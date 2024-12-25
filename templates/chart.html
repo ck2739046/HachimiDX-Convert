@@ -30,61 +30,37 @@
             font-size: 12px;
             opacity: 0.7;
         }
-        #start-button {
-            position: absolute;
-            padding: 10px 20px;
-            background: #444;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-family: sans-serif;
-            z-index: 100;
-        }
-        #start-button.hidden {
-            display: none;
-        }
     </style>
 </head>
 <body>
     <canvas id="unity-canvas"></canvas>
     <div id="loading">Loading...</div>
     <div id="renderer-info"></div>
-    <button id="start-button">Click to Start</button>
 
     <script src="{{ url_for('static', filename='majdata-wasm/build.loader.js') }}"></script>
     <script>
         const canvas = document.getElementById('unity-canvas');
         const loadingBar = document.getElementById('loading');
         const rendererInfo = document.getElementById('renderer-info');
-        const startButton = document.getElementById('start-button');
         let unityInstance = null;
 
-        startButton.onclick = () => {
-            startButton.classList.add('hidden');
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            const audioContext = new AudioContext();
-            audioContext.resume();
-
-            createUnityInstance(canvas, {
-                dataUrl: "{{ url_for('static', filename='majdata-wasm/build.bin') }}",
-                frameworkUrl: "{{ url_for('static', filename='majdata-wasm/build.framework.js') }}",
-                codeUrl: "{{ url_for('static', filename='majdata-wasm/build.wasm') }}",
-                streamingAssetsUrl: "StreamingAssets",
-                companyName: "DefaultCompany",
-                productName: "MajdataView",
-                productVersion: "1.0",
-            }).then((instance) => {
-                unityInstance = instance;
-                loadingBar.style.display = "none";
-                
-                const gl = canvas.getContext('webgl2');
-                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-                const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-                const gpuName = renderer.match(/Intel.*Graphics|NVIDIA.*Series|AMD.*Graphics/);
-                rendererInfo.textContent = gpuName ? gpuName[0] : renderer;
-            });
-        };
+        createUnityInstance(canvas, {
+            dataUrl: "{{ url_for('static', filename='majdata-wasm/build.bin') }}",
+            frameworkUrl: "{{ url_for('static', filename='majdata-wasm/build.framework.js') }}",
+            codeUrl: "{{ url_for('static', filename='majdata-wasm/build.wasm') }}",
+            streamingAssetsUrl: "StreamingAssets",
+            companyName: "DefaultCompany",
+            productName: "ChartPreview",
+            productVersion: "1.0",
+        }).then(() => {
+            loadingBar.style.display = "none";
+            
+            const gl = canvas.getContext('webgl2');
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+            const gpuName = renderer.match(/Intel.*Graphics|NVIDIA.*Series|AMD.*Graphics/);
+            rendererInfo.textContent = gpuName ? gpuName[0] : renderer;
+        });
     </script>
 </body>
 </html>
