@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>MajdataView</title>
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <style>
         body {
             margin: 0;
@@ -13,7 +14,7 @@
             background: #000;
         }
         canvas {
-            width: 768px;
+            width: 830px;
             height: 432px;
         }
         #loading {
@@ -24,11 +25,34 @@
         #renderer-info {
             position: absolute;
             top: 30px;
-            left: 10px;
+            left: 13px;
             color: white;
             font-family: sans-serif;
             font-size: 12px;
             opacity: 0.7;
+        }
+        #error-message {
+            position: absolute;
+            top: 45px;
+            left: 13px;
+            color: yellow;
+            font-family: sans-serif;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+        #start-button {
+            position: absolute;
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: sans-serif;
+        }
+        .hidden {
+            display: none;
         }
     </style>
 </head>
@@ -36,31 +60,67 @@
     <canvas id="unity-canvas"></canvas>
     <div id="loading">Loading...</div>
     <div id="renderer-info"></div>
+    <div id="error-message"></div>
+    <button id="start-button">Click to Start</button>
 
     <script src="{{ url_for('static', filename='majdata-wasm/build.loader.js') }}"></script>
     <script>
         const canvas = document.getElementById('unity-canvas');
         const loadingBar = document.getElementById('loading');
         const rendererInfo = document.getElementById('renderer-info');
+        const errorMessage = document.getElementById('error-message');
+        const startButton = document.getElementById('start-button');
         let unityInstance = null;
 
-        createUnityInstance(canvas, {
-            dataUrl: "{{ url_for('static', filename='majdata-wasm/build.bin') }}",
-            frameworkUrl: "{{ url_for('static', filename='majdata-wasm/build.framework.js') }}",
-            codeUrl: "{{ url_for('static', filename='majdata-wasm/build.wasm') }}",
-            streamingAssetsUrl: "StreamingAssets",
-            companyName: "DefaultCompany",
-            productName: "ChartPreview",
-            productVersion: "1.0",
-        }).then(() => {
-            loadingBar.style.display = "none";
-            
-            const gl = canvas.getContext('webgl2');
-            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-            const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-            const gpuName = renderer.match(/Intel.*Graphics|NVIDIA.*Series|AMD.*Graphics/);
-            rendererInfo.textContent = gpuName ? gpuName[0] : renderer;
-        });
+        // Console output interceptor
+        const originalConsoleLog = console.log;
+        
+        console.log = function() {
+            if (arguments[0] && arguments[0].toString().includes("Null level")) {
+                errorMessage.textContent = "Track level Error";
+            }
+            originalConsoleLog.apply(console, arguments);
+        };
+
+        startButton.onclick = () => {
+            startButton.style.display = 'none';
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const audioContext = new AudioContext();
+            audioContext.resume();
+
+            createUnityInstance(canvas, {
+                dataUrl: "{{ url_for('static', filename='majdata-wasm/build.bin') }}",
+                frameworkUrl: "{{ url_for('static', filename='majdata-wasm/build.framework.js') }}",
+                codeUrl: "{{ url_for('static', filename='majdata-wasm/build.wasm') }}",
+                streamingAssetsUrl: "StreamingAssets",
+                companyName: "DefaultCompany",
+                productName: "MajdataView",
+                productVersion: "1.0",
+            }).then((instance) => {
+                unityInstance = instance;
+                loadingBar.style.display = "none";
+
+                // Show GPU info
+                const gl = canvas.getContext('webgl2');
+                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                const gpuName = renderer.match(/Intel.*Graphics|NVIDIA.*Series|AMD.*Graphics/);
+                rendererInfo.textContent = gpuName ? gpuName[0] : renderer;
+
+                // Send sample chart data
+                setTimeout(() => {
+                    unityInstance.SendMessage(
+                        "HandleJSMessages",            //static
+                        "ReceiveMessage",              //static
+                        `jsnmsl\n` +                   //static
+                        `http://localhost:5000` +      //static
+                        `/MajdataView/snooze/5` +      //song_name & inote_lv
+                        `\n1\nlv` +                    //static
+                        `1`                            //inote_lv - 1
+                    );
+                }, 3000);
+            });
+        };
     </script>
 </body>
 </html>
