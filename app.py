@@ -19,7 +19,7 @@ import os
 
 class FlaskThread(threading.Thread):
     def run(self):
-        server.app.run(port=5000)
+        server.app.run(port=5273)
 
 class ChromeHandler:
     def __init__(self):
@@ -31,7 +31,7 @@ class ChromeHandler:
         self.chrome_process.start(
             "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
             ["--new-window",
-             "--app=http://localhost:5000",
+             "--app=http://localhost:5273",
              "--inprivate"]
         )
 
@@ -231,20 +231,21 @@ class MainWindow(QMainWindow):
 
     def setup_control_panel(self, control_widget):
         layout = QHBoxLayout(control_widget)
-
-        # "Current:" label
-        current_label = QLabel(" Current:")
-        layout.addWidget(current_label)
         
         # Song input
         self.song_input = QLineEdit()
         self.song_input.setPlaceholderText("song")
         self.song_input.setFixedWidth(150)
+        self.song_input.textChanged.connect(self.on_song_changed) # textChanged signal
         layout.addWidget(self.song_input)
+
+        # Track choose
+        self.track_choose = QComboBox()
+        self.track_choose.setFixedWidth(150)
+        layout.addWidget(self.track_choose)
         
         # Level choose
         self.level_choose = QComboBox()
-        self.level_choose.addItems([str(i) for i in range(1, 8)])
         self.level_choose.setFixedWidth(41)
         layout.addWidget(self.level_choose)
         
@@ -272,9 +273,10 @@ class MainWindow(QMainWindow):
     @pyqtSlot()
     def on_load_clicked(self):
         song = self.song_input.text()
+        track = self.track_choose.currentText()
         level = self.level_choose.currentText()
-        if not song or not level: return
-        server.MajdataView_load_chart(song, level)
+        if not song or not track or not level: return
+        server.MajdataView_load_chart(song, track, level)
 
     @pyqtSlot()
     def on_refresh_clicked(self):
@@ -290,6 +292,44 @@ class MainWindow(QMainWindow):
         )
         if filepath:
             self.load_video(filepath)
+
+    @pyqtSlot()
+    #Update track and level combobox
+    def on_song_changed(self):
+        
+        # Check song
+        song = self.song_input.text()
+        if not song:
+            return   
+        song_path = os.path.join(server.song_folder, song)
+        if not os.path.exists(song_path):
+            return
+        # Clear combobox
+        self.track_choose.clear()
+        self.level_choose.clear() 
+        # Get all mp3/ogg files in the song_path
+        audio_files = []
+        for f in os.listdir(song_path):
+            if f.endswith('.mp3') or f.endswith('.ogg'):
+                audio_files.append(f)
+        # Update track combobox
+        for audio_file in audio_files:
+            self.track_choose.addItem(audio_file)
+        self.track_choose.setCurrentIndex(len(audio_files) - 1)
+        # Get all levels in maidata.txt
+        maidata_path = os.path.join(song_path, 'maidata.txt')
+        if not os.path.exists(maidata_path):
+            return
+        with open(maidata_path, encoding='utf-8') as f:
+            data = f.read()
+        levels = []
+        for line in data.splitlines():
+            if line.startswith('&inote_'):
+                levels.append(line[7])
+        # Update level combobox
+        for level in levels:
+            self.level_choose.addItem(level)
+        self.level_choose.setCurrentIndex(len(levels) - 1)
 
 #--------------------------------------------------------------
 # Main

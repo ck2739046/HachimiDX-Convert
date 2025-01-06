@@ -4,7 +4,7 @@ from flask_socketio import SocketIO
 import os
 import logging
 
-# Filter out socket.io massage logger
+# Filter out socket.io message logger
 logging.getLogger('werkzeug').addFilter(lambda r: not('/socket.io/?EIO=' in r.getMessage()))
 
 app = Flask(__name__)
@@ -51,11 +51,11 @@ app.song_folder = song_folder
 def chart_player():
     return render_template('chart.html')
 
-@app.route('/MajdataView/src/<string:name>/<int:level>/ImageFull/1')
-def majdataView_bg(name, level):
+@app.route('/MajdataView/src/<string:song>/<string:track>/ImageFull/1')
+def majdataView_bg(song, track):
     # Return the background image
-    bg_png = os.path.join(song_folder, name, 'bg.png')
-    bg_jpg = os.path.join(song_folder, name, 'bg.jpg')  
+    bg_png = os.path.join(song_folder, song, 'bg.png')
+    bg_jpg = os.path.join(song_folder, song, 'bg.jpg')  
     if os.path.exists(bg_png):
         return send_file(bg_png)
     elif os.path.exists(bg_jpg):
@@ -63,10 +63,10 @@ def majdataView_bg(name, level):
     else:
         return "BG not found", 404
         
-@app.route('/MajdataView/src/<string:name>/<int:level>/Maidata/1')
-def majdataView_maidata(name, level):
+@app.route('/MajdataView/src/<string:song>/<string:track>/Maidata/1')
+def majdataView_maidata(song, track):
     # Return the chart data
-    maidata = os.path.join(song_folder, name, 'maidata.txt')
+    maidata = os.path.join(song_folder, song, 'maidata.txt')
     try:
         with open(maidata, encoding='utf-8') as f:
             data = f.read()
@@ -74,40 +74,36 @@ def majdataView_maidata(name, level):
     except Exception as e:
         return "Chart not found", 404
 
-@app.route('/MajdataView/src/<string:name>/<int:level>/Track/1') 
-def majdataView_track(name, level):
+@app.route('/MajdataView/src/<string:song>/<string:track>/Track/1') 
+def majdataView_track(song, track):
     # Return the audio track
-    track_mp3 = os.path.join(song_folder, name, 'track.mp3')
-    track_ogg = os.path.join(song_folder, name, 'track.ogg')
-    if os.path.exists(track_mp3):
-        return send_file(track_mp3)
-    elif os.path.exists(track_ogg):
-        return send_file(track_ogg)
+    track_audio = os.path.join(song_folder, song, track)
+    if os.path.exists(track_audio):
+        return send_file(track_audio)
     else:
         return "Track not found", 404
 
-def MajdataView_load_chart(song, level):
+def MajdataView_load_chart(song, track, level):
     # 0: no error, 1: no chart, 2: no track
 
     # Check if maidata.txt exists
     maidata_path = os.path.join(song_folder, song, 'maidata.txt')
     if not os.path.exists(maidata_path):
-        socketio.emit('MajdataView_load_chart', {'song': song, 'level': level, 'error': 1})
+        socketio.emit('MajdataView_load_chart', {'song': song, 'track': track, 'level': level, 'error': 1})
         return
-    # Check if audio track exists
-    track_mp3 = os.path.join(song_folder, song, 'track.mp3')
-    track_ogg = os.path.join(song_folder, song, 'track.ogg')
-    if not (os.path.exists(track_mp3) or os.path.exists(track_ogg)):
-        socketio.emit('MajdataView_load_chart', {'song': song, 'level': level, 'error': 2})
+    # Check if track audio exists
+    audio_path = os.path.join(song_folder, song, track)
+    if not (os.path.exists(audio_path)):
+        socketio.emit('MajdataView_load_chart', {'song': song, 'track': track, 'level': level, 'error': 2})
         return
     # No error
-    socketio.emit('MajdataView_load_chart', {'song': song, 'level': level, 'error': 0})
+    socketio.emit('MajdataView_load_chart', {'song': song, 'track': track, 'level': level, 'error': 0})
 
 def MajdataView_refresh_page():
     socketio.emit('MajdataView_refresh_page')
 
 def start_server():
-    socketio.run(app, port=5000, debug=False)
+    socketio.run(app, port=5273, debug=False)
 
 if __name__ == '__main__':
     start_server()
