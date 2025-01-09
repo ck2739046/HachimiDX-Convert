@@ -9,8 +9,12 @@ class JudgeLineDetector:
         self.touch_areas = None
 
 
-    def process(self, cap, state: dict) -> bool:
-        """main process"""
+    def process(self, cap, state: dict) -> tuple:
+        """main process
+        arg: cap, state(video_width, video_height, debug)
+        ret: circle_center, circle_radius,
+             touch_areas{label: {center, polygon, original_pos}}
+        """
         try:
             print("Judge Line Detector...", end="\r")
             # detect circle
@@ -26,16 +30,15 @@ class JudgeLineDetector:
             if state['debug']: self.display_preview(cap, state)
 
             print("Judge Line Detector... Done")
-            return True
+            return (self.circle_center, self.circle_radius, self.touch_areas)
 
         except Exception as e:
-            print(f"Error in process: {e}")
-            return False
+            raise Exception(f"Error in JudgeLineDetector: {e}")
 
 
     def collect_frames(self, cap, state, traget=30) -> list:
         """采样30个黑帧
-        arg: cap, state(video_width, video_height), target(可选采样数量 默认20)
+        arg: cap, state(video_width, video_height), target(可选,默认30)
         ret: balck_frames[]
         """
         try:
@@ -248,6 +251,8 @@ class JudgeLineDetector:
                 if cv2.waitKey(12) & 0xFF == ord('q'):
                     break
             cv2.destroyWindow(window_name)
+            # Reset to start of video
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             
         except Exception as e:
             raise Exception(f"Error in display_preview: {e}")

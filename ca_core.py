@@ -1,6 +1,5 @@
 import cv2
 import os
-from typing import Dict, List
 import ca_config
 
 from ca_modules_pre.JudgeLineDetector import JudgeLineDetector
@@ -12,7 +11,9 @@ class ChartAnalyzer:
         self.current_frame = None # 当前帧
         self.cap = None           # cv2.VideoCapture对象
         # state -------------
-        self.state = {}     # 运行时的状态
+        self.state = {}
+        # video_width, video_height, video_fps, total_frames
+        # circle_center, circle_radius, touch_areas
 
     def update_state(self, key: str, value) -> None:
         """更新状态"""
@@ -21,94 +22,98 @@ class ChartAnalyzer:
 
     def analyze(self, video_path: str) -> bool:
         """主处理流程"""
+        try:
+            self.state["debug"] = False
+            # Load video
+            self.load_video(video_path)
+            
+            # Preprocess
+            self.run_preprocess()
 
-        # 加载视频
-        self.state["debug"] = False
-        if not self.load_video(video_path): return False
+            # Process video
+            while True:
+                ret, self.current_frame = self.cap.read()
+                if not ret: break
+                self.frame_count += 1
+                self.process_frame()
+            self.cap.release()
+
+            # Postprocess
+            self.run_postprocess()
+
+            return True
         
-        # 视频预处理
-        if not self.run_preprocess(): return False
-
-        while True:
-            ret, self.current_frame = self.cap.read()
-            if not ret:
-                break
-
-            self.frame_count += 1
-            if not self.process_frame():
-                return False
-
-        self.cap.release()
-
-        # 后处理
-        return self.run_postprocess()
+        except Exception as e:
+            print(f"Error in analyze: {e}")
+            return False
     
 
-    def run_preprocess(self) -> bool:
+    def run_preprocess(self):
         """运行预处理"""
         try:
-            # call modules
+            # get judge line
             detector = JudgeLineDetector()
-            if not detector.process(self.cap, self.state):
-                return False
+            self.state['circle_center'], \
+            self.state['circle_radius'], \
+            self.state['touch_areas'] = detector.process(self.cap, self.state)
+            return
 
         except Exception as e:
-            print(f"Error in preprocess: {e}")
-            return False
+            raise Exception(f"Error in preprocess: {e}")
         
 
-    def process_frame(self) -> bool:
+    def process_frame(self):
         """处理单个帧"""
         try:
             # call modules
-            return True
+            return
         except Exception as e:
-            print(f"Error processing frame {self.frame_count}: {e}")
-            return False
+            raise Exception(f"Error processing frame {self.frame_count}: {e}")
         
         
-    def run_postprocess(self) -> bool:
+    def run_postprocess(self):
         """运行后处理"""
         try:
             # call modules
-            return True
+            return
         except Exception as e:
-            print(f"Error in postprocess: {e}")
-            return False
+            raise Exception(f"Error in postprocess: {e}")
 
 
-    def load_video(self, video_path: str) -> bool:
+    def load_video(self, video_path: str):
         """加载视频文件, 获取信息
         arg: video_path
-        ret: bool
+        ret: N/A
         设置self.state(video_width, video_height, video_fps, total_frames)
         设置self.cap = cv2.VideoCapture(video_path)                 
         """
 
-        # 加载视频文件
-        if not os.path.exists(video_path):
-            print(f"Error load_video: video file not found: {video_path}")
-            return False
+        try:
+            # load video
+            if not os.path.exists(video_path):
+                raise Exception(f"load_video: video file not found: {video_path}")
+            
+            self.cap = cv2.VideoCapture(video_path)
+            if not self.cap.isOpened():
+                raise Exception("load_video: fail set cv2.VideoCapture()")
+            
+            # get video info
+            width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+            total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            if total_frames < 600: # 10s
+                raise Exception("load_video: video too short")
+            
+            # update state 
+            self.update_state("video_width", max(width, height))  # 宽取大值
+            self.update_state("video_height", min(width, height)) # 高取小值
+            self.update_state("video_fps", fps)
+            self.update_state("total_frames", total_frames)
+            return
         
-        self.cap = cv2.VideoCapture(video_path)
-        if not self.cap.isOpened():
-            print("Error load_video: fail set cv2.VideoCapture()")
-            return False
-        
-        # 获取视频信息
-        width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-        total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        if total_frames < 600: # 10s
-            print("Error load_video: video too short")
-            return False
-        self.update_state("video_width", max(width, height))  # 宽取大值
-        self.update_state("video_height", min(width, height)) # 高取小值
-        self.update_state("video_fps", fps)
-        self.update_state("total_frames", total_frames)
-
-        return True
+        except Exception as e:
+            raise Exception(f"Error in load_video: {e}")
 
 
 if __name__ == "__main__":
