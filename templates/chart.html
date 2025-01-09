@@ -138,11 +138,13 @@
                 loadingBar.style.display = "none";
 
                 // Show GPU info
+                /*
                 const gl = canvas.getContext('webgl2');
                 const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
                 const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
                 const gpuName = renderer.match(/Intel.*Graphics|NVIDIA.*Series|AMD.*Graphics/);
                 rendererInfo.textContent = gpuName ? gpuName[0] : renderer;
+                */
 
             });
         };
