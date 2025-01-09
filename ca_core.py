@@ -18,35 +18,6 @@ class ChartAnalyzer:
         """更新状态"""
         self.state[key] = value
 
-    def run_preprocess(self) -> bool:
-        """运行预处理"""
-        try:
-            # call modules
-            detector = JudgeLineDetector()
-            if not detector.process(self.cap, self.state):
-                return False
-
-        except Exception as e:
-            print(f"Error in preprocess: {e}")
-            return False
-
-    def process_frame(self) -> bool:
-        """处理单个帧"""
-        try:
-            # call modules
-            return True
-        except Exception as e:
-            print(f"Error processing frame {self.frame_count}: {e}")
-            return False
-        
-    def run_postprocess(self) -> bool:
-        """运行后处理"""
-        try:
-            # call modules
-            return True
-        except Exception as e:
-            print(f"Error in postprocess: {e}")
-            return False
 
     def analyze(self, video_path: str) -> bool:
         """主处理流程"""
@@ -71,13 +42,47 @@ class ChartAnalyzer:
 
         # 后处理
         return self.run_postprocess()
+    
+
+    def run_preprocess(self) -> bool:
+        """运行预处理"""
+        try:
+            # call modules
+            detector = JudgeLineDetector()
+            if not detector.process(self.cap, self.state):
+                return False
+
+        except Exception as e:
+            print(f"Error in preprocess: {e}")
+            return False
+        
+
+    def process_frame(self) -> bool:
+        """处理单个帧"""
+        try:
+            # call modules
+            return True
+        except Exception as e:
+            print(f"Error processing frame {self.frame_count}: {e}")
+            return False
+        
+        
+    def run_postprocess(self) -> bool:
+        """运行后处理"""
+        try:
+            # call modules
+            return True
+        except Exception as e:
+            print(f"Error in postprocess: {e}")
+            return False
+
 
     def load_video(self, video_path: str) -> bool:
         """加载视频文件, 获取信息
         arg: video_path
         ret: bool
-        设置state(video_width, video_height, video_fps, total_frames)
-        设置cap = cv2.VideoCapture(video_path)                 
+        设置self.state(video_width, video_height, video_fps, total_frames)
+        设置self.cap = cv2.VideoCapture(video_path)                 
         """
 
         # 加载视频文件
@@ -107,6 +112,6 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\Code\Ariake.mp4"
+    video = r"C:\Code\Ariake-720p.mp4"
     ca = ChartAnalyzer()
     ca.analyze(video)
