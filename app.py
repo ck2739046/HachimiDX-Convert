@@ -13,6 +13,7 @@ import win32con
 from PyQt6.QtCore import pyqtSlot
 import server
 import os
+import psutil
 
 #--------------------------------------------------------------
 # Initialize Class
@@ -21,22 +22,52 @@ class FlaskThread(threading.Thread):
     def run(self):
         server.app.run(port=5273)
 
+def exception_handler(exctype, value, traceback):
+    # Close chrome before exiting
+    try:
+        for proc in psutil.process_iter(['name']):
+            try:
+                if proc.info['name'] == 'launch_web.exe':
+                    proc.kill()
+                    print("Browser closed")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+    except:
+        pass
+    # Print the original error
+    sys.__excepthook__(exctype, value, traceback)
+    print("Press ignore the following QProcess error:")
+    sys.exit(1)
+
+class FolderComboBox(QComboBox):
+
+    def mousePressEvent(self, event):
+        current_text = self.currentText() # Save current text before clear
+        self.clear()
+        if os.path.exists(server.song_folder):
+            subdirs = [d for d in os.listdir(server.song_folder) 
+                      if os.path.isdir(os.path.join(server.song_folder, d))]
+            self.addItems(subdirs)
+            
+        # Restore previous selection if it exists
+        if current_text:
+            index = self.findText(current_text)
+            if index >= 0:
+                self.setCurrentIndex(index)
+            else:
+                self.setCurrentText(current_text)
+                
+        super().mousePressEvent(event)
+
 class ChromeHandler:
     def __init__(self):
         self.chrome_hwnd = None
         self.chrome_process = None
-        self.window_size = None
-        self.relative_position = None
-        self.offset = (0, 0)
     
     def start_chrome(self):
         self.chrome_process = QProcess()
-        self.chrome_process.start(
-            "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-            ["--new-window",
-             "--app=http://localhost:5273",
-             "--inprivate"]
-        )
+        pywebview = os.path.join(os.path.dirname(__file__), 'launch_web.exe')
+        self.chrome_process.start(pywebview)
 
     def find_chrome_window(self, timeout=5):
 
@@ -56,66 +87,15 @@ class ChromeHandler:
         print("Browser window not found")
         return None
     
-    def save_position(self):
-        if self.chrome_hwnd:
-            # Get chrome window rect
-            chrome_rect = win32gui.GetWindowRect(self.chrome_hwnd)
-            # Get parent window rect
-            parent = win32gui.GetParent(self.chrome_hwnd)
-            if parent:
-                parent_rect = win32gui.GetWindowRect(parent)
-            # Save relative position
-            x = chrome_rect[0] - parent_rect[0]
-            y = chrome_rect[1] - parent_rect[1]
-            self.relative_position = (x, y)
-            # Save window size
-            width = chrome_rect[2] - chrome_rect[0]
-            height = chrome_rect[3] - chrome_rect[1]
-            self.window_size = (width, height)
-            return
-
-    def reset_position(self):
-
-        def reset_window():
-            win32gui.SetWindowPos(
-                self.chrome_hwnd,
-                0,
-                self.relative_position[0]-self.offset[0], # idk why there's offset
-                self.relative_position[1]-self.offset[1], # but it exists anyway
-                self.window_size[0],
-                self.window_size[1],
-                win32con.SWP_NOZORDER 
-            )
-        
-        if self.chrome_hwnd and self.window_size and self.relative_position:
-            # Get parent window rect
-            parent = win32gui.GetParent(self.chrome_hwnd)
-            if parent:
-                p_rect = win32gui.GetWindowRect(parent)
-            # This is the position where the chrome window should be
-            ideax = p_rect[0] + self.relative_position[0]
-            ideay = p_rect[1] + self.relative_position[1]
-            # Check if chrome window position is already correct
-            chrome_rect = win32gui.GetWindowRect(self.chrome_hwnd)
-            if chrome_rect[0] == ideax and chrome_rect[1] == ideay:
-                return
-            # If not, reset window and check postion
-            reset_window()
-            chrome_rect = win32gui.GetWindowRect(self.chrome_hwnd)
-            if chrome_rect[0] == ideax and chrome_rect[1] == ideay:
-                return
-            # If not, adjust offset and try reset again
-            self.offset = (chrome_rect[0] - ideax, chrome_rect[1] - ideay)
-            reset_window()
-
-            return
-
     def close_chrome(self):
         if self.chrome_hwnd:
             try:
                 win32gui.PostMessage(self.chrome_hwnd, win32con.WM_CLOSE, 0, 0)
             except:
                 pass
+        time.sleep(0.2)
+        if self.chrome_process:
+            self.chrome_process.kill()
 
 #--------------------------------------------------------------
 # Main Class
@@ -126,7 +106,6 @@ class MainWindow(QMainWindow):
         self.chrome_handler = ChromeHandler()
         self.setup_window()
         self.setup_layout()
-        self.setup_chrome()
 
     def setup_window(self):
         self.setWindowTitle("Mai Chart Analyze")
@@ -154,9 +133,8 @@ class MainWindow(QMainWindow):
         right_layout.setContentsMargins(2, 0, 0, 0) # Remove outer margins, avoid double margins
         
         # Top right widget (Chrome MajdataView)
-        self.chrome_container = QWidget()
-        self.chrome_container.setStyleSheet("background-color: #1e1e1e;")
-        right_layout.addWidget(self.chrome_container, 0, 0)
+        self.setup_chrome()
+        right_layout.addWidget(self.chrome_widget, 0, 0)
         
         # Middle right widget (Control Panel)
         control_widget = QWidget()
@@ -187,15 +165,10 @@ class MainWindow(QMainWindow):
     def setup_chrome(self):
         self.chrome_handler.start_chrome()
         chrome_hwnd = self.chrome_handler.find_chrome_window()
-        
         if chrome_hwnd:
             window = QWindow.fromWinId(chrome_hwnd)
-            chrome_widget = self.createWindowContainer(window, self)
-            chrome_widget.setFixedSize(768, 432)
-            
-            chrome_layout = QVBoxLayout(self.chrome_container)
-            chrome_layout.addWidget(chrome_widget)
-            chrome_layout.setContentsMargins(0, 0, 0, 0)
+            self.chrome_widget = self.createWindowContainer(window, self)
+            self.chrome_widget.setFixedHeight(384)
 
     def closeEvent(self, event):
         self.chrome_handler.close_chrome()
@@ -289,16 +262,16 @@ class MainWindow(QMainWindow):
     def setup_control_panel(self, control_widget):
         layout = QHBoxLayout(control_widget)
         
-        # Song input
-        self.song_input = QLineEdit()
-        self.song_input.setPlaceholderText("song")
-        self.song_input.setFixedWidth(150)
-        self.song_input.textChanged.connect(self.on_song_changed) # textChanged signal
+        # Song editable combobox
+        self.song_input = FolderComboBox()
+        self.song_input.setEditable(True)
+        self.song_input.setFixedWidth(130)
+        self.song_input.currentTextChanged.connect(self.on_song_changed)
         layout.addWidget(self.song_input)
 
         # Track choose
         self.track_choose = QComboBox()
-        self.track_choose.setFixedWidth(150)
+        self.track_choose.setFixedWidth(130)
         layout.addWidget(self.track_choose)
         
         # Level choose
@@ -329,7 +302,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def on_load_clicked(self):
-        song = self.song_input.text()
+        song = self.song_input.currentText()
         track = self.track_choose.currentText()
         level = self.level_choose.currentText()
         if not song or not track or not level: return
@@ -337,7 +310,6 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def on_refresh_clicked(self):
-        self.chrome_handler.reset_position()
         server.MajdataView_refresh_page()
 
     @pyqtSlot()
@@ -355,22 +327,23 @@ class MainWindow(QMainWindow):
     #Update track and level combobox
     def on_song_changed(self):
 
-        # Clear combobox
-        self.track_choose.clear()
-        self.level_choose.clear()
         # Check song
-        song = self.song_input.text()
+        song = self.song_input.currentText()
         if not song:
             return   
         song_path = os.path.join(server.song_folder, song)
         if not os.path.exists(song_path):
             return
+        # Clear combobox
+        self.track_choose.clear()
+        self.level_choose.clear()
         # Get all mp3/ogg files in the song_path
         audio_files = []
         for f in os.listdir(song_path):
             if f.endswith('.mp3') or f.endswith('.ogg'):
                 audio_files.append(f)
         # Update track combobox
+        audio_files.sort()
         for audio_file in audio_files:
             self.track_choose.addItem(audio_file)
         self.track_choose.setCurrentIndex(len(audio_files) - 1)
@@ -385,6 +358,7 @@ class MainWindow(QMainWindow):
             if line.startswith('&inote_'):
                 levels.append(line[7])
         # Update level combobox
+        levels.sort(reverse=True)
         for level in levels:
             self.level_choose.addItem(level)
         self.level_choose.setCurrentIndex(0)
@@ -393,13 +367,16 @@ class MainWindow(QMainWindow):
 # Main
 
 def main():
+    # Set up global exception handler
+    sys.excepthook = exception_handler
+
     flask_thread = FlaskThread(daemon=True)
     flask_thread.start()
     
     qt_app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    ChromeHandler.save_position(window.chrome_handler)
+
     sys.exit(qt_app.exec())
 
 if __name__ == "__main__":
