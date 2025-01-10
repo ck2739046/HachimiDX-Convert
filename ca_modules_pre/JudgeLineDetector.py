@@ -5,7 +5,7 @@ class JudgeLineDetector:
     def __init__(self):
         self.circle_center = None  # (x, y)
         self.circle_radius = None
-        self.template_path = "static/judge_area.png"
+        self.template_path = "static/template/judge_area.png"
         self.touch_areas = None
 
 
