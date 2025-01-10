@@ -18,8 +18,7 @@ class JudgeLineDetector:
         try:
             print("Judge Line Detector...", end="\r")
             # detect circle
-            black_frames = self.collect_frames(cap, state)
-            self.circle_center, self.circle_radius = self.detect_circle(state, black_frames)
+            self.circle_center, self.circle_radius = self.detect_circle(cap, state)
 
             # detect touch areas
             template = self.load_template()
@@ -36,53 +35,32 @@ class JudgeLineDetector:
             raise Exception(f"Error in JudgeLineDetector: {e}")
 
 
-    def collect_frames(self, cap, state, traget=30) -> list:
-        """采样30个黑帧
+    def detect_circle(self, cap, state, traget=30) -> list:
+        """采样30个黑帧, 进行圆形检测，取出现次数最多的圆
         arg: cap, state(video_width, video_height), target(可选,默认30)
-        ret: balck_frames[]
-        """
-        try:
-            black_frames = []
-            black_frames_processed = 0
-            total_pixels = state["video_width"] * state["video_height"]
-
-            # Collect target black frames
-            while black_frames_processed < traget:
-                ret, frame = cap.read()
-                if not ret: break # end of video
-                # count black pixels
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                black_pixels = np.sum(gray < 20)
-                # check if frame is mostly black (90%)
-                is_frame_black = black_pixels / total_pixels > 0.9
-                if not is_frame_black: continue
-                # add frame
-                black_frames.append(frame)
-                black_frames_processed += 1
-
-            if not black_frames:
-                raise Exception("collect_frames: No frames detected")
-
-            return black_frames
-
-        except Exception as e:
-            raise Exception(f"Error in collect_frames: {e}")
-
-
-    def detect_circle(self, state, black_frames) -> tuple:
-        """对采集的帧进行圆形检测，取出现次数最多的圆
-        arg: cap, state(video_height), black_frames[]
         ret: circle_center(x, y), circle_radius
         """
         try:
+            black_frames_processed = 0
+            total_pixels = state["video_width"] * state["video_height"]
             height = state["video_height"]
             x_offset = int(-0.003*height) # 补偿-0.3%
             y_offset = 0
             r_offset = 0
             circles_detected = []
 
-            # Process the collected black frames
-            for frame in black_frames:
+            # Process black frames
+            while black_frames_processed < traget:
+                ret, frame = cap.read()
+                if not ret: break # end of video
+
+                # count black pixels
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                black_pixels = np.sum(gray < 20)
+                # check if frame is mostly black (90%)
+                is_frame_black = black_pixels / total_pixels > 0.9
+                if not is_frame_black: continue
+
                 # 转换为灰度图，二值化突出白色部分
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 _, binary = cv2.threshold(gray, 220, 255, cv2.THRESH_BINARY)
@@ -101,6 +79,7 @@ class JudgeLineDetector:
                     circles = np.uint16(np.around(circles))
                     for circle in circles[0, :]:
                         circles_detected.append((circle[0], circle[1], circle[2]))
+                    black_frames_processed += 1
 
             if not circles_detected:
                 raise Exception("detect circle: No circle detected")
