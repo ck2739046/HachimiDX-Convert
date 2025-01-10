@@ -36,6 +36,7 @@ def exception_handler(exctype, value, traceback):
         pass
     # Print the original error
     sys.__excepthook__(exctype, value, traceback)
+    print("---mai chart analyze quit in exception_handler---")
     print("Press ignore the following QProcess error:")
     sys.exit(1)
 
@@ -81,6 +82,7 @@ class ChromeHandler:
             chrome_windows = []
             win32gui.EnumWindows(callback, chrome_windows)
             if chrome_windows:
+                time.sleep(0.4) # wait for loading
                 self.chrome_hwnd = chrome_windows[0]
                 return self.chrome_hwnd
             time.sleep(0.1)
@@ -96,6 +98,7 @@ class ChromeHandler:
         time.sleep(0.2)
         if self.chrome_process:
             self.chrome_process.kill()
+            print("mai chart analyze quit normally")
 
 #--------------------------------------------------------------
 # Main Class

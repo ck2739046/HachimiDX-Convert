@@ -4,8 +4,19 @@ from flask_socketio import SocketIO
 import os
 import logging
 
-# Filter out socket.io message logger
-logging.getLogger('werkzeug').addFilter(lambda r: not('/socket.io/?EIO=' in r.getMessage()))
+# Filter out specific message logger
+def log_filter(record):
+    message = record.getMessage()
+    filtered_paths = [
+        '/socket.io/?EIO=',
+        '/static/socket.io.js',
+        '/static/majdata-wasm',
+        '/static/MajdataView.ico',
+        '/ImageFull/1',
+        '/Track/1 HTTP/1.1',
+    ]
+    return not any(path in message for path in filtered_paths)
+logging.getLogger('werkzeug').addFilter(log_filter)
 
 app = Flask(__name__)
 CORS(app)
