@@ -19,7 +19,7 @@ class JudgeLineDetector:
             print("Judge Line Detector...", end="\r")
 
             # detect circle
-            self.circle_center, self.circle_radius = self.detect_circle(cap)
+            self.circle_center, self.circle_radius = self.detect_circle(cap, state)
 
             # detect touch areas
             template = self.load_template()
@@ -27,7 +27,7 @@ class JudgeLineDetector:
             self.touch_areas = self.organize_regions(regions)
 
             # display preview
-            print("Judge Line Detector...Done               ")
+            print("Judge Line Detector...Done                       ")
             if state['debug']:
                 print(f"  DEBUG: O {self.circle_center}, R {self.circle_radius}")
                 self.display_preview(cap, state)
@@ -40,45 +40,61 @@ class JudgeLineDetector:
             raise Exception(f"Error in JudgeLineDetector: {e}")
 
 
-    def detect_circle(self, cap, target=15) -> list:
+    def detect_circle(self, cap, state, target=15) -> list:
         """采样15个帧, 检测判定线圆形，返回圆心和半径
-        arg: cap, target(可选,默认15)
+        arg: cap, state(video_height, total_frames), target(可选,默认15)
         ret: circle_center(x, y), circle_radius
         """
         try:
             print(f"Judge Line Detector...Detect_circle...", end="\r")
 
             frame_counter = 0
+            total_frames = state["total_frames"]
             circles_detected = []
+            circles = 0
+            r_small = int(state["video_height"] * 0.3)
+            r_large = int(state["video_height"] * 0.6)
 
             # Process frames
-            while frame_counter < target:
+            while frame_counter < total_frames:
                 ret, frame = cap.read()
                 if not ret: break # end of video
+                print(f"Judge Line Detector...Detect_circle...{frame_counter}/{total_frames}", end="\r")
 
-                # 转换为灰度图，二值化突出屏幕部分 (大于10的全白)
+                # 转换为灰度图，二值化突出屏幕部分 (大于180的全白)
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                _, binary = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
+                _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
 
                 # 寻找轮廓
                 contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                 if not contours:
                     raise Exception("detect_circle: No contours detected")
                 
-                if contours:
-                    # 找到最大的轮廓（应该是圆形游戏区域）
-                    largest_contour = max(contours, key=cv2.contourArea)
+                # 遍历所有轮廓，寻找最圆的轮廓
+                valid_circles = []
+                for contour in contours:
                     # 计算最小包围圆
-                    (x, y), radius = cv2.minEnclosingCircle(largest_contour)
-                    # 进一步验证这个轮廓是否接近圆形
-                    area = cv2.contourArea(largest_contour)
-                    circle_area = np.pi * radius * radius
+                    (x, y), radius = cv2.minEnclosingCircle(contour)
+                    # 忽略尺寸不对的轮廓
+                    if radius < r_small or radius > r_large: continue
+                    # 验证轮廓是否接近圆形
+                    area = cv2.contourArea(contour)
+                    circle_area = 3.14 * radius * radius
                     circularity = area / circle_area
                     # 如果轮廓接近圆形（圆形度大于0.9）
                     if circularity > 0.9:
-                        judge_line_r = int(radius * 0.88)
-                        circles_detected.append((int(x), int(y), judge_line_r))
-                        frame_counter += 1
+                        valid_circles.append((x, y, int(radius)))
+                
+                # 如果找到合适的圆形，选择半径最大的
+                if valid_circles:
+                    valid_circles.sort(key=lambda x: x[2], reverse=True)
+                    x, y, radius = valid_circles[0]
+                    judge_line_r = int(radius * 0.88)
+                    circles_detected.append((int(x), int(y), judge_line_r))
+                    circles += 1
+                    if circles == target: break
+                    
+                frame_counter += 1
 
             if len(circles_detected) < target:
                 raise Exception("detect circle: Not enough circles detected")

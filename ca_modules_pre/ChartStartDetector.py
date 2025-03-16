@@ -40,7 +40,7 @@ class ChartStartDetector:
             print("Chart Start Detector...Find_first_black_frame...", end="\r")
 
             circle_center = state["circle_center"]
-            inner_radius = int(state["circle_radius"] * 0.8)  # 80% of radius for outer circle
+            outer_radius = int(state["circle_radius"] * 0.8)
             frame_number = 0
             total_frames = state["total_frames"]
 
@@ -49,14 +49,17 @@ class ChartStartDetector:
                 if not ret: break # end of video
                 print(f"Chart Start Detector...Find_first_black_frame...{frame_number}/{total_frames}", end="\r")
 
-                # Create a ring-shaped mask for the inner circle area
+                # 创建80%判定区域的遮罩，避免outline的干扰
                 mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-                cv2.circle(mask, circle_center, inner_radius, 255, -1)
+                cv2.circle(mask, circle_center, outer_radius, 255, -1)
                 masked_frame = cv2.bitwise_and(frame, frame, mask=mask)
-
+                # 将帧转换为灰度图
                 gray = cv2.cvtColor(masked_frame, cv2.COLOR_BGR2GRAY)
+                # 使用二值化，将<180的变为黑色，避免其他元素的干扰
+                _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+                
                 # Check if all pixels in masked area are drak (value < 5)
-                if np.all(np.where(mask > 0, gray < 5, True)): break
+                if np.all(np.where(mask > 0, binary < 5, True)): break
 
                 frame_number += 1
             
@@ -79,7 +82,7 @@ class ChartStartDetector:
 
             cap.set(cv2.CAP_PROP_POS_FRAMES, first_black_frame + 60) 
             circle_center = state["circle_center"]
-            inner_radius = int(state["circle_radius"] * 0.8)  # 80% of radius for outer circle
+            inner_radius = int(state["circle_radius"] * 0.8)
             frame_number = first_black_frame + 60
             total_frames = state["total_frames"]
 
@@ -95,8 +98,8 @@ class ChartStartDetector:
 
                 # 将帧转换为灰度图
                 gray = cv2.cvtColor(masked_frame, cv2.COLOR_BGR2GRAY)
-                # 使用二值化，将灰度值<75的变为黑色，避免bga的干扰
-                _, binary = cv2.threshold(gray, 75, 255, cv2.THRESH_BINARY)
+                # 使用二值化，将<180的变为黑色，避免其他元素的干扰
+                _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
                 # Check if any pixel in masked area is bright
                 if np.any(binary > 0): break
                 

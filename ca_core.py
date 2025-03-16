@@ -15,7 +15,7 @@ class ChartAnalyzer:
         # state -------------
         self.state = {}
         # video_width, video_height, video_fps, total_frames
-        # circle_center, circle_radius, touch_areas, first_offset
+        # circle_center, circle_radius, touch_areas, chart_start, note_speed
         # debug
 
     def update_state(self, key: str, value) -> None:
@@ -66,8 +66,8 @@ class ChartAnalyzer:
             self.state['chart_start'] = detector.process(self.cap, self.state)
 
             # get note speed
-            #detector = NoteSpeedDetector()
-            #self.state['note_speed'] = detector.process(self.cap, self.state)
+            detector = NoteSpeedDetector()
+            self.state['note_speed'] = detector.process(self.cap, self.state)
             return
 
         except Exception as e:
@@ -129,6 +129,6 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] Ourania MASTER-p01-116.mp4"
+    video = r"C:\OBS\6_6_touch_178.mp4"
     ca = ChartAnalyzer()
     ca.analyze(video, True)
