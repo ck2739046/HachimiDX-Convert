@@ -3,6 +3,8 @@ import os
 import ca_config
 
 from ca_modules_pre.JudgeLineDetector import JudgeLineDetector
+from ca_modules_pre.ChartStartDetector import ChartStartDetector
+from ca_modules_pre.NoteSpeedDetector import NoteSpeedDetector
 
 class ChartAnalyzer:
     def __init__(self):
@@ -13,22 +15,24 @@ class ChartAnalyzer:
         # state -------------
         self.state = {}
         # video_width, video_height, video_fps, total_frames
-        # circle_center, circle_radius, touch_areas
+        # circle_center, circle_radius, touch_areas, first_offset
+        # debug
 
     def update_state(self, key: str, value) -> None:
         """更新状态"""
         self.state[key] = value
 
 
-    def analyze(self, video_path: str) -> bool:
+    def analyze(self, video_path: str, debug : bool) -> bool:
         """主处理流程"""
         try:
-            self.state["debug"] = False
+            self.state["debug"] = debug
             # Load video
             self.load_video(video_path)
             
             # Preprocess
             self.run_preprocess()
+            return True
 
             # Process video
             while True:
@@ -56,6 +60,14 @@ class ChartAnalyzer:
             self.state['circle_center'], \
             self.state['circle_radius'], \
             self.state['touch_areas'] = detector.process(self.cap, self.state)
+
+            # get chart start
+            detector = ChartStartDetector()
+            self.state['chart_start'] = detector.process(self.cap, self.state)
+
+            # get note speed
+            #detector = NoteSpeedDetector()
+            #self.state['note_speed'] = detector.process(self.cap, self.state)
             return
 
         except Exception as e:
@@ -117,6 +129,6 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\Code\Ariake-720p.mp4"
+    video = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] Ourania MASTER-p01-116.mp4"
     ca = ChartAnalyzer()
-    ca.analyze(video)
+    ca.analyze(video, True)

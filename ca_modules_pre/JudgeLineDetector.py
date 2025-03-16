@@ -17,8 +17,9 @@ class JudgeLineDetector:
         """
         try:
             print("Judge Line Detector...", end="\r")
+
             # detect circle
-            self.circle_center, self.circle_radius = self.detect_circle(cap, state)
+            self.circle_center, self.circle_radius = self.detect_circle(cap)
 
             # detect touch areas
             template = self.load_template()
@@ -26,69 +27,67 @@ class JudgeLineDetector:
             self.touch_areas = self.organize_regions(regions)
 
             # display preview
-            if state['debug']: self.display_preview(cap, state)
+            print("Judge Line Detector...Done               ")
+            if state['debug']:
+                print(f"  DEBUG: O {self.circle_center}, R {self.circle_radius}")
+                self.display_preview(cap, state)
 
-            print("Judge Line Detector... Done")
+            # Reset to start of video and return
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             return (self.circle_center, self.circle_radius, self.touch_areas)
 
         except Exception as e:
             raise Exception(f"Error in JudgeLineDetector: {e}")
 
 
-    def detect_circle(self, cap, state, traget=30) -> list:
-        """采样30个黑帧, 进行圆形检测，取出现次数最多的圆
-        arg: cap, state(video_width, video_height), target(可选,默认30)
+    def detect_circle(self, cap, target=15) -> list:
+        """采样15个帧, 检测判定线圆形，返回圆心和半径
+        arg: cap, target(可选,默认15)
         ret: circle_center(x, y), circle_radius
         """
         try:
-            black_frames_processed = 0
-            total_pixels = state["video_width"] * state["video_height"]
-            height = state["video_height"]
-            x_offset = int(-0.003*height) # 补偿-0.3%
-            y_offset = 0
-            r_offset = 0
+            print(f"Judge Line Detector...Detect_circle...", end="\r")
+
+            frame_counter = 0
             circles_detected = []
 
-            # Process black frames
-            while black_frames_processed < traget:
+            # Process frames
+            while frame_counter < target:
                 ret, frame = cap.read()
                 if not ret: break # end of video
 
-                # count black pixels
+                # 转换为灰度图，二值化突出屏幕部分 (大于10的全白)
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                black_pixels = np.sum(gray < 20)
-                # check if frame is mostly black (90%)
-                is_frame_black = black_pixels / total_pixels > 0.9
-                if not is_frame_black: continue
+                _, binary = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
 
-                # 转换为灰度图，二值化突出白色部分
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                _, binary = cv2.threshold(gray, 220, 255, cv2.THRESH_BINARY)
-                # detect circle
-                circles = cv2.HoughCircles(
-                    binary,
-                    cv2.HOUGH_GRADIENT,
-                    dp=1,                         # 保持原分辨率
-                    minDist=height,               # 只检测一个圆
-                    param1=50,                    
-                    param2=30,
-                    minRadius=int(height * 0.2),  # 最小半径为30%
-                    maxRadius=int(height * 0.5)   # 最大半径为50%
-                )
-                if circles is not None:
-                    circles = np.uint16(np.around(circles))
-                    for circle in circles[0, :]:
-                        circles_detected.append((circle[0], circle[1], circle[2]))
-                    black_frames_processed += 1
+                # 寻找轮廓
+                contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if not contours:
+                    raise Exception("detect_circle: No contours detected")
+                
+                if contours:
+                    # 找到最大的轮廓（应该是圆形游戏区域）
+                    largest_contour = max(contours, key=cv2.contourArea)
+                    # 计算最小包围圆
+                    (x, y), radius = cv2.minEnclosingCircle(largest_contour)
+                    # 进一步验证这个轮廓是否接近圆形
+                    area = cv2.contourArea(largest_contour)
+                    circle_area = np.pi * radius * radius
+                    circularity = area / circle_area
+                    # 如果轮廓接近圆形（圆形度大于0.9）
+                    if circularity > 0.9:
+                        judge_line_r = int(radius * 0.88)
+                        circles_detected.append((int(x), int(y), judge_line_r))
+                        frame_counter += 1
 
-            if not circles_detected:
-                raise Exception("detect circle: No circle detected")
+            if len(circles_detected) < target:
+                raise Exception("detect circle: Not enough circles detected")
             
             # 取出现次数最多的圆
             circles_detected = [(int(x), int(y), int(r)) for x, y, r in circles_detected]
             most_common = max(set(circles_detected), key=circles_detected.count)
-            circle_center = (most_common[0]+x_offset, most_common[1]+y_offset)
-            circle_radius = most_common[2]+r_offset
+            circle_center = (most_common[0], most_common[1])
+            circle_radius = most_common[2]
 
             return circle_center, circle_radius
 
@@ -117,10 +116,10 @@ class JudgeLineDetector:
         ret: regions[]
         """
         try:
-            # Convert template to grayscale
+            print(f"Judge Line Detector...Detect_regions...", end="\r")
+
+            # 转换为灰度图并二值化
             gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-            # Simple threshold to find gray regions
-            # background: 0, regions: 255
             _, binary = cv2.threshold(
                 gray, 
                 230, # above 230 -> 0 (black)
@@ -173,6 +172,8 @@ class JudgeLineDetector:
         ret: touch_areas{label: {center, polygon, original_pos}}
         """
         try:
+            print(f"Judge Line Detector...Organize_regions...", end="\r")
+
             # Sort by distance from center and group
             regions.sort(key=lambda x: x["dist_from_center"])
             groups = {
@@ -221,23 +222,31 @@ class JudgeLineDetector:
             # Set window
             window_name = "Judge Line Detector Preview"
             cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+            # Playback control variables
+            isPaused = False
             # Show frames
             while True:
-                ret, frame = cap.read()
-                if not ret: break # end of video
-                frame = self.draw_frames(frame, state)
+                if not isPaused:
+                    ret, frame = cap.read()
+                    if not ret: break  # end of video
+                    frame = self.draw_frames(frame, state, isPaused)
+
                 cv2.imshow(window_name, frame)
-                if cv2.waitKey(12) & 0xFF == ord('q'):
-                    break
+
+                key = cv2.waitKey(8) & 0xFF
+                if key == ord('q'):
+                    break # quit
+                if key == ord(' '):
+                    isPaused = not isPaused
+                    frame = self.draw_frames(frame, state, isPaused) # draw paused text
+
             cv2.destroyWindow(window_name)
-            # Reset to start of video
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             
         except Exception as e:
             raise Exception(f"Error in display_preview: {e}")
 
 
-    def draw_frames(self, frame, state):
+    def draw_frames(self, frame, state, isPaused):
         """Draw cirle and touch areas with labels"""
         try:
             font_size = max(0.5, round(state["video_height"]/1000, 1))
@@ -253,6 +262,18 @@ class JudgeLineDetector:
                 (255, 255, 255),
                 thickness
             )
+
+            # Draw paused text if paused
+            if isPaused:
+                cv2.putText(
+                    frame,
+                    "Paused",
+                    (10, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    font_size,
+                    (0, 255, 255),
+                    thickness
+                )
 
             # Draw circle
             cv2.circle(frame, self.circle_center, self.circle_radius, (0, 255, 0), thickness)
@@ -283,7 +304,6 @@ class JudgeLineDetector:
                     thickness
                 )
 
-            # Resize frame
             return frame
     
         except Exception as e:
