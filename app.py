@@ -15,12 +15,6 @@ import server
 import os
 import psutil
 
-#--------------------------------------------------------------
-# Initialize Class
-
-class FlaskThread(threading.Thread):
-    def run(self):
-        server.app.run(port=5273)
 
 def exception_handler(exctype, value, traceback):
     # Close chrome before exiting
@@ -39,6 +33,14 @@ def exception_handler(exctype, value, traceback):
     print("---mai chart analyze quit in exception_handler---")
     print("Press ignore the following QProcess error:")
     sys.exit(1)
+
+
+#--------------------------------------------------------------
+# Initialize Class
+
+class FlaskThread(threading.Thread):
+    def run(self):
+        server.app.run(port=5273)
 
 class FolderComboBox(QComboBox):
 

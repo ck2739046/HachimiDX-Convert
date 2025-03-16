@@ -52,6 +52,7 @@ state = AppState()
 # Configure static folder path
 static_folder = os.path.join(os.path.dirname(__file__), 'static')
 app.static_folder = static_folder
+app.template_folder = static_folder # render_template path
 
 # Configure song folder path (brooooo)
 song_folder = os.path.join(os.path.dirname(__file__), 'brooooo')
@@ -60,7 +61,7 @@ app.song_folder = song_folder
 # Root
 @app.route('/')
 def chart_player():
-    return render_template('chart.html')
+    return render_template('majdataView.html')
 
 @app.route('/MajdataView/src/<string:song>/<string:track>/ImageFull/1')
 def majdataView_bg(song, track):
