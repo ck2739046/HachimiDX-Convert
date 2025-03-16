@@ -66,8 +66,8 @@ class ChartAnalyzer:
             self.state['chart_start'] = detector.process(self.cap, self.state)
 
             # get note speed
-            detector = NoteSpeedDetector()
-            self.state['note_speed'] = detector.process(self.cap, self.state)
+            #detector = NoteSpeedDetector()
+            #self.state['note_speed'] = detector.process(self.cap, self.state)
             return
 
         except Exception as e:
@@ -129,6 +129,6 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\OBS\6_6_touch_178.mp4"
+    video = r"C:\OBS\6_6_slide_181.mp4"
     ca = ChartAnalyzer()
     ca.analyze(video, True)

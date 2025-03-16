@@ -245,16 +245,16 @@ class JudgeLineDetector:
                 if not isPaused:
                     ret, frame = cap.read()
                     if not ret: break  # end of video
-                    frame = self.draw_frames(frame, state, isPaused)
+                    new_frame = self.draw_frames(frame, state, isPaused)
 
-                cv2.imshow(window_name, frame)
+                cv2.imshow(window_name, new_frame)
 
-                key = cv2.waitKey(8) & 0xFF
+                key = cv2.waitKey(1) & 0xFF
                 if key == ord('q'):
                     break # quit
                 if key == ord(' '):
                     isPaused = not isPaused
-                    frame = self.draw_frames(frame, state, isPaused) # draw paused text
+                    new_frame = self.draw_frames(frame, state, isPaused) # draw paused text
 
             cv2.destroyWindow(window_name)
             
@@ -265,31 +265,9 @@ class JudgeLineDetector:
     def draw_frames(self, frame, state, isPaused):
         """Draw cirle and touch areas with labels"""
         try:
-            font_size = max(0.5, round(state["video_height"]/1000, 1))
-            thickness = max(1, round(state["video_height"]/360))
-
-            # Draw instruction text
-            cv2.putText(
-                frame,
-                "Press Q to quit",
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                font_size,
-                (255, 255, 255),
-                thickness
-            )
-
-            # Draw paused text if paused
-            if isPaused:
-                cv2.putText(
-                    frame,
-                    "Paused",
-                    (10, 70),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    font_size,
-                    (0, 255, 255),
-                    thickness
-                )
+            screen_r = int(self.circle_radius / 0.88)
+            font_size = 1
+            thickness = 3
 
             # Draw circle
             cv2.circle(frame, self.circle_center, self.circle_radius, (0, 255, 0), thickness)
@@ -317,6 +295,37 @@ class JudgeLineDetector:
                     cv2.FONT_HERSHEY_SIMPLEX,
                     font_size,
                     (255, 255, 255),
+                    thickness
+                )
+
+            # crop and resize frame
+            x1 = self.circle_center[0] - screen_r
+            x2 = self.circle_center[0] + screen_r
+            y1 = self.circle_center[1] - screen_r
+            y2 = self.circle_center[1] + screen_r
+            frame = frame[y1:y2, x1:x2]
+            frame = cv2.resize(frame, (1000, 1000))
+
+            # Draw instruction text
+            cv2.putText(
+                frame,
+                "Press Q to quit",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                font_size,
+                (255, 255, 255),
+                thickness
+            )
+
+            # Draw paused text if paused
+            if isPaused:
+                cv2.putText(
+                    frame,
+                    "Paused",
+                    (10, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    font_size,
+                    (0, 255, 255),
                     thickness
                 )
 
