@@ -173,7 +173,7 @@ class JudgeLineDetector:
 
             if not regions:
                 raise Exception("detect_regions: No regions detected")
-            if len(regions) != 34:
+            if len(regions) != 33:
                 raise Exception(f"detect_regions: Not enough regions detected {len(regions)}")
 
             return regions
@@ -193,11 +193,11 @@ class JudgeLineDetector:
             # Sort by distance from center and group
             regions.sort(key=lambda x: x["dist_from_center"])
             groups = {
-                'C': regions[:2],
-                'B': regions[2:10],
-                'E': regions[10:18],
-                'A': regions[18:26],
-                'D': regions[26:]
+                'C': regions[0:1],
+                'B': regions[1:9],
+                'E': regions[9:17],
+                'A': regions[17:25],
+                'D': regions[25:]
             }
             
             touch_areas = {}

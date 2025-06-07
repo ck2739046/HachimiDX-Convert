@@ -4,7 +4,7 @@ import ca_config
 
 from ca_modules_pre.JudgeLineDetector import JudgeLineDetector
 from ca_modules_pre.ChartStartDetector import ChartStartDetector
-from ca_modules_pre.NoteSpeedDetector import NoteSpeedDetector
+from ca_modules.NoteDetector import NoteDetector
 
 class ChartAnalyzer:
     def __init__(self):
@@ -14,8 +14,9 @@ class ChartAnalyzer:
         self.cap = None           # cv2.VideoCapture对象
         # state -------------
         self.state = {}
+        # bpm, notes_style (0/1)
         # video_width, video_height, video_fps, total_frames
-        # circle_center, circle_radius, touch_areas, chart_start, note_speed
+        # circle_center, circle_radius, touch_areas, chart_start
         # debug
 
     def update_state(self, key: str, value) -> None:
@@ -23,23 +24,28 @@ class ChartAnalyzer:
         self.state[key] = value
 
 
-    def analyze(self, video_path: str, debug : bool) -> bool:
+    def analyze(self, video_path: str, debug : bool, bpm : float, notes_style : int) -> bool:
         """主处理流程"""
         try:
             self.state["debug"] = debug
+            self.state["bpm"] = bpm
+            self.state["notes_style"] = notes_style
+            
             # Load video
             self.load_video(video_path)
             
             # Preprocess
             self.run_preprocess()
-            return True
 
+            # Reset to start of video
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.state["chart_start"])
+            self.frame_count = self.state["chart_start"]
             # Process video
             while True:
                 ret, self.current_frame = self.cap.read()
-                if not ret: break
-                self.frame_count += 1
+                if not ret: break # end of video
                 self.process_frame()
+                self.frame_count += 1
             self.cap.release()
 
             # Postprocess
@@ -65,11 +71,6 @@ class ChartAnalyzer:
             detector = ChartStartDetector()
             self.state['chart_start'] = detector.process(self.cap, self.state)
 
-            # get note speed
-            #detector = NoteSpeedDetector()
-            #self.state['note_speed'] = detector.process(self.cap, self.state)
-            return
-
         except Exception as e:
             raise Exception(f"Error in preprocess: {e}")
         
@@ -78,6 +79,8 @@ class ChartAnalyzer:
         """处理单个帧"""
         try:
             # call modules
+            detector = NoteDetector()
+            detector.process(self.current_frame, self.frame_count, self.state)
             return
         except Exception as e:
             raise Exception(f"Error processing frame {self.frame_count}: {e}")
@@ -129,6 +132,6 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\OBS\6_6_slide_181.mp4"
+    video = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] MORNINGLOOM MASTER-p01-116.mp4"
     ca = ChartAnalyzer()
-    ca.analyze(video, True)
+    ca.analyze(video, True, 102, 1)
