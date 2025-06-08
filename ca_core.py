@@ -1,9 +1,8 @@
 import cv2
 import os
-import ca_config
 
-from ca_modules_pre.JudgeLineDetector import JudgeLineDetector
-from ca_modules_pre.ChartStartDetector import ChartStartDetector
+from ca_modules.JudgeLineDetector import JudgeLineDetector
+from ca_modules.ChartStartDetector import ChartStartDetector
 
 class ChartAnalyzer:
     def __init__(self):
