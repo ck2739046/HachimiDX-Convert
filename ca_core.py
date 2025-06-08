@@ -134,9 +134,9 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\Code\Deicide-1080p.mp4"
+    video = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] MORNINGLOOM MASTER-p01-116.mp4"
     ca = ChartAnalyzer()
-    ca.analyze(video, 163, 1, True)
+    ca.analyze(video, 102, 1, True)
 
     # morningloom 102 337-488-4.351
     # decide 163 384-486-4.697

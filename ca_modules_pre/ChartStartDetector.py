@@ -65,7 +65,7 @@ class ChartStartDetector:
 
         except Exception as e:
             raise Exception(f"Error in ChartStartDetector: {e}")
-        
+
 
     def find_first_black_frame(self, cap, state) -> int:
         """Find the first frame where the inner circle is completely black
@@ -77,6 +77,7 @@ class ChartStartDetector:
 
             circle_center = state["circle_center"]
             outer_radius = int(state["circle_radius"] * 0.8)
+            inner_radius = int(state["circle_radius"] * 0.4)
             frame_number = 0
             total_frames = state["total_frames"]
 
@@ -85,17 +86,30 @@ class ChartStartDetector:
                 if not ret: break # end of video
                 print(f"Chart Start Detector...Find_first_black_frame...{frame_number}/{total_frames}", end="\r")
 
-                # 创建80%判定区域的遮罩，避免outline的干扰
-                mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-                cv2.circle(mask, circle_center, outer_radius, 255, -1)
-                masked_frame = cv2.bitwise_and(frame, frame, mask=mask)
-                # 将帧转换为灰度图
+                # 创建外部遮罩（80%半径）
+                outer_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+                cv2.circle(outer_mask, circle_center, outer_radius, 255, -1)
+                # 创建内部遮罩（40%半径）
+                inner_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+                cv2.circle(inner_mask, circle_center, inner_radius, 255, -1)
+                # 创建环形区域遮罩（外部遮罩 - 内部遮罩）
+                ring_mask = cv2.bitwise_and(outer_mask, cv2.bitwise_not(inner_mask))
+                # 应用外部遮罩获取整体区域
+                masked_frame = cv2.bitwise_and(frame, frame, mask=outer_mask)
                 gray = cv2.cvtColor(masked_frame, cv2.COLOR_BGR2GRAY)
-                # 使用二值化，将<180的变为黑色，避免其他元素的干扰
-                _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
-                
-                # Check if all pixels in masked area are drak (value < 5)
-                if np.all(np.where(mask > 0, binary < 5, True)): break
+
+                # 对内部区域进行二值化处理（宽容<200变为黑色）
+                inner_gray = cv2.bitwise_and(gray, gray, mask=inner_mask)
+                _, inner_binary = cv2.threshold(inner_gray, 200, 255, cv2.THRESH_BINARY)
+                # 对环形区域进行二值化处理（严格<10变为黑色）
+                ring_gray = cv2.bitwise_and(gray, gray, mask=ring_mask)
+                _, ring_binary = cv2.threshold(ring_gray, 10, 255, cv2.THRESH_BINARY)
+
+                # 检查两个区域是否全黑（值 < 5）
+                inner_all_black = np.all(np.where(inner_mask > 0, inner_binary < 5, True))
+                ring_all_black = np.all(np.where(ring_mask > 0, ring_binary < 5, True))
+                if inner_all_black and ring_all_black:
+                    break
 
                 frame_number += 1
             
