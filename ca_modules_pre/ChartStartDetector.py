@@ -220,12 +220,12 @@ class ChartStartDetector:
                 if end_pos <= total_length:
                     full_template[start_pos:end_pos] = template_resampled
 
-            if state['debug']:
+            #if state['debug']:
                 # Save the generated template to desktop
-                desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-                output_file = os.path.join(desktop_path, "generated_template.wav")
-                normalized_template = full_template / (np.max(np.abs(full_template)) + 1e-8)
-                wavfile.write(output_file, int(audio_sr), normalized_template.astype(np.float32))
+                #desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+                #output_file = os.path.join(desktop_path, "generated_template.wav")
+                #normalized_template = full_template / (np.max(np.abs(full_template)) + 1e-8)
+                #wavfile.write(output_file, int(audio_sr), normalized_template.astype(np.float32))
                     
             return full_template
             
