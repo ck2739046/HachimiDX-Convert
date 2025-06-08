@@ -16,7 +16,7 @@ class ChartAnalyzer:
         # bpm, notes_style (0/1)
         # video_width, video_height, video_fps, total_frames, video_path
         # circle_center, circle_radius, touch_areas, chart_start, audio_start
-        # debug
+
 
     def update_state(self, key: str, value) -> None:
         """更新状态"""
@@ -33,33 +33,6 @@ class ChartAnalyzer:
             # Load video
             self.load_video(video_path)
             
-            # Preprocess
-            self.run_preprocess()
-
-            # Reset to start of video
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.state["chart_start"])
-            self.frame_count = self.state["chart_start"]
-            # Process video
-            while True:
-                ret, self.current_frame = self.cap.read()
-                if not ret: break # end of video
-                self.process_frame()
-                self.frame_count += 1
-            self.cap.release()
-
-            # Postprocess
-            self.run_postprocess()
-
-            return True
-        
-        except Exception as e:
-            print(f"Error in analyze: {e}")
-            return False
-    
-
-    def run_preprocess(self):
-        """运行预处理"""
-        try:
             # get judge line
             detector = JudgeLineDetector()
             self.state['circle_center'], \
@@ -71,26 +44,11 @@ class ChartAnalyzer:
             self.state['chart_start'], \
             self.state['audio_start'] = detector.process(self.cap, self.state)
 
-        except Exception as e:
-            raise Exception(f"Error in preprocess: {e}")
+            return True
         
-
-    def process_frame(self):
-        """处理单个帧"""
-        try:
-            # call modules
-            return
         except Exception as e:
-            raise Exception(f"Error processing frame {self.frame_count}: {e}")
-        
-        
-    def run_postprocess(self):
-        """运行后处理"""
-        try:
-            # call modules
-            return
-        except Exception as e:
-            raise Exception(f"Error in postprocess: {e}")
+            print(f"Error in analyze: {e}")
+            return False
 
 
     def load_video(self, video_path: str):
