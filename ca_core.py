@@ -4,7 +4,6 @@ import ca_config
 
 from ca_modules_pre.JudgeLineDetector import JudgeLineDetector
 from ca_modules_pre.ChartStartDetector import ChartStartDetector
-#from ca_modules.NoteDetector import NoteDetector
 
 class ChartAnalyzer:
     def __init__(self):
@@ -80,8 +79,6 @@ class ChartAnalyzer:
         """处理单个帧"""
         try:
             # call modules
-            #detector = NoteDetector()
-            #detector.process(self.current_frame, self.frame_count, self.state)
             return
         except Exception as e:
             raise Exception(f"Error processing frame {self.frame_count}: {e}")
