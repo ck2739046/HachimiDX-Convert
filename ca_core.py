@@ -15,8 +15,8 @@ class ChartAnalyzer:
         # state -------------
         self.state = {}
         # bpm, notes_style (0/1)
-        # video_width, video_height, video_fps, total_frames
-        # circle_center, circle_radius, touch_areas, chart_start
+        # video_width, video_height, video_fps, total_frames, video_path
+        # circle_center, circle_radius, touch_areas, chart_start, audio_start
         # debug
 
     def update_state(self, key: str, value) -> None:
@@ -24,7 +24,7 @@ class ChartAnalyzer:
         self.state[key] = value
 
 
-    def analyze(self, video_path: str, debug : bool, bpm : float, notes_style : int) -> bool:
+    def analyze(self, video_path:str, bpm:float, notes_style:int=1, debug:bool=False) -> bool:
         """主处理流程"""
         try:
             self.state["debug"] = debug
@@ -69,7 +69,8 @@ class ChartAnalyzer:
 
             # get chart start
             detector = ChartStartDetector()
-            self.state['chart_start'] = detector.process(self.cap, self.state)
+            self.state['chart_start'], \
+            self.state['audio_start'] = detector.process(self.cap, self.state)
 
         except Exception as e:
             raise Exception(f"Error in preprocess: {e}")
@@ -99,7 +100,7 @@ class ChartAnalyzer:
         """加载视频文件, 获取信息
         arg: video_path
         ret: N/A
-        设置self.state(video_width, video_height, video_fps, total_frames)
+        设置self.state(video_width, video_height, video_fps, total_frames, video_path)
         设置self.cap = cv2.VideoCapture(video_path)                 
         """
 
@@ -125,6 +126,7 @@ class ChartAnalyzer:
             self.update_state("video_height", min(width, height)) # 高取小值
             self.update_state("video_fps", fps)
             self.update_state("total_frames", total_frames)
+            self.update_state("video_path", video_path)
             return
         
         except Exception as e:
@@ -132,6 +134,12 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] MORNINGLOOM MASTER-p01-116.mp4"
+    video = r"C:\Code\Deicide-1080p.mp4"
     ca = ChartAnalyzer()
-    ca.analyze(video, True, 102, 1)
+    ca.analyze(video, 163, 1, True)
+
+    # morningloom 102 337-488-4.351
+    # decide 163 384-486-4.697
+    # Ourania 204 403-484-4.668
+    # エイプリルスター 185 441-454-0.679
+    # Ariake 190 337-419-354

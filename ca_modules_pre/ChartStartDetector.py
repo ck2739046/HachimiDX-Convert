@@ -1,15 +1,24 @@
 import cv2
 import numpy as np
+import librosa
+import os
+from scipy.signal import correlate
+from scipy.io import wavfile
+import warnings
+
+# Suppress deprecation warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 class ChartStartDetector:
     def __init__(self):
-        pass
+        self.template_path = "static/template/start_sound.aac"
 
 
     def process(self, cap, state: dict) -> float:
         """Main process
-        arg: cap, state(circle_center, circle_radius, total_frames, debug)
-        ret: first_offset (in seconds)
+        arg: cap, state(circle_center, circle_radius, total_frames, debug, bpm, video_fps, video_path)
+        ret: chart_start_frame, audio_start_frame
         """
         try:
             print("Chart Start Detector...", end="\r")
@@ -20,12 +29,39 @@ class ChartStartDetector:
             # Find first frame when the first note appears
             chart_start = self.find_chart_start_frame(cap, state, first_black_frame)
 
+            # Try audio start detection
+            is_audio_success = False
+            try:
+                # Load template and audio data
+                template, template_sr, audio_data, audio_sr = self.load_template_and_audio(state)
+                # Generate the full 4-beat template based on BPM
+                full_template = self.generate_template(state, template, template_sr, audio_sr)
+                # Perform template matching to find the match frame
+                match_frame = self.template_match(state, audio_data, audio_sr, full_template, chart_start)
+                # End
+                is_audio_success = True
+            except Exception as e:
+                print(f"ChartStartDetector: Audio start detection error: {e}")
+
+            if is_audio_success:
+                audio_start = match_frame
+            else:
+                audio_start = -666
+
             print(f"Chart Start Detector...Done                                ")
-            if state["debug"]: print(f"  DEBUG: {first_black_frame} - {chart_start}")
+            if not is_audio_success:
+                print("  Warning: Fail to get audio start due to audio detection error")
+
+            if state["debug"]:
+                if is_audio_success:
+                    print(f"  DEBUG (audio): first_black_frame {first_black_frame} - chart_start {chart_start} - audio_start {audio_start}")
+                else:
+                    print(f"  DEBUG (visual): first_black_frame {first_black_frame} - chart_start {chart_start}")
             
             # Reset to start of video and return
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            return chart_start
+            return chart_start-5, audio_start
+                   # 保险起见，提前5帧
 
         except Exception as e:
             raise Exception(f"Error in ChartStartDetector: {e}")
@@ -108,7 +144,131 @@ class ChartStartDetector:
             if frame_number == total_frames or frame_number < 10:
                 raise Exception("find chart start frame: Chart start frame not found")
             
-            return frame_number-5 # 保险起见，往前推5帧
+            return frame_number
             
         except Exception as e:
             raise Exception(f"Error in find_chart_start_frame: {e}")
+        
+
+    def load_template_and_audio(self, state):
+        """Load the start sound template adn video audio
+        arg: self.template_path, state(video_path)
+        ret: template, template_sr, audio_data, audio_sr
+        """
+        try:
+            template_path_full = os.path.join(os.path.dirname(os.path.dirname(__file__)), self.template_path)
+            if not os.path.exists(template_path_full):
+                raise Exception("load_template_and_video: Template start_sound not found")
+            
+            template, template_sr = librosa.load(template_path_full, sr=None)
+            if template is None or len(template) == 0:
+                raise Exception("load_template_and_video: Cannot load template start_sound")
+            
+            audio_data, audio_sr = librosa.load(state['video_path'], sr=None)
+            if audio_data is None or len(audio_data) == 0:
+                raise Exception("load_template_and_video: No audio track found in video")
+            
+            return template, template_sr, audio_data, audio_sr
+        
+        except Exception as e:
+            raise Exception(f"Error in load_template_and_audio: {e}")
+
+
+    def generate_template(self, state, template, template_sr, audio_sr) -> np.ndarray:
+        """Generate the 4-beat full template based on BPM
+        arg: state(bpm, debug), template, template_sr, audio_sr
+        ret: full_template
+        """
+        try:
+            print(f"Chart Start Detector...generate_template...", end="\r")
+            beat_interval = 60.0 / state.get("bpm")
+            
+            # Resample template to audio sample rate if needed
+            if template_sr != audio_sr:
+                template_resampled = librosa.resample(
+                    template, 
+                    orig_sr=template_sr, 
+                    target_sr=audio_sr
+                )
+            else:
+                template_resampled = template.copy()
+            
+            # Calculate sample interval between beats
+            sample_interval = int(beat_interval * audio_sr)
+            template_length = len(template_resampled)
+            
+            # Create 4-beat template with proper intervals
+            total_length = template_length + 3 * sample_interval
+            full_template = np.zeros(total_length)
+            for i in range(4):
+                start_pos = i * sample_interval
+                end_pos = start_pos + template_length
+                if end_pos <= total_length:
+                    full_template[start_pos:end_pos] = template_resampled
+
+            if state['debug']:
+                # Save the generated template to desktop
+                desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+                output_file = os.path.join(desktop_path, "generated_template.wav")
+                normalized_template = full_template / (np.max(np.abs(full_template)) + 1e-8)
+                wavfile.write(output_file, int(audio_sr), normalized_template.astype(np.float32))
+                    
+            return full_template
+            
+        except Exception as e:
+            raise Exception(f"Error in generate_template: {e}")
+        
+
+    def template_match(self, state, audio_data, audio_sr, full_template, chart_start, threshold: float = 10) -> float:
+        """Find the best match position for the template in audio data
+        arg: state(video_fps, total_frames), audio_data, audio_sr, full_template, chart_start, threshold
+        ret: audio_start
+        """
+        try:
+            print("Chart Start Detector...template_match...", end="\r")
+
+            # Convert chart_start frame to audio sample position
+            offset = 5 * state["video_fps"]
+            chart_start_time = (chart_start+offset) / state["video_fps"]
+            chart_start_sample = int(chart_start_time * audio_sr)
+            if chart_start_sample >= len(audio_data):
+                raise Exception(f"template_match: chart_start exceeds audio length")
+            
+            # Truncate audio data to only include samples before chart_start
+            audio_data_truncated = audio_data[:chart_start_sample]
+            if len(audio_data_truncated) < len(full_template):
+                raise Exception(f"template_match: not enough audio data before chart_start for template matching")
+
+            # Normalize both audio and template
+            def rms_normalize(signal):
+                rms = np.sqrt(np.mean(signal**2))
+                return signal / (rms + 1e-8)
+            
+            audio_norm = rms_normalize(audio_data_truncated)
+            template_norm = rms_normalize(full_template)
+            
+            # Perform normalized cross-correlation
+            correlation = correlate(audio_norm, template_norm, mode='valid')
+            
+            # Normalize correlation by template energy for proper scaling
+            template_energy = np.sum(template_norm**2)
+            correlation = correlation / np.sqrt(template_energy)
+
+            max_correlation = np.max(correlation)
+
+            if max_correlation < threshold:
+                raise Exception(f"template_match: Correlation too low: {max_correlation:.3f} < {threshold}")
+                
+            # Find the position of maximum correlation
+            max_pos = np.argmax(correlation)
+            
+            # Convert sample position to match frame
+            match_time = max_pos / audio_sr
+            audio_start = int(match_time * state["video_fps"])
+            if not 0 <= audio_start <= state["total_frames"]:
+                raise Exception(f"audio start {audio_start} out of bounds (0, {state['total_frames']})")
+
+            return audio_start
+            
+        except Exception as e:
+            raise Exception(f"Error in template_match: {e}")
