@@ -5,6 +5,7 @@ import os
 
 class NoteDetector:
     def __init__(self):
+        self.threshold = 200
         self.tap_template_path = "static/template/tap.png"
         self.tap_notes = {}
         # dict{frame_counter: detected_notes}
@@ -31,9 +32,9 @@ class NoteDetector:
                 if not ret: break # end of video
                 print(f"Note Detector...{frame_counter}/{total_frames}", end="\r")
 
-                # 转换为灰度图，二值化突出屏幕部分 (大于200的全白)
+                # 转换为灰度图，二值化突出屏幕部分 (大于阈值的全白)
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                _, pure_frame = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+                _, pure_frame = cv2.threshold(gray, self.threshold, 255, cv2.THRESH_BINARY)
 
                 # Detect tap notes
                 detected_notes = self.detect_tap_notes(pure_frame, tap_radius_min, tap_radius_max)
@@ -211,9 +212,9 @@ class NoteDetector:
                 ret, frame = cap.read()
                 if not ret: break  # end of video
 
-                # 转换为灰度图，二值化突出屏幕部分 (大于200的全白)
+                # 转换为灰度图，二值化突出屏幕部分 (大于阈值的全白)
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                _, frame1 = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+                _, frame1 = cv2.threshold(gray, self.threshold, 255, cv2.THRESH_BINARY)
                 # 将单通道黑白图像转换为3通道，以支持彩色绘制
                 frame2 = cv2.cvtColor(frame1, cv2.COLOR_GRAY2BGR)
 
@@ -284,12 +285,12 @@ if __name__ == "__main__":
         #detector.visualize_tap_template()
 
         # deicide 474 ariake 315
-        video_path = r"C:\Code\Ariake-720p.mp4"
+        video_path = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] DEICIDE MASTER-p01-116.mp4"
         cap = cv2.VideoCapture(video_path)
         state = {
             'chart_start': 2100,
             'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-            'circle_radius': 315,
+            'circle_radius': 474,
             'debug': True
         }
         detector.process(cap, state, 2400)
