@@ -8,6 +8,7 @@ class NoteDetector:
         self.threshold = 210
         self.tap_notes = {}
         self.slide_notes = {}
+        self.hold_notes = {}
         # dict{frame_counter: detected_notes}
         #                     notes_list( note_dict{ bbox, center, radius, confidence } )
 
@@ -27,6 +28,8 @@ class NoteDetector:
             tap_radius_max = int(state['circle_radius'] * 0.12)
             slide_radius_min = int(state['circle_radius'] * 0.04)
             slide_radius_max = int(state['circle_radius'] * 0.18)
+            hold_radius_min = int(state['circle_radius'] * 0.07)
+            hold_radius_max = int(state['circle_radius'] * 0.6)
 
             # main loop
             while frame_counter < limit_frame:
@@ -40,7 +43,7 @@ class NoteDetector:
 
                 # 获取轮廓及其最小包围圆
                 contour_circle_list = []
-                contours, _ = cv2.findContours(frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                contours, _ = cv2.findContours(frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
                 if not contours:
                     raise Exception(f"No contours detected - frame {frame_counter}")
                 for contour in contours:
@@ -48,16 +51,16 @@ class NoteDetector:
                     # 将轮廓和圆心坐标/半径一起存储
                     contour_circle_list.append({
                         'contour': contour,
-                        'center': (x, y),
-                        'radius': radius
+                        'center': (int(x), int(y)),
+                        'radius': int(radius)
                     })
 
                 # Detect tap notes
-                detected_tap_notes = self.detect_tap_notes(contour_circle_list, tap_radius_min, tap_radius_max)
-                self.tap_notes[frame_counter] = detected_tap_notes
+                self.tap_notes[frame_counter] = self.detect_tap_notes(contour_circle_list, tap_radius_min, tap_radius_max)
                 # Detect slide notes
-                detected_slide_notes = self.detect_slide_notes(contour_circle_list, slide_radius_min, slide_radius_max)
-                self.slide_notes[frame_counter] = detected_slide_notes
+                self.slide_notes[frame_counter] = self.detect_slide_notes(contour_circle_list, slide_radius_min, slide_radius_max)
+                # Detect hold notes
+                self.hold_notes[frame_counter] = self.detect_hold_notes(contour_circle_list, hold_radius_min, hold_radius_max)
 
                 frame_counter += 1
 
@@ -89,7 +92,7 @@ class NoteDetector:
                 circularity = area / circle_area
                 # 如果轮廓接近圆形（圆形度大于0.9）
                 if circularity > 0.9:
-                    circles.append((int(x), int(y), int(radius)))
+                    circles.append((x, y, radius))
 
             if circles is None:
                 return []
@@ -116,7 +119,7 @@ class NoteDetector:
         ret: slide_notes_list(bbox, center, radius, confidence)
         '''
         try:
-            slides = []
+            slides = {}
 
             # 遍历所有轮廓，寻找尺寸合适的轮廓
             for item in contour_circle_list:
@@ -125,7 +128,7 @@ class NoteDetector:
                 radius = item['radius']
                 # 忽略尺寸不对的轮廓
                 if radius < slide_radius_min or radius > slide_radius_max: continue
-                # 验证轮廓是否接近星形（圆形度大于0.6）
+                # 验证轮廓是否接近星形（圆形度0.4-0.5）
                 area = cv2.contourArea(contour)
                 circle_area = 3.14 * radius * radius
                 circularity = area / circle_area
@@ -148,16 +151,28 @@ class NoteDetector:
                         significant_defects += 1
                     else:
                         significant_defects -= 1
-
-                if significant_defects == 5:
-                    slides.append((int(x), int(y), int(radius)))
+                if significant_defects != 5: continue
+                # 如果中心相近（允许x,y各有±1的误差），保留最大半径的音符
+                found_similar = False
+                similar_key = None
+                for existing_key in slides.keys():
+                    if abs(existing_key[0] - x) <= 1 and abs(existing_key[1] - y) <= 1:
+                        found_similar = True
+                        similar_key = existing_key
+                        break
+                if found_similar:
+                    if slides[similar_key][2] < radius:
+                        del slides[similar_key]
+                        slides[(x, y)] = (x, y, radius)
+                else:
+                    slides[(x, y)] = (x, y, radius)
                 
             if slides is None:
                 return []
             
             detected_notes = []
 
-            for (x, y, r) in slides:
+            for (key, (x, y, r)) in slides.items():
                 note = {
                     'bbox': (x - r, y - r, x + r, y + r),
                     'center': (x, y),
@@ -169,6 +184,71 @@ class NoteDetector:
         
         except Exception as e:
             raise Exception(f"Error in detect_slide_notes: {e}")
+        
+
+    def detect_hold_notes(self, contour_circle_list, hold_radius_min, hold_radius_max):
+        '''Detect hold notes
+        arg: contour_circle_list, hold_radius_min, hold_radius_max
+        ret: hold_notes_list(box_points, center, radius, confidence)
+        '''
+        try:
+            holds = {}
+
+            # 遍历所有轮廓，寻找尺寸合适的轮廓
+            for item in contour_circle_list:
+                contour = item['contour']
+                (x, y) = item['center']
+                radius = item['radius']
+                # 忽略尺寸不对的轮廓
+                if radius < hold_radius_min or radius > hold_radius_max: continue
+                # 验证是否近似六边形
+                epsilon = 0.02 * cv2.arcLength(contour, True)
+                approx = cv2.approxPolyDP(contour, epsilon, True)
+                if len(approx) != 6: continue
+                # 检查填充度 (>0.73)
+                rect = cv2.minAreaRect(contour)
+                width, height = rect[1]
+                area = cv2.contourArea(contour)
+                rect_area = width * height
+                fill_ratio = area / rect_area
+                if fill_ratio < 0.73: continue
+                # 计算长宽比
+                aspect_ratio = max(width, height) / min(width, height)
+                # 计算旋转包围盒顶点
+                box_points = np.intp(cv2.boxPoints(rect))
+                # 如果中心相近（允许x,y各有±1的误差），保留最大半径的音符
+                found_similar = False
+                similar_key = None
+                for existing_key in holds.keys():
+                    if abs(existing_key[0] - x) <= 1 and abs(existing_key[1] - y) <= 1:
+                        found_similar = True
+                        similar_key = existing_key
+                        break
+                if found_similar:
+                    if holds[similar_key][2] < radius:
+                        del holds[similar_key]
+                        holds[(x, y)] = (x, y, radius, aspect_ratio, box_points)
+                else:
+                    holds[(x, y)] = (x, y, radius, aspect_ratio, box_points)
+                
+            if holds is None:
+                return []
+            
+            detected_notes = []
+
+            for (key, (x, y, r, a, box_points)) in holds.items():
+                note = {
+                    'box_points': box_points,
+                    'center': (x, y),
+                    'radius': r,
+                    'aspect_ratio': a
+                }
+                detected_notes.append(note)
+
+            return detected_notes
+        
+        except Exception as e:
+            raise Exception(f"Error in detect_hold_notes: {e}")
         
 
     def display_preview(self, cap, state):
@@ -195,6 +275,10 @@ class NoteDetector:
 
                 result_frame = self.debug_draw_tap_notes(frame2, frame_counter)
                 result_frame = self.debug_draw_slide_notes(result_frame, frame_counter)
+                result_frame = self.debug_draw_hold_notes(result_frame, frame_counter)
+
+                # contours, _ = cv2.findContours(frame1, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
 
                 # Add frame info
                 cv2.putText(result_frame, f"Frame: {frame_counter}/{total_frames}", 
@@ -286,6 +370,38 @@ class NoteDetector:
         
         except Exception as e:
             raise Exception(f"Error in debug_draw_slide_notes: {e}")
+        
+
+    def debug_draw_hold_notes(self, frame, frame_counter):
+        try:
+            detected_notes = self.hold_notes.get(frame_counter, [])
+            # Draw notes counter
+            cv2.putText(frame, f"Hold: {len(detected_notes)}",
+                        (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            
+            if not detected_notes: return frame
+
+            for i, note in enumerate(detected_notes):
+                bbox = note['box_points']
+                center = note['center']
+                radius = note.get('radius')
+                aspect_ratio = note.get('aspect_ratio')
+                
+                # Draw bounding box (rotated rectangle)
+                cv2.polylines(frame, [bbox], isClosed=True, color=(0, 255, 0), thickness=2)
+                
+                # Draw center point
+                cv2.circle(frame, center, 5, (0, 0, 255), -1)
+                
+                # Draw note index and radius info
+                cv2.putText(frame, f"{radius}, AR: {aspect_ratio:.2f}", 
+                            (center[0] + 10, center[1] + 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                
+            return frame
+        
+        except Exception as e:
+            raise Exception(f"Error in debug_draw_hold_notes: {e}")
 
 
 if __name__ == "__main__":
