@@ -5,7 +5,7 @@ import os
 
 class NoteDetector:
     def __init__(self):
-        self.threshold = 200
+        self.threshold = 210
         self.tap_notes = {}
         self.slide_notes = {}
         # dict{frame_counter: detected_notes}
@@ -25,7 +25,7 @@ class NoteDetector:
 
             tap_radius_min = int(state['circle_radius'] * 0.09)
             tap_radius_max = int(state['circle_radius'] * 0.12)
-            slide_radius_min = int(state['circle_radius'] * 0.08)
+            slide_radius_min = int(state['circle_radius'] * 0.04)
             slide_radius_max = int(state['circle_radius'] * 0.18)
 
             # main loop
@@ -125,6 +125,11 @@ class NoteDetector:
                 radius = item['radius']
                 # 忽略尺寸不对的轮廓
                 if radius < slide_radius_min or radius > slide_radius_max: continue
+                # 验证轮廓是否接近星形（圆形度大于0.6）
+                area = cv2.contourArea(contour)
+                circle_area = 3.14 * radius * radius
+                circularity = area / circle_area
+                if not 0.41 <= circularity <= 0.5: continue
                 # 使用凸包缺陷检测
                 try:
                     hull = cv2.convexHull(contour, returnPoints=False)
@@ -141,6 +146,8 @@ class NoteDetector:
                     # 如果缺陷深度足够大，认为是一个有效的凹陷
                     if depth > radius * 0.2:
                         significant_defects += 1
+                    else:
+                        significant_defects -= 1
 
                 if significant_defects == 5:
                     slides.append((int(x), int(y), int(radius)))
@@ -192,7 +199,7 @@ class NoteDetector:
                 # Add frame info
                 cv2.putText(result_frame, f"Frame: {frame_counter}/{total_frames}", 
                             (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                cv2.putText(result_frame, "Press 'q' to quit", 
+                cv2.putText(result_frame, "Press 'q' to quit, 'arrow key' to go back", 
                             (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
 
                 cv2.imshow(window_name, result_frame)
@@ -200,7 +207,11 @@ class NoteDetector:
                 key = cv2.waitKey(0) & 0xFF
                 if key == ord('q'): # quit
                     break
-                frame_counter += 1
+                elif key == 0: # '方向键'
+                    frame_counter = max(0, frame_counter - 1) # Last frame
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_counter)
+                else:
+                    frame_counter += 1 # Next frame
             
             cv2.destroyWindow(window_name)
 
