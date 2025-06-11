@@ -6,8 +6,8 @@ import os
 class NoteDetector:
     def __init__(self):
         self.threshold = 200
-        self.tap_template_path = "static/template/tap.png"
         self.tap_notes = {}
+        self.slide_notes = {}
         # dict{frame_counter: detected_notes}
         #                     notes_list( note_dict{ bbox, center, radius, confidence } )
 
@@ -25,20 +25,39 @@ class NoteDetector:
 
             tap_radius_min = int(state['circle_radius'] * 0.09)
             tap_radius_max = int(state['circle_radius'] * 0.12)
+            slide_radius_min = int(state['circle_radius'] * 0.08)
+            slide_radius_max = int(state['circle_radius'] * 0.18)
 
             # main loop
             while frame_counter < limit_frame:
-                ret, frame = cap.read()
+                ret, raw_frame = cap.read()
                 if not ret: break # end of video
                 print(f"Note Detector...{frame_counter}/{total_frames}", end="\r")
 
                 # 转换为灰度图，二值化突出屏幕部分 (大于阈值的全白)
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                _, pure_frame = cv2.threshold(gray, self.threshold, 255, cv2.THRESH_BINARY)
+                gray_frame = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
+                _, frame = cv2.threshold(gray_frame, self.threshold, 255, cv2.THRESH_BINARY)
+
+                # 获取轮廓及其最小包围圆
+                contour_circle_list = []
+                contours, _ = cv2.findContours(frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if not contours:
+                    raise Exception(f"No contours detected - frame {frame_counter}")
+                for contour in contours:
+                    (x, y), radius = cv2.minEnclosingCircle(contour)
+                    # 将轮廓和圆心坐标/半径一起存储
+                    contour_circle_list.append({
+                        'contour': contour,
+                        'center': (x, y),
+                        'radius': radius
+                    })
 
                 # Detect tap notes
-                detected_notes = self.detect_tap_notes(pure_frame, tap_radius_min, tap_radius_max)
-                self.tap_notes[frame_counter] = detected_notes
+                detected_tap_notes = self.detect_tap_notes(contour_circle_list, tap_radius_min, tap_radius_max)
+                self.tap_notes[frame_counter] = detected_tap_notes
+                # Detect slide notes
+                detected_slide_notes = self.detect_slide_notes(contour_circle_list, slide_radius_min, slide_radius_max)
+                self.slide_notes[frame_counter] = detected_slide_notes
 
                 frame_counter += 1
 
@@ -48,125 +67,20 @@ class NoteDetector:
 
         except Exception as e:
             raise Exception(f"Error in NoteDetector: {e}")
-        
-        
-    def load_tap_template(self):
-        """Load tap template and process it with alpha thresholding and edge detection
-        ret: processed template and contours
-        """
-        try:
-            print("Note Detector...Loading tap template...", end="\r")
-            
-            # Get full path to template
-            template_path_full = os.path.join(os.path.dirname(os.path.dirname(__file__)), self.tap_template_path)
-            if not os.path.exists(template_path_full):
-                raise Exception("load_tap_template: Template tap.png not found")
-            
-            # Load image with alpha channel
-            template_bgra = cv2.imread(template_path_full, cv2.IMREAD_UNCHANGED)
-            if template_bgra is None:
-                raise Exception("load_tap_template: Cannot load tap.png")
-            
-            # Check if image has alpha channel
-            if template_bgra.shape[2] != 4:
-                raise Exception("load_tap_template: tap.png must have alpha channel")
-            
-            # Extract alpha channel
-            alpha_channel = template_bgra[:, :, 3]
-            
-            # Apply threshold to alpha channel (threshold = 200)
-            _, binary_alpha = cv2.threshold(alpha_channel, 200, 255, cv2.THRESH_BINARY)
-            
-            # Apply edge detection (Canny)
-            edges = cv2.Canny(binary_alpha, 50, 150)
-            
-            # Find contours from edge detection
-            contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            
-            if not contours:
-                raise Exception("load_tap_template: No contours found in tap template")
-            
-            # Store the original template (BGR) and contours
-            self.tap_template = cv2.cvtColor(template_bgra[:, :, :3], cv2.COLOR_BGR2RGB)  # Convert to RGB for matplotlib
-            self.tap_contours = contours
-            print("Note Detector...Loading tap template...Done                    ")
-            print(f"  Found {len(contours)} contour(s) in tap template")
-            
-            return self.tap_template, self.tap_contours
-            
-        except Exception as e:
-            raise Exception(f"Error in load_tap_template: {e}")
-    
 
-    def visualize_tap_template(self):
-        """Visualize the tap template with contours in a new window
-        """
-        try:
-            if self.tap_template is None or self.tap_contours is None:
-                print("Note Detector: Loading template first...")
-                self.load_tap_template()
-            
-            print("Note Detector...Visualizing tap template...", end="\r")
-            
-            # Convert RGB back to BGR for OpenCV display
-            template_bgr = cv2.cvtColor(self.tap_template, cv2.COLOR_RGB2BGR)
-            
-            # Create a copy for drawing contours
-            template_with_contours = template_bgr.copy()
-            
-            # Draw contours on the template
-            cv2.drawContours(template_with_contours, self.tap_contours, -1, (0, 0, 255), 2)
-            
-            # Create side-by-side display
-            height = max(template_bgr.shape[0], template_with_contours.shape[0])
-            width = template_bgr.shape[1] + template_with_contours.shape[1] + 20  # Add gap
-            
-            # Create combined image
-            combined = np.zeros((height, width, 3), dtype=np.uint8)
-            
-            # Place original template on the left
-            combined[:template_bgr.shape[0], :template_bgr.shape[1]] = template_bgr
-            
-            # Place template with contours on the right
-            start_x = template_bgr.shape[1] + 20
-            combined[:template_with_contours.shape[0], start_x:start_x+template_with_contours.shape[1]] = template_with_contours
-            
-            # Add text labels
-            cv2.putText(combined, "Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-            cv2.putText(combined, f"With Contours ({len(self.tap_contours)} found)", 
-                       (start_x + 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-            
-            # Display the window
-            window_name = "Tap Template Visualization"
-            cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
-            cv2.imshow(window_name, combined)
-            
-            print("Note Detector...Visualizing tap template...Done                    ")
-            print("  Press any key to close the visualization window")
-            
-            # Wait for user input            cv2.waitKey(0)
-            cv2.destroyWindow(window_name)
-            
-        except Exception as e:
-            raise Exception(f"Error in visualize_tap_template: {e}")
-    
 
-    def detect_tap_notes(self, frame, tap_radius_min, tap_radius_max):
-        """使用轮廓检测，识别圆形音符
-        arg: pure_frame, tap_radius_min, tap_radius_max
+    def detect_tap_notes(self, contour_circle_list, tap_radius_min, tap_radius_max):
+        """识别圆形音符
+        arg: contour_circle_list, tap_radius_min, tap_radius_max
         ret: tap_notes_list(bbox, center, radius, confidence)
         """
         try:
-            # 寻找轮廓
-            contours, _ = cv2.findContours(frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if not contours:
-                raise Exception("detect_circle: No contours detected")
-            
-            # 遍历所有轮廓，寻找尺寸合适的圆
             circles = []
-            for contour in contours:
-                # 计算最小包围圆
-                (x, y), radius = cv2.minEnclosingCircle(contour)
+            # 遍历所有轮廓，寻找尺寸合适的圆
+            for item in contour_circle_list:
+                contour = item['contour']
+                (x, y) = item['center']
+                radius = item['radius']
                 # 忽略尺寸不对的轮廓
                 if radius < tap_radius_min or radius > tap_radius_max: continue
                 # 验证轮廓是否接近圆形
@@ -196,13 +110,67 @@ class NoteDetector:
             raise Exception(f"Error in detect_tap_notes: {e}")
         
 
+    def detect_slide_notes(self, contour_circle_list, slide_radius_min, slide_radius_max):
+        '''Detect slide notes
+        arg: contour_circle_list, slide_radius_min, slide_radius_max
+        ret: slide_notes_list(bbox, center, radius, confidence)
+        '''
+        try:
+            slides = []
+
+            # 遍历所有轮廓，寻找尺寸合适的轮廓
+            for item in contour_circle_list:
+                contour = item['contour']
+                (x, y) = item['center']
+                radius = item['radius']
+                # 忽略尺寸不对的轮廓
+                if radius < slide_radius_min or radius > slide_radius_max: continue
+                # 使用凸包缺陷检测
+                try:
+                    hull = cv2.convexHull(contour, returnPoints=False)
+                    defects = cv2.convexityDefects(contour, hull)
+                    if defects is None: continue
+                except cv2.error as e:
+                    continue
+                # 五角星应该有5个明显的凹陷点
+                significant_defects = 0
+                for i in range(defects.shape[0]):
+                    s, e, f, d = defects[i, 0]
+                    # d是缺陷深度，除以256得到实际像素距离
+                    depth = d / 256.0
+                    # 如果缺陷深度足够大，认为是一个有效的凹陷
+                    if depth > radius * 0.2:
+                        significant_defects += 1
+
+                if significant_defects == 5:
+                    slides.append((int(x), int(y), int(radius)))
+                
+            if slides is None:
+                return []
+            
+            detected_notes = []
+
+            for (x, y, r) in slides:
+                note = {
+                    'bbox': (x - r, y - r, x + r, y + r),
+                    'center': (x, y),
+                    'radius': r,
+                }
+                detected_notes.append(note)
+
+            return detected_notes
+        
+        except Exception as e:
+            raise Exception(f"Error in detect_slide_notes: {e}")
+        
+
     def display_preview(self, cap, state):
         """Display preview"""
                 
         try:
             frame_counter = state['chart_start']
             total_frames = state['total_frames']
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_counter)  # Set to chart start
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_counter) # Set to chart start
 
             window_name = 'Note Detector Preview'
             cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
@@ -219,6 +187,7 @@ class NoteDetector:
                 frame2 = cv2.cvtColor(frame1, cv2.COLOR_GRAY2BGR)
 
                 result_frame = self.debug_draw_tap_notes(frame2, frame_counter)
+                result_frame = self.debug_draw_slide_notes(result_frame, frame_counter)
 
                 # Add frame info
                 cv2.putText(result_frame, f"Frame: {frame_counter}/{total_frames}", 
@@ -246,7 +215,7 @@ class NoteDetector:
         try:
             detected_notes = self.tap_notes.get(frame_counter, [])
             # Draw notes counter
-            cv2.putText(frame, f"Notes: {len(detected_notes)}",
+            cv2.putText(frame, f"Tap: {len(detected_notes)}",
                         (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
             
             if not detected_notes: return frame
@@ -275,15 +244,42 @@ class NoteDetector:
             
         except Exception as e:
             raise Exception(f"Error in debug_draw_preview_frame: {e}")
+        
+
+    def debug_draw_slide_notes(self, frame, frame_counter):
+        try:
+            detected_notes = self.slide_notes.get(frame_counter, [])
+            # Draw notes counter
+            cv2.putText(frame, f"Slide: {len(detected_notes)}",
+                        (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            
+            if not detected_notes: return frame
+
+            for i, note in enumerate(detected_notes):
+                bbox = note['bbox']
+                center = note['center']
+                radius = note.get('radius')
+                
+                # Draw bounding box (rectangle)
+                cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
+                
+                # Draw center point
+                cv2.circle(frame, center, 5, (0, 0, 255), -1)
+                
+                # Draw note index and radius info
+                cv2.putText(frame, f"{radius}", 
+                            (center[0] + 10, center[1] + 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                
+            return frame
+        
+        except Exception as e:
+            raise Exception(f"Error in debug_draw_slide_notes: {e}")
 
 
 if __name__ == "__main__":
     detector = NoteDetector()
     try:
-        # Load and visualize the template
-        #detector.load_tap_template()
-        #detector.visualize_tap_template()
-
         # deicide 474 ariake 315
         video_path = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] DEICIDE MASTER-p01-116.mp4"
         cap = cv2.VideoCapture(video_path)
@@ -293,7 +289,7 @@ if __name__ == "__main__":
             'circle_radius': 474,
             'debug': True
         }
-        detector.process(cap, state, 2400)
+        detector.process(cap, state, 2600)
         cap.release()
         
     except Exception as e:
