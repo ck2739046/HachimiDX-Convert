@@ -3,6 +3,7 @@ import os
 
 from ca_modules.JudgeLineDetector import JudgeLineDetector
 from ca_modules.ChartStartDetector import ChartStartDetector
+from ca_modules.NoteDetector import NoteDetector
 
 class ChartAnalyzer:
     def __init__(self):
@@ -14,7 +15,8 @@ class ChartAnalyzer:
         self.state = {}
         # bpm, notes_style (0/1)
         # video_width, video_height, video_fps, total_frames, video_path
-        # circle_center, circle_radius, touch_areas, chart_start, audio_start
+        # circle_center, circle_radius, touch_areas
+        # chart_start, audio_start, outline_mask
 
 
     def update_state(self, key: str, value) -> None:
@@ -36,12 +38,18 @@ class ChartAnalyzer:
             detector = JudgeLineDetector()
             self.state['circle_center'], \
             self.state['circle_radius'], \
-            self.state['touch_areas'] = detector.process(self.cap, self.state)
+            self.state['touch_areas'],\
+            self.state['chart_start'] = detector.process(self.cap, self.state)
 
             # get chart start
             detector = ChartStartDetector()
             self.state['chart_start'], \
-            self.state['audio_start'] = detector.process(self.cap, self.state)
+            self.state['audio_start'], \
+            self.state['outline_mask'] = detector.process(self.cap, self.state)
+
+            # get notes
+            detector = NoteDetector()
+            detector.process(self.cap, self.state, 1600)
 
             return True
         

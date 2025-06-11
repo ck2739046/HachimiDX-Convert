@@ -5,7 +5,7 @@ import os
 
 class NoteDetector:
     def __init__(self):
-        self.threshold = 210
+        self.threshold = 180
         self.tap_notes = {}
         self.slide_notes = {}
         self.hold_notes = {}
@@ -41,11 +41,16 @@ class NoteDetector:
                 gray_frame = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
                 _, frame = cv2.threshold(gray_frame, self.threshold, 255, cv2.THRESH_BINARY)
 
+                # 将 outline mask 区域设为黑色
+                outline_mask = state.get('outline_mask')
+                if outline_mask is not None:
+                    frame[outline_mask == 255] = 0
+
                 # 获取轮廓及其最小包围圆
                 contour_circle_list = []
                 contours, _ = cv2.findContours(frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
                 if not contours:
-                    raise Exception(f"No contours detected - frame {frame_counter}")
+                    continue
                 for contour in contours:
                     (x, y), radius = cv2.minEnclosingCircle(contour)
                     # 将轮廓和圆心坐标/半径一起存储
@@ -272,13 +277,14 @@ class NoteDetector:
                 _, frame1 = cv2.threshold(gray, self.threshold, 255, cv2.THRESH_BINARY)
                 # 将单通道黑白图像转换为3通道，以支持彩色绘制
                 frame2 = cv2.cvtColor(frame1, cv2.COLOR_GRAY2BGR)
+                # 将 outline mask 区域设为黑色
+                outline_mask = state.get('outline_mask')
+                if outline_mask is not None:
+                    frame2[outline_mask == 255] = 0
 
                 result_frame = self.debug_draw_tap_notes(frame2, frame_counter)
                 result_frame = self.debug_draw_slide_notes(result_frame, frame_counter)
                 result_frame = self.debug_draw_hold_notes(result_frame, frame_counter)
-
-                # contours, _ = cv2.findContours(frame1, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
 
                 # Add frame info
                 cv2.putText(result_frame, f"Frame: {frame_counter}/{total_frames}", 
@@ -286,6 +292,10 @@ class NoteDetector:
                 cv2.putText(result_frame, "Press 'q' to quit, 'arrow key' to go back", 
                             (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
 
+                # resize
+                scale = 1000 / state['video_height']
+                new_size = (int(state['video_width']*scale), 1000)
+                result_frame = cv2.resize(result_frame, new_size, interpolation=cv2.INTER_LINEAR)
                 cv2.imshow(window_name, result_frame)
 
                 key = cv2.waitKey(0) & 0xFF
@@ -410,13 +420,17 @@ if __name__ == "__main__":
         # deicide 474 ariake 315
         video_path = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] DEICIDE MASTER-p01-116.mp4"
         cap = cv2.VideoCapture(video_path)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         state = {
-            'chart_start': 2100,
+            'chart_start': 400,
             'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
             'circle_radius': 474,
-            'debug': True
+            'debug': True,
+            'video_height': min(width, height),
+            'video_width': max(width, height)
         }
-        detector.process(cap, state, 2600)
+        detector.process(cap, state, 1000)
         cap.release()
         
     except Exception as e:

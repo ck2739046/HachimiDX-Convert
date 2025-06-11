@@ -13,13 +13,14 @@ class JudgeLineDetector:
         """main process
         arg: cap, state(video_width, video_height, debug)
         ret: circle_center, circle_radius,
-             touch_areas{label: {center, polygon, original_pos}}
+             touch_areas{label: {center, polygon, original_pos}},
+             chart_start
         """
         try:
             print("Judge Line Detector...", end="\r")
 
             # detect circle
-            self.circle_center, self.circle_radius = self.detect_circle(cap, state)
+            self.circle_center, self.circle_radius, chart_start = self.detect_circle(cap, state)
 
             # detect touch areas
             template = self.load_template()
@@ -34,7 +35,7 @@ class JudgeLineDetector:
 
             # Reset to start of video and return
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            return (self.circle_center, self.circle_radius, self.touch_areas)
+            return (self.circle_center, self.circle_radius, self.touch_areas, chart_start)
 
         except Exception as e:
             raise Exception(f"Error in JudgeLineDetector: {e}")
@@ -43,7 +44,7 @@ class JudgeLineDetector:
     def detect_circle(self, cap, state, target=15) -> list:
         """采样15个帧, 检测判定线圆形，返回圆心和半径
         arg: cap, state(video_height, total_frames), target(可选,默认15)
-        ret: circle_center(x, y), circle_radius
+        ret: circle_center(x, y), circle_radius, chart_start
         """
         try:
             print(f"Judge Line Detector...Detect_circle...", end="\r")
@@ -105,7 +106,7 @@ class JudgeLineDetector:
             circle_center = (most_common[0], most_common[1])
             circle_radius = most_common[2]
 
-            return circle_center, circle_radius
+            return circle_center, circle_radius, frame_counter
 
         except Exception as e:
             raise Exception(f"Error in detect_circle: {e}")
@@ -333,21 +334,3 @@ class JudgeLineDetector:
     
         except Exception as e:
             raise Exception(f"Error in draw_frames: {e}")
-
-
-if __name__ == "__main__":
-    # prepare parameters from ca_core.py
-    # cap
-    video_path = r"C:\Code\Ariake-720p.mp4"
-    cap = cv2.VideoCapture(video_path)
-    # state
-    state = {}
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    state["video_width"] = max(width, height)
-    state["video_height"] = min(width, height)
-    state["debug"] = True
-    # call process()
-    detector = JudgeLineDetector()
-    detector.process(cap, state)
-    cap.release()
