@@ -5,7 +5,7 @@ import os
 
 class NoteDetector:
     def __init__(self):
-        self.threshold = 180
+        self.threshold = 170
         self.tap_notes = {}
         self.slide_notes = {}
         self.hold_notes = {}
@@ -201,6 +201,7 @@ class NoteDetector:
                 radius = item['radius']
                 # 忽略尺寸不对的轮廓
                 if radius < hold_radius_min or radius > hold_radius_max: continue
+                
 
                 if self._has_three_consecutive_120_angles(contour):
                     rect = cv2.minAreaRect(contour)
@@ -222,7 +223,8 @@ class NoteDetector:
                     else:
                         holds[(x, y)] = (x, y, radius, aspect_ratio, box_points)
                     continue
-                    
+                
+                '''
                 # 验证是否近似六边形
                 epsilon = 0.02 * cv2.arcLength(contour, True)
                 approx = cv2.approxPolyDP(contour, epsilon, True)
@@ -252,6 +254,7 @@ class NoteDetector:
                         holds[(x, y)] = (x, y, radius, aspect_ratio, box_points)
                 else:
                     holds[(x, y)] = (x, y, radius, aspect_ratio, box_points)
+                '''
                 
             if holds is None:
                 return []
@@ -494,7 +497,7 @@ if __name__ == "__main__":
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         state = {
-            'chart_start': 400,
+            'chart_start': 500,
             'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
             'circle_radius': 474,
             'debug': True,
