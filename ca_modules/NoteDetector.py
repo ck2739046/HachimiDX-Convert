@@ -1,13 +1,14 @@
-# filepath: d:\git\mai-chart-analyse\ca_modules\NoteDetector.py
 import cv2
 import numpy as np
 import os
+import time
 
 class NoteDetector:
     def __init__(self):
         self.track_mask_path = 'static/template/track_mask.png'
         self.track_mask = None
-        self.threshold = 160
+        self.threshold = 160  # for tap & hold
+        self.threshold2 = 200 # for slide & touch
         self.tap_notes = {}
         self.slide_notes = {}
         self.hold_notes = {}
@@ -29,6 +30,11 @@ class NoteDetector:
             frame_counter = state['chart_start']
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_counter)  # Set to chart start
 
+            # fps计算相关变量
+            fps_counter = 0
+            fps_start_time = time.time()
+            fps = 0
+
             tap_radius_min = int(state['circle_radius'] * 0.09)
             tap_radius_max = int(state['circle_radius'] * 0.12)
 
@@ -37,20 +43,31 @@ class NoteDetector:
 
             hold_radius_min = int(state['circle_radius'] * 0.08)
             hold_radius_max = int(state['circle_radius'] * 0.6)
-            hold_width = int(state['circle_radius'] * 0.18)
-            hold_size = (hold_radius_min, hold_radius_max, hold_width)
+            hold_width1 = int(state['circle_radius'] * 0.11)
+            hold_width2 = int(state['circle_radius'] * 0.18)
+            hold_width3 = int(state['circle_radius'] * 0.25)
+            hold_size = (hold_radius_min, hold_radius_max, hold_width1, hold_width2, hold_width3)
 
             # main loop
             while frame_counter < limit_frame:
                 ret, raw_frame = cap.read()
                 if not ret: break # end of video
-                print(f"Note Detector...{frame_counter}/{total_frames}", end="\r")
+
+                # 计算fps
+                fps_counter += 1
+                if fps_counter == 120:  # 每处理120帧计算1次fps
+                    current_time = time.time()
+                    fps = 120 / (current_time - fps_start_time)
+                    fps_start_time = current_time
+                    fps_counter = 0
+
+                print(f"Note Detector...{frame_counter}/{total_frames}, {int(fps)}fps", end="\r")
                 
                 # 转换为灰度图，二值化突出屏幕部分 (大于阈值的全白)
                 gray_frame = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
-                _, frame = cv2.threshold(gray_frame, self.threshold, 255, cv2.THRESH_BINARY)
+                _, threshold_frame = cv2.threshold(gray_frame, self.threshold, 255, cv2.THRESH_BINARY)
                 # 将掩码应用到二值化图像上
-                frame = cv2.bitwise_and(frame, self.track_mask)
+                frame = cv2.bitwise_and(threshold_frame, self.track_mask)
                 # 形态学闭运算
                 for x1, y1, x2, y2 in closing_regions:
                     frame[y1:y2, x1:x2] = cv2.morphologyEx(frame[y1:y2, x1:x2], cv2.MORPH_CLOSE, closing_kernel, iterations=1)
@@ -71,14 +88,30 @@ class NoteDetector:
 
                 # Detect tap notes
                 self.tap_notes[frame_counter] = self.detect_tap_notes(contour_circle_list, tap_radius_min, tap_radius_max)
-                # Detect slide notes
-                self.slide_notes[frame_counter] = self.detect_slide_notes(contour_circle_list, slide_radius_min, slide_radius_max)
                 # Detect hold notes
                 self.hold_notes[frame_counter] = self.detect_hold_notes(contour_circle_list, hold_size, state)
 
+                _, threshold_frame2 = cv2.threshold(gray_frame, self.threshold2, 255, cv2.THRESH_BINARY)
+                # 获取轮廓及其最小包围圆
+                contour_circle_list = []
+                contours, _ = cv2.findContours(threshold_frame2, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                if not contours:
+                    continue
+                for contour in contours:
+                    (x, y), radius = cv2.minEnclosingCircle(contour)
+                    # 将轮廓和圆心坐标/半径一起存储
+                    contour_circle_list.append({
+                        'contour': contour,
+                        'center': (int(x), int(y)),
+                        'radius': int(radius)
+                    })
+                
+                # Detect slide notes
+                self.slide_notes[frame_counter] = self.detect_slide_notes(contour_circle_list, slide_radius_min, slide_radius_max)
+
                 frame_counter += 1
 
-            print("Note Detector...Done             ")
+            print("Note Detector...Done               ")
             if state['debug']: 
                 self.display_preview(cap, state)
 
@@ -87,26 +120,26 @@ class NoteDetector:
         
 
     def define_closing_region(self, state):
-
-        closing_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (10, 10))
-        cx, cy = state['circle_center']
-        r = state['circle_radius']
-        
-        a = int(r * 0.22)
-        b = int(r * 0.17)
-        c = int(r * 0.12)
-
-        # x1, y1, x2, y2
-        closing_regions = [(cx+c, cy-a, cx+b, cy-b), # 1
-                           (cx+b, cy-b, cx+a, cy-c), # 2
-                           (cx+b, cy+c, cx+a, cy+b), # 3
-                           (cx+c, cy+b, cx+b, cy+a), # 4
-                           (cx-b, cy+b, cx-c, cy+a), # 5
-                           (cx-a, cy+c, cx-b, cy+b), # 6
-                           (cx-a, cy-b, cx-b, cy-c), # 7
-                           (cx-b, cy-a, cx-c, cy-b)] # 8
-        
-        return closing_regions, closing_kernel
+        try:
+            closing_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (10, 10))
+            cx, cy = state['circle_center']
+            r = state['circle_radius']
+            # offset
+            a = int(r * 0.22)
+            b = int(r * 0.17)
+            c = int(r * 0.12)
+            # x1, y1, x2, y2
+            closing_regions = [(cx+c, cy-a, cx+b, cy-b), # 1
+                            (cx+b, cy-b, cx+a, cy-c), # 2
+                            (cx+b, cy+c, cx+a, cy+b), # 3
+                            (cx+c, cy+b, cx+b, cy+a), # 4
+                            (cx-b, cy+b, cx-c, cy+a), # 5
+                            (cx-a, cy+c, cx-b, cy+b), # 6
+                            (cx-a, cy-b, cx-b, cy-c), # 7
+                            (cx-b, cy-a, cx-c, cy-b)] # 8
+            return closing_regions, closing_kernel
+        except Exception as e:
+            raise Exception(f"Error in define_closing_region: {e}")
     
 
     def load_track_mask(self, state):
@@ -201,11 +234,11 @@ class NoteDetector:
                 radius = item['radius']
                 # 忽略尺寸不对的轮廓
                 if radius < slide_radius_min or radius > slide_radius_max: continue
-                # 验证轮廓是否接近星形（圆形度0.4-0.5）
+                # 验证轮廓是否接近星形（圆形度0.4-0.7）
                 area = cv2.contourArea(contour)
                 circle_area = 3.14 * radius * radius
                 circularity = area / circle_area
-                if not 0.41 <= circularity <= 0.5: continue
+                if not 0.4 < circularity < 0.7: continue
                 # 使用凸包缺陷检测
                 try:
                     hull = cv2.convexHull(contour, returnPoints=False)
@@ -213,18 +246,23 @@ class NoteDetector:
                     if defects is None: continue
                 except cv2.error as e:
                     continue
-                # 五角星应该有5个明显的凹陷点
+                # 五角星应该有5个明显的凹陷点 (或10个)
                 significant_defects = 0
                 for i in range(defects.shape[0]):
                     s, e, f, d = defects[i, 0]
                     # d是缺陷深度，除以256得到实际像素距离
                     depth = d / 256.0
                     # 如果缺陷深度足够大，认为是一个有效的凹陷
-                    if depth > radius * 0.2:
+                    if depth > radius * 0.1:
                         significant_defects += 1
                     else:
                         significant_defects -= 1
-                if significant_defects != 5: continue
+                if significant_defects == 5:
+                    type = 'single'
+                elif 8 < significant_defects < 12:
+                    type = 'double'
+                else:
+                    continue
                 # 如果中心相近（允许x,y各有±2的误差），保留最大半径的音符
                 found_similar = False
                 similar_key = None
@@ -236,20 +274,21 @@ class NoteDetector:
                 if found_similar:
                     if slides[similar_key][2] < radius:
                         del slides[similar_key]
-                        slides[(x, y)] = (x, y, radius)
+                        slides[(x, y)] = (x, y, radius, type)
                 else:
-                    slides[(x, y)] = (x, y, radius)
+                    slides[(x, y)] = (x, y, radius, type)
                 
             if slides is None:
                 return []
             
             detected_notes = []
 
-            for (key, (x, y, r)) in slides.items():
+            for (key, (x, y, r, t)) in slides.items():
                 note = {
                     'bbox': (x - r, y - r, x + r, y + r),
                     'center': (x, y),
                     'radius': r,
+                    'type': t
                 }
                 detected_notes.append(note)
 
@@ -265,7 +304,7 @@ class NoteDetector:
         ret: hold_notes_list(box_points, center, radius, confidence)
         '''
         try:
-            hold_radius_min, hold_radius_max, _ = hold_size
+            hold_radius_min, hold_radius_max, _, _, _ = hold_size
             holds = {}
 
             # 遍历所有轮廓，寻找尺寸合适的轮廓
@@ -290,6 +329,8 @@ class NoteDetector:
                 if self.has_three_consecutive_120_angles(contour):
                     box_points = np.intp(cv2.boxPoints(rect))
                     head, tail = self.calculate_head_and_tail(box_points, state, hold_size)
+                    if head[0] == -1 or head[1] == -1 or tail[0] == -1 or tail[1] == -1:
+                        continue
                     holds[tail] = (tail[0], tail[1], head[0], head[1], box_points)
                     continue
 
@@ -319,8 +360,10 @@ class NoteDetector:
             point = np.array([x, y])
             center = np.array(circle_center)
             direction_vector = point - center
-            # Get distance + offset
+            # Get new_distance = distance + offset
             distance_to_center = np.linalg.norm(direction_vector)
+            if distance_to_center < circle_radius * 0.12:
+                return (-1, -1)
             new_distance_to_center = distance_to_center + offset * circle_radius
             # Calculate angle of the point relative to circle center
             point_angle = np.arctan2(direction_vector[1], direction_vector[0])
@@ -357,8 +400,15 @@ class NoteDetector:
         head_midpoint_y = (head_1[1] + head_2[1]) // 2
         # 判断当前轮廓内外
         width = np.linalg.norm(np.array(tail_1) - np.array(tail_2))
-        _, _, hold_width = hold_size
-        offset = 0.08 if width < hold_width else 0.12
+        _, _, hold_width1, hold_width2, hold_width3 = hold_size
+        if width < hold_width1:
+            return (-1, -1), (-1, -1)
+        elif width < hold_width2:
+            offset = 0.08
+        elif width < hold_width3:
+            offset = 0.12
+        else:
+            return (-1, -1), (-1, -1)
         # 移动头尾
         final_head = move_point(head_midpoint_x, head_midpoint_y, (-1*offset), circle_center, circle_radius)
         final_tail = move_point(tail_midpoint_x, tail_midpoint_y, offset, circle_center, circle_radius)
@@ -446,7 +496,7 @@ class NoteDetector:
                 gray = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
                 _, frame = cv2.threshold(gray, self.threshold, 255, cv2.THRESH_BINARY)
                 # 将掩码应用到二值化图像上
-                frame = cv2.bitwise_and(frame, self.track_mask)
+                #frame = cv2.bitwise_and(frame, self.track_mask)
                 # 形态学闭运算
                 for x1, y1, x2, y2 in closing_regions:
                     frame[y1:y2, x1:x2] = cv2.morphologyEx(frame[y1:y2, x1:x2], cv2.MORPH_CLOSE, closing_kernel, iterations=1)
@@ -539,7 +589,8 @@ class NoteDetector:
             for i, note in enumerate(detected_notes):
                 bbox = note['bbox']
                 center = note['center']
-                radius = note.get('radius')
+                radius = note['radius']
+                type = note['type']
                 
                 # Draw bounding box (rectangle)
                 cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
@@ -548,7 +599,7 @@ class NoteDetector:
                 cv2.circle(frame, center, 5, (0, 0, 255), -1)
                 
                 # Draw note index and radius info
-                cv2.putText(frame, f"{radius}", 
+                cv2.putText(frame, f"{radius}, {type}", 
                             (center[0] + 10, center[1] + 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
                 
@@ -597,7 +648,7 @@ if __name__ == "__main__":
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         state = {
-            'chart_start': 500,
+            'chart_start': 1800,
             'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
             'circle_center': (959, 539),
             'circle_radius': 474,
@@ -605,7 +656,7 @@ if __name__ == "__main__":
             'video_width': max(width, height),
             'debug': True
         }
-        detector.process(cap, state, 1000)
+        detector.process(cap, state, 2800)
         cap.release()
         
     except Exception as e:
