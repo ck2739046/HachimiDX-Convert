@@ -28,7 +28,7 @@ class NoteDetector:
             tap_radius_max = int(state['circle_radius'] * 0.12)
             slide_radius_min = int(state['circle_radius'] * 0.04)
             slide_radius_max = int(state['circle_radius'] * 0.18)
-            hold_radius_min = int(state['circle_radius'] * 0.07)
+            hold_radius_min = int(state['circle_radius'] * 0.05)
             hold_radius_max = int(state['circle_radius'] * 0.6)
 
             # main loop
@@ -40,7 +40,6 @@ class NoteDetector:
                 # 转换为灰度图，二值化突出屏幕部分 (大于阈值的全白)
                 gray_frame = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
                 _, frame = cv2.threshold(gray_frame, self.threshold, 255, cv2.THRESH_BINARY)
-
                 # 将 outline mask 区域设为黑色
                 outline_mask = state.get('outline_mask')
                 if outline_mask is not None:
@@ -157,11 +156,11 @@ class NoteDetector:
                     else:
                         significant_defects -= 1
                 if significant_defects != 5: continue
-                # 如果中心相近（允许x,y各有±1的误差），保留最大半径的音符
+                # 如果中心相近（允许x,y各有±2的误差），保留最大半径的音符
                 found_similar = False
                 similar_key = None
                 for existing_key in slides.keys():
-                    if abs(existing_key[0] - x) <= 1 and abs(existing_key[1] - y) <= 1:
+                    if abs(existing_key[0] - x) <= 2 and abs(existing_key[1] - y) <= 2:
                         found_similar = True
                         similar_key = existing_key
                         break
@@ -206,6 +205,28 @@ class NoteDetector:
                 radius = item['radius']
                 # 忽略尺寸不对的轮廓
                 if radius < hold_radius_min or radius > hold_radius_max: continue
+
+                if self._has_three_consecutive_120_angles(contour):
+                    rect = cv2.minAreaRect(contour)
+                    width, height = rect[1]
+                    aspect_ratio = max(width, height) / min(width, height)
+                    box_points = np.intp(cv2.boxPoints(rect))
+                    # 如果中心相近（允许x,y各有±2的误差），保留最大半径的音符
+                    found_similar = False
+                    similar_key = None
+                    for existing_key in holds.keys():
+                        if abs(existing_key[0] - x) <= 2 and abs(existing_key[1] - y) <= 2:
+                            found_similar = True
+                            similar_key = existing_key
+                            break
+                    if found_similar:
+                        if holds[similar_key][2] < radius:
+                            del holds[similar_key]
+                            holds[(x, y)] = (x, y, radius, aspect_ratio, box_points)
+                    else:
+                        holds[(x, y)] = (x, y, radius, aspect_ratio, box_points)
+                    continue
+                    
                 # 验证是否近似六边形
                 epsilon = 0.02 * cv2.arcLength(contour, True)
                 approx = cv2.approxPolyDP(contour, epsilon, True)
@@ -221,11 +242,11 @@ class NoteDetector:
                 aspect_ratio = max(width, height) / min(width, height)
                 # 计算旋转包围盒顶点
                 box_points = np.intp(cv2.boxPoints(rect))
-                # 如果中心相近（允许x,y各有±1的误差），保留最大半径的音符
+                # 如果中心相近（允许x,y各有±2的误差），保留最大半径的音符
                 found_similar = False
                 similar_key = None
                 for existing_key in holds.keys():
-                    if abs(existing_key[0] - x) <= 1 and abs(existing_key[1] - y) <= 1:
+                    if abs(existing_key[0] - x) <= 2 and abs(existing_key[1] - y) <= 2:
                         found_similar = True
                         similar_key = existing_key
                         break
@@ -256,6 +277,64 @@ class NoteDetector:
             raise Exception(f"Error in detect_hold_notes: {e}")
         
 
+    def _has_three_consecutive_120_angles(self, contour):
+        '''检查轮廓是否有连续三个角都接近120度'''
+        try:
+            # 获得多边形近似
+            epsilon = 0.02 * cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, epsilon, True)
+            
+            # 至少需要5个点
+            if len(approx) < 5:
+                return False
+                
+            # 计算所有角度
+            angles = []
+            n = len(approx)
+            for i in range(n):
+                p1 = approx[i-1][0]
+                p2 = approx[i][0]
+                p3 = approx[(i+1) % n][0]
+                
+                # 计算向量
+                v1 = p1 - p2
+                v2 = p3 - p2
+                
+                # 计算角度
+                cos_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+                cos_angle = np.clip(cos_angle, -1, 1)  # 防止数值误差
+                angle = np.arccos(cos_angle) * 180 / np.pi
+                angles.append(angle)
+            
+            # 检查是否有连续三个角都接近120度（允许±10度的误差）
+            target_angle = 120
+            tolerance = 10
+            
+            consecutive_count = 0
+            max_consecutive = 0
+            
+            for angle in angles:
+                if abs(angle - target_angle) <= tolerance:
+                    consecutive_count += 1
+                    max_consecutive = max(max_consecutive, consecutive_count)
+                else:
+                    consecutive_count = 0
+            
+            # 检查环形连续性（最后几个和开头几个角度）
+            if consecutive_count > 0:
+                for angle in angles:
+                    if abs(angle - target_angle) <= tolerance:
+                        consecutive_count += 1
+                        max_consecutive = max(max_consecutive, consecutive_count)
+                    else:
+                        break
+            
+            return max_consecutive >= 3
+            
+        except Exception as e:
+            return False
+        
+
     def display_preview(self, cap, state):
         """Display preview"""
                 
@@ -269,20 +348,20 @@ class NoteDetector:
             
             # Display frames
             while True:
-                ret, frame = cap.read()
+                ret, raw_frame = cap.read()
                 if not ret: break  # end of video
 
                 # 转换为灰度图，二值化突出屏幕部分 (大于阈值的全白)
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                gray = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
                 _, frame1 = cv2.threshold(gray, self.threshold, 255, cv2.THRESH_BINARY)
                 # 将单通道黑白图像转换为3通道，以支持彩色绘制
-                frame2 = cv2.cvtColor(frame1, cv2.COLOR_GRAY2BGR)
+                frame = cv2.cvtColor(frame1, cv2.COLOR_GRAY2BGR)
                 # 将 outline mask 区域设为黑色
                 outline_mask = state.get('outline_mask')
                 if outline_mask is not None:
-                    frame2[outline_mask == 255] = 0
+                    frame[outline_mask == 255] = 0
 
-                result_frame = self.debug_draw_tap_notes(frame2, frame_counter)
+                result_frame = self.debug_draw_tap_notes(frame, frame_counter)
                 result_frame = self.debug_draw_slide_notes(result_frame, frame_counter)
                 result_frame = self.debug_draw_hold_notes(result_frame, frame_counter)
 
