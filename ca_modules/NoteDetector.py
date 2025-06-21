@@ -40,10 +40,6 @@ class NoteDetector:
                 # 转换为灰度图，二值化突出屏幕部分 (大于阈值的全白)
                 gray_frame = cv2.cvtColor(raw_frame, cv2.COLOR_BGR2GRAY)
                 _, frame = cv2.threshold(gray_frame, self.threshold, 255, cv2.THRESH_BINARY)
-                # 将 outline mask 区域设为黑色
-                outline_mask = state.get('outline_mask')
-                if outline_mask is not None:
-                    frame[outline_mask == 255] = 0
 
                 # 获取轮廓及其最小包围圆
                 contour_circle_list = []
@@ -356,10 +352,6 @@ class NoteDetector:
                 _, frame1 = cv2.threshold(gray, self.threshold, 255, cv2.THRESH_BINARY)
                 # 将单通道黑白图像转换为3通道，以支持彩色绘制
                 frame = cv2.cvtColor(frame1, cv2.COLOR_GRAY2BGR)
-                # 将 outline mask 区域设为黑色
-                outline_mask = state.get('outline_mask')
-                if outline_mask is not None:
-                    frame[outline_mask == 255] = 0
 
                 result_frame = self.debug_draw_tap_notes(frame, frame_counter)
                 result_frame = self.debug_draw_slide_notes(result_frame, frame_counter)
