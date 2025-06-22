@@ -38,7 +38,7 @@ class NoteDetector:
             tap_radius_min = int(state['circle_radius'] * 0.09)
             tap_radius_max = int(state['circle_radius'] * 0.12)
 
-            slide_radius_min = int(state['circle_radius'] * 0.04)
+            slide_radius_min = int(state['circle_radius'] * 0.06)
             slide_radius_max = int(state['circle_radius'] * 0.18)
 
             hold_radius_min = int(state['circle_radius'] * 0.08)
@@ -521,7 +521,7 @@ class NoteDetector:
             # 获得多边形近似
             epsilon = 0.01 * cv2.arcLength(contour, True)
             approx = cv2.approxPolyDP(contour, epsilon, True)
-            
+
             # 至少需要5个点
             if len(approx) < 5:
                 return False
