@@ -49,7 +49,7 @@ class ChartAnalyzer:
 
             # get notes
             detector = NoteDetector()
-            detector.process(self.cap, self.state, 1600)
+            detector.process(self.cap, self.state, 2000)
 
             return True
         
@@ -96,7 +96,7 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] MORNINGLOOM MASTER-p01-116.mp4"
+    video = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] 天蓋 MASTER-p01-116.mp4"
     ca = ChartAnalyzer()
     ca.analyze(video, 102, 1, True)
 

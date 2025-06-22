@@ -7,20 +7,21 @@ class NoteDetector:
     def __init__(self):
         self.track_mask_path = 'static/template/track_mask.png'
         self.track_mask = None
-        self.threshold = 160  # for tap & hold
-        self.threshold2 = 200 # for slide & touch
+        self.threshold = 170
+        self.threshold2 = 210
         self.tap_notes = {}
         self.slide_notes = {}
         self.hold_notes = {}
+        self.touch_notes = {}
         # dict{frame_counter: detected_notes}
         #                     notes_list( note_dict{ bbox, center, radius, confidence } )
 
 
     def process(self, cap, state, limit_frame: int = 0):
-        '''main rpocess'''
+        '''main process'''
+        
+        print('Note Detector...Initialize...', end="\r")
         try:
-            print('Note Detector', end="\r")
-            
             self.load_track_mask(state)
             total_frames = state['total_frames']
             limit_frame = limit_frame if limit_frame > 0 else total_frames
@@ -47,6 +48,11 @@ class NoteDetector:
             hold_width2 = int(state['circle_radius'] * 0.18)
             hold_width3 = int(state['circle_radius'] * 0.25)
             hold_size = (hold_radius_min, hold_radius_max, hold_width1, hold_width2, hold_width3)
+
+            touch_radius_min = int(state['circle_radius'] * 0.02)
+            touch_radius_max = int(state['circle_radius'] * 0.12)
+            touch_radius_mid = int(state['circle_radius'] * 0.06)
+            touch_size = (touch_radius_min, touch_radius_max, touch_radius_mid)
 
             # main loop
             while frame_counter < limit_frame:
@@ -91,8 +97,10 @@ class NoteDetector:
                 # Detect hold notes
                 self.hold_notes[frame_counter] = self.detect_hold_notes(contour_circle_list, hold_size, state)
 
-                _, threshold_frame2 = cv2.threshold(gray_frame, self.threshold2, 255, cv2.THRESH_BINARY)
+
+
                 # 获取轮廓及其最小包围圆
+                threshold_frame2 = cv2.threshold(gray_frame, self.threshold2, 255, cv2.THRESH_BINARY)[1]
                 contour_circle_list = []
                 contours, _ = cv2.findContours(threshold_frame2, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
                 if not contours:
@@ -108,6 +116,8 @@ class NoteDetector:
                 
                 # Detect slide notes
                 self.slide_notes[frame_counter] = self.detect_slide_notes(contour_circle_list, slide_radius_min, slide_radius_max)
+                # Detect touch notes
+                self.touch_notes[frame_counter] = self.detect_touch_notes(contour_circle_list, touch_size)
 
                 frame_counter += 1
 
@@ -247,11 +257,11 @@ class NoteDetector:
                 radius = item['radius']
                 # 忽略尺寸不对的轮廓
                 if radius < slide_radius_min or radius > slide_radius_max: continue
-                # 验证轮廓是否接近星形（圆形度0.4-0.7）
+                # 验证轮廓是否接近星形（圆形度0.4-0.8）
                 area = cv2.contourArea(contour)
                 circle_area = 3.14 * radius * radius
                 circularity = area / circle_area
-                if not 0.4 < circularity < 0.7: continue
+                if not 0.4 < circularity < 0.8: continue
                 # 使用凸包缺陷检测
                 try:
                     hull = cv2.convexHull(contour, returnPoints=False)
@@ -270,12 +280,14 @@ class NoteDetector:
                         significant_defects += 1
                     else:
                         significant_defects -= 1
-                if significant_defects == 5:
+                if 4 <= significant_defects <= 7:
                     type = 'single'
-                elif 8 < significant_defects < 12:
+                elif 8 <= significant_defects <= 12:
                     type = 'double'
                 else:
                     continue
+                # normalize radius
+                radius_n = slide_radius_min * 2
                 # 如果中心相近（允许x,y各有±5的误差），保留最大半径的音符
                 found_similar = False
                 similar_key = None
@@ -287,18 +299,18 @@ class NoteDetector:
                 if found_similar:
                     if slides[similar_key][2] < radius:
                         del slides[similar_key]
-                        slides[(x, y)] = (x, y, radius, type)
+                        slides[(x, y)] = (x, y, radius, type, radius_n)
                 else:
-                    slides[(x, y)] = (x, y, radius, type)
+                    slides[(x, y)] = (x, y, radius, type, radius_n)
                 
             if slides is None:
                 return []
             
             detected_notes = []
 
-            for (x, y, r, t) in slides.values():
+            for (x, y, r, t, rn) in slides.values():
                 note = {
-                    'bbox': (x - r, y - r, x + r, y + r),
+                    'bbox': (x - rn, y - rn, x + rn, y + rn),
                     'center': (x, y),
                     'radius': r,
                     'type': t
@@ -440,6 +452,112 @@ class NoteDetector:
             raise Exception(f"Error in detect_hold_notes: {e}")
         
 
+
+    def detect_touch_notes(self, contour_circle_list, touch_size):
+        '''Detect touch notes
+        arg: contour_circle_list, touch_size, touch_size
+        ret: touch_notes_list(bbox, center, radius, confidence)
+        '''
+        try:
+            touches = {}
+            touch_radius_min, touch_radius_max, touch_radius_mid = touch_size
+
+            # 遍历所有轮廓，寻找尺寸合适的轮廓
+            for item in contour_circle_list:
+                contour = item['contour']
+                (x, y) = item['center']
+                radius = item['radius']
+                # 忽略尺寸不对的轮廓
+                if radius < touch_radius_min or radius > touch_radius_max: continue
+                # 验证轮廓圆形度
+                area = cv2.contourArea(contour)
+                circle_area = 3.14 * radius * radius
+                circularity = area / circle_area
+                if circularity > 0.5: continue
+                # 检查凸包填充度
+                hull = cv2.convexHull(contour)
+                hull_area = cv2.contourArea(hull)
+                if hull_area > 0:
+                    solidity = area / hull_area
+                    if solidity < 0.9: continue
+                # 获取最小包围矩形
+                rect = cv2.minAreaRect(contour)
+                width, height = rect[1]
+                # 检查长宽比
+                if width < 10 or height < 10: continue
+                aspect_ratio = max(width, height) / min(width, height)
+                if not (0.95 < aspect_ratio < 2.2): continue
+                # 检查矩形填充度
+                rect_area = width * height
+                fill_ratio = area / rect_area
+                if not (0.2 < fill_ratio < 0.7): continue
+
+                # normalize radius
+                if radius < touch_radius_mid:
+                    radius_n = radius * 1.8
+                else:
+                    radius_n = radius * 0.9
+
+                # 获取包围圆的上下左右四个点
+                up = (int(x), int(y - radius_n))
+                left = (int(x - radius_n), int(y))
+                down = (int(x), int(y + radius_n))
+                right = (int(x + radius_n), int(y))
+                box_points = [up, left, down, right]
+                # 计算轮廓的几何中心（centroid）
+                M = cv2.moments(contour)
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                # 计算三角形朝向
+                distances = [np.linalg.norm(np.array((cx, cy)) - np.array(point)) for point in box_points]
+                closest_index = np.argmin(distances)
+                orientation = ["up", "left", "down", "right"][closest_index]
+                closest_box_point = box_points[closest_index]
+                # 排除最远的点
+                next_index = (closest_index + 1) % 4
+                prev_index = (closest_index - 1) % 4
+                box_triangle = np.array([box_points[prev_index],
+                                         box_points[closest_index],
+                                         box_points[next_index]],
+                                         dtype=np.int32)
+
+                # 如果同方向的中心相近（允许x,y各有±10的误差），保留最小半径的音符
+                found_similar = False
+                similar_key = None
+                for existing_key in touches.keys():
+                    if orientation != touches[existing_key][5]: continue
+                    if abs(existing_key[0] - x) <= 10 and abs(existing_key[1] - y) <= 10:
+                        found_similar = True
+                        similar_key = existing_key
+                        break
+                if found_similar:
+                    if touches[similar_key][3] < radius:
+                        del touches[similar_key]
+                        touches[(x, y)] = (x, y, radius_n, radius, box_triangle, orientation, closest_box_point)
+                else:
+                    touches[(x, y)] = (x, y, radius_n, radius, box_triangle, orientation, closest_box_point)
+
+            if touches is None:
+                return []        
+            
+            detected_notes = []
+
+            for (x, y, r, _, box_triangle, orientation, closest_box_point) in touches.values():
+                note = {
+                    'box_points': box_triangle,
+                    'center': (x, y),
+                    'radius': r,
+                    'orientation': orientation,
+                    'end_point': closest_box_point
+                }
+                detected_notes.append(note)
+            
+            return detected_notes
+            
+        except Exception as e:
+            raise Exception(f"Error in detect_touch_notes: {e}")
+        
+
     def calculate_head_and_tail(self, box_points, state, hold_size):
 
         def move_point(x, y, offset, circle_center, circle_radius):
@@ -470,7 +588,7 @@ class NoteDetector:
             min_angle_difference = angle_differences[closest_line_index]
             max_tolerance = 3 * np.pi / 180  # 3°
             if min_angle_difference > max_tolerance:
-                return None (-1, -1), -1
+                return (-1, -1), -1
             # Calculate new point position on the closest line
             closest_angle = line_angles[closest_line_index]
             new_x = center[0] + new_distance_to_center * np.cos(closest_angle)
@@ -615,6 +733,7 @@ class NoteDetector:
                 result_frame = self.debug_draw_tap_notes(frame_final, frame_counter)
                 result_frame = self.debug_draw_slide_notes(result_frame, frame_counter)
                 result_frame = self.debug_draw_hold_notes(result_frame, frame_counter)
+                result_frame = self.debug_draw_touch_notes(result_frame, frame_counter)
 
                 # 添加文字
                 cv2.putText(result_frame, f"Frame: {frame_counter}/{total_frames}", 
@@ -735,6 +854,8 @@ class NoteDetector:
                 # Draw head and tail points
                 cv2.circle(frame, tail, 5, (0, 255, 255), -1)
                 cv2.circle(frame, head, 5, (0, 0, 255), -1)
+                # Draw line segment between head and tail
+                cv2.line(frame, tail, head, (255, 0, 255), 1)
 
                 # Draw dist
                 cv2.putText(frame, f"{dist1:.2f}", 
@@ -744,13 +865,45 @@ class NoteDetector:
                             (tail[0] + 10, tail[1] + 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
                 
-                # Draw line segment between head and tail
-                cv2.line(frame, tail, head, (255, 0, 255), 1)
+                
                 
             return frame
         
         except Exception as e:
             raise Exception(f"Error in debug_draw_hold_notes: {e}")
+        
+
+    def debug_draw_touch_notes(self, frame, frame_counter):
+        """Draw touch notes on frame"""
+        try:
+            detected_notes = self.touch_notes.get(frame_counter, [])
+            # Draw notes counter
+            cv2.putText(frame, f"Touch: {len(detected_notes)}",
+                        (10, 180), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            
+            if not detected_notes: return frame
+
+            for i, note in enumerate(detected_notes):
+                bbox = note['box_points']
+                center = note['center']
+                #radius = note['radius']
+                #orientation = note['orientation']
+                end_point = note['end_point']
+                
+                # Draw bounding box (rotated rectangle)
+                cv2.polylines(frame, [bbox], isClosed=True, color=(255, 255, 0), thickness=2)
+                
+                # Draw center point
+                cv2.circle(frame, center, 5, (0, 255, 255), -1)
+                # Draw end point
+                cv2.circle(frame, end_point, 5, (0, 0, 255), -1)
+                # Draw line segment from center to end point
+                cv2.line(frame, center, end_point, (255, 0, 255), 1)
+                
+            return frame
+            
+        except Exception as e:
+            raise Exception(f"Error in debug_draw_touch_notes: {e}")
 
 
 if __name__ == "__main__":
