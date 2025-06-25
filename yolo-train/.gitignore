@@ -1,2 +1,11 @@
 *.mp4
-datasets/
+datasets/images/
+datasets/labels/
+runs/
+*.pt
+yolo11*.pt
+debug_output/
+input/
+__pycache__/
+*.pyc
+*.log
