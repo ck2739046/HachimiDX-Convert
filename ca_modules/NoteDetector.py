@@ -346,8 +346,8 @@ class NoteDetector:
             center_x = (x1 + x2) / 2
             center_y = (y1 + y2) / 2
             # 计算矩形的四个顶点
-            half_width = rect_width / 2
-            half_length = rect_length / 2
+            half_width = rect_width / 2 + state['circle_radius'] * 0.03
+            half_length = rect_length / 2 + state['circle_radius'] * 0.04
             # 沿线段方向和垂直方向计算四个点
             p1_x = center_x - half_length * direction_x - half_width * perpendicular_x
             p1_y = center_y - half_length * direction_y - half_width * perpendicular_y
@@ -565,7 +565,8 @@ class NoteDetector:
                             'radius': r,
                             'orientation': orientation,
                             'end_point': closest_box_point,
-                            'label': label
+                            'label': label,
+                            'distance': distance
                         }
                         matched_touches[label].append(note)
                         matched = True
@@ -573,23 +574,25 @@ class NoteDetector:
                 
                 # 如果没有匹配的，则忽略这个音符
             
-            # 对于每个标签，判断是否有至少两个方向不同的音符
+            # 对于每个标签，判断是否有至少三个方向不同的音符
             valid_labels = {}
             for label, notes in matched_touches.items():
                 orientations = set()
                 for note in notes:
                     orientations.add(note['orientation'])
-                
-                # 如果有至少两个不同方向的音符，保留这个标签
-                if len(orientations) >= 2:
+
+                # 如果有至少三个不同方向的音符，保留这个标签
+                if len(orientations) >= 3:
                     valid_labels[label] = notes
             
             # 创建最终的音符列表
             detected_notes = []
-            r = int(touch_radius_max * 1.7)
             for label, notes in valid_labels.items():
                 # 为每个有效标签生成一个音符
                 touch_center = touch_areas[label]['center']
+                # 选择这个label中最大的distance作为radius
+                max_distance = max(note['distance'] for note in notes)
+                r = int(max_distance) + touch_radius_mid*2
                 note = {
                     'center': touch_center,
                     'radius': r,
@@ -674,7 +677,12 @@ class NoteDetector:
         final_tail, dist2 = move_point(tail_midpoint_x, tail_midpoint_y, offset, circle_center, circle_radius)
         # 特例:critical perfect特效
         if circle_radius*0.91 < dist1 < circle_radius*0.92 and \
-           circle_radius*0.25 < dist2 < circle_radius*0.28:
+           circle_radius*0.25 < dist2 < circle_radius*0.34:
+            return ((-1, -1), (-1, -1), (-1, -1), (-1, -1), (-1, -1), (-1, -1))
+        # 如果头尾离圆心的距离都太远，排除
+        if dist1 > circle_radius and dist2 > circle_radius * 0.65:
+            return ((-1, -1), (-1, -1), (-1, -1), (-1, -1), (-1, -1), (-1, -1))
+        if dist1 < circle_radius * 0.9 and dist2 < circle_radius * 0.3:
             return ((-1, -1), (-1, -1), (-1, -1), (-1, -1), (-1, -1), (-1, -1))
 
         return (final_head, final_tail, (int(head_midpoint_x), int(head_midpoint_y)), (int(tail_midpoint_x), int(tail_midpoint_y)), dist1, dist2)

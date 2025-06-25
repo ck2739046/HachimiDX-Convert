@@ -119,12 +119,12 @@ if __name__ == "__main__":
 
     # Define which classes are "rare" and need to be oversampled.
     # Based on your description, 'touch_note' (3) and likely 'hold_note' (2) are rare.
-    RARE_CLASSES_TO_OVERSAMPLE = [3]
+    RARE_CLASSES_TO_OVERSAMPLE = [2]
 
     # Set the desired number of copies. A factor of 5 means each original image
     # will have 4 new copies, for a total of 5 instances.
     # Adjust this factor based on the initial imbalance.
-    DUPLICATION_FACTOR = 4
+    DUPLICATION_FACTOR = 2
 
     # --- End of Configuration ---
 

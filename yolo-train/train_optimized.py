@@ -93,7 +93,7 @@ def main():
         imgsz=640,
         batch=batch_size,
         lr0=0.01,
-        patience=10,
+        patience=5,
         save_period=10,
         workers=config['workers'],
         device=device,
@@ -104,21 +104,17 @@ def main():
         verbose=True,
         rect=True,           # 矩形训练
         mosaic=1.0,          # 马赛克增强
-        mixup=0.2,           # mixup增强
-        copy_paste=0.3,      # copy-paste增强
-        hsv_h=0.015,         # HSV色调增强
-        hsv_s=0.7,           # HSV饱和度增强
-        hsv_v=0.4,           # HSV明度增强
-        degrees=10.0,        # 旋转增强
-        translate=0.1,       # 平移增强
-        scale=0.5,           # 缩放增强
-        shear=2.0,           # 剪切增强
-        perspective=0.0001,  # 透视增强
+        copy_paste=0.5,      # copy-paste增强
+        hsv_h=0.05,          # HSV色调增强
+        hsv_s=0.2,           # HSV饱和度增强
+        hsv_v=0.2,           # HSV明度增强
+        scale=0.2,           # 缩放增强
         flipud=0.5,          # 垂直翻转
         fliplr=0.5,          # 水平翻转
         # 内存优化参数
         close_mosaic=10,     # 最后10个epoch关闭mosaic
         max_det=300,         # 最大检测数量
+        plot=False           # 不绘制训练过程图
     )
     
     print("训练完成！")

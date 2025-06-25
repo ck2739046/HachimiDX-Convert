@@ -58,7 +58,7 @@ def convert_note_to_yolo_format(note, note_type, img_width, img_height):
     Returns:
         tuple: (class_id, center_x_rel, center_y_rel, width_rel, height_rel)
     """
-    if note_type in [0, 1]:  # tap_note, slide_note
+    if note_type in [0, 1, 3]:  # tap_note, slide_note, touch_note
         # 使用bbox格式: (x1, y1, x2, y2)
         bbox = note['bbox']
         x1, y1, x2, y2 = bbox
@@ -70,11 +70,6 @@ def convert_note_to_yolo_format(note, note_type, img_width, img_height):
         y_coords = [point[1] for point in box_points]
         x1, y1 = min(x_coords), min(y_coords)
         x2, y2 = max(x_coords), max(y_coords)
-        
-    elif note_type == 3:  # touch_note
-        # 使用bbox格式: (x1, y1, x2, y2)
-        bbox = note['bbox']
-        x1, y1, x2, y2 = bbox
     
     # 转换为YOLO格式 (相对坐标)
     center_x_rel, center_y_rel, width_rel, height_rel = convert_bbox_to_yolo(
@@ -272,7 +267,7 @@ def create_data_splits(output_dir, train_ratio=0.8, val_ratio=0.15):
 def main():
     # 配置参数 - 请根据您的实际情况修改
     video_path = "deicide.mp4"  # 视频文件路径
-    output_dir = "yolo-train/datasets"              # 输出目录
+    output_dir = "datasets"              # 输出目录
     max_frames = 4000                    # 最大处理帧数
     chart_start = 500                      # 谱面开始帧 (请根据实际情况调整)
     touch_areas = {
@@ -348,23 +343,23 @@ def main():
 
             # --- 新增：平衡数据集 ---
             print("\n正在平衡训练集...")
-            DATASET_DIR = Path(output_dir)
-            CLASS_NAMES = {
-                0: "tap_note",
-                1: "slide_note",
-                2: "hold_note",
-                3: "touch_note"
-            }
+            #DATASET_DIR = Path(output_dir)
+            #CLASS_NAMES = {
+                #0: "tap_note",
+                #1: "slide_note",
+                #2: "hold_note",
+                #3: "touch_note"
+            #}
             # 根据您的描述，touch (3) 和 hold (2) 是稀有类别
-            RARE_CLASSES_TO_OVERSAMPLE = [2, 3]
+            #RARE_CLASSES_TO_OVERSAMPLE = [2, 3]
             # 每个稀有样本复制2次，总共3个实例
-            DUPLICATION_FACTOR = 3
-            balance_dataset(DATASET_DIR, RARE_CLASSES_TO_OVERSAMPLE, DUPLICATION_FACTOR, CLASS_NAMES)
+            #DUPLICATION_FACTOR = 3
+            #balance_dataset(DATASET_DIR, RARE_CLASSES_TO_OVERSAMPLE, DUPLICATION_FACTOR, CLASS_NAMES)
             # --- 结束 ---
 
-            print("\n数据集生成和平衡完成！")
+            #print("\n数据集生成和平衡完成！")
             print(f"数据集位置: {output_dir}")
-            print("现在可以运行 train.py 开始训练模型")
+            #print("现在可以运行 train.py 开始训练模型")
         else:
             print("未生成任何训练样本，请检查视频和配置参数")
             

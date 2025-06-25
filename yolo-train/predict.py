@@ -7,15 +7,39 @@ from ultralytics import YOLO
 import os
 import cv2
 import sys
+import glob
+from pathlib import Path
+
+def find_latest_model():
+    """
+    自动找到最新的训练模型
+    """
+    # 查找所有匹配的训练目录
+    train_dirs = glob.glob("runs/train/note_detection_optimized*")
+    
+    if not train_dirs:
+        return None
+    
+    # 按修改时间排序，获取最新的
+    latest_dir = max(train_dirs, key=os.path.getmtime)
+    model_path = os.path.join(latest_dir, "weights", "best.pt")
+    
+    if os.path.exists(model_path):
+        return model_path
+    else:
+        return None
 
 def main():
-    # 模型路径
-    model_path = "runs/train/note_detection_optimized/weights/best.pt"
+    # 自动找到最新的模型
+    model_path = find_latest_model()
     
-    if not os.path.exists(model_path):
-        print(f"错误: 未找到训练好的模型 {model_path}")
+    if not model_path:
+        print("错误: 未找到训练好的模型")
         print("请先运行 train.py 进行训练")
+        print("查找路径: runs/train/note_detection_optimized*")
         return
+    
+    print(f"使用模型: {model_path}")
     
     # 加载模型
     model = YOLO(model_path)
@@ -59,8 +83,6 @@ def main():
         
         # 在同一行显示进度信息
         print(f"\r进度: {frame_count}/{total_frames} ({progress:.1f}%) - 检测到 {detections} 个目标", end="", flush=True)
-    
-    print()  # 换行
     
     print()  # 换行
     print("检测完成！")
