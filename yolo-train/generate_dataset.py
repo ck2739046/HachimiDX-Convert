@@ -12,6 +12,9 @@ from pathlib import Path
 # 添加父目录到路径，以便导入NoteDetector
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'ca_modules'))
 
+# Import the balancing function
+from balance_dataset import balance_dataset
+
 try:
     from NoteDetector import NoteDetector
 except ImportError as e:
@@ -140,7 +143,7 @@ def process_video_to_dataset(video_path, output_dir, max_frames=1000, chart_star
     saved_count = 0
     
     # 设置帧采样间隔 (避免数据过于相似)
-    frame_interval = 2  # 每2帧采样1帧
+    frame_interval = 3  # 每3帧采样1帧
     
     for frame_counter in range(chart_start, limit_frame, frame_interval):
         # 重新读取这一帧的图像
@@ -200,7 +203,7 @@ def process_video_to_dataset(video_path, output_dir, max_frames=1000, chart_star
             
             saved_count += 1
             if saved_count % 20 == 0:
-                print(f"已生成 {saved_count} 个训练样本", end='\r')
+                print(f"已生成 {saved_count} 个训练样本...{frame_counter}", end='\r')
     
     cap.release()
     print(f"完成！共生成 {saved_count} 个训练样本")
@@ -270,7 +273,7 @@ def main():
     # 配置参数 - 请根据您的实际情况修改
     video_path = "deicide.mp4"  # 视频文件路径
     output_dir = "yolo-train/datasets"              # 输出目录
-    max_frames = 8000                    # 最大处理帧数
+    max_frames = 4000                    # 最大处理帧数
     chart_start = 500                      # 谱面开始帧 (请根据实际情况调整)
     touch_areas = {
         'C1': {'center': (958, 540)},
@@ -341,7 +344,25 @@ def main():
             print("\n正在分割数据集...")
             # 将数据分割为训练/验证/测试集
             create_data_splits(output_dir)
-            print("数据集生成完成！")
+            print("数据集分割完成！")
+
+            # --- 新增：平衡数据集 ---
+            print("\n正在平衡训练集...")
+            DATASET_DIR = Path(output_dir)
+            CLASS_NAMES = {
+                0: "tap_note",
+                1: "slide_note",
+                2: "hold_note",
+                3: "touch_note"
+            }
+            # 根据您的描述，touch (3) 和 hold (2) 是稀有类别
+            RARE_CLASSES_TO_OVERSAMPLE = [2, 3]
+            # 每个稀有样本复制2次，总共3个实例
+            DUPLICATION_FACTOR = 3
+            balance_dataset(DATASET_DIR, RARE_CLASSES_TO_OVERSAMPLE, DUPLICATION_FACTOR, CLASS_NAMES)
+            # --- 结束 ---
+
+            print("\n数据集生成和平衡完成！")
             print(f"数据集位置: {output_dir}")
             print("现在可以运行 train.py 开始训练模型")
         else:

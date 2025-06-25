@@ -23,16 +23,10 @@ def get_optimal_config():
     config = {}
     
     # 根据内存大小配置参数
-    if total_ram >= 32:  # 大内存系统
-        config['batch_size_gpu'] = 40  # 更大的batch size
-        config['batch_size_cpu'] = 16
-        config['workers'] = min(12, cpu_count)  # 更多workers
-        config['cache_mode'] = 'ram'  # 全部缓存到RAM
-        config['prefetch_factor'] = 4  # 预取更多数据
-    elif total_ram >= 16:  # 中等内存
-        config['batch_size_gpu'] = 24
-        config['batch_size_cpu'] = 8
-        config['workers'] = min(8, cpu_count)
+    if total_ram >= 16:  # 中等内存
+        config['batch_size_gpu'] = 16
+        config['batch_size_cpu'] = 12
+        config['workers'] = min(12, cpu_count)
         config['cache_mode'] = 'ram'
         config['prefetch_factor'] = 2
     else:  # 小内存系统
