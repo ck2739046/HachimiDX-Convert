@@ -1,0 +1,10 @@
+# YOLO音符检测项目依赖
+ultralytics>=8.0.0
+opencv-python>=4.5.0
+Pillow>=8.0.0
+numpy>=1.21.0
+matplotlib>=3.3.0
+PyYAML>=5.4.0
+torch>=1.11.0
+torchvision>=0.12.0
+tqdm>=4.64.0

@@ -1,0 +1,15 @@
+# 音符检测数据集配置文件
+path: ./datasets  # 数据集根目录
+train: images/train  # 训练图片路径
+val: images/val      # 验证图片路径
+test: images/test    # 测试图片路径
+
+# 类别数量
+nc: 4
+
+# 类别名称
+names:
+  0: tap_note    # 圆形音符
+  1: slide_note  # 星形音符
+  2: hold_note   # 长条音符
+  3: touch_note  # 三角形音符
