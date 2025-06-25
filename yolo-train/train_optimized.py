@@ -25,16 +25,16 @@ def get_optimal_config():
     # 根据内存大小配置参数
     if total_ram >= 16:  # 中等内存
         config['batch_size_gpu'] = 16
-        config['batch_size_cpu'] = 12
-        config['workers'] = min(12, cpu_count)
+        config['batch_size_cpu'] = 8
+        config['workers'] = min(16, cpu_count)
         config['cache_mode'] = 'ram'
-        config['prefetch_factor'] = 2
+        config['prefetch_factor'] = 4              # 增加预取因子, 提前准备更多批次
     else:  # 小内存系统
         config['batch_size_gpu'] = 16
         config['batch_size_cpu'] = 4
-        config['workers'] = min(4, cpu_count)
+        config['workers'] = min(8, cpu_count)  # 显著增加worker数量
         config['cache_mode'] = True
-        config['prefetch_factor'] = 2
+        config['prefetch_factor'] = 3              # 增加预取因子
     
     return config
 
@@ -89,11 +89,11 @@ def main():
     print("开始训练...")
     results = model.train(
         data=data_config,
-        epochs=100,
+        epochs=50,
         imgsz=640,
         batch=batch_size,
         lr0=0.01,
-        patience=20,
+        patience=10,
         save_period=10,
         workers=config['workers'],
         device=device,
@@ -119,23 +119,6 @@ def main():
         # 内存优化参数
         close_mosaic=10,     # 最后10个epoch关闭mosaic
         max_det=300,         # 最大检测数量
-        
-        # 高级优化
-        optimizer='AdamW',   # 使用AdamW优化器
-        cos_lr=True,         # 余弦学习率调度
-        warmup_epochs=3,     # 预热轮数
-        warmup_momentum=0.8, # 预热动量
-        warmup_bias_lr=0.1,  # 预热偏置学习率
-        box=7.5,             # 边界框损失权重
-        cls=0.5,             # 分类损失权重
-        dfl=1.5,             # DFL损失权重
-        pose=12.0,           # 姿态损失权重
-        kobj=2.0,            # 关键点损失权重
-        label_smoothing=0.0, # 标签平滑
-        nbs=64,              # 名义批次大小
-        overlap_mask=True,   # 重叠掩码
-        mask_ratio=4,        # 掩码比率
-        dropout=0.0,         # Dropout率
     )
     
     print("训练完成！")
