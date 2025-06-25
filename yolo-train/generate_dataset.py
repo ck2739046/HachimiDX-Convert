@@ -69,12 +69,9 @@ def convert_note_to_yolo_format(note, note_type, img_width, img_height):
         x2, y2 = max(x_coords), max(y_coords)
         
     elif note_type == 3:  # touch_note
-        # 使用box_points格式，计算外接矩形
-        box_points = note['box_points']
-        x_coords = [point[0] for point in box_points]
-        y_coords = [point[1] for point in box_points]
-        x1, y1 = min(x_coords), min(y_coords)
-        x2, y2 = max(x_coords), max(y_coords)
+        # 使用bbox格式: (x1, y1, x2, y2)
+        bbox = note['bbox']
+        x1, y1, x2, y2 = bbox
     
     # 转换为YOLO格式 (相对坐标)
     center_x_rel, center_y_rel, width_rel, height_rel = convert_bbox_to_yolo(
@@ -123,7 +120,8 @@ def process_video_to_dataset(video_path, output_dir, max_frames=1000, chart_star
         'circle_radius': state_config.get('circle_radius', min(video_width, video_height) // 4),    # 默认半径
         'video_height': video_height,
         'video_width': video_width,
-        'debug': False
+        'debug': False,
+        'touch_areas': state_config.get('touch_areas', {})  # 默认触摸区域
     }
     
     # 初始化NoteDetector
@@ -142,7 +140,7 @@ def process_video_to_dataset(video_path, output_dir, max_frames=1000, chart_star
     saved_count = 0
     
     # 设置帧采样间隔 (避免数据过于相似)
-    frame_interval = 3  # 每3帧采样1帧
+    frame_interval = 2  # 每2帧采样1帧
     
     for frame_counter in range(chart_start, limit_frame, frame_interval):
         # 重新读取这一帧的图像
@@ -201,8 +199,8 @@ def process_video_to_dataset(video_path, output_dir, max_frames=1000, chart_star
                     f.write(f"{class_id} {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
             
             saved_count += 1
-            if saved_count % 100 == 0:
-                print(f"已生成 {saved_count} 个训练样本")
+            if saved_count % 20 == 0:
+                print(f"已生成 {saved_count} 个训练样本", end='\r')
     
     cap.release()
     print(f"完成！共生成 {saved_count} 个训练样本")
@@ -272,15 +270,51 @@ def main():
     # 配置参数 - 请根据您的实际情况修改
     video_path = "deicide.mp4"  # 视频文件路径
     output_dir = "yolo-train/datasets"              # 输出目录
-    max_frames = 2500                    # 最大处理帧数
+    max_frames = 8000                    # 最大处理帧数
     chart_start = 500                      # 谱面开始帧 (请根据实际情况调整)
+    touch_areas = {
+        'C1': {'center': (958, 540)},
+        'B1': {'center': (1043, 335)},
+        'B2': {'center': (1163, 455)},
+        'B3': {'center': (1163, 625)},
+        'B4': {'center': (1043, 744)},
+        'B5': {'center': (874, 744)},
+        'B6': {'center': (754, 625)},
+        'B7': {'center': (754, 455)},
+        'B8': {'center': (874, 336)},
+        'E1': {'center': (959, 229)},
+        'E2': {'center': (1179, 320)},
+        'E3': {'center': (1270, 540)},
+        'E4': {'center': (1179, 759)},
+        'E5': {'center': (958, 851)},
+        'E6': {'center': (739, 759)},
+        'E7': {'center': (648, 539)},
+        'E8': {'center': (739, 320)},
+        'A1': {'center': (1111, 170)},
+        'A2': {'center': (1327, 387)},
+        'A3': {'center': (1326, 693)},
+        'A4': {'center': (1110, 908)},
+        'A5': {'center': (806, 907)},
+        'A6': {'center': (590, 692)},
+        'A7': {'center': (589, 387)},
+        'A8': {'center': (805, 170)},
+        'D1': {'center': (959, 116)},
+        'D2': {'center': (1258, 240)},
+        'D3': {'center': (1381, 541)},
+        'D4': {'center': (1257, 838)},
+        'D5': {'center': (958, 962)},
+        'D6': {'center': (660, 838)},
+        'D7': {'center': (536, 540)},
+        'D8': {'center': (659, 241)}
+    }
     
     # NoteDetector状态配置 - 请根据您的视频调整这些参数
     state_config = {
         'chart_start': chart_start,
         'circle_center': (959, 539),     # 请根据实际视频中的圆圈中心调整
         'circle_radius': 474,            # 请根据实际视频中的圆圈半径调整
-        'debug': False
+        'debug': False,
+        'touch_areas': touch_areas
     }
     
     # 检查视频文件是否存在

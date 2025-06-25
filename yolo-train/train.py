@@ -35,12 +35,12 @@ def main():
     print("开始训练...")
     results = model.train(
         data=data_config,
-        epochs=100,          # 训练轮数
+        epochs=50,          # 训练轮数
         imgsz=640,          # 图像尺寸
         batch=batch_size,   # 批次大小，利用大内存
         lr0=0.01,           # 初始学习率
         patience=20,        # 早停耐心值
-        save_period=10,     # 每10轮保存一次
+        save_period=5,      # 每5轮保存一次
         workers=8,          # 增加数据加载进程数以利用多核CPU和大内存
         device=device,      # 自动选择设备
         project="runs/train",  # 保存路径
