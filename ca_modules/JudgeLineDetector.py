@@ -31,6 +31,8 @@ class JudgeLineDetector:
             print("Judge Line Detector...Done                       ")
             if state['debug']:
                 print(f"  DEBUG: O {self.circle_center}, R {self.circle_radius}")
+                #for label, area in self.touch_areas.items():
+                #    print(f"         {label} Center: {area['center']}")
                 self.display_preview(cap, state)
 
             # Reset to start of video and return

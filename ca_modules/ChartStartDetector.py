@@ -228,6 +228,8 @@ class ChartStartDetector:
         ret: template, template_sr, audio_data, audio_sr
         """
         try:
+            print("Chart Start Detector...audio_match...                        ", end="\r")
+            
             template_path_full = os.path.join(os.path.dirname(os.path.dirname(__file__)), self.template_path)
             if not os.path.exists(template_path_full):
                 raise Exception("load_template_and_video: Template start_sound not found")
@@ -252,7 +254,6 @@ class ChartStartDetector:
         ret: full_template
         """
         try:
-            print(f"Chart Start Detector...generate_template...", end="\r")
             beat_interval = 60.0 / state.get("bpm")
             
             # Resample template to audio sample rate if needed
@@ -297,8 +298,6 @@ class ChartStartDetector:
         ret: audio_start
         """
         try:
-            print("Chart Start Detector...template_match...", end="\r")
-
             # Convert chart_start frame to audio sample position
             offset = 5 * state["video_fps"]
             chart_start_time = (chart_start+offset) / state["video_fps"]

@@ -117,7 +117,7 @@ class NoteDetector:
                 # Detect slide notes
                 self.slide_notes[frame_counter] = self.detect_slide_notes(contour_circle_list, slide_radius_min, slide_radius_max)
                 # Detect touch notes
-                self.touch_notes[frame_counter] = self.detect_touch_notes(contour_circle_list, touch_size)
+                self.touch_notes[frame_counter] = self.detect_touch_notes(state, contour_circle_list, touch_size)
 
                 frame_counter += 1
 
@@ -280,9 +280,9 @@ class NoteDetector:
                         significant_defects += 1
                     else:
                         significant_defects -= 1
-                if 4 <= significant_defects <= 7:
+                if significant_defects == 5:
                     type = 'single'
-                elif 8 <= significant_defects <= 12:
+                elif significant_defects == 10:
                     type = 'double'
                 else:
                     continue
@@ -453,14 +453,16 @@ class NoteDetector:
         
 
 
-    def detect_touch_notes(self, contour_circle_list, touch_size):
+    def detect_touch_notes(self, state, contour_circle_list, touch_size):
         '''Detect touch notes
-        arg: contour_circle_list, touch_size, touch_size
+        arg: contour_circle_list, touch_size, touch_size, state['touch_areas']
         ret: touch_notes_list(bbox, center, radius, confidence)
         '''
         try:
             touches = {}
             touch_radius_min, touch_radius_max, touch_radius_mid = touch_size
+            touch_areas = state['touch_areas']
+            # touch_areas{label: {center, polygon, original_pos}}
 
             # 遍历所有轮廓，寻找尺寸合适的轮廓
             for item in contour_circle_list:
@@ -537,21 +539,66 @@ class NoteDetector:
                 else:
                     touches[(x, y)] = (x, y, radius_n, radius, box_triangle, orientation, closest_box_point)
 
-            if touches is None:
-                return []        
-            
-            detected_notes = []
 
+            if touches is None:
+                return []
+            
+            # 与触摸区域进行匹配
+            matched_touches = {}  # {label: [notes]}
+            
             for (x, y, r, _, box_triangle, orientation, closest_box_point) in touches.values():
+                matched = False
+                # 检测音符endpoint与每个touch_area的center的距离
+                for label, touch_area in touch_areas.items():
+                    touch_center = touch_area['center']
+                    distance = np.sqrt((closest_box_point[0] - touch_center[0])**2 + 
+                                     (closest_box_point[1] - touch_center[1])**2)
+                    
+                    if distance < touch_radius_max:
+                        # 匹配成功，添加到对应标签
+                        if label not in matched_touches:
+                            matched_touches[label] = []
+                        
+                        note = {
+                            'box_points': box_triangle,
+                            'center': (x, y),
+                            'radius': r,
+                            'orientation': orientation,
+                            'end_point': closest_box_point,
+                            'label': label
+                        }
+                        matched_touches[label].append(note)
+                        matched = True
+                        break
+                
+                # 如果没有匹配的，则忽略这个音符
+            
+            # 对于每个标签，判断是否有至少两个方向不同的音符
+            valid_labels = {}
+            for label, notes in matched_touches.items():
+                orientations = set()
+                for note in notes:
+                    orientations.add(note['orientation'])
+                
+                # 如果有至少两个不同方向的音符，保留这个标签
+                if len(orientations) >= 2:
+                    valid_labels[label] = notes
+            
+            # 创建最终的音符列表
+            detected_notes = []
+            r = int(touch_radius_max * 1.7)
+            for label, notes in valid_labels.items():
+                # 为每个有效标签生成一个音符
+                touch_center = touch_areas[label]['center']
                 note = {
-                    'box_points': box_triangle,
-                    'center': (x, y),
+                    'center': touch_center,
                     'radius': r,
-                    'orientation': orientation,
-                    'end_point': closest_box_point
+                    'label': label,
+                    'bbox': (touch_center[0] - r, touch_center[1] - r,
+                             touch_center[0] + r, touch_center[1] + r)
                 }
                 detected_notes.append(note)
-            
+
             return detected_notes
             
         except Exception as e:
@@ -884,21 +931,20 @@ class NoteDetector:
             if not detected_notes: return frame
 
             for i, note in enumerate(detected_notes):
-                bbox = note['box_points']
+                bbox = note['bbox']
                 center = note['center']
-                #radius = note['radius']
-                #orientation = note['orientation']
-                end_point = note['end_point']
-                
-                # Draw bounding box (rotated rectangle)
-                cv2.polylines(frame, [bbox], isClosed=True, color=(255, 255, 0), thickness=2)
+                label = note['label']
+
+                # Draw bounding box (rectangle)
+                cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
                 
                 # Draw center point
-                cv2.circle(frame, center, 5, (0, 255, 255), -1)
-                # Draw end point
-                cv2.circle(frame, end_point, 5, (0, 0, 255), -1)
-                # Draw line segment from center to end point
-                cv2.line(frame, center, end_point, (255, 0, 255), 1)
+                cv2.circle(frame, center, 5, (0, 0, 255), -1)
+                
+                # Draw note index and radius info
+                cv2.putText(frame, f"{label}", 
+                            (center[0] + 10, center[1] + 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
                 
             return frame
             
@@ -914,6 +960,43 @@ if __name__ == "__main__":
         cap = cv2.VideoCapture(video_path)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        # 创建touch_areas字典
+        touch_areas = {
+            'C1': {'center': (958, 540)},
+            'B1': {'center': (1043, 335)},
+            'B2': {'center': (1163, 455)},
+            'B3': {'center': (1163, 625)},
+            'B4': {'center': (1043, 744)},
+            'B5': {'center': (874, 744)},
+            'B6': {'center': (754, 625)},
+            'B7': {'center': (754, 455)},
+            'B8': {'center': (874, 336)},
+            'E1': {'center': (959, 229)},
+            'E2': {'center': (1179, 320)},
+            'E3': {'center': (1270, 540)},
+            'E4': {'center': (1179, 759)},
+            'E5': {'center': (958, 851)},
+            'E6': {'center': (739, 759)},
+            'E7': {'center': (648, 539)},
+            'E8': {'center': (739, 320)},
+            'A1': {'center': (1111, 170)},
+            'A2': {'center': (1327, 387)},
+            'A3': {'center': (1326, 693)},
+            'A4': {'center': (1110, 908)},
+            'A5': {'center': (806, 907)},
+            'A6': {'center': (590, 692)},
+            'A7': {'center': (589, 387)},
+            'A8': {'center': (805, 170)},
+            'D1': {'center': (959, 116)},
+            'D2': {'center': (1258, 240)},
+            'D3': {'center': (1381, 541)},
+            'D4': {'center': (1257, 838)},
+            'D5': {'center': (958, 962)},
+            'D6': {'center': (660, 838)},
+            'D7': {'center': (536, 540)},
+            'D8': {'center': (659, 241)}
+        }
+
         state = {
             'chart_start': 500,
             'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
@@ -921,6 +1004,7 @@ if __name__ == "__main__":
             'circle_radius': 474,
             'video_height': min(width, height),
             'video_width': max(width, height),
+            'touch_areas': touch_areas,
             'debug': True
         }
         detector.process(cap, state, 1400)
