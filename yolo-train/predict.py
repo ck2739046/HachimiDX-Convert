@@ -6,10 +6,11 @@ YOLO音符检测推理脚本
 from ultralytics import YOLO
 import os
 import cv2
+import sys
 
 def main():
     # 模型路径
-    model_path = "runs/train/note_detection/weights/best.pt"
+    model_path = "runs/train/note_detection_optimized/weights/best.pt"
     
     if not os.path.exists(model_path):
         print(f"错误: 未找到训练好的模型 {model_path}")
@@ -20,7 +21,7 @@ def main():
     model = YOLO(model_path)
     
     # 输入视频路径（请修改为您的视频路径）
-    input_video = "input/test_video.mp4"
+    input_video = "input/deicide.mp4"
     
     if not os.path.exists(input_video):
         print(f"错误: 未找到输入视频 {input_video}")
@@ -29,6 +30,13 @@ def main():
     
     # 开始推理
     print("开始检测...")
+    
+    # 获取视频总帧数用于显示进度
+    cap = cv2.VideoCapture(input_video)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    print(f"视频总帧数: {total_frames}")
+    
     results = model.predict(
         source=input_video,
         conf=0.5,           # 置信度阈值
@@ -37,11 +45,26 @@ def main():
         save_txt=True,      # 保存检测坐标
         save_conf=True,     # 保存置信度
         project="runs/detect",  # 输出目录
-        name="note_detection"   # 实验名称
+        name="note_detection_optimized_pred",   # 实验名称
+        verbose=False,      # 关闭详细输出
+        stream=True         # 启用流式处理，可以逐帧处理
     )
     
+    # 显示进度
+    frame_count = 0
+    for result in results:
+        frame_count += 1
+        progress = (frame_count / total_frames) * 100
+        detections = len(result.boxes) if result.boxes is not None else 0
+        
+        # 在同一行显示进度信息
+        print(f"\r进度: {frame_count}/{total_frames} ({progress:.1f}%) - 检测到 {detections} 个目标", end="", flush=True)
+    
+    print()  # 换行
+    
+    print()  # 换行
     print("检测完成！")
-    print("结果保存在: runs/detect/note_detection/")
+    print(f"结果保存在: runs/detect/note_detection_optimized_pred/")
 
 if __name__ == "__main__":
     main()
