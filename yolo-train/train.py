@@ -23,12 +23,12 @@ def main():
     print("开始训练...")
     results = model.train(
         data=data_config,
-        epochs=50,     
+        epochs=100,     
         imgsz=640,        
         batch=batch_num,
         lr0=0.01,         
         patience=10,       
-        save_period=5,      
+        save_period=10,      
         workers=workers_num,    
         device=0,        
         project=project_path,
