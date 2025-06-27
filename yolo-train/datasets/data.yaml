@@ -8,6 +8,6 @@ names: ['hold', 'slide', 'tap', 'touch', 'touch_hold']
 roboflow:
   workspace: sdez
   project: sdez
-  version: 6
+  version: 5
   license: CC BY 4.0
-  url: https://universe.roboflow.com/sdez/sdez/dataset/6
+  url: https://universe.roboflow.com/sdez/sdez/dataset/5

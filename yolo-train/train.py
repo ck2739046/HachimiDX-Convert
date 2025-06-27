@@ -32,7 +32,7 @@ def main():
         workers=workers_num,    
         device=0,        
         project=project_path,
-        name="note_detection", 
+        name="note_detection1080", 
         amp=True,      
         cache=True,        
         verbose=True,
@@ -40,8 +40,11 @@ def main():
 
         rect=True,          # 启用矩形训练以提高效率
         mosaic=1.0,         # 启用马赛克增强
-        mixup=0.2,          # 启用mixup增强
-        copy_paste=0.3     # 启用copy-paste增强
+        copy_paste=0.2,     # 启用copy-paste增强
+
+        hsv_h=0.02,         # HSV色调增强，适应不同光照
+        hsv_s=0.2,          # HSV饱和度增强
+        hsv_v=0.2          # HSV亮度增强
     )
     
     print("训练完成！")
