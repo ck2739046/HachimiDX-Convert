@@ -1,7 +1,5 @@
 from ultralytics import YOLO
 import os
-import yaml
-import torch
 
 def main():
 
@@ -19,7 +17,7 @@ def main():
 
     # 参数
     workers_num = 16
-    batch_size_num = 16
+    batch_num = 16
     
     # 开始训练
     print("开始训练...")
@@ -27,7 +25,7 @@ def main():
         data=data_config,
         epochs=50,     
         imgsz=640,        
-        batch=batch_size_num,
+        batch=batch_num,
         lr0=0.01,         
         patience=10,       
         save_period=5,      
@@ -43,9 +41,7 @@ def main():
         rect=True,          # 启用矩形训练以提高效率
         mosaic=1.0,         # 启用马赛克增强
         mixup=0.2,          # 启用mixup增强
-        copy_paste=0.3,     # 启用copy-paste增强
-        flipud=0.5,         # 垂直翻转
-        fliplr=0.5          # 水平翻转
+        copy_paste=0.3     # 启用copy-paste增强
     )
     
     print("训练完成！")

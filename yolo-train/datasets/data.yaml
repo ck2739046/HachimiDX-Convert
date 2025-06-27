@@ -2,12 +2,12 @@ train: ../train/images
 val: ../valid/images
 test: ../test/images
 
-nc: 6
-names: ['hold', 'slide', 'tap', 'touch', 'touch_hold', 'wifi']
+nc: 5
+names: ['hold', 'slide', 'tap', 'touch', 'touch_hold']
 
 roboflow:
   workspace: sdez
   project: sdez
-  version: 2
+  version: 5
   license: CC BY 4.0
-  url: https://universe.roboflow.com/sdez/sdez/dataset/2
+  url: https://universe.roboflow.com/sdez/sdez/dataset/5
