@@ -155,7 +155,8 @@ class NoteDetector:
     def load_track_mask(self, state):
         try:
             size = int(state['circle_radius'] * 1.14 * 2)
-            track_mask_pic = cv2.imread(self.track_mask_path, cv2.IMREAD_GRAYSCALE)
+            mask_path = os.path.join(os.path.dirname(__file__), "../", self.track_mask_path)
+            track_mask_pic = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
             track_mask_pic = cv2.resize(track_mask_pic, (size, size))
             # white areas become 255, gray areas become 0
             _, track_mask = cv2.threshold(track_mask_pic, 254, 255, cv2.THRESH_BINARY)
@@ -205,6 +206,8 @@ class NoteDetector:
                 # 验证轮廓是否接近圆形
                 area = cv2.contourArea(contour)
                 circle_area = 3.14 * radius * radius
+                # 防止除零错误
+                if circle_area <= 0: continue
                 circularity = area / circle_area
                 # 如果轮廓接近圆形（圆形度大于0.9）
                 if circularity < 0.9: continue
@@ -260,6 +263,8 @@ class NoteDetector:
                 # 验证轮廓是否接近星形（圆形度0.4-0.8）
                 area = cv2.contourArea(contour)
                 circle_area = 3.14 * radius * radius
+                # 防止除零错误
+                if circle_area <= 0: continue
                 circularity = area / circle_area
                 if not 0.4 < circularity < 0.8: continue
                 # 使用凸包缺陷检测
@@ -384,12 +389,12 @@ class NoteDetector:
                 # 获取最小包围矩形
                 rect = cv2.minAreaRect(contour)
                 width, height = rect[1]
-                # 检查长宽比 (>1.4)
-                aspect_ratio = max(width, height) / min(width, height)
-                if aspect_ratio < 1.4: continue
+                if width < 10 or height < 10: continue
                 # 检查填充度 (>0.7)
                 area = cv2.contourArea(contour)
                 rect_area = width * height
+                # 防止除零错误
+                if rect_area <= 0: continue
                 fill_ratio = area / rect_area
                 if fill_ratio < 0.7: continue
                 # 检查轮廓是否有连续三个120度的角
@@ -474,6 +479,8 @@ class NoteDetector:
                 # 验证轮廓圆形度
                 area = cv2.contourArea(contour)
                 circle_area = 3.14 * radius * radius
+                # 防止除零错误
+                if circle_area <= 0: continue
                 circularity = area / circle_area
                 if circularity > 0.5: continue
                 # 检查凸包填充度
@@ -487,10 +494,13 @@ class NoteDetector:
                 width, height = rect[1]
                 # 检查长宽比
                 if width < 10 or height < 10: continue
+                if min(width, height) <= 0: continue  # 防止除零错误
                 aspect_ratio = max(width, height) / min(width, height)
                 if not (0.95 < aspect_ratio < 2.2): continue
                 # 检查矩形填充度
                 rect_area = width * height
+                # 防止除零错误
+                if rect_area <= 0: continue
                 fill_ratio = area / rect_area
                 if not (0.2 < fill_ratio < 0.7): continue
 
@@ -508,6 +518,8 @@ class NoteDetector:
                 box_points = [up, left, down, right]
                 # 计算轮廓的几何中心（centroid）
                 M = cv2.moments(contour)
+                # 防止除零错误
+                if M["m00"] == 0: continue
                 cx = int(M["m10"] / M["m00"])
                 cy = int(M["m01"] / M["m00"])
                 # 计算三角形朝向
@@ -712,7 +724,11 @@ class NoteDetector:
                 v2 = p3 - p2
                 
                 # 计算角度
-                cos_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+                norm1 = np.linalg.norm(v1)
+                norm2 = np.linalg.norm(v2)
+                # 防止除零错误
+                if norm1 == 0 or norm2 == 0: continue
+                cos_angle = np.dot(v1, v2) / (norm1 * norm2)
                 cos_angle = np.clip(cos_angle, -1, 1)  # 防止数值误差
                 angle = np.arccos(cos_angle) * 180 / np.pi
                 angles.append(angle)
@@ -964,7 +980,7 @@ if __name__ == "__main__":
     detector = NoteDetector()
     try:
         # deicide 474 ariake 315
-        video_path = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] DEICIDE MASTER-p01-116.mp4"
+        video_path = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] ワールドワイドワンダー MASTER-p01-116.mp4"
         cap = cv2.VideoCapture(video_path)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))

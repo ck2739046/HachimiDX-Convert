@@ -20,8 +20,7 @@ def get_class_distribution(labels_dir: Path, class_names: dict):
                     class_counts[class_id] += 1
                 except (ValueError, IndexError):
                     continue
-    
-    print("\n--- Class Distribution ---")
+
     total_instances = sum(class_counts.values())
     if total_instances == 0:
         print("No labels found.")
@@ -32,7 +31,6 @@ def get_class_distribution(labels_dir: Path, class_names: dict):
         percentage = (count / total_instances) * 100
         print(f"{name} (ID: {class_id}): {count} instances ({percentage:.2f}%)")
     print(f"Total instances: {total_instances}")
-    print("--------------------------\n")
     return class_counts
 
 def balance_dataset(dataset_dir: Path, rare_classes: list, duplication_factor: int, class_names: dict):
@@ -46,8 +44,8 @@ def balance_dataset(dataset_dir: Path, rare_classes: list, duplication_factor: i
                             A factor of 2 means 1 copy is made.
         class_names: A dictionary mapping class IDs to names.
     """
-    train_images_dir = dataset_dir / "images" / "train"
-    train_labels_dir = dataset_dir / "labels" / "train"
+    train_images_dir = dataset_dir / "train" / "images"
+    train_labels_dir = dataset_dir / "train" / "labels"
 
     if not train_images_dir.exists() or not train_labels_dir.exists():
         print(f"Error: Training directories not found in {dataset_dir}.")
@@ -111,21 +109,15 @@ if __name__ == "__main__":
 
     # Class names from your 'data.yaml'
     CLASS_NAMES = {
-        0: "tap_note",
-        1: "slide_note",
-        2: "hold_note",
-        3: "touch_note"
+        0: "hold",
+        1: "slide",
+        2: "tap",
+        3: "touch",
+        4: "touch_hold",
+        5: "wifi"
     }
 
-    # Define which classes are "rare" and need to be oversampled.
-    # Based on your description, 'touch_note' (3) and likely 'hold_note' (2) are rare.
-    RARE_CLASSES_TO_OVERSAMPLE = [2]
-
-    # Set the desired number of copies. A factor of 5 means each original image
-    # will have 4 new copies, for a total of 5 instances.
-    # Adjust this factor based on the initial imbalance.
-    DUPLICATION_FACTOR = 2
-
-    # --- End of Configuration ---
-
-    balance_dataset(DATASET_DIR, RARE_CLASSES_TO_OVERSAMPLE, DUPLICATION_FACTOR, CLASS_NAMES)
+    balance_dataset(DATASET_DIR, [1], 0, CLASS_NAMES)
+    #balance_dataset(DATASET_DIR, [1], 2, CLASS_NAMES)
+    #balance_dataset(DATASET_DIR, [2], 4, CLASS_NAMES)
+    #balance_dataset(DATASET_DIR, [3], 12, CLASS_NAMES)

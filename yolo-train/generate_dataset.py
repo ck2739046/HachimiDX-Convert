@@ -8,6 +8,7 @@ import os
 import sys
 import numpy as np
 from pathlib import Path
+import shutil
 
 # 添加父目录到路径，以便导入NoteDetector
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'ca_modules'))
@@ -98,6 +99,51 @@ def process_video_to_dataset(video_path, output_dir, max_frames=1000, chart_star
     images_dir.mkdir(parents=True, exist_ok=True)
     labels_dir.mkdir(parents=True, exist_ok=True)
     
+    # 检查是否已有数据，询问用户选择处理方式
+    existing_images = list(images_dir.glob("*.jpg"))
+    existing_labels = list(labels_dir.glob("*.txt"))
+    
+    if existing_images or existing_labels:
+        print(f"\n检测到现有数据集:")
+        print(f"  图片文件: {len(existing_images)} 个")
+        print(f"  标注文件: {len(existing_labels)} 个")
+        print("\n请选择处理方式:")
+        print("1. 删除旧数据，重新开始")
+        print("2. 保留旧数据，添加新数据")
+        
+        while True:
+            choice = input("请输入选择 (1 或 2): ").strip()
+            if choice == "1":
+                print("正在删除旧数据...")
+                # 删除现有图片
+                for img_file in existing_images:
+                    img_file.unlink()
+                # 删除现有标注
+                for label_file in existing_labels:
+                    label_file.unlink()
+                # 同时清理验证集和测试集
+                val_images_dir = Path(output_dir) / "images" / "val"
+                val_labels_dir = Path(output_dir) / "labels" / "val"
+                test_images_dir = Path(output_dir) / "images" / "test"
+                test_labels_dir = Path(output_dir) / "labels" / "test"
+                
+                for cleanup_dir in [val_images_dir, val_labels_dir, test_images_dir, test_labels_dir]:
+                    if cleanup_dir.exists():
+                        for file in cleanup_dir.glob("*"):
+                            file.unlink()
+                print("旧数据已删除")
+                start_count = 0
+                break
+            elif choice == "2":
+                print("将保留旧数据，在此基础上添加新数据")
+                start_count = len(existing_images)
+                break
+            else:
+                print("无效选择，请输入 1 或 2")
+    else:
+        print("未检测到现有数据，将创建新数据集")
+        start_count = 0
+    
     # 打开视频
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -109,6 +155,7 @@ def process_video_to_dataset(video_path, output_dir, max_frames=1000, chart_star
     video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
     print(f"视频信息: {video_width}x{video_height}, 总帧数: {total_frames}")
+    print(video_path)
     
     # 默认状态配置 (请根据实际视频调整这些参数)
     state_config = {
@@ -135,7 +182,7 @@ def process_video_to_dataset(video_path, output_dir, max_frames=1000, chart_star
     
     # 提取检测结果并生成数据集
     print("生成训练数据...")
-    saved_count = 0
+    saved_count = start_count  # 从已有文件数量开始计数
     
     # 设置帧采样间隔 (避免数据过于相似)
     frame_interval = 3  # 每3帧采样1帧
@@ -201,7 +248,8 @@ def process_video_to_dataset(video_path, output_dir, max_frames=1000, chart_star
                 print(f"已生成 {saved_count} 个训练样本...{frame_counter}", end='\r')
     
     cap.release()
-    print(f"完成！共生成 {saved_count} 个训练样本")
+    new_samples = saved_count - start_count
+    print(f"完成！本次新增 {new_samples} 个训练样本，总共 {saved_count} 个样本")
     print(f"图片保存在: {images_dir}")
     print(f"标注保存在: {labels_dir}")
     
@@ -268,6 +316,7 @@ def main():
     # 配置参数 - 请根据您的实际情况修改
     video_path = "deicide.mp4"  # 视频文件路径
     output_dir = "datasets"              # 输出目录
+    output_dir = os.path.join(os.path.dirname(__file__), output_dir)  # 确保输出目录在当前脚本目录下
     max_frames = 4000                    # 最大处理帧数
     chart_start = 500                      # 谱面开始帧 (请根据实际情况调整)
     touch_areas = {
@@ -342,7 +391,7 @@ def main():
             print("数据集分割完成！")
 
             # --- 新增：平衡数据集 ---
-            print("\n正在平衡训练集...")
+            #print("\n正在平衡训练集...")
             #DATASET_DIR = Path(output_dir)
             #CLASS_NAMES = {
                 #0: "tap_note",

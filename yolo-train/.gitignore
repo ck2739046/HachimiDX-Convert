@@ -1,6 +1,6 @@
 *.mp4
-datasets/images/
-datasets/labels/
+datasets/
+!datasets/daya.yaml
 runs/
 *.pt
 yolo11*.pt
@@ -9,3 +9,5 @@ input/
 __pycache__/
 *.pyc
 *.log
+*.zip
+sdez*/
