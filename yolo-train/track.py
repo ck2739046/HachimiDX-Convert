@@ -104,6 +104,8 @@ def predict(input_video):
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
+
+    print(input_video)
     
     # 确定最终使用的视频路径
     if width != height:
@@ -124,6 +126,14 @@ def predict(input_video):
     if torch.cuda.is_available():
         model.to('cuda')
         #print(f"使用GPU: {torch.cuda.get_device_name(0)}")
+    
+    # 设置自定义跟踪器配置路径
+    custom_tracker_path = os.path.join(os.path.dirname(__file__), "custom_track.yaml")
+    
+    # 如果自定义配置不存在，回退到默认配置
+    if not os.path.exists(custom_tracker_path):
+        print(f"警告: 未找到自定义跟踪器配置 {custom_tracker_path}，使用默认配置")
+        custom_tracker_path = "bytetrack.yaml"
 
     # 创建输出目录
     track_output_dir = os.path.join(output_path, f'{input_video}_temp')
@@ -146,6 +156,10 @@ def predict(input_video):
     track_history = defaultdict(list)
     # 存储每个轨迹最后出现的帧数
     track_last_seen = defaultdict(int)
+    # 存储隐藏的轨迹（超过5帧未出现但还在30帧恢复期内）
+    hidden_tracks = defaultdict(lambda: {'history': [], 'last_seen': 0})
+    # 存储轨迹状态：'active', 'hidden', 'expired'
+    track_status = defaultdict(lambda: 'active')
     
     # 为不同ID生成不同颜色
     def get_color_for_id(track_id):
@@ -157,7 +171,7 @@ def predict(input_video):
     start_time = time.time()
     frame_count = 0
 
-    print(input_video)
+    print(f"使用跟踪器配置: {custom_tracker_path}")
 
     # 使用track方法替代predict
     results = model.track(
@@ -172,7 +186,7 @@ def predict(input_video):
         verbose=False,      # 关闭详细输出
         stream=True,        # 启用流式处理
         device='cuda' if torch.cuda.is_available() else 'cpu',
-        tracker="bytetrack.yaml",  # 使用ByteTrack跟踪器
+        tracker=custom_tracker_path,
         persist=True,       # 持续跟踪
         max_det=50
     )
@@ -205,14 +219,23 @@ def predict(input_video):
                 # 记录当前帧中存在的轨迹ID
                 current_track_ids.add(track_id)
                 
+                # 检查是否是从隐藏状态恢复的轨迹
+                if track_status[track_id] == 'hidden':
+                    # 恢复轨迹：将隐藏的历史记录恢复到活跃轨迹
+                    track_history[track_id] = hidden_tracks[track_id]['history'].copy()
+                    track_status[track_id] = 'active'
+                    del hidden_tracks[track_id]
+                    #print(f"轨迹 {track_id} 在第 {frame_count} 帧恢复显示")
+                
                 # 更新轨迹最后出现的帧数
                 track_last_seen[track_id] = frame_count
+                track_status[track_id] = 'active'
                 
                 # 存储轨迹点
                 track_history[track_id].append((center_x, center_y))
                 
                 # 限制轨迹长度，避免内存过多
-                if len(track_history[track_id]) > 30:
+                if len(track_history[track_id]) > 192:
                     track_history[track_id].pop(0)
                 
                 # 获取颜色
@@ -231,24 +254,53 @@ def predict(input_video):
                 cv2.putText(frame, label, (x1, y1 - 5), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
         
-        # 清理超过10帧未出现的轨迹
-        expired_tracks = []
+        # 处理轨迹状态管理
+        tracks_to_hide = []
+        tracks_to_expire = []
+        
+        # 检查活跃轨迹
         for track_id in list(track_history.keys()):
             if track_id not in current_track_ids:
-                # 如果轨迹超过10帧未出现，则标记为过期
-                if frame_count - track_last_seen.get(track_id, frame_count) > 10:
-                    expired_tracks.append(track_id)
+                frames_since_last_seen = frame_count - track_last_seen.get(track_id, frame_count)
+                
+                # 超过5帧未出现，隐藏轨迹
+                if frames_since_last_seen > 5 and track_status[track_id] == 'active':
+                    tracks_to_hide.append(track_id)
         
-        # 删除过期的轨迹
-        for track_id in expired_tracks:
+        # 检查隐藏轨迹
+        for track_id in list(hidden_tracks.keys()):
+            if track_id not in current_track_ids:
+                frames_since_last_seen = frame_count - hidden_tracks[track_id]['last_seen']
+                
+                # 超过30帧未出现，永久删除
+                if frames_since_last_seen > 30:
+                    tracks_to_expire.append(track_id)
+        
+        # 隐藏轨迹
+        for track_id in tracks_to_hide:
             if track_id in track_history:
+                # 将轨迹移动到隐藏状态
+                hidden_tracks[track_id]['history'] = track_history[track_id].copy()
+                hidden_tracks[track_id]['last_seen'] = track_last_seen[track_id]
+                track_status[track_id] = 'hidden'
+                
+                # 从活跃轨迹中删除
                 del track_history[track_id]
+                #print(f"轨迹 {track_id} 在第 {frame_count} 帧暂时隐藏")
+        
+        # 永久删除过期轨迹
+        for track_id in tracks_to_expire:
+            if track_id in hidden_tracks:
+                del hidden_tracks[track_id]
             if track_id in track_last_seen:
                 del track_last_seen[track_id]
+            if track_id in track_status:
+                del track_status[track_id]
+            #print(f"轨迹 {track_id} 在第 {frame_count} 帧永久删除")
         
-        # 绘制所有物体的轨迹线
+        # 绘制所有活跃轨迹的轨迹线
         for track_id, points in track_history.items():
-            if len(points) > 1:
+            if len(points) > 1 and track_status[track_id] == 'active':
                 color = get_color_for_id(track_id)
                 # 绘制轨迹线
                 for i in range(1, len(points)):
@@ -276,8 +328,7 @@ def predict(input_video):
             else:
                 print(f"\r进度: {frame_count}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps", end="", flush=True)
 
-    print(f"\n跟踪完成，输出视频: {output_video_path}")
-    print(f"检测到 {len(track_history)} 个独特的物体轨迹")
+    print(f"\n跟踪完成")
     
     # 释放资源
     cap.release()
@@ -319,4 +370,4 @@ def main(single_video=None):
             print()
 
 if __name__ == "__main__":
-    main('deicide_cropped')
+    main('deicide_trim')
