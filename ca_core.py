@@ -51,6 +51,9 @@ class ChartAnalyzer:
             predictor = NotePredictor()
             self.state['labels'] = predictor.process(self.cap, self.state)
 
+            # analyze results
+            analyzer = NoteAnalyzer()
+
             return True
         
         except Exception as e:
