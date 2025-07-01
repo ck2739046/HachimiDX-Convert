@@ -14,7 +14,7 @@ class ChartAnalyzer:
         # state -------------
         self.state = {}
         # bpm, notes_style (0/1)
-        # video_width, video_height, video_fps, total_frames, video_path
+        # video_width, video_height, video_fps, total_frames, video_path, video_name
         # circle_center, circle_radius, touch_areas
         # chart_start, audio_start, outline_mask
 
@@ -58,6 +58,7 @@ class ChartAnalyzer:
         
         except Exception as e:
             print(f"Error in analyze: {e}")
+            print(e.stacktrace())
             return False
 
 
@@ -79,6 +80,7 @@ class ChartAnalyzer:
                 raise Exception("load_video: fail set cv2.VideoCapture()")
             
             # get video info
+            video_name = os.path.basename(video_path).split('.')[0]
             width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = int(self.cap.get(cv2.CAP_PROP_FPS))
@@ -92,6 +94,7 @@ class ChartAnalyzer:
             self.update_state("video_fps", fps)
             self.update_state("total_frames", total_frames)
             self.update_state("video_path", video_path)
+            self.update_state("video_name", video_name)
             return
         
         except Exception as e:
