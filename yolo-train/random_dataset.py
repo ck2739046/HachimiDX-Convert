@@ -137,7 +137,7 @@ def move_samples_to_valid_advanced(input_num):
     num_samples = int(input_num * len(image_files))
     
     # 随机选择样本
-    selected_files = random.sample(image_files.items(), num_samples)
+    selected_files = random.sample(list(image_files.items()), num_samples)
     
     print(f"正在移动 {num_samples} 个样本到 valid...")
     
@@ -277,8 +277,8 @@ def main():
     
     num = 0.2
 
-    success = move_samples_to_valid(num)
-    #success = move_samples_to_valid_advanced(num)
+    #success = move_samples_to_valid(num)
+    success = move_samples_to_valid_advanced(num)
     #success = move_back_to_train()
     
     if not success: print("操作失败!")

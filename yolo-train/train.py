@@ -32,7 +32,7 @@ def main():
         workers=workers_num,    
         device=0,        
         project=project_path,
-        name="note_detection1080_v3", 
+        name="note_detection1080_v4", 
         amp=True,      
         cache=True,        
         verbose=True,

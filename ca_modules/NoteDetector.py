@@ -19,7 +19,7 @@ class NoteDetector:
     def __init__(self):
         self.output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yolo-train/runs/detect")
         self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/temp')
-        self.model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yolo-train/runs/train/note_detection1080_v3/weights/best.pt")
+        self.model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yolo-train/runs/train/note_detection1080_v4/weights/best.pt")
 
 
 
@@ -520,6 +520,8 @@ class NoteDetector:
                 if file.endswith('.mp4'):
                     final_tracks, track_results_all, final_output_path = self.predict(os.path.join(path, file), state, start=start, end=end)
                     print()
+        except KeyboardInterrupt:
+            print("\n中断")
         except Exception as e:
             print(f"Error in main: {e}")
             print(e.stacktrace())
@@ -539,7 +541,7 @@ class NoteDetector:
 
 
 if __name__ == "__main__":
-    video_path = r"D:\git\mai-chart-analyse\yolo-train\input\天蓋_cropped.mp4"
+    video_path = r"C:\Users\ck273\Desktop\ウェルテル\JIGOKU STATION CENTRAL GATE EXPERT.mp4"
     cap = cv2.VideoCapture(video_path)
     state = {
         'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
@@ -549,5 +551,37 @@ if __name__ == "__main__":
     cap.release()
 
     detector = NoteDetector()
-    #detector.main(state, video_path, start=400, end=None)
+    #detector.main(state, video_path, start=380, end=None)
     detector.main(state, start=400)
+
+'''
+
+final_tracks格式:
+{
+    track_id: {
+        'class_id': int,  # 物体类别 (0=hold, 1=slide, 2=tap, 3=touch, 4=touch_hold)
+        'path': [         # 轨迹点列表
+            {
+                'frame': int,        # 出现的帧数
+                'center_x': int,     # 中心点 x 坐标
+                'center_y': int,     # 中心点 y 坐标
+                'width': int,        # 检测框宽度
+                'height': int,       # 检测框高度
+                'confidence': float  # 置信度
+            },
+            ...
+        ]
+    },
+    ...
+}
+
+track_results_all格式:
+{
+    frame_number: [   # 每帧的跟踪结果列表
+        [x1, y1, x2, y2, track_id, confidence, class_id],  # 一些检测框的集合
+        ...
+    ],
+    ...
+}
+
+'''

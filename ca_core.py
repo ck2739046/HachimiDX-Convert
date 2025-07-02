@@ -60,6 +60,9 @@ class ChartAnalyzer:
             
             return True
         
+        except KeyboardInterrupt:
+            print("\n中断")
+            return False
         except Exception as e:
             print(f"Error in analyze: {e}")
             print(e.stacktrace())
