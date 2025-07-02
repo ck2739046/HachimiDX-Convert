@@ -46,14 +46,7 @@ class ChartAnalyzer:
             self.state['chart_start'], \
             self.state['audio_start'], \
             self.state['outline_mask'] = detector.process(self.cap, self.state)
-
-            # get notes
-            predictor = NotePredictor()
-            self.state['labels'] = predictor.process(self.cap, self.state)
-
-            # analyze results
-            analyzer = NoteAnalyzer()
-
+            
             return True
         
         except Exception as e:

@@ -10,7 +10,7 @@ def main():
         return
     
     # 加载预训练模型
-    yolo_path = os.path.join(os.path.dirname(__file__), 'yolo11s.pt')
+    yolo_path = os.path.join(os.path.dirname(__file__), 'yolo11n.pt')
     model = YOLO(yolo_path)
 
     project_path = os.path.join(os.path.dirname(__file__), 'runs', 'train')
@@ -27,12 +27,12 @@ def main():
         imgsz=640,        
         batch=batch_num,
         lr0=0.01,         
-        patience=10,       
+        patience=20,       
         save_period=10,      
         workers=workers_num,    
         device=0,        
         project=project_path,
-        name="note_detection1080", 
+        name="note_detection1080_v3", 
         amp=True,      
         cache=True,        
         verbose=True,
@@ -44,7 +44,7 @@ def main():
 
         hsv_h=0.02,         # HSV色调增强，适应不同光照
         hsv_s=0.2,          # HSV饱和度增强
-        hsv_v=0.2          # HSV亮度增强
+        hsv_v=0.2           # HSV亮度增强
     )
     
     print("训练完成！")

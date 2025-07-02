@@ -6,7 +6,8 @@ import time
 import torch
 import numpy as np
 from collections import defaultdict
-import random
+import hashlib
+import colorsys
 from types import SimpleNamespace
 from ultralytics.engine.results import Boxes
 from ultralytics.utils import LOGGER
@@ -20,7 +21,7 @@ class NoteAnalyzer:
     def __init__(self):
         self.output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yolo-train/runs/detect")
         self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/temp')
-        self.model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yolo-train/runs/train/note_detection1080/weights/best.pt")
+        self.model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yolo-train/runs/train/note_detection1080_v3/weights/best.pt")
 
 
 
@@ -112,6 +113,8 @@ class NoteAnalyzer:
             
 
             # 验证start/end
+            if start is None: start = 0
+            if end is None: end = total_frames
             if start == 0 and end == total_frames:
                 return input_video  # 不需要裁剪，直接返回
             if start < 0 or end > total_frames or start >= end:
@@ -141,8 +144,8 @@ class NoteAnalyzer:
             while current_frame <= end:
                 # 读取帧
                 ret, frame = cap.read()
-                if not ret:
-                    raise Exception(f'Fail to read frame {current_frame}')
+                if not ret: break
+                    #raise Exception(f'Fail to read frame {current_frame}')
                 # 写入帧
                 out.write(frame)
                 # 更新进度
@@ -164,12 +167,11 @@ class NoteAnalyzer:
 
 
 
-    def filter_track(self, frame_counter, results, tracker_other, tracker_slide, orig_img):
+    def filter_track(self, frame_counter, results, trackers, orig_img):
         # class id: 0 hold, 1 slide, 2 tap, 3 touch, 4 touch_hold
+        # trackers: 0 hold, 1 slide, 2 tap, 3 touch/touch_hold
         try:
-            # 默认返回空列表
-            tracked_objects_other = []
-            tracked_objects_slide = []
+            track_results = []
             orig_shape = orig_img.shape[:2]
 
             # 检查是否有检测结果
@@ -177,44 +179,57 @@ class NoteAnalyzer:
                 # 即使没有检测，也要调用update，让跟踪器知道时间在流逝，以便管理旧的轨迹
                 # 传递一个空的Boxes对象
                 empty_boxes = Boxes(np.empty((0, 6)), orig_shape)
-                tracked_objects_other = tracker_other.update(empty_boxes, orig_img)
-                tracked_objects_slide = tracker_slide.update(empty_boxes, orig_img)
-                return tracked_objects_other, tracked_objects_slide
+                for tracker in trackers:
+                    track_result = tracker.update(empty_boxes, orig_img)
+                    track_results.append(track_result)
+                return track_results
 
             # 从Results对象中获取所有检测框数据 (xyxy, conf, cls)
             all_boxes = results[0].boxes.data.cpu().numpy()
 
-            # 1. 分离出 class_id != 1 的检测框
-            other_mask = all_boxes[:, 5] != 1
-            other_detections = all_boxes[other_mask]
-
-            # 2. 分离出 class_id == 1 的检测框
+            # 1. 分离出各个class_id的检测框
+            candidates = {}
+            hold_mask = all_boxes[:, 5] == 0
+            candidates[0] = (all_boxes[hold_mask])
             slide_mask = all_boxes[:, 5] == 1
-            slide_candidates = all_boxes[slide_mask]
+            candidates[1] = (all_boxes[slide_mask])
+            tap_mask = all_boxes[:, 5] == 2
+            candidates[2] = (all_boxes[tap_mask])
+            touch_mask = all_boxes[:, 5] >= 3
+            candidates[3] = (all_boxes[touch_mask])
             
-            # 3. 对 slide 检测框应用宽高比过滤
+            # 2. 过滤slide音符
             final_slide_detections = []
-            if len(slide_candidates) > 0:
-                for box in slide_candidates:
+            if len(candidates[1]) > 0:
+                for box in candidates[1]:
                     x1, y1, x2, y2 = box[:4]
+                    # 检查宽高比 (1.25)
                     width = x2 - x1
                     height = y2 - y1
-                    # 避免除以零
-                    if height == 0: continue
+                    if height == 0: continue # 避免除以零
                     aspect_ratio = width / height
-                    if aspect_ratio < 1.2:
-                        final_slide_detections.append(box)
+                    if aspect_ratio > 1.25: continue
+                    # 增大slide检测框尺寸1.4x, 改善追踪效果
+                    new_width = int(width * 1.4)
+                    new_height = int(height * 1.4)
+                    center_x = (x1 + x2) / 2
+                    center_y = (y1 + y2) / 2
+                    new_x1 = max(0, int(center_x - new_width // 2))
+                    new_y1 = max(0, int(center_y - new_height // 2))
+                    new_x2 = min(orig_shape[1], new_x1 + new_width)
+                    new_y2 = min(orig_shape[0], new_y1 + new_height)
+                    # 创建新box然后保存
+                    final_slide_detections.append([new_x1, new_y1, new_x2, new_y2] + box[4:].tolist())
             
-            final_slide_detections = np.array(final_slide_detections) if len(final_slide_detections) > 0 else np.empty((0, 6))
+            candidates[1] = np.array(final_slide_detections) if len(final_slide_detections) > 0 else np.empty((0, 6))
 
-            # 4. 将过滤后的结果重新包装成Boxes对象，再交给对应的追踪器处理
-            other_boxes = Boxes(other_detections, orig_shape)
-            slide_boxes = Boxes(final_slide_detections, orig_shape)
+            # 3. 将过滤后的结果重新封装为Boxes对象，再交给对应的追踪器处理
+            for i in range(len(trackers)):
+                boxes = Boxes(candidates[i], orig_shape)
+                track_result = trackers[i].update(boxes, orig_img)
+                track_results.append(track_result)
 
-            tracked_objects_other = tracker_other.update(other_boxes, orig_img)
-            tracked_objects_slide = tracker_slide.update(slide_boxes, orig_img)
-
-            return tracked_objects_other, tracked_objects_slide
+            return track_results
         
         except Exception as e:
             raise Exception(f"Error in filter_detections {frame_counter}: {e}")
@@ -225,21 +240,30 @@ class NoteAnalyzer:
 
         # 为不同ID生成不同颜色
         def get_color_for_id(track_id):
-            # 使用track_id作为种子生成固定的颜色
-            random.seed(track_id)
-            return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            color_pool = [
+                (0, 255, 255), (255, 0, 255), (255, 255, 0),
+                (128, 0, 0), (0, 128, 0), (0, 0, 128),
+                (128, 255, 255), (255, 128, 255), (255, 255, 128),
+                (0, 128, 128), (128, 0, 128), (128, 128, 0),
+                (255, 0, 0), (0, 255, 0), (0, 0, 255),
+                (255, 128, 128), (128, 255, 128), (128, 128, 255),
+                (128, 128, 128)
+            ]
+            # 使用track_id对颜色池长度取模来选择颜色
+            color_index = track_id % len(color_pool)
+            return color_pool[color_index]
+
 
         try:
-            print(f'Predict initialize...', end='\r', flush=True)
             # 处理视频
-            if start is None: start = 0
-            if end is None: end = int(state['total_frames'])
             video_name_og = os.path.basename(input_path).split('.')[0]
+            print(f"Predict: {video_name_og}")
             # trim then crop
             input_path_trim = self.trim_video(input_path, start, end)
             input_path_crop = self.crop_video_to_square(state, input_path_trim)
             input_path_final = input_path_crop
             video_name_final = os.path.basename(input_path_final).split('.')[0]
+            print(f'Predict initialize...', end='\r', flush=True)
             # 重新获取处理后的视频信息
             cap = cv2.VideoCapture(input_path_final)
             video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -256,24 +280,27 @@ class NoteAnalyzer:
 
 
             # 初始化跟踪器
-            tracker_args = SimpleNamespace(
-                # 没有注释的全是默认参数
-                tracker_type='botsort',
-                track_high_thresh=0.25,
-                track_low_thresh=0.1,
-                new_track_thresh=0.25,
-                track_buffer=30,
-                match_thresh=0.99,     # 保证不会变为新编号
-                fuse_score=True,
-                # min_box_area=10,
-                gmc_method='sparseOptFlow',
-                proximity_thresh=0.5,
-                appearance_thresh=0.8,
-                with_reid=False,
-                model="yolo11n-cls.pt" # ReID 模型
-            )
-            tracker_other = BOTSORT(args=tracker_args, frame_rate=fps)
-            tracker_slide = BOTSORT(args=tracker_args, frame_rate=fps)
+            trackers = []
+            # trackers: hold, slide, tap, touch/touch_hold
+            thresholds = [0.99, 0.99, 0.99, 0.8]
+            for thresh in thresholds:
+                tracker_args = SimpleNamespace(
+                    # 没有注释的全是默认参数
+                    tracker_type='botsort',
+                    track_high_thresh=0.25,
+                    track_low_thresh=0.1,
+                    new_track_thresh=0.25,
+                    track_buffer=30,
+                    match_thresh=thresh,   # 自定义阈值
+                    fuse_score=True,
+                    # min_box_area=10,
+                    gmc_method='none',     # 无需全局运动补偿
+                    proximity_thresh=0.5,
+                    appearance_thresh=0.8,
+                    with_reid=False,
+                    model="auto"
+                )
+                trackers.append(BOTSORT(args=tracker_args, frame_rate=fps))
 
             
             # 加载模型
@@ -286,6 +313,7 @@ class NoteAnalyzer:
             # 设置必要变量
             fps_counter = 0
             start_time = time.time()
+            start_time_fixed = start_time
             frame_count = 0
             fps_rate = 0
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0) # 重置到开始
@@ -297,6 +325,8 @@ class NoteAnalyzer:
             hidden_tracks = defaultdict(lambda: {'history': [], 'last_seen': 0})
             # 存储轨迹状态：'active', 'hidden', 'expired'
             track_status = defaultdict(lambda: 'active')
+            # 存储所有帧的跟踪结果
+            all_frames = {}
 
 
             # 主循环
@@ -310,34 +340,30 @@ class NoteAnalyzer:
                 # 使用模型预测当前帧
                 results = model.predict(
                     source=frame,
-                    conf=0.5,
+                    conf=0.6,
                     iou=0.7,
                     verbose=False, # 关闭详细输出
                     device='cuda' if torch.cuda.is_available() else 'cpu',
                     max_det=50
                 )
 
-                tracked_objects_slide = []
-                tracked_objects_other = []
+
                 # 过滤检测结果
+                track_results = []
                 if len(results) > 0 and results[0].boxes is not None:
-                    tracked_objects_other, tracked_objects_slide = self.filter_track(frame_count, results, tracker_other, tracker_slide, frame)
- 
+                    track_results = self.filter_track(frame_count, results, trackers, frame)
 
                 
                 # 处理跟踪结果
                 current_track_ids = set()  # 当前帧中存在的轨迹ID
-                for tracked_objects, track_type in [(tracked_objects_slide, 'slide'),
-                                                    (tracked_objects_other, 'other')]:
-                    if len(tracked_objects) > 0:
+                for track_result in track_results:
+                    if track_result is not None and len(track_result) > 0:
                         # 绘制检测框和轨迹
-                        for track in tracked_objects:
+                        for track in track_result:
                             # 获取轨迹信息
-                            if len(track) < 5: continue
-                            x1, y1, x2, y2, track_id = track[:5]
-                            x1, y1, x2, y2, track_id = int(x1), int(y1), int(x2), int(y2), int(track_id)
-                            if track_type == 'slide':
-                                track_id = track_id + 1000 # 偏移ID，避免与其他检测冲突
+                            if len(track) < 7: continue
+                            x1, y1, x2, y2, track_id, conf, class_id = track[:7]
+                            x1, y1, x2, y2, track_id, class_id = int(x1), int(y1), int(x2), int(y2), int(track_id), int(class_id)
                             # 计算中心点
                             center_x = (x1 + x2) // 2
                             center_y = (y1 + y2) // 2
@@ -355,15 +381,15 @@ class NoteAnalyzer:
                             # 存储轨迹点
                             track_history[track_id].append((center_x, center_y))
                             # 限制轨迹长度，避免内存过多
-                            if len(track_history[track_id]) > 192:
+                            if len(track_history[track_id]) > 512:
                                 track_history[track_id].pop(0)
                             # 获取颜色
                             color = get_color_for_id(track_id)
                             # 绘制边界框
                             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                            # 绘制ID和置信度
-                            conf = track[5] if len(track) > 5 else 0.0  # 获取置信度
-                            label = f'ID:{track_id} {conf:.2f}'
+                            # 绘制标签
+                            class_name = ['hold', 'slide', 'tap', 'touch', 'touch_hold'][class_id]
+                            label = f'{class_name} ID:{track_id} {conf:.2f}'
                             label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
                             cv2.rectangle(frame, (x1, y1 - label_size[1] - 10), 
                                         (x1 + label_size[0], y1), color, -1)
@@ -435,27 +461,30 @@ class NoteAnalyzer:
                     fps_rate = fps_counter / (current_time - start_time)
                     start_time = current_time
                     fps_counter = 0
+                    progress = (frame_count / total_frames) * 100 
+                    print(f"progress: {frame_count}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps", end="\r", flush=True)
 
-                progress = (frame_count / total_frames) * 100 
-                print(f"progress: {frame_count}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps", end="\r", flush=True)
-
-            print(f"predict done                                  ")
+            end_time = time.time()
+            average_fps_rate = frame_count / (end_time - start_time_fixed)
+            print(f"predict done, average FPS: {average_fps_rate:.2f}            ")
             cap.release()
             out.release()
             
-            # 如果使用了裁剪的临时文件，删除它
-            #if input_path != input_path_trim:
-                #os.remove(input_path_trim)
-            #if input_path != input_path_crop:
-                #os.remove(input_path_crop)
+
             # 移动tracked_video到最终输出目录
             final_output_dir = os.path.join(self.output_dir, video_name_og)
             os.makedirs(final_output_dir, exist_ok=True)
             final_output_path = os.path.join(final_output_dir, f'{video_name_og}_tracked.mp4')
+            # 处理文件名冲突，自动生成 _1, _2, _3 等后缀
+            counter = 1
+            while os.path.exists(final_output_path):
+                final_output_path = os.path.join(final_output_dir, f'{video_name_og}_tracked_{counter}.mp4')
+                counter += 1
             os.rename(output_path, final_output_path)
             # 清理临时目录
             if not os.listdir(self.temp_dir):
                 os.rmdir(self.temp_dir)
+
 
         except Exception as e:
             raise Exception(f"Error in predict: {e}")
@@ -466,10 +495,10 @@ class NoteAnalyzer:
             if single_video:
                 self.predict(single_video, state, start=start, end=end)
                 return
-            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'yolo-train/input')
+            path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/input')
             for file in os.listdir(path):
                 if file.endswith('.mp4'):
-                    self.predict(os.path.join(path, file), state)
+                    self.predict(os.path.join(path, file), state, start=start, end=end)
                     print()
         except Exception as e:
             print(f"Error in main: {e}")
@@ -479,14 +508,15 @@ class NoteAnalyzer:
 
 
 if __name__ == "__main__":
-    video_path = r"D:\git\mai-chart-analyse\yolo-train\input\DEICIDE.mp4"
+    video_path = r"D:\git\mai-chart-analyse\yolo-train\input\天蓋_cropped.mp4"
     cap = cv2.VideoCapture(video_path)
     state = {
         'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-        'circle_center': (959, 539),
+        'circle_center': (539, 539), # 1920x1080: 959, 539
         'circle_radius': 474,
     }
     cap.release()
 
     analyzer = NoteAnalyzer()
-    analyzer.main(state, video_path, start=400, end=4000)
+    #analyzer.main(state, video_path, start=400, end=None)
+    analyzer.main(state, start=400)
