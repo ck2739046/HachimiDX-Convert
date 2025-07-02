@@ -6,8 +6,6 @@ import time
 import torch
 import numpy as np
 from collections import defaultdict
-import hashlib
-import colorsys
 from types import SimpleNamespace
 from ultralytics.engine.results import Boxes
 from ultralytics.utils import LOGGER
@@ -17,7 +15,7 @@ original_level = LOGGER.level
 LOGGER.setLevel(logging.ERROR) # 只显示错误信息，忽略 Warning
 
 
-class NoteAnalyzer:
+class NoteDetector:
     def __init__(self):
         self.output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yolo-train/runs/detect")
         self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/temp')
@@ -326,7 +324,9 @@ class NoteAnalyzer:
             # 存储轨迹状态：'active', 'hidden', 'expired'
             track_status = defaultdict(lambda: 'active')
             # 存储所有帧的跟踪结果
-            all_frames = {}
+            track_results_all = {}
+            # 存储最终返回的轨迹数据
+            final_tracks = defaultdict(lambda: {'class_id': None, 'path': []})
 
 
             # 主循环
@@ -352,6 +352,7 @@ class NoteAnalyzer:
                 track_results = []
                 if len(results) > 0 and results[0].boxes is not None:
                     track_results = self.filter_track(frame_count, results, trackers, frame)
+                    track_results_all[frame_count] = track_results
 
                 
                 # 处理跟踪结果
@@ -367,8 +368,24 @@ class NoteAnalyzer:
                             # 计算中心点
                             center_x = (x1 + x2) // 2
                             center_y = (y1 + y2) // 2
+                            # 计算检测框尺寸
+                            width = x2 - x1
+                            height = y2 - y1
+                            
                             # 记录当前帧中存在的轨迹ID
                             current_track_ids.add(track_id)
+  
+                            # 添加到最终轨迹数据
+                            final_tracks[track_id]['class_id'] = class_id
+                            final_tracks[track_id]['path'].append({
+                                'frame': frame_count,
+                                'center_x': center_x,
+                                'center_y': center_y,
+                                'width': width,
+                                'height': height,
+                                'confidence': conf
+                            })
+
                             # 检查是否是从隐藏状态恢复的轨迹
                             if track_status[track_id] == 'hidden':
                                 # 恢复轨迹：将隐藏的历史记录恢复到活跃轨迹
@@ -484,6 +501,9 @@ class NoteAnalyzer:
             # 清理临时目录
             if not os.listdir(self.temp_dir):
                 os.rmdir(self.temp_dir)
+            
+            # 返回轨迹数据
+            return dict(final_tracks), track_results_all, final_output_path
 
 
         except Exception as e:
@@ -493,17 +513,28 @@ class NoteAnalyzer:
     def main(self, state, single_video=None, start=None, end=None):
         try:
             if single_video:
-                self.predict(single_video, state, start=start, end=end)
+                final_tracks, track_results_all, final_output_path = self.predict(single_video, state, start=start, end=end)
                 return
             path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/input')
             for file in os.listdir(path):
                 if file.endswith('.mp4'):
-                    self.predict(os.path.join(path, file), state, start=start, end=end)
+                    final_tracks, track_results_all, final_output_path = self.predict(os.path.join(path, file), state, start=start, end=end)
                     print()
         except Exception as e:
             print(f"Error in main: {e}")
             print(e.stacktrace())
 
+
+
+    def process(self, state):
+        try:
+            video_path = state['video_path']
+            start = state['chart_start']
+            final_tracks, track_results_all, final_output_path = self.predict(video_path, state, start=start, end=None)
+            return final_tracks, track_results_all, final_output_path
+
+        except Exception as e:
+            raise Exception(f"Error in process: {e}")
 
 
 
@@ -517,6 +548,6 @@ if __name__ == "__main__":
     }
     cap.release()
 
-    analyzer = NoteAnalyzer()
-    #analyzer.main(state, video_path, start=400, end=None)
-    analyzer.main(state, start=400)
+    detector = NoteDetector()
+    #detector.main(state, video_path, start=400, end=None)
+    detector.main(state, start=400)

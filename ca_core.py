@@ -3,7 +3,7 @@ import os
 
 from ca_modules.JudgeLineDetector import JudgeLineDetector
 from ca_modules.ChartStartDetector import ChartStartDetector
-from ca_modules.NotePredictor import NotePredictor
+from ca_modules.NoteDetector import NoteDetector
 
 class ChartAnalyzer:
     def __init__(self):
@@ -46,6 +46,10 @@ class ChartAnalyzer:
             self.state['chart_start'], \
             self.state['audio_start'], \
             self.state['outline_mask'] = detector.process(self.cap, self.state)
+
+            # get notes
+            detector = NoteDetector()
+            self.state['notes'] = detector.process(self.state)
             
             return True
         
