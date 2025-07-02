@@ -4,6 +4,7 @@ import os
 from ca_modules.JudgeLineDetector import JudgeLineDetector
 from ca_modules.ChartStartDetector import ChartStartDetector
 from ca_modules.NoteDetector import NoteDetector
+from ca_modules.NoteAnalyzer import NoteAnalyzer
 
 class ChartAnalyzer:
     def __init__(self):
@@ -52,6 +53,10 @@ class ChartAnalyzer:
             self.state['track_paths'], \
             self.state['track_results'],\
             self.state['detect_video_path'] = detector.process(self.state)
+
+            # analyze results
+            analyzer = NoteAnalyzer()
+            txt = analyzer.process(self.state)
             
             return True
         
