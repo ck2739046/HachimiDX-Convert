@@ -49,7 +49,9 @@ class ChartAnalyzer:
 
             # get notes
             detector = NoteDetector()
-            self.state['notes'] = detector.process(self.state)
+            self.state['track_paths'], \
+            self.state['track_results'],\
+            self.state['detect_video_path'] = detector.process(self.state)
             
             return True
         
