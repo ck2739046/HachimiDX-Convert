@@ -541,7 +541,8 @@ class NoteDetector:
 
 
 if __name__ == "__main__":
-    video_path = r"C:\Users\ck273\Desktop\ウェルテル\JIGOKU STATION CENTRAL GATE EXPERT.mp4"
+    #video_path = r"C:\Users\ck273\Desktop\ウェルテル\JIGOKU STATION CENTRAL GATE EXPERT.mp4"
+    video_path = r"D:\git\mai-chart-analyse\yolo-train\input\天蓋_cropped.mp4"
     cap = cv2.VideoCapture(video_path)
     state = {
         'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
@@ -551,8 +552,8 @@ if __name__ == "__main__":
     cap.release()
 
     detector = NoteDetector()
-    #detector.main(state, video_path, start=380, end=None)
-    detector.main(state, start=400)
+    detector.main(state, video_path, start=380, end=None)
+    #detector.main(state, start=400)
 
 '''
 

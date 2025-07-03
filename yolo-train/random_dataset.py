@@ -1,8 +1,6 @@
 import os
 import random
 import shutil
-import argparse
-from pathlib import Path
 
 
 # 全局路径
@@ -87,7 +85,7 @@ def move_samples_to_valid(input_num):
 
 
 
-def move_samples_to_valid_advanced(input_num):
+def move_samples_to_valid_advanced(input_num, round=None):
     '''
     train数据集经过增强, 一个样本变三个
     此方法会将增强的三个样本中的第一个样本移动到valid目录
@@ -140,6 +138,16 @@ def move_samples_to_valid_advanced(input_num):
     selected_files = random.sample(list(image_files.items()), num_samples)
     
     print(f"正在移动 {num_samples} 个样本到 valid...")
+    
+    # 保存选中的文件key到txt文件
+    if round is not None:
+        selected_keys_file = os.path.join(script_dir, f'selected_keys_round{round}.txt')
+        if os.path.exists(selected_keys_file):
+            os.remove(selected_keys_file)
+        with open(selected_keys_file, 'w', encoding='utf-8') as f:
+            for image_key, image_list in selected_files:
+                f.write(f"{image_key}\n")
+        print(f"已保存选中的样本key到: {selected_keys_file}")
     
     # 移动选中的文件
     moved_count = 0
@@ -278,8 +286,8 @@ def main():
     num = 0.2
 
     #success = move_samples_to_valid(num)
-    success = move_samples_to_valid_advanced(num)
-    #success = move_back_to_train()
+    #success = move_samples_to_valid_advanced(num)
+    success = move_back_to_train()
     
     if not success: print("操作失败!")
 
