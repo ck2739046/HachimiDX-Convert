@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from ultralytics.engine.results import Boxes
 from ultralytics.utils import LOGGER
 import logging
+import subprocess
 
 original_level = LOGGER.level
 LOGGER.setLevel(logging.ERROR) # 只显示错误信息，忽略 Warning
@@ -17,151 +18,161 @@ LOGGER.setLevel(logging.ERROR) # 只显示错误信息，忽略 Warning
 
 class NoteDetector:
     def __init__(self):
-        self.output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yolo-train/runs/detect")
-        self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/temp')
-        self.model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "yolo-train/runs/train/note_detection1080_v4/weights/best.pt")
+        self.output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train', 'runs', 'detect')
+        self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train', 'temp')
+        self.model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train', 'runs', 'train', 'note_detection1080_v4', 'weights', 'best.pt')
 
 
 
-    def crop_video_to_square(self, state, input_video):
+    def standardlize_video(self, state, input_video, start=None, end=None):
+        """
+        使用ffmpeg进行视频的crop、trim和resize操作, 保留音频
+        
+        Args:
+            start: 开始帧数
+            end: 结束帧数
+            state: 包含circle_center/circle_radius/debug的状态字典
+            input_video: 输入视频路径
+        
+        Returns:
+            处理后的视频路径
+        """
         try:
             # 获取基础参数
+            cap = cv2.VideoCapture(input_video)
+            video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
             circle_radius = state['circle_radius']
             circle_center = state['circle_center']
-            cap = cv2.VideoCapture(input_video)
-            video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
-            cap.release()
 
+            need_trim_ss = True
+            need_trim_to = True
+            need_crop = True
+            need_resize = True
 
-            # 如果已经是正方形，直接返回原视频路径
-            if video_width == video_height:
-                return input_video
-            
+            # 检查start和end参数
+            if start is not None and end is not None:
+                if start < 0 or end > total_frames or start >= end:
+                    raise Exception(f"Invalid start/end: [{start}, {end}], expect 0~{total_frames}")
+                
+            # 定义trim参数
+            if start is None:
+                start = 0
+                need_trim_ss = False
+            if end is None:
+                end = total_frames
+                need_trim_to = False
 
-            # 设置视频输出路径
-            video_name = os.path.basename(input_video).split('.')[0]
-            os.makedirs(self.temp_dir, exist_ok=True)
-            output_path = os.path.join(self.temp_dir, f'{video_name}_cropped.mp4')
-            if os.path.exists(output_path):
-                return output_path  # 如果输出文件已存在，直接返回
-            
-
-            # 计算裁剪尺寸和位置
+            # 定义crop参数
             if video_height < circle_radius * 2.3:
-                # 2.3x 半径 = 整个圆
+                # 检查画面是否已经正常
+                if video_width == video_height:
+                    if video_height <= 1080 and video_width <= 1080:
+                        frame_center = (video_width // 2, video_height // 2)
+                        diff_x = abs(frame_center[0] - circle_center[0])
+                        diff_y = abs(frame_center[1] - circle_center[1])
+                        if diff_x < 10 and diff_y < 10:
+                            need_crop = False # 不需要裁剪
+
                 # 说明圆圈已经铺满整个画面，直接裁两边即可
                 crop_size = min(video_width, video_height)
-                # 画面中心左上角
-                x = (video_width - crop_size) // 2
-                y = (video_height - crop_size) // 2
+                # 画面中心
+                crop_x = (video_width - crop_size) // 2
+                crop_y = (video_height - crop_size) // 2
             else:
                 # 裁出圆形区域
-                crop_size = int(circle_radius * 2.26)
+                crop_size = int(circle_radius * 2.28)
                 # 圆形区域左上角
-                x = circle_center[0] - int(circle_radius * 1.13)
-                y = circle_center[1] - int(circle_radius * 1.13)
+                crop_x = circle_center[0] - int(circle_radius * 1.14)
+                crop_y = circle_center[1] - int(circle_radius * 1.14)
 
-            print(f"video crop: {video_width}x{video_height} -> {crop_size}x{crop_size}")
+            # 定义resize参数
+            if crop_size <= 1080:
+                need_resize = False
+
+
+            # 如果不需要任何处理，直接返回原视频路径
+            if not need_crop and not need_resize and not need_trim_ss and not need_trim_to:
+                print("Standardlize video: Video already standardlized.")
+                return input_video
             
-
-            # 设置视频编码器
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, fps, (crop_size, crop_size))
-            
-
-            # 开始裁剪
-            cap = cv2.VideoCapture(input_video)
-            frame_count = 0
-            while True:
-                # 读取帧
-                ret, frame = cap.read()
-                if not ret: break # end of video
-                # 裁剪帧
-                cropped_frame = frame[y:y+crop_size, x:x+crop_size]
-                out.write(cropped_frame)
-                # 更新进度
-                frame_count += 1
-                if frame_count % 50 == 0: # 每50帧计算一次进度
-                    progress = (frame_count / total_frames) * 100
-                    print(f"progress: {frame_count}/{total_frames} ({progress:.1f}%)", end="\r", flush=True)
-
-            #print(f"\r裁剪: {frame_count}/{total_frames} (100.0%) 完成", flush=True)
-            print(f"  crop done                        ")
-            cap.release()
-            out.release()
-            return output_path
-        
-        except Exception as e:
-            raise Exception(f"Error in crop_video_to_square: {e}")
-        
-
-
-    def trim_video(self, input_video, start, end):
-        try:
-            # 获取基础参数
-            cap = cv2.VideoCapture(input_video)
-            video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
-            cap.release()
-            
-
-            # 验证start/end
-            if start is None: start = 0
-            if end is None: end = total_frames
-            if start == 0 and end == total_frames:
-                return input_video  # 不需要裁剪，直接返回
-            if start < 0 or end > total_frames or start >= end:
-                raise Exception(f"Invalid start/end: [{start}, {end}]")
-            
-
             # 设置视频输出路径
             video_name = os.path.basename(input_video).split('.')[0]
             os.makedirs(self.temp_dir, exist_ok=True)
-            output_path = os.path.join(self.temp_dir, f'{video_name}_trimmed[{start}_{end}].mp4')
+            output_path = os.path.join(self.temp_dir, f'{video_name}_standardlized.mp4')
+            # 如果标准化视频已存在
             if os.path.exists(output_path):
-                return output_path  # 如果输出文件已存在，直接返回
-
-
-            # 设置视频编码器
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, fps, (video_width, video_height))
+                try:
+                    cap = cv2.VideoCapture(output_path)
+                    output_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    output_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    output_total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    cap.release()
+                    if output_width <= 1080 and output_height <= 1080 and output_width == output_height:
+                        if output_total_frames == (end-start):
+                            print(f"Standardlize video: Output file already exists")
+                            return output_path # 输出文件已存在，直接返回
+                    raise Exception('standardlized video exists but invalid')
+                except Exception as e:
+                    os.remove(output_path)  # 删除损坏的文件
+            print(f"Standardlize video...")
             
+            
+            # 构建ffmpeg命令
+            cmd = ['ffmpeg', '-y', '-hide_banner', '-stats', '-loglevel', 'error']
+            # -y: 覆盖文件 -hide_banner: 隐藏FFmpeg的版本信息和配置信息
+            # -loglevel error: 只显示错误信息（不显示流信息）
+            # -stats: 显示编码统计信息
+            
+            # 输入文件
+            cmd.extend(['-i', input_video])
+            
+            # Trim参数 (帧数转为时间值)
+            if need_trim_ss:
+                cmd.extend(['-ss', str(start / fps)]) 
+            if need_trim_to:
+                cmd.extend(['-to', str(end / fps)])
+            
+            # Crop/Resize参数
+            if need_crop:
+                crop_cmd = f'crop={crop_size}:{crop_size}:{crop_x}:{crop_y}'
+            if need_resize:
+                resize_cmd = f'scale=1080:1080'
 
-            # 跳转到开始帧
-            cap = cv2.VideoCapture(input_video)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, start)
-            current_frame = start
-            frames_written = 0
-            print(f"video trim: {total_frames} -> {end-start+1} ({start}:{end})")
+            if need_crop and need_resize:
+                cmd.extend(['-vf', f'{crop_cmd},{resize_cmd}'])
+            elif need_crop:
+                cmd.extend(['-vf', crop_cmd])
+            elif need_resize:
+                cmd.extend(['-vf', resize_cmd])
             
-            while current_frame <= end:
-                # 读取帧
-                ret, frame = cap.read()
-                if not ret: break
-                    #raise Exception(f'Fail to read frame {current_frame}')
-                # 写入帧
-                out.write(frame)
-                # 更新进度
-                frames_written += 1
-                current_frame += 1
-                if frames_written % 50 == 0:
-                    current = current_frame - start
-                    total = end - start + 1
-                    progress = current / total * 100
-                    print(f"progess: {current}/{total} {progress:.1f}%", end='\r')
+            # 音频编解码器
+            cmd.extend(['-c:a', 'aac'])  # 使用AAC重新编码
+            cmd.extend(['-b:a', '192k']) # 统一码率192k
+            # 视频编解码器
+            cmd.extend(['-c:v', 'libx264'])
+            # 确保音视频同步
+            cmd.extend(['-async', '1'])
+            # 输出文件
+            cmd.append(output_path)
+
+            # 执行ffmpeg命令
+            result = subprocess.run(cmd, capture_output=False, text=True, encoding='utf-8')
             
-            print('  trim done                        ')
-            cap.release()
-            out.release()
+            if result.returncode != 0:
+                raise Exception(f"FFmpeg error: {result.stderr}")
+            
+            if state['debug']:
+                print(f"  Debug: Use FFmpeg command: {' '.join(cmd)}")
+            
+            print("Standardlize video: completed")
             return output_path
-
+            
         except Exception as e:
-            raise Exception(f"Error in trim_video: {e}")
+            raise Exception(f"Error in standardlize_video: {e}")
 
 
 
@@ -254,12 +265,13 @@ class NoteDetector:
 
         try:
             # 处理视频
+            input_path = os.path.abspath(input_path)
+            input_path = os.path.normpath(input_path)
             video_name_og = os.path.basename(input_path).split('.')[0]
             print(f"Predict: {video_name_og}")
-            # trim then crop
-            input_path_trim = self.trim_video(input_path, start, end)
-            input_path_crop = self.crop_video_to_square(state, input_path_trim)
-            input_path_final = input_path_crop
+            
+            # 输入视频标准化
+            input_path_final = self.standardlize_video(state, input_path, start, end)
             video_name_final = os.path.basename(input_path_final).split('.')[0]
             print(f'Predict initialize...', end='\r', flush=True)
             # 重新获取处理后的视频信息
@@ -497,7 +509,41 @@ class NoteDetector:
             while os.path.exists(final_output_path):
                 final_output_path = os.path.join(final_output_dir, f'{video_name_og}_tracked_{counter}.mp4')
                 counter += 1
-            os.rename(output_path, final_output_path)
+
+
+            # 使用ffmpeg添加音频到跟踪视频
+            temp_final_path = final_output_path.replace('.mp4', '_temp.mp4')
+            if os.path.exists(temp_final_path):
+                os.remove(temp_final_path)
+            # 构建ffmpeg命令来合并视频和音频
+            audio_cmd = [
+                'ffmpeg', '-y',
+                '-i', output_path,  # 无声的跟踪视频
+                '-i', input_path_final,  # 有声的标准化视频
+                '-c:v', 'copy',  # 复制视频流
+                '-c:a', 'copy',  # 复制音频流
+                '-map', '0:v:0',  # 使用第一个输入的视频流
+                '-map', '1:a:0',  # 使用第二个输入的音频流
+                '-shortest',  # 以最短的流为准
+                temp_final_path
+            ]
+            
+            try:
+                result = subprocess.run(audio_cmd, capture_output=True, text=True, encoding='utf-8')
+                if result.returncode == 0:
+                    # 成功添加音频，替换原文件
+                    os.rename(temp_final_path, final_output_path)
+                    os.remove(output_path)  # 删除临时的无声视频
+                else:
+                    raise Exception(result.stderr)
+            except Exception as e:
+                print(f"Warning: Error adding audio - {e}")
+                # 发生错误时，使用无声视频
+                os.rename(output_path, final_output_path)
+                if os.path.exists(temp_final_path):
+                    os.remove(temp_final_path)
+
+
             # 清理临时目录
             if not os.listdir(self.temp_dir):
                 os.rmdir(self.temp_dir)
@@ -541,9 +587,14 @@ class NoteDetector:
 
 
 if __name__ == "__main__":
-    #video_path = r"C:\Users\ck273\Desktop\ウェルテル\JIGOKU STATION CENTRAL GATE EXPERT.mp4"
-    #video_path = r"D:\git\mai-chart-analyse\yolo-train\input\deicide_cropped.mp4"
+
+    # raw 蛹
+    # 380, 9670, (1702, 702), r 568
+
     video_path = r"C:\Users\ck273\Desktop\蛹.mp4"
+    start=380
+    end=9670
+
     # O (1702, 702), R 568, start=400, end=9670
     cap = cv2.VideoCapture(video_path)
     state = {
@@ -552,12 +603,12 @@ if __name__ == "__main__":
         # 1920x1080: 959, 539
         # 1080x1080: 539, 539
         'circle_radius': 568,
-        # 474
+        'debug': True
     }
     cap.release()
 
     detector = NoteDetector()
-    detector.main(state, video_path, start=400, end=9670)
+    detector.main(state, video_path, start, end)
     #detector.main(state, start=400)
 
 '''
