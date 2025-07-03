@@ -59,10 +59,10 @@ class NoteDetector:
                 y = (video_height - crop_size) // 2
             else:
                 # 裁出圆形区域
-                crop_size = int(circle_radius * 2.3)
+                crop_size = int(circle_radius * 2.26)
                 # 圆形区域左上角
-                x = circle_center[0] - circle_radius
-                y = circle_center[1] - circle_radius
+                x = circle_center[0] - int(circle_radius * 1.13)
+                y = circle_center[1] - int(circle_radius * 1.13)
 
             print(f"video crop: {video_width}x{video_height} -> {crop_size}x{crop_size}")
             
@@ -542,17 +542,22 @@ class NoteDetector:
 
 if __name__ == "__main__":
     #video_path = r"C:\Users\ck273\Desktop\ウェルテル\JIGOKU STATION CENTRAL GATE EXPERT.mp4"
-    video_path = r"D:\git\mai-chart-analyse\yolo-train\input\天蓋_cropped.mp4"
+    #video_path = r"D:\git\mai-chart-analyse\yolo-train\input\deicide_cropped.mp4"
+    video_path = r"C:\Users\ck273\Desktop\蛹.mp4"
+    # O (1702, 702), R 568, start=400, end=9670
     cap = cv2.VideoCapture(video_path)
     state = {
         'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-        'circle_center': (539, 539), # 1920x1080: 959, 539
-        'circle_radius': 474,
+        'circle_center': (1702, 702),
+        # 1920x1080: 959, 539
+        # 1080x1080: 539, 539
+        'circle_radius': 568,
+        # 474
     }
     cap.release()
 
     detector = NoteDetector()
-    detector.main(state, video_path, start=380, end=None)
+    detector.main(state, video_path, start=400, end=9670)
     #detector.main(state, start=400)
 
 '''

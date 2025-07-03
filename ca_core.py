@@ -4,7 +4,7 @@ import os
 from ca_modules.JudgeLineDetector import JudgeLineDetector
 from ca_modules.ChartStartDetector import ChartStartDetector
 from ca_modules.NoteDetector import NoteDetector
-from ca_modules.NoteAnalyzer import NoteAnalyzer
+#from ca_modules.NoteAnalyzer import NoteAnalyzer
 
 class ChartAnalyzer:
     def __init__(self):
@@ -55,8 +55,8 @@ class ChartAnalyzer:
             self.state['detect_video_path'] = detector.process(self.state)
 
             # analyze results
-            analyzer = NoteAnalyzer()
-            txt = analyzer.process(self.state)
+            #analyzer = NoteAnalyzer()
+            #txt = analyzer.process(self.state)
             
             return True
         
@@ -109,7 +109,7 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] 天蓋 MASTER-p01-116.mp4"
+    video = r"C:\Users\ck273\Desktop\蛹.mp4"
     ca = ChartAnalyzer()
     ca.analyze(video, 102, 1, True)
 
