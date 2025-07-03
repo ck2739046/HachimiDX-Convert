@@ -11,6 +11,7 @@ from ultralytics.engine.results import Boxes
 from ultralytics.utils import LOGGER
 import logging
 import subprocess
+import json
 
 original_level = LOGGER.level
 LOGGER.setLevel(logging.ERROR) # 只显示错误信息，忽略 Warning
@@ -547,19 +548,322 @@ class NoteDetector:
             # 清理临时目录
             if not os.listdir(self.temp_dir):
                 os.rmdir(self.temp_dir)
+
+            # 保存轨迹数据为JSON文件
+            self.save_track_data(final_tracks, track_results_all, final_output_dir, video_name_og)
             
             # 返回轨迹数据
             return dict(final_tracks), track_results_all, final_output_path
 
-
         except Exception as e:
             raise Exception(f"Error in predict: {e}")
+        
+
+
+    def save_track_data(self, final_tracks, track_results_all, output_dir, video_name):
+        """
+        保存轨迹数据到文件
+        
+        Args:
+            final_tracks: 最终轨迹数据
+            track_results_all: 所有帧的跟踪结果
+            output_dir: 输出目录
+            video_name: 视频名称
+        """
+        try:
+            # 转换final_tracks为JSON可序列化格式
+            final_tracks_serializable = {}
+            for track_id, track_data in dict(final_tracks).items():
+                final_tracks_serializable[str(track_id)] = {
+                    'class_id': int(track_data['class_id']) if track_data['class_id'] is not None else None,
+                    'path': []
+                }
+                for point in track_data['path']:
+                    serializable_point = {
+                        'frame': int(point['frame']),
+                        'center_x': int(point['center_x']),
+                        'center_y': int(point['center_y']),
+                        'width': int(point['width']),
+                        'height': int(point['height']),
+                        'confidence': float(point['confidence'])
+                    }
+                    final_tracks_serializable[str(track_id)]['path'].append(serializable_point)
+            
+            # 保存final_tracks
+            final_tracks_path = os.path.join(output_dir, f'{video_name}_final_tracks.json')
+            with open(final_tracks_path, 'w', encoding='utf-8') as f:
+                json.dump(final_tracks_serializable, f, ensure_ascii=False, indent=2)
+            
+            # 保存track_results_all (转换为可序列化格式)
+            track_results_serializable = {}
+            for frame_num, results in track_results_all.items():
+                track_results_serializable[str(frame_num)] = []
+                for result in results:
+                    if result is not None and len(result) > 0:
+                        # 将numpy数组转换为列表，确保数据类型转换
+                        result_list = []
+                        for track in result:
+                            if len(track) >= 7:
+                                # 显式转换每个数值的类型
+                                track_values = []
+                                for i, val in enumerate(track[:7]):
+                                    if i == 4:  # track_id
+                                        track_values.append(int(val))
+                                    elif i == 5:  # confidence
+                                        track_values.append(float(val))
+                                    elif i == 6:  # class_id
+                                        track_values.append(int(val))
+                                    else:  # x1, y1, x2, y2
+                                        track_values.append(float(val))
+                                result_list.append(track_values)
+                        track_results_serializable[str(frame_num)].append(result_list)
+                    else:
+                        # 处理空结果
+                        track_results_serializable[str(frame_num)].append([])
+            
+            track_results_path = os.path.join(output_dir, f'{video_name}_track_results.json')
+            with open(track_results_path, 'w', encoding='utf-8') as f:
+                json.dump(track_results_serializable, f, ensure_ascii=False, indent=2)
+            
+            # 保存元数据信息
+            metadata = {
+                'video_name': video_name,
+                'class_mapping': {
+                    0: 'hold',
+                    1: 'slide', 
+                    2: 'tap',
+                    3: 'touch',
+                    4: 'touch_hold'
+                },
+                'final_tracks_format': {
+                    'description': 'Dictionary with track_id as key',
+                    'structure': {
+                        'class_id': 'int - object class (0=hold, 1=slide, 2=tap, 3=touch, 4=touch_hold)',
+                        'path': 'list of detection points with frame, center_x, center_y, width, height, confidence'
+                    }
+                },
+                'track_results_format': {
+                    'description': 'Dictionary with frame_number as key',
+                    'structure': 'List of tracker results [hold, slide, tap, touch] each containing [x1, y1, x2, y2, track_id, confidence, class_id]'
+                }
+            }
+            
+            metadata_path = os.path.join(output_dir, f'{video_name}_metadata.json')
+            with open(metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+            
+            print(f"Track data saved to:")
+            print(f"  - {final_tracks_path}")
+            print(f"  - {track_results_path}")
+            print(f"  - {metadata_path}")
+            
+        except Exception as e:
+            print(f"Warning: Failed to save track data - {e}")
+
+
+
+    def load_track_data(self, data_dir, video_name):
+        """
+        从文件加载轨迹数据
+        
+        Args:
+            data_dir: 数据目录
+            video_name: 视频名称
+            
+        Returns:
+            tuple: (final_tracks, track_results_all, metadata)
+        """
+        try:
+            # 加载final_tracks
+            final_tracks_path = os.path.join(data_dir, f'{video_name}_final_tracks.json')
+            with open(final_tracks_path, 'r', encoding='utf-8') as f:
+                final_tracks = json.load(f)
+            
+            # 加载track_results_all
+            track_results_path = os.path.join(data_dir, f'{video_name}_track_results.json')
+            with open(track_results_path, 'r', encoding='utf-8') as f:
+                track_results_serializable = json.load(f)
+            
+            # 转换回原始格式
+            track_results_all = {}
+            for frame_str, results in track_results_serializable.items():
+                track_results_all[int(frame_str)] = results
+            
+            # 加载元数据
+            metadata_path = os.path.join(data_dir, f'{video_name}_metadata.json')
+            metadata = None
+            if os.path.exists(metadata_path):
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+            
+            return final_tracks, track_results_all, metadata
+            
+        except Exception as e:
+            raise Exception(f"Error loading track data: {e}")
+        
+
+
+    # debug
+    def compare_final_tracks(self, original, loaded):
+        """比较原始的final_tracks和从JSON加载的数据"""
+        try:
+            # 比较轨迹数量
+            if len(original) != len(loaded):
+                print(f"  ❌ 轨迹数量不匹配: 原始={len(original)}, 加载={len(loaded)}")
+                return False
+            else:
+                print(f"  ✅ 轨迹数量匹配: {len(original)}")
+            
+            # 比较每个轨迹
+            all_match = True
+            for track_id_str, track_data in loaded.items():
+                track_id = int(track_id_str)  # JSON中的key是字符串
+                
+                if track_id not in original:
+                    print(f"  ❌ 轨迹ID {track_id} 在原始数据中不存在")
+                    all_match = False
+                    continue
+                
+                orig_track = original[track_id]
+                
+                # 比较class_id
+                if orig_track['class_id'] != track_data['class_id']:
+                    print(f"  ❌ 轨迹ID {track_id} class_id不匹配: 原始={orig_track['class_id']}, 加载={track_data['class_id']}")
+                    all_match = False
+                
+                # 比较path长度
+                if len(orig_track['path']) != len(track_data['path']):
+                    print(f"  ❌ 轨迹ID {track_id} path长度不匹配: 原始={len(orig_track['path'])}, 加载={len(track_data['path'])}")
+                    all_match = False
+                    continue
+                
+                # 比较path内容
+                for i, (orig_point, loaded_point) in enumerate(zip(orig_track['path'], track_data['path'])):
+                    if orig_point != loaded_point:
+                        print(f"  ❌ 轨迹ID {track_id} path[{i}]不匹配:")
+                        print(f"    原始: {orig_point}")
+                        print(f"    加载: {loaded_point}")
+                        all_match = False
+                        break
+            
+            if all_match:
+                print(f"  ✅ 所有轨迹数据完全匹配")
+            
+            return all_match
+            
+        except Exception as e:
+            print(f"  ❌ 比较final_tracks时出错: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def compare_track_results_all(self, original, loaded):
+        """比较原始的track_results_all和从JSON加载的数据"""
+        try:
+            # 比较帧数量
+            if len(original) != len(loaded):
+                print(f"  ❌ 帧数量不匹配: 原始={len(original)}, 加载={len(loaded)}")
+                return False
+            else:
+                print(f"  ✅ 帧数量匹配: {len(original)}")
+            
+            # 比较每帧数据
+            all_match = True
+            for frame_num, orig_results in original.items():
+                if frame_num not in loaded:
+                    print(f"  ❌ 帧 {frame_num} 在加载数据中不存在")
+                    all_match = False
+                    continue
+                
+                loaded_results = loaded[frame_num]
+                
+                # 比较tracker结果数量（应该有4个tracker: hold, slide, tap, touch）
+                if len(orig_results) != len(loaded_results):
+                    print(f"  ❌ 帧 {frame_num} tracker数量不匹配: 原始={len(orig_results)}, 加载={len(loaded_results)}")
+                    all_match = False
+                    continue
+                
+                # 比较每个tracker的结果
+                for tracker_idx, (orig_tracker, loaded_tracker) in enumerate(zip(orig_results, loaded_results)):
+                    if orig_tracker is None and loaded_tracker is None:
+                        continue
+                    
+                    if orig_tracker is None or loaded_tracker is None:
+                        print(f"  ❌ 帧 {frame_num} tracker {tracker_idx} 一个为None一个不为None")
+                        all_match = False
+                        continue
+                    
+                    # 转换原始数据为列表格式进行比较
+                    orig_list = []
+                    if len(orig_tracker) > 0:
+                        for track in orig_tracker:
+                            if len(track) >= 7:
+                                orig_list.append(track[:7].tolist() if hasattr(track, 'tolist') else track[:7])
+                    
+                    # 比较数据
+                    if len(orig_list) != len(loaded_tracker):
+                        print(f"  ❌ 帧 {frame_num} tracker {tracker_idx} 检测数量不匹配: 原始={len(orig_list)}, 加载={len(loaded_tracker)}")
+                        all_match = False
+                        continue
+                    
+                    # 比较具体数据
+                    for detect_idx, (orig_detect, loaded_detect) in enumerate(zip(orig_list, loaded_tracker)):
+                        # 转换为列表进行比较
+                        orig_detect_list = orig_detect if isinstance(orig_detect, list) else orig_detect.tolist()
+                        
+                        # 比较数值（考虑浮点数精度问题）
+                        if len(orig_detect_list) != len(loaded_detect):
+                            print(f"  ❌ 帧 {frame_num} tracker {tracker_idx} 检测 {detect_idx} 长度不匹配")
+                            all_match = False
+                            continue
+                        
+                        for val_idx, (orig_val, loaded_val) in enumerate(zip(orig_detect_list, loaded_detect)):
+                            if isinstance(orig_val, float) and isinstance(loaded_val, float):
+                                if abs(orig_val - loaded_val) > 1e-6:
+                                    print(f"  ❌ 帧 {frame_num} tracker {tracker_idx} 检测 {detect_idx} 值 {val_idx} 不匹配: {orig_val} vs {loaded_val}")
+                                    all_match = False
+                                    break
+                            elif orig_val != loaded_val:
+                                print(f"  ❌ 帧 {frame_num} tracker {tracker_idx} 检测 {detect_idx} 值 {val_idx} 不匹配: {orig_val} vs {loaded_val}")
+                                all_match = False
+                                break
+            
+            if all_match:
+                print(f"  ✅ 所有帧跟踪数据完全匹配")
+            
+            return all_match
+            
+        except Exception as e:
+            print(f"  ❌ 比较track_results_all时出错: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    # debug
+
         
 
     def main(self, state, single_video=None, start=None, end=None):
         try:
             if single_video:
                 final_tracks, track_results_all, final_output_path = self.predict(single_video, state, start=start, end=end)
+
+                # ：读取保存的JSON文件并比较
+                video_name = os.path.basename(single_video).split('.')[0]
+                final_output_dir = os.path.join(self.output_dir, video_name)
+                print("\n=== 调试：比较原始数据和保存的JSON数据 ===")
+                try:
+                    # 读取保存的数据
+                    loaded_final_tracks, loaded_track_results_all, loaded_metadata = self.load_track_data(final_output_dir, video_name)
+                    # 比较 final_tracks
+                    print("1. 比较 final_tracks...")
+                    self.compare_final_tracks(final_tracks, loaded_final_tracks)
+                    # 比较 track_results_all
+                    print("2. 比较 track_results_all...")
+                    self.compare_track_results_all(track_results_all, loaded_track_results_all)
+                    print("=== 调试完成 ===\n")  
+                except Exception as e:
+                    print(f"调试过程中出错: {e}")
+                
                 return
             path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/input')
             for file in os.listdir(path):
@@ -570,7 +874,8 @@ class NoteDetector:
             print("\n中断")
         except Exception as e:
             print(f"Error in main: {e}")
-            print(e.stacktrace())
+            import traceback
+            traceback.print_exc()
 
 
 
@@ -634,9 +939,12 @@ final_tracks格式:
 
 track_results_all格式:
 {
-    frame_number: [   # 每帧的跟踪结果列表
-        [x1, y1, x2, y2, track_id, confidence, class_id],  # 一些检测框的集合
-        ...
+    frame_number: [   # 好几个列表
+        [             # 列表0: holder的每帧的追踪结果 
+            [x1, y1, x2, y2, track_id, confidence, class_id],  # 每个列表元素是一个检测框
+            ...
+        ],
+        ...           # 还有几个列表, 分别对应slide, tap, touch/touch_hold
     ],
     ...
 }
