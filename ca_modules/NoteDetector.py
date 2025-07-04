@@ -213,12 +213,12 @@ class NoteDetector:
             if len(candidates[1]) > 0:
                 for box in candidates[1]:
                     x1, y1, x2, y2 = box[:4]
-                    # 检查宽高比 (1.25)
                     width = x2 - x1
                     height = y2 - y1
-                    if height == 0: continue # 避免除以零
-                    aspect_ratio = width / height
-                    if aspect_ratio > 1.25: continue
+                    # 检查宽高比 (1.25)
+                    #if height == 0: continue # 避免除以零
+                    #aspect_ratio = width / height
+                    #if aspect_ratio > 1.25: continue
                     # 增大slide检测框尺寸1.4x, 改善追踪效果
                     new_width = int(width * 1.4)
                     new_height = int(height * 1.4)
@@ -252,9 +252,9 @@ class NoteDetector:
         def get_color_for_id(track_id):
             color_pool = [
                 (0, 255, 255), (255, 0, 255), (255, 255, 0),
-                (128, 0, 0), (0, 128, 0), (0, 0, 128),
+                #(128, 0, 0), (0, 128, 0), (0, 0, 128),
                 (128, 255, 255), (255, 128, 255), (255, 255, 128),
-                (0, 128, 128), (128, 0, 128), (128, 128, 0),
+                #(0, 128, 128), (128, 0, 128), (128, 128, 0),
                 (255, 0, 0), (0, 255, 0), (0, 0, 255),
                 (255, 128, 128), (128, 255, 128), (128, 128, 255),
                 (128, 128, 128)
@@ -336,12 +336,19 @@ class NoteDetector:
             hidden_tracks = defaultdict(lambda: {'history': [], 'last_seen': 0})
             # 存储轨迹状态：'active', 'hidden', 'expired'
             track_status = defaultdict(lambda: 'active')
-            # 存储所有帧的跟踪结果
-            track_results_all = {}
-            # 存储所有帧的预测结果
-            predict_results_all = {}
             # 存储最终返回的轨迹数据
             final_tracks = defaultdict(lambda: {'class_id': None, 'path': []})
+
+            # 创建JSONL文件用于流式写入
+            predict_results_file_path = os.path.join(self.temp_dir, f'{video_name_final}_predict_results.jsonl')
+            if os.path.exists(predict_results_file_path):
+                os.remove(predict_results_file_path)
+            predict_results_file = open(predict_results_file_path, 'w', encoding='utf-8')
+
+            track_results_file_path = os.path.join(self.temp_dir, f'{video_name_final}_track_results.jsonl')    
+            if os.path.exists(track_results_file_path):
+                os.remove(track_results_file_path)
+            track_results_file = open(track_results_file_path, 'w', encoding='utf-8')
 
 
             # 主循环
@@ -361,14 +368,46 @@ class NoteDetector:
                     device='cuda' if torch.cuda.is_available() else 'cpu',
                     max_det=50
                 )
-                predict_results_all[frame_count] = results
+
+                # 流式写入预测结果
+                predict_frame_data = {
+                    'frame': frame_count,
+                    'results': json.loads(results[0].tojson())
+                }
+                predict_results_file.write(json.dumps(predict_frame_data, ensure_ascii=False) + '\n')
+                predict_results_file.flush()  # 确保数据写入
 
 
                 # 过滤检测结果
                 track_results = []
                 if len(results) > 0 and results[0].boxes is not None:
                     track_results = self.filter_track(frame_count, results, trackers, frame)
-                    track_results_all[frame_count] = track_results
+                    
+
+                    # 转换track_results为可序列化格式
+                    track_results_serializable = []
+                    for result in track_results:
+                        if result is not None and len(result) > 0:
+                            for track in result:
+                                if len(track) >= 7:
+                                    track_values = []
+                                    for i, val in enumerate(track[:7]):
+                                        if i == 4:  # track_id
+                                            track_values.append(int(val))
+                                        elif i == 5:  # confidence
+                                            track_values.append(round(float(val), 2))
+                                        elif i == 6:  # class_id
+                                            track_values.append(int(val))
+                                        else:  # x1, y1, x2, y2
+                                            track_values.append(int(val))
+                                    track_results_serializable.append(track_values)
+                    # 写入文件
+                    track_frame_data = {
+                        'frame': frame_count,
+                        'results': track_results_serializable
+                    }
+                    track_results_file.write(json.dumps(track_frame_data, ensure_ascii=False) + '\n')
+                    track_results_file.flush()  # 确保数据写入
 
                 
                 # 处理跟踪结果
@@ -502,6 +541,8 @@ class NoteDetector:
             print(f"predict done, average FPS: {average_fps_rate:.2f}            ")
             cap.release()
             out.release()
+            predict_results_file.close()
+            track_results_file.close() 
             
 
             # 移动tracked_video到最终输出目录
@@ -552,27 +593,34 @@ class NoteDetector:
             if not os.listdir(self.temp_dir):
                 os.rmdir(self.temp_dir)
 
-            print('Saving detection data...')
             # 保存数据为JSON文件
-            self.save_detection_data(final_tracks, track_results_all, predict_results_all, final_output_dir, video_name_og)
+            self.save_detection_data(final_tracks, final_output_dir, track_results_file_path, predict_results_file_path, video_name_og)
 
             # 返回轨迹数据
             return dict(final_tracks), final_output_path
 
         except Exception as e:
             raise Exception(f"Error in predict: {e}")
+        finally:
+           # 确保文件被关闭
+            if 'predict_results_file' in locals():
+                if not predict_results_file.closed:
+                    predict_results_file.close()
+            if 'track_results_file' in locals():
+                if not track_results_file.closed:
+                    track_results_file.close()
         
 
 
-    def save_detection_data(self, final_tracks, track_results_all, predict_results_all, output_dir, video_name):
+    def save_detection_data(self, final_tracks, output_dir, track_results_path, predict_results_path, video_name):
         """
         保存轨迹数据到文件
         
         Args:
             final_tracks: 最终轨迹数据
-            track_results_all: 所有帧的bot_sort结果
-            predict_results_all: 所有帧的predict结果
             output_dir: 输出目录
+            track_results_file_path: track results JSONL文件路径
+            predict_results_file_path: predict results JSONL文件路径
             video_name: 原始视频名称
         """
         try:
@@ -590,7 +638,7 @@ class NoteDetector:
                         'center_y': int(point['center_y']),
                         'width': int(point['width']),
                         'height': int(point['height']),
-                        'confidence': float(point['confidence'])
+                        'conf': round(float(point['confidence']), 2)
                     }
                     final_tracks_serializable[str(track_id)]['path'].append(serializable_point)
             
@@ -600,57 +648,19 @@ class NoteDetector:
                 os.remove(final_tracks_path)
             with open(final_tracks_path, 'w', encoding='utf-8') as f:
                 json.dump(final_tracks_serializable, f, ensure_ascii=False, indent=2)
-            
 
 
-            # 转换 track_results_all 为可序列化格式
-            track_results_serializable = {}
-            for frame_num, results in track_results_all.items():
-                track_results_serializable[str(frame_num)] = []
-                for result in results:
-                    if result is not None and len(result) > 0:
-                        # 将numpy数组转换为列表，确保数据类型转换
-                        result_list = []
-                        for track in result:
-                            if len(track) >= 7:
-                                # 显式转换每个数值的类型
-                                track_values = []
-                                for i, val in enumerate(track[:7]):
-                                    if i == 4:  # track_id
-                                        track_values.append(int(val))
-                                    elif i == 5:  # confidence
-                                        track_values.append(float(val))
-                                    elif i == 6:  # class_id
-                                        track_values.append(int(val))
-                                    else:  # x1, y1, x2, y2
-                                        track_values.append(float(val))
-                                result_list.append(track_values)
-                        track_results_serializable[str(frame_num)].append(result_list)
-                    else:
-                        # 处理空结果
-                        track_results_serializable[str(frame_num)].append([])
-
-            # 保存 track_results_all
-            track_results_path = os.path.join(output_dir, f'{video_name}_track_results.json')
-            if os.path.exists(track_results_path):
-                os.remove(track_results_path)
-            with open(track_results_path, 'w', encoding='utf-8') as f:
-                json.dump(track_results_serializable, f, ensure_ascii=False, indent=2)
-
-
-
-            # 转换 predict_results_all 为可序列化格式
-            serializable_results = {}
-            for frame, results_list in predict_results_all.items():
-                # results_list 是包含一个 a list of Results object
-                # a Results object has a .tojson() method which returns a JSON string
-                serializable_results[str(frame)] = [json.loads(r.tojson()) for r in results_list]
-            # 保存 predict_results_all
-            predict_results_path = os.path.join(output_dir, f'{video_name}_predict_results.json')
-            if os.path.exists(predict_results_path):
-                os.remove(predict_results_path)
-            with open(predict_results_path, 'w', encoding='utf-8') as f:
-                json.dump(serializable_results, f, indent=2)
+            # 移动JSONL文件到最终输出目录
+            final_track_results_path = os.path.join(output_dir, f'{video_name}_track_results.jsonl')
+            final_predict_results_path = os.path.join(output_dir, f'{video_name}_predict_results.jsonl')
+            # 删除已存在的文件
+            if os.path.exists(final_track_results_path):
+                os.remove(final_track_results_path)
+            if os.path.exists(final_predict_results_path):
+                os.remove(final_predict_results_path)
+            # 移动文件
+            os.rename(track_results_path, final_track_results_path)
+            os.rename(predict_results_path, final_predict_results_path)
             
             
 
@@ -668,12 +678,26 @@ class NoteDetector:
                     'description': 'Dictionary with track_id as key',
                     'structure': {
                         'class_id': 'int - object class (0=hold, 1=slide, 2=tap, 3=touch, 4=touch_hold)',
-                        'path': 'list of detection points with frame, center_x, center_y, width, height, confidence'
+                        'path': 'list of notes with format dict{frame, center_x, center_y, width, height, conf}'
                     }
                 },
                 'track_results_format': {
-                    'description': 'Dictionary with frame_number as key',
-                    'structure': 'List of tracker results [hold, slide, tap, touch] each containing [x1, y1, x2, y2, track_id, confidence, class_id]'
+                    'description': 'JSONL file with one line per frame',
+                    'structure': {
+                        'each_line': {
+                            'frame': 'int - frame number',
+                            'results': 'List of notes with format [x1, y1, x2, y2, track_id, confidence, class_id]'
+                        }
+                    }
+                },
+                'predict_results_format': {
+                    'description': 'JSONL file with one line per frame', 
+                    'structure': {
+                        'each_line': {
+                            'frame': 'int - frame number',
+                            'results': 'List of notes with yolo format [name, class, confidence, box{x1, y1, x2, y2}]'
+                        }
+                    }
                 }
             }
             
@@ -685,9 +709,9 @@ class NoteDetector:
             
             print(f"Note detection data saved to:")
             print(f"  - {final_tracks_path}")
-            print(f"  - {track_results_path}")
+            print(f"  - {final_track_results_path}") 
+            print(f"  - {final_predict_results_path}")
             print(f"  - {metadata_path}")
-            print(f"  - {predict_results_path}")
             
         except Exception as e:
             raise Exception(f"Error in save_detection_data: {e}")
@@ -710,22 +734,33 @@ class NoteDetector:
             final_tracks_path = os.path.join(output_dir, f'{video_name}_final_tracks.json')
             with open(final_tracks_path, 'r', encoding='utf-8') as f:
                 final_tracks = json.load(f)
-            
-            # 加载track_results_all
-            track_results_path = os.path.join(output_dir, f'{video_name}_track_results.json')
-            with open(track_results_path, 'r', encoding='utf-8') as f:
-                track_results_serializable = json.load(f)
 
-            # 加载predict_results_all
-            predict_results_path = os.path.join(output_dir, f'{video_name}_predict_results.json')
-            with open(predict_results_path, 'r', encoding='utf-8') as f:
-                predict_results_all = json.load(f)
-            
-            # 转换回原始格式
+            # 加载track_results_all from JSONL
+            track_results_path = os.path.join(output_dir, f'{video_name}_track_results.jsonl')
             track_results_all = {}
-            for frame_str, results in track_results_serializable.items():
-                track_results_all[int(frame_str)] = results
             
+            if os.path.exists(track_results_path):
+                with open(track_results_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            frame_data = json.loads(line)
+                            frame_num = frame_data['frame']
+                            track_results_all[frame_num] = frame_data['results']
+            
+            # 加载predict_results_all from JSONL
+            predict_results_path = os.path.join(output_dir, f'{video_name}_predict_results.jsonl')
+            predict_results_all = {}
+            
+            if os.path.exists(predict_results_path):
+                with open(predict_results_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            frame_data = json.loads(line)
+                            frame_num = frame_data['frame']
+                            predict_results_all[frame_num] = frame_data['results']
+
             # 加载元数据
             metadata_path = os.path.join(output_dir, f'{video_name}_metadata.json')
             metadata = None
@@ -794,38 +829,3 @@ if __name__ == "__main__":
     detector = NoteDetector()
     detector.main(state, video_path, start, end)
     #detector.main(state, start=400)
-
-'''
-
-final_tracks格式:
-{
-    track_id: {
-        'class_id': int,  # 物体类别 (0=hold, 1=slide, 2=tap, 3=touch, 4=touch_hold)
-        'path': [         # 轨迹点列表
-            {
-                'frame': int,        # 出现的帧数
-                'center_x': int,     # 中心点 x 坐标
-                'center_y': int,     # 中心点 y 坐标
-                'width': int,        # 检测框宽度
-                'height': int,       # 检测框高度
-                'confidence': float  # 置信度
-            },
-            ...
-        ]
-    },
-    ...
-}
-
-track_results_all格式:
-{
-    frame_number: [   # 好几个列表
-        [             # 列表0: holder的每帧的追踪结果 
-            [x1, y1, x2, y2, track_id, confidence, class_id],  # 每个列表元素是一个检测框
-            ...
-        ],
-        ...           # 还有几个列表, 分别对应slide, tap, touch/touch_hold
-    ],
-    ...
-}
-
-'''
