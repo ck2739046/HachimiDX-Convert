@@ -338,6 +338,8 @@ class NoteDetector:
             track_status = defaultdict(lambda: 'active')
             # 存储所有帧的跟踪结果
             track_results_all = {}
+            # 存储所有帧的预测结果
+            predict_results_all = {}
             # 存储最终返回的轨迹数据
             final_tracks = defaultdict(lambda: {'class_id': None, 'path': []})
 
@@ -359,6 +361,7 @@ class NoteDetector:
                     device='cuda' if torch.cuda.is_available() else 'cpu',
                     max_det=50
                 )
+                predict_results_all[frame_count] = results
 
 
                 # 过滤检测结果
@@ -549,29 +552,45 @@ class NoteDetector:
             if not os.listdir(self.temp_dir):
                 os.rmdir(self.temp_dir)
 
-            # 保存轨迹数据为JSON文件
-            self.save_track_data(final_tracks, track_results_all, final_output_dir, video_name_og)
-            
+            print('Saving detection data...')
+            # 保存数据为JSON文件
+            self.save_detection_data(final_tracks, track_results_all, predict_results_all, final_output_dir, video_name_og)
+
+            # 加载JSON并比较原始数据，确保保存正确
+            try:
+                loaded_final_tracks, loaded_track_results_all, loaded_predict_results_all, loaded_metadata = self.load_detection_data(final_output_dir, video_name_og)
+                if final_tracks and loaded_final_tracks:
+                    self.compare_final_tracks(final_tracks, loaded_final_tracks)
+                if track_results_all and loaded_track_results_all:
+                    self.compare_track_results_all(track_results_all, loaded_track_results_all)
+                if predict_results_all and loaded_predict_results_all:
+                    self.compare_predict_results_all(predict_results_all, loaded_predict_results_all)
+            except Exception as e:
+                print(f"Error in compare json: {e}")
+                import traceback
+                traceback.print_exc()
+
             # 返回轨迹数据
-            return dict(final_tracks), track_results_all, final_output_path
+            return dict(final_tracks), track_results_all, predict_results_all, final_output_path
 
         except Exception as e:
             raise Exception(f"Error in predict: {e}")
         
 
 
-    def save_track_data(self, final_tracks, track_results_all, output_dir, video_name):
+    def save_detection_data(self, final_tracks, track_results_all, predict_results_all, output_dir, video_name):
         """
         保存轨迹数据到文件
         
         Args:
             final_tracks: 最终轨迹数据
-            track_results_all: 所有帧的跟踪结果
+            track_results_all: 所有帧的bot_sort结果
+            predict_results_all: 所有帧的predict结果
             output_dir: 输出目录
-            video_name: 视频名称
+            video_name: 原始视频名称
         """
         try:
-            # 转换final_tracks为JSON可序列化格式
+            # 转换 final_tracks 为JSON可序列化格式
             final_tracks_serializable = {}
             for track_id, track_data in dict(final_tracks).items():
                 final_tracks_serializable[str(track_id)] = {
@@ -589,12 +608,16 @@ class NoteDetector:
                     }
                     final_tracks_serializable[str(track_id)]['path'].append(serializable_point)
             
-            # 保存final_tracks
+            # 保存 final_tracks
             final_tracks_path = os.path.join(output_dir, f'{video_name}_final_tracks.json')
+            if os.path.exists(final_tracks_path):
+                os.remove(final_tracks_path)
             with open(final_tracks_path, 'w', encoding='utf-8') as f:
                 json.dump(final_tracks_serializable, f, ensure_ascii=False, indent=2)
             
-            # 保存track_results_all (转换为可序列化格式)
+
+
+            # 转换 track_results_all 为可序列化格式
             track_results_serializable = {}
             for frame_num, results in track_results_all.items():
                 track_results_serializable[str(frame_num)] = []
@@ -620,11 +643,31 @@ class NoteDetector:
                     else:
                         # 处理空结果
                         track_results_serializable[str(frame_num)].append([])
-            
+
+            # 保存 track_results_all
             track_results_path = os.path.join(output_dir, f'{video_name}_track_results.json')
+            if os.path.exists(track_results_path):
+                os.remove(track_results_path)
             with open(track_results_path, 'w', encoding='utf-8') as f:
                 json.dump(track_results_serializable, f, ensure_ascii=False, indent=2)
+
+
+
+            # 转换 predict_results_all 为可序列化格式
+            serializable_results = {}
+            for frame, results_list in predict_results_all.items():
+                # results_list 是包含一个 a list of Results object
+                # a Results object has a .tojson() method which returns a JSON string
+                serializable_results[str(frame)] = [json.loads(r.tojson()) for r in results_list]
+            # 保存 predict_results_all
+            predict_results_path = os.path.join(output_dir, f'{video_name}_predict_results.json')
+            if os.path.exists(predict_results_path):
+                os.remove(predict_results_path)
+            with open(predict_results_path, 'w', encoding='utf-8') as f:
+                json.dump(serializable_results, f, indent=2)
             
+            
+
             # 保存元数据信息
             metadata = {
                 'video_name': video_name,
@@ -649,20 +692,23 @@ class NoteDetector:
             }
             
             metadata_path = os.path.join(output_dir, f'{video_name}_metadata.json')
+            if os.path.exists(metadata_path):
+                os.remove(metadata_path)
             with open(metadata_path, 'w', encoding='utf-8') as f:
                 json.dump(metadata, f, ensure_ascii=False, indent=2)
             
-            print(f"Track data saved to:")
+            print(f"Note detection data saved to:")
             print(f"  - {final_tracks_path}")
             print(f"  - {track_results_path}")
             print(f"  - {metadata_path}")
+            print(f"  - {predict_results_path}")
             
         except Exception as e:
-            print(f"Warning: Failed to save track data - {e}")
+            raise Exception(f"Error in save_detection_data: {e}")
 
 
 
-    def load_track_data(self, data_dir, video_name):
+    def load_detection_data(self, output_dir, video_name):
         """
         从文件加载轨迹数据
         
@@ -671,18 +717,23 @@ class NoteDetector:
             video_name: 视频名称
             
         Returns:
-            tuple: (final_tracks, track_results_all, metadata)
+            tuple: (final_tracks, track_results_all, predict_results_all, metadata)
         """
         try:
             # 加载final_tracks
-            final_tracks_path = os.path.join(data_dir, f'{video_name}_final_tracks.json')
+            final_tracks_path = os.path.join(output_dir, f'{video_name}_final_tracks.json')
             with open(final_tracks_path, 'r', encoding='utf-8') as f:
                 final_tracks = json.load(f)
             
             # 加载track_results_all
-            track_results_path = os.path.join(data_dir, f'{video_name}_track_results.json')
+            track_results_path = os.path.join(output_dir, f'{video_name}_track_results.json')
             with open(track_results_path, 'r', encoding='utf-8') as f:
                 track_results_serializable = json.load(f)
+
+            # 加载predict_results_all
+            predict_results_path = os.path.join(output_dir, f'{video_name}_predict_results.json')
+            with open(predict_results_path, 'r', encoding='utf-8') as f:
+                predict_results_all = json.load(f)
             
             # 转换回原始格式
             track_results_all = {}
@@ -690,16 +741,16 @@ class NoteDetector:
                 track_results_all[int(frame_str)] = results
             
             # 加载元数据
-            metadata_path = os.path.join(data_dir, f'{video_name}_metadata.json')
+            metadata_path = os.path.join(output_dir, f'{video_name}_metadata.json')
             metadata = None
             if os.path.exists(metadata_path):
                 with open(metadata_path, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
             
-            return final_tracks, track_results_all, metadata
+            return final_tracks, track_results_all, predict_results_all, metadata
             
         except Exception as e:
-            raise Exception(f"Error loading track data: {e}")
+            raise Exception(f"Error in load_detection_data: {e}")
         
 
 
@@ -711,8 +762,8 @@ class NoteDetector:
             if len(original) != len(loaded):
                 print(f"  ❌ 轨迹数量不匹配: 原始={len(original)}, 加载={len(loaded)}")
                 return False
-            else:
-                print(f"  ✅ 轨迹数量匹配: {len(original)}")
+            #else:
+                #print(f"  ✅ 轨迹数量匹配: {len(original)}")
             
             # 比较每个轨迹
             all_match = True
@@ -746,8 +797,8 @@ class NoteDetector:
                         all_match = False
                         break
             
-            if all_match:
-                print(f"  ✅ 所有轨迹数据完全匹配")
+            #if all_match:
+                #print(f"  ✅ 所有轨迹数据完全匹配")
             
             return all_match
             
@@ -764,18 +815,22 @@ class NoteDetector:
             if len(original) != len(loaded):
                 print(f"  ❌ 帧数量不匹配: 原始={len(original)}, 加载={len(loaded)}")
                 return False
-            else:
-                print(f"  ✅ 帧数量匹配: {len(original)}")
+            #else:
+                #print(f"  ✅ 帧数量匹配: {len(original)}")
             
             # 比较每帧数据
             all_match = True
             for frame_num, orig_results in original.items():
                 if frame_num not in loaded:
-                    print(f"  ❌ 帧 {frame_num} 在加载数据中不存在")
-                    all_match = False
-                    continue
-                
-                loaded_results = loaded[frame_num]
+                    # 尝试将原始的整数键转换为字符串进行检查
+                    if str(frame_num) in loaded:
+                        loaded_results = loaded[str(frame_num)]
+                    else:
+                        print(f"  ❌ 帧 {frame_num} 在加载数据中不存在")
+                        all_match = False
+                        continue
+                else:
+                    loaded_results = loaded[frame_num]
                 
                 # 比较tracker结果数量（应该有4个tracker: hold, slide, tap, touch）
                 if len(orig_results) != len(loaded_results):
@@ -828,8 +883,8 @@ class NoteDetector:
                                 all_match = False
                                 break
             
-            if all_match:
-                print(f"  ✅ 所有帧跟踪数据完全匹配")
+            #if all_match:
+                #print(f"  ✅ 所有帧跟踪数据完全匹配")
             
             return all_match
             
@@ -838,44 +893,90 @@ class NoteDetector:
             import traceback
             traceback.print_exc()
             return False
-    # debug
 
-        
+    def compare_predict_results_all(self, original, loaded):
+        """比较原始的predict_results_all和从JSON加载的数据"""
+        try:
+            # 比较帧数量
+            if len(original) != len(loaded):
+                print(f"  ❌ 帧数量不匹配: 原始={len(original)}, 加载={len(loaded)}")
+                return False
+            #else:
+                #print(f"  ✅ 帧数量匹配: {len(original)}")
+
+            all_match = True
+            # 遍历原始数据 (key是int)
+            for frame_num, orig_results_list in original.items():
+                frame_num_str = str(frame_num)
+                if frame_num_str not in loaded:
+                    print(f"  ❌ 帧 {frame_num} 在加载数据中不存在")
+                    all_match = False
+                    continue
+                
+                loaded_frame_results = loaded[frame_num_str]
+
+                if len(orig_results_list) != len(loaded_frame_results):
+                    print(f"  ❌ 帧 {frame_num} results列表长度不匹配: 原始={len(orig_results_list)}, 加载={len(loaded_frame_results)}")
+                    all_match = False
+                    continue
+
+                # 比较每个Result对象
+                for i, orig_result_obj in enumerate(orig_results_list):
+                    loaded_result_list = loaded_frame_results[i]
+                    orig_result_list = json.loads(orig_result_obj.tojson())
+
+                    if len(orig_result_list) != len(loaded_result_list):
+                        print(f"  ❌ 帧 {frame_num} result {i} 检测数量不匹配: 原始={len(orig_result_list)}, 加载={len(loaded_result_list)}")
+                        all_match = False
+                        continue
+
+                    # 比较每个检测框
+                    for det_idx, (orig_det, loaded_det) in enumerate(zip(orig_result_list, loaded_result_list)):
+                        # 比较基本属性
+                        if orig_det['name'] != loaded_det['name'] or orig_det['class'] != loaded_det['class']:
+                            print(f"  ❌ 帧 {frame_num} 检测 {det_idx} 类别不匹配: 原始={orig_det['name']}({orig_det['class']}), 加载={loaded_det['name']}({loaded_det['class']})")
+                            all_match = False
+                        # 比较置信度 (浮点数)
+                        if abs(orig_det['confidence'] - loaded_det['confidence']) > 1e-6:
+                            print(f"  ❌ 帧 {frame_num} 检测 {det_idx} 置信度不匹配: 原始={orig_det['confidence']:.6f}, 加载={loaded_det['confidence']:.6f}")
+                            all_match = False
+                        # 比较检测框坐标 (浮点数)
+                        for key in ['x1', 'y1', 'x2', 'y2']:
+                            if abs(orig_det['box'][key] - loaded_det['box'][key]) > 1e-6:
+                                print(f"  ❌ 帧 {frame_num} 检测 {det_idx} box.{key} 不匹配: 原始={orig_det['box'][key]}, 加载={loaded_det['box'][key]}")
+                                all_match = False
+            
+            #if all_match:
+                #print(f"  ✅ 所有帧预测数据完全匹配")
+            
+            return all_match
+
+        except Exception as e:
+            print(f"  ❌ 比较predict_results_all时出错: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+
+
+
+
 
     def main(self, state, single_video=None, start=None, end=None):
         try:
             if single_video:
-                final_tracks, track_results_all, final_output_path = self.predict(single_video, state, start=start, end=end)
-
-                # ：读取保存的JSON文件并比较
-                video_name = os.path.basename(single_video).split('.')[0]
-                final_output_dir = os.path.join(self.output_dir, video_name)
-                print("\n=== 调试：比较原始数据和保存的JSON数据 ===")
-                try:
-                    # 读取保存的数据
-                    loaded_final_tracks, loaded_track_results_all, loaded_metadata = self.load_track_data(final_output_dir, video_name)
-                    # 比较 final_tracks
-                    print("1. 比较 final_tracks...")
-                    self.compare_final_tracks(final_tracks, loaded_final_tracks)
-                    # 比较 track_results_all
-                    print("2. 比较 track_results_all...")
-                    self.compare_track_results_all(track_results_all, loaded_track_results_all)
-                    print("=== 调试完成 ===\n")  
-                except Exception as e:
-                    print(f"调试过程中出错: {e}")
-                
+                final_tracks, track_results_all, predict_results_all, final_output_path = self.predict(single_video, state, start=start, end=end)
                 return
             path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/input')
             for file in os.listdir(path):
                 if file.endswith('.mp4'):
-                    final_tracks, track_results_all, final_output_path = self.predict(os.path.join(path, file), state, start=start, end=end)
+                    final_tracks, track_results_all, predict_results_all, final_output_path = self.predict(os.path.join(path, file), state, start=start, end=end)
                     print()
         except KeyboardInterrupt:
             print("\n中断")
         except Exception as e:
             print(f"Error in main: {e}")
-            import traceback
-            traceback.print_exc()
+            print(e.stacktrace())
 
 
 
@@ -883,8 +984,8 @@ class NoteDetector:
         try:
             video_path = state['video_path']
             start = state['chart_start']
-            final_tracks, track_results_all, final_output_path = self.predict(video_path, state, start=start, end=None)
-            return final_tracks, track_results_all, final_output_path
+            final_tracks, track_results_all, predict_results_all, final_output_path = self.predict(video_path, state, start=start, end=None)
+            return final_tracks, track_results_all, predict_results_all, final_output_path
 
         except Exception as e:
             raise Exception(f"Error in process: {e}")
