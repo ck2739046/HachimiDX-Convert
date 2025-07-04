@@ -556,22 +556,8 @@ class NoteDetector:
             # 保存数据为JSON文件
             self.save_detection_data(final_tracks, track_results_all, predict_results_all, final_output_dir, video_name_og)
 
-            # 加载JSON并比较原始数据，确保保存正确
-            try:
-                loaded_final_tracks, loaded_track_results_all, loaded_predict_results_all, loaded_metadata = self.load_detection_data(final_output_dir, video_name_og)
-                if final_tracks and loaded_final_tracks:
-                    self.compare_final_tracks(final_tracks, loaded_final_tracks)
-                if track_results_all and loaded_track_results_all:
-                    self.compare_track_results_all(track_results_all, loaded_track_results_all)
-                if predict_results_all and loaded_predict_results_all:
-                    self.compare_predict_results_all(predict_results_all, loaded_predict_results_all)
-            except Exception as e:
-                print(f"Error in compare json: {e}")
-                import traceback
-                traceback.print_exc()
-
             # 返回轨迹数据
-            return dict(final_tracks), track_results_all, predict_results_all, final_output_path
+            return dict(final_tracks), final_output_path
 
         except Exception as e:
             raise Exception(f"Error in predict: {e}")
@@ -751,226 +737,18 @@ class NoteDetector:
             
         except Exception as e:
             raise Exception(f"Error in load_detection_data: {e}")
-        
-
-
-    # debug
-    def compare_final_tracks(self, original, loaded):
-        """比较原始的final_tracks和从JSON加载的数据"""
-        try:
-            # 比较轨迹数量
-            if len(original) != len(loaded):
-                print(f"  ❌ 轨迹数量不匹配: 原始={len(original)}, 加载={len(loaded)}")
-                return False
-            #else:
-                #print(f"  ✅ 轨迹数量匹配: {len(original)}")
-            
-            # 比较每个轨迹
-            all_match = True
-            for track_id_str, track_data in loaded.items():
-                track_id = int(track_id_str)  # JSON中的key是字符串
-                
-                if track_id not in original:
-                    print(f"  ❌ 轨迹ID {track_id} 在原始数据中不存在")
-                    all_match = False
-                    continue
-                
-                orig_track = original[track_id]
-                
-                # 比较class_id
-                if orig_track['class_id'] != track_data['class_id']:
-                    print(f"  ❌ 轨迹ID {track_id} class_id不匹配: 原始={orig_track['class_id']}, 加载={track_data['class_id']}")
-                    all_match = False
-                
-                # 比较path长度
-                if len(orig_track['path']) != len(track_data['path']):
-                    print(f"  ❌ 轨迹ID {track_id} path长度不匹配: 原始={len(orig_track['path'])}, 加载={len(track_data['path'])}")
-                    all_match = False
-                    continue
-                
-                # 比较path内容
-                for i, (orig_point, loaded_point) in enumerate(zip(orig_track['path'], track_data['path'])):
-                    if orig_point != loaded_point:
-                        print(f"  ❌ 轨迹ID {track_id} path[{i}]不匹配:")
-                        print(f"    原始: {orig_point}")
-                        print(f"    加载: {loaded_point}")
-                        all_match = False
-                        break
-            
-            #if all_match:
-                #print(f"  ✅ 所有轨迹数据完全匹配")
-            
-            return all_match
-            
-        except Exception as e:
-            print(f"  ❌ 比较final_tracks时出错: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-
-    def compare_track_results_all(self, original, loaded):
-        """比较原始的track_results_all和从JSON加载的数据"""
-        try:
-            # 比较帧数量
-            if len(original) != len(loaded):
-                print(f"  ❌ 帧数量不匹配: 原始={len(original)}, 加载={len(loaded)}")
-                return False
-            #else:
-                #print(f"  ✅ 帧数量匹配: {len(original)}")
-            
-            # 比较每帧数据
-            all_match = True
-            for frame_num, orig_results in original.items():
-                if frame_num not in loaded:
-                    # 尝试将原始的整数键转换为字符串进行检查
-                    if str(frame_num) in loaded:
-                        loaded_results = loaded[str(frame_num)]
-                    else:
-                        print(f"  ❌ 帧 {frame_num} 在加载数据中不存在")
-                        all_match = False
-                        continue
-                else:
-                    loaded_results = loaded[frame_num]
-                
-                # 比较tracker结果数量（应该有4个tracker: hold, slide, tap, touch）
-                if len(orig_results) != len(loaded_results):
-                    print(f"  ❌ 帧 {frame_num} tracker数量不匹配: 原始={len(orig_results)}, 加载={len(loaded_results)}")
-                    all_match = False
-                    continue
-                
-                # 比较每个tracker的结果
-                for tracker_idx, (orig_tracker, loaded_tracker) in enumerate(zip(orig_results, loaded_results)):
-                    if orig_tracker is None and loaded_tracker is None:
-                        continue
-                    
-                    if orig_tracker is None or loaded_tracker is None:
-                        print(f"  ❌ 帧 {frame_num} tracker {tracker_idx} 一个为None一个不为None")
-                        all_match = False
-                        continue
-                    
-                    # 转换原始数据为列表格式进行比较
-                    orig_list = []
-                    if len(orig_tracker) > 0:
-                        for track in orig_tracker:
-                            if len(track) >= 7:
-                                orig_list.append(track[:7].tolist() if hasattr(track, 'tolist') else track[:7])
-                    
-                    # 比较数据
-                    if len(orig_list) != len(loaded_tracker):
-                        print(f"  ❌ 帧 {frame_num} tracker {tracker_idx} 检测数量不匹配: 原始={len(orig_list)}, 加载={len(loaded_tracker)}")
-                        all_match = False
-                        continue
-                    
-                    # 比较具体数据
-                    for detect_idx, (orig_detect, loaded_detect) in enumerate(zip(orig_list, loaded_tracker)):
-                        # 转换为列表进行比较
-                        orig_detect_list = orig_detect if isinstance(orig_detect, list) else orig_detect.tolist()
-                        
-                        # 比较数值（考虑浮点数精度问题）
-                        if len(orig_detect_list) != len(loaded_detect):
-                            print(f"  ❌ 帧 {frame_num} tracker {tracker_idx} 检测 {detect_idx} 长度不匹配")
-                            all_match = False
-                            continue
-                        
-                        for val_idx, (orig_val, loaded_val) in enumerate(zip(orig_detect_list, loaded_detect)):
-                            if isinstance(orig_val, float) and isinstance(loaded_val, float):
-                                if abs(orig_val - loaded_val) > 1e-6:
-                                    print(f"  ❌ 帧 {frame_num} tracker {tracker_idx} 检测 {detect_idx} 值 {val_idx} 不匹配: {orig_val} vs {loaded_val}")
-                                    all_match = False
-                                    break
-                            elif orig_val != loaded_val:
-                                print(f"  ❌ 帧 {frame_num} tracker {tracker_idx} 检测 {detect_idx} 值 {val_idx} 不匹配: {orig_val} vs {loaded_val}")
-                                all_match = False
-                                break
-            
-            #if all_match:
-                #print(f"  ✅ 所有帧跟踪数据完全匹配")
-            
-            return all_match
-            
-        except Exception as e:
-            print(f"  ❌ 比较track_results_all时出错: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-
-    def compare_predict_results_all(self, original, loaded):
-        """比较原始的predict_results_all和从JSON加载的数据"""
-        try:
-            # 比较帧数量
-            if len(original) != len(loaded):
-                print(f"  ❌ 帧数量不匹配: 原始={len(original)}, 加载={len(loaded)}")
-                return False
-            #else:
-                #print(f"  ✅ 帧数量匹配: {len(original)}")
-
-            all_match = True
-            # 遍历原始数据 (key是int)
-            for frame_num, orig_results_list in original.items():
-                frame_num_str = str(frame_num)
-                if frame_num_str not in loaded:
-                    print(f"  ❌ 帧 {frame_num} 在加载数据中不存在")
-                    all_match = False
-                    continue
-                
-                loaded_frame_results = loaded[frame_num_str]
-
-                if len(orig_results_list) != len(loaded_frame_results):
-                    print(f"  ❌ 帧 {frame_num} results列表长度不匹配: 原始={len(orig_results_list)}, 加载={len(loaded_frame_results)}")
-                    all_match = False
-                    continue
-
-                # 比较每个Result对象
-                for i, orig_result_obj in enumerate(orig_results_list):
-                    loaded_result_list = loaded_frame_results[i]
-                    orig_result_list = json.loads(orig_result_obj.tojson())
-
-                    if len(orig_result_list) != len(loaded_result_list):
-                        print(f"  ❌ 帧 {frame_num} result {i} 检测数量不匹配: 原始={len(orig_result_list)}, 加载={len(loaded_result_list)}")
-                        all_match = False
-                        continue
-
-                    # 比较每个检测框
-                    for det_idx, (orig_det, loaded_det) in enumerate(zip(orig_result_list, loaded_result_list)):
-                        # 比较基本属性
-                        if orig_det['name'] != loaded_det['name'] or orig_det['class'] != loaded_det['class']:
-                            print(f"  ❌ 帧 {frame_num} 检测 {det_idx} 类别不匹配: 原始={orig_det['name']}({orig_det['class']}), 加载={loaded_det['name']}({loaded_det['class']})")
-                            all_match = False
-                        # 比较置信度 (浮点数)
-                        if abs(orig_det['confidence'] - loaded_det['confidence']) > 1e-6:
-                            print(f"  ❌ 帧 {frame_num} 检测 {det_idx} 置信度不匹配: 原始={orig_det['confidence']:.6f}, 加载={loaded_det['confidence']:.6f}")
-                            all_match = False
-                        # 比较检测框坐标 (浮点数)
-                        for key in ['x1', 'y1', 'x2', 'y2']:
-                            if abs(orig_det['box'][key] - loaded_det['box'][key]) > 1e-6:
-                                print(f"  ❌ 帧 {frame_num} 检测 {det_idx} box.{key} 不匹配: 原始={orig_det['box'][key]}, 加载={loaded_det['box'][key]}")
-                                all_match = False
-            
-            #if all_match:
-                #print(f"  ✅ 所有帧预测数据完全匹配")
-            
-            return all_match
-
-        except Exception as e:
-            print(f"  ❌ 比较predict_results_all时出错: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-
-
-
 
 
 
     def main(self, state, single_video=None, start=None, end=None):
         try:
             if single_video:
-                final_tracks, track_results_all, predict_results_all, final_output_path = self.predict(single_video, state, start=start, end=end)
+                final_tracks, final_output_path = self.predict(single_video, state, start=start, end=end)
                 return
             path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/input')
             for file in os.listdir(path):
                 if file.endswith('.mp4'):
-                    final_tracks, track_results_all, predict_results_all, final_output_path = self.predict(os.path.join(path, file), state, start=start, end=end)
+                    final_tracks, final_output_path = self.predict(os.path.join(path, file), state, start=start, end=end)
                     print()
         except KeyboardInterrupt:
             print("\n中断")
@@ -984,8 +762,8 @@ class NoteDetector:
         try:
             video_path = state['video_path']
             start = state['chart_start']
-            final_tracks, track_results_all, predict_results_all, final_output_path = self.predict(video_path, state, start=start, end=None)
-            return final_tracks, track_results_all, predict_results_all, final_output_path
+            final_tracks, final_output_path = self.predict(video_path, state, start=start, end=None)
+            return final_tracks, final_output_path
 
         except Exception as e:
             raise Exception(f"Error in process: {e}")
