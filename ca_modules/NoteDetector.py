@@ -597,7 +597,7 @@ class NoteDetector:
             self.save_detection_data(final_tracks, final_output_dir, track_results_file_path, predict_results_file_path, video_name_og)
 
             # 返回轨迹数据
-            return dict(final_tracks), final_output_path
+            return final_output_path
 
         except Exception as e:
             raise Exception(f"Error in predict: {e}")
@@ -778,12 +778,12 @@ class NoteDetector:
     def main(self, state, single_video=None, start=None, end=None):
         try:
             if single_video:
-                final_tracks, final_output_path = self.predict(single_video, state, start=start, end=end)
+                final_output_path = self.predict(single_video, state, start=start, end=end)
                 return
             path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/input')
             for file in os.listdir(path):
                 if file.endswith('.mp4'):
-                    final_tracks, final_output_path = self.predict(os.path.join(path, file), state, start=start, end=end)
+                    final_output_path = self.predict(os.path.join(path, file), state, start=start, end=end)
                     print()
         except KeyboardInterrupt:
             print("\n中断")
@@ -797,8 +797,8 @@ class NoteDetector:
         try:
             video_path = state['video_path']
             start = state['chart_start']
-            final_tracks, final_output_path = self.predict(video_path, state, start=start, end=None)
-            return final_tracks, final_output_path
+            final_output_path = self.predict(video_path, state, start=start, end=None)
+            return final_output_path
 
         except Exception as e:
             raise Exception(f"Error in process: {e}")
