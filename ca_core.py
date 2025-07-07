@@ -18,6 +18,7 @@ class ChartAnalyzer:
         # video_width, video_height, video_fps, total_frames, video_path, video_name
         # circle_center, circle_radius, touch_areas
         # chart_start, audio_start, outline_mask
+        # detect_video_path
 
 
     def update_state(self, key: str, value) -> None:
@@ -50,8 +51,6 @@ class ChartAnalyzer:
 
             # get notes
             detector = NoteDetector()
-            self.state['track_paths'], \
-            self.state['track_results'],\
             self.state['detect_video_path'] = detector.process(self.state)
 
             # analyze results

@@ -71,12 +71,11 @@ class NoteDetector:
             if video_height < circle_radius * 2.3:
                 # 检查画面是否已经正常
                 if video_width == video_height:
-                    if video_height <= 1080 and video_width <= 1080:
-                        frame_center = (video_width // 2, video_height // 2)
-                        diff_x = abs(frame_center[0] - circle_center[0])
-                        diff_y = abs(frame_center[1] - circle_center[1])
-                        if diff_x < 10 and diff_y < 10:
-                            need_crop = False # 不需要裁剪
+                    frame_center = (video_width // 2, video_height // 2)
+                    diff_x = abs(frame_center[0] - circle_center[0])
+                    diff_y = abs(frame_center[1] - circle_center[1])
+                    if diff_x < 5 and diff_y < 5:
+                        need_crop = False # 不需要裁剪
 
                 # 说明圆圈已经铺满整个画面，直接裁两边即可
                 crop_size = min(video_width, video_height)
@@ -91,7 +90,7 @@ class NoteDetector:
                 crop_y = circle_center[1] - int(circle_radius * 1.14)
 
             # 定义resize参数
-            if crop_size <= 1080:
+            if crop_size == 1080:
                 need_resize = False
 
 
@@ -112,7 +111,7 @@ class NoteDetector:
                     output_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                     output_total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                     cap.release()
-                    if output_width <= 1080 and output_height <= 1080 and output_width == output_height:
+                    if output_width == 1080 and output_height == 1080:
                         if output_total_frames == (end-start):
                             print(f"Standardlize video: Output file already exists")
                             return output_path # 输出文件已存在，直接返回
@@ -718,63 +717,6 @@ class NoteDetector:
 
 
 
-    def load_detection_data(self, output_dir, video_name):
-        """
-        从文件加载轨迹数据
-        
-        Args:
-            data_dir: 数据目录
-            video_name: 视频名称
-            
-        Returns:
-            tuple: (final_tracks, track_results_all, predict_results_all, metadata)
-        """
-        try:
-            # 加载final_tracks
-            final_tracks_path = os.path.join(output_dir, f'{video_name}_final_tracks.json')
-            with open(final_tracks_path, 'r', encoding='utf-8') as f:
-                final_tracks = json.load(f)
-
-            # 加载track_results_all from JSONL
-            track_results_path = os.path.join(output_dir, f'{video_name}_track_results.jsonl')
-            track_results_all = {}
-            
-            if os.path.exists(track_results_path):
-                with open(track_results_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            frame_data = json.loads(line)
-                            frame_num = frame_data['frame']
-                            track_results_all[frame_num] = frame_data['results']
-            
-            # 加载predict_results_all from JSONL
-            predict_results_path = os.path.join(output_dir, f'{video_name}_predict_results.jsonl')
-            predict_results_all = {}
-            
-            if os.path.exists(predict_results_path):
-                with open(predict_results_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            frame_data = json.loads(line)
-                            frame_num = frame_data['frame']
-                            predict_results_all[frame_num] = frame_data['results']
-
-            # 加载元数据
-            metadata_path = os.path.join(output_dir, f'{video_name}_metadata.json')
-            metadata = None
-            if os.path.exists(metadata_path):
-                with open(metadata_path, 'r', encoding='utf-8') as f:
-                    metadata = json.load(f)
-            
-            return final_tracks, track_results_all, predict_results_all, metadata
-            
-        except Exception as e:
-            raise Exception(f"Error in load_detection_data: {e}")
-
-
-
     def main(self, state, single_video=None, start=None, end=None):
         try:
             if single_video:
@@ -801,7 +743,7 @@ class NoteDetector:
             return final_output_path
 
         except Exception as e:
-            raise Exception(f"Error in process: {e}")
+            raise Exception(f"Error in NoteDetector: {e}")
 
 
 
@@ -810,7 +752,7 @@ if __name__ == "__main__":
     # raw 蛹
     # 380, 9670, (1702, 702), r 568
 
-    video_path = r"C:\Users\ck273\Desktop\蛹.mp4"
+    video_path = r"C:\Users\ck273\Desktop\踊.mp4"
     start=380
     end=9670
 
