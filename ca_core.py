@@ -86,7 +86,7 @@ class ChartAnalyzer:
                 raise Exception("load_video: fail set cv2.VideoCapture()")
             
             # get video info
-            video_name = os.path.basename(video_path).split('.')[0]
+            video_name = os.path.basename(video_path).rsplit('.', 1)[0]
             width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = int(self.cap.get(cv2.CAP_PROP_FPS))
@@ -108,7 +108,7 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\Users\ck273\Desktop\蛹.mp4"
+    video = r"D:\git\mai-chart-analyse\yolo-train\input\test_6.0.mp4"
     ca = ChartAnalyzer()
     ca.analyze(video, 102, 1, True)
 

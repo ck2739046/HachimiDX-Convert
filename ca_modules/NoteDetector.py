@@ -100,7 +100,7 @@ class NoteDetector:
                 return input_video
             
             # 设置视频输出路径
-            video_name = os.path.basename(input_video).split('.')[0]
+            video_name = os.path.basename(input_video).rsplit('.', 1)[0]
             os.makedirs(self.temp_dir, exist_ok=True)
             output_path = os.path.join(self.temp_dir, f'{video_name}_standardlized.mp4')
             # 如果标准化视频已存在
@@ -267,12 +267,12 @@ class NoteDetector:
             # 处理视频
             input_path = os.path.abspath(input_path)
             input_path = os.path.normpath(input_path)
-            video_name_og = os.path.basename(input_path).split('.')[0]
+            video_name_og = os.path.basename(input_path).rsplit('.', 1)[0]
             print(f"Predict: {video_name_og}")
             
             # 输入视频标准化
             input_path_final = self.standardlize_video(state, input_path, start, end)
-            video_name_final = os.path.basename(input_path_final).split('.')[0]
+            video_name_final = os.path.basename(input_path_final).rsplit('.', 1)[0]
             print(f'Predict initialize...', end='\r', flush=True)
             # 重新获取处理后的视频信息
             cap = cv2.VideoCapture(input_path_final)
@@ -749,18 +749,21 @@ class NoteDetector:
 
 if __name__ == "__main__":
 
-    # raw 蛹
+    # raw 踊
     # 380, 9670, (1702, 702), r 568
 
-    video_path = r"C:\Users\ck273\Desktop\踊.mp4"
-    start=380
-    end=9670
+    #video_path = r"C:\Users\ck273\Desktop\踊.mp4"
+    #start=380
+    #end=9670
+    video_path = r"D:\git\mai-chart-analyse\yolo-train\input\test_7.50.mp4"
+    start = 520
+    end = 2910
 
     # O (1702, 702), R 568, start=400, end=9670
     cap = cv2.VideoCapture(video_path)
     state = {
         'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-        'circle_center': (1702, 702),
+        'circle_center': (1702, 703),
         # 1920x1080: 959, 539
         # 1080x1080: 539, 539
         'circle_radius': 568,

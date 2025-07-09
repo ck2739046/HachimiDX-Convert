@@ -170,8 +170,9 @@ class NoteAnalyzer:
 if __name__ == "__main__":
     analyzer = NoteAnalyzer()
     state = {
-        'video_name': '踊',
-        'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
+        'video_name': 'test_6.0',
+        #'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
+        'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\test\test_6.0_tracked.mp4",
         'debug': True
     }
     analyzer.process(state)
