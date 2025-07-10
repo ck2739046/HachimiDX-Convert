@@ -108,7 +108,7 @@ class NoteAnalyzer:
             #self.touch_speed = self.calculate_touch_speed(circle_info, debug)
 
             # Calculate note time
-            self.calculate_tap_arrival_time(circle_info, fps, bpm, debug)
+            self.calculate_tap_info(circle_info, fps, bpm, debug)
 
 
         except Exception as e:
@@ -116,11 +116,42 @@ class NoteAnalyzer:
         
 
 
-    def calculate_tap_arrival_time(self, circle_info, fps, bpm, debug):
+    def calculate_tap_info(self, circle_info, fps, bpm, debug):
+
+        def calculate_tap_direction(circle_center_x, circle_center_y, note_x, note_y):
+            x_diff = note_x - circle_center_x
+            y_diff = note_y - circle_center_y
+            if x_diff > 0 and y_diff < 0:
+                # 1, 2
+                if abs(x_diff) < abs(y_diff):
+                    return 1
+                else:
+                    return 2
+            elif x_diff > 0 and y_diff > 0:
+                # 3, 4
+                if abs(x_diff) > abs(y_diff):
+                    return 3
+                else:
+                    return 4
+            elif x_diff < 0 and y_diff > 0:
+                # 5, 6
+                if abs(x_diff) < abs(y_diff):
+                    return 5
+                else:
+                    return 6
+            elif x_diff < 0 and y_diff < 0:
+                # 7, 8
+                if abs(x_diff) > abs(y_diff):
+                    return 7
+                else:
+                    return 8
+
+
         try:
             circle_center_x, circle_center_y, circle_radius = circle_info
 
             dist_to_center_dict = {}
+            direction_dict = {}
 
             # read final_tracks
             for track_id, track_data in self.final_tracks.items():
@@ -131,11 +162,17 @@ class NoteAnalyzer:
 
                 if class_id != 2: continue # tap
                 dist_to_center_dict[track_id] = []
+                is_direction_calculated = False
 
                 for track_box in track_path:
                     track_frame_num = int(track_box['frame'])
                     track_center_x = int(track_box['center_x'])
                     track_center_y = int(track_box['center_y'])
+
+                    if not is_direction_calculated:
+                        direction = calculate_tap_direction(circle_center_x, circle_center_y, track_center_x, track_center_y)
+                        direction_dict[track_id] = direction
+                        is_direction_calculated = True
 
                     dist_to_center = np.sqrt(((track_center_x - circle_center_x)**2 + (track_center_y - circle_center_y)**2))
                     dist_to_center_dict[track_id].append((dist_to_center, track_frame_num))
@@ -193,7 +230,8 @@ class NoteAnalyzer:
                 
                 data = np.array(arrival_times)
                 mean = np.mean(data)
-                final_arrival_times.append((track_id, mean))
+                direction = direction_dict[track_id]
+                final_arrival_times.append((track_id, mean, direction))
 
                 #if debug:
                     #min = np.min(data)
@@ -206,20 +244,20 @@ class NoteAnalyzer:
             first = 0
             last_note_arrival_time = 0
             final_arrival_times.sort(key=lambda x: x[1]) # sort by arrival time
-            for track_id, arrival_time in final_arrival_times:
+            for track_id, arrival_time, direction in final_arrival_times:
                 if first == 0:
                     first = arrival_time
                     last_note_arrival_time = arrival_time
-                    print(f'{track_id}-{arrival_time:.3f}, ', end='')
+                    print(f'{track_id}-{direction}-{arrival_time:.3f}, ', end='')
                     continue
                 diff = arrival_time - last_note_arrival_time
                 diff_beat = diff / beat_Msec
-                print(f'{track_id}-{diff_beat:.3f}, ', end='')
+                print(f'{track_id}-{direction}-{diff_beat:.3f}, ', end='')
                 last_note_arrival_time = arrival_time
 
 
         except Exception as e:
-            raise Exception(f"Error in calculate_tap_arrival_time: {e}")
+            raise Exception(f"Error in calculate_tap_info: {e}")
 
 
 
@@ -353,14 +391,14 @@ if __name__ == "__main__":
     analyzer = NoteAnalyzer()
     id = '7.50'
     state = {
-        'video_name': '踊',
-        #'video_name': f'test_{id}',
-        'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
-        #'detect_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
+        #'video_name': '踊',
+        'video_name': f'test_{id}',
+        #'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
+        'detect_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
         'debug': True,
         'video_fps': 60,
-        'bpm': 120,
-        #'bpm': 170, # test
+        #'bpm': 120,
+        'bpm': 170, # test
     }
     analyzer.process(state)
     #analyzer.draw_circle(state['detect_video_path'])
