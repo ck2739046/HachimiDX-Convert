@@ -188,12 +188,12 @@ class NoteAnalyzer:
                 print('No tap notes found')
                 return 0
             
-            final_arrival_times = {}
+            final_arrival_times = []
             for track_id, arrival_times in tap_arrival_time.items():
                 
                 data = np.array(arrival_times)
                 mean = np.mean(data)
-                final_arrival_times[track_id] = mean
+                final_arrival_times.append((track_id, mean))
 
                 #if debug:
                     #min = np.min(data)
@@ -205,14 +205,16 @@ class NoteAnalyzer:
             beat_Msec = 60 / bpm * 1000 * 4
             first = 0
             last_note_arrival_time = 0
-            for track_id, arrival_time in final_arrival_times.items():
+            final_arrival_times.sort(key=lambda x: x[1]) # sort by arrival time
+            for track_id, arrival_time in final_arrival_times:
                 if first == 0:
                     first = arrival_time
                     last_note_arrival_time = arrival_time
                     print(f'{track_id}-{arrival_time:.3f}, ', end='')
                     continue
                 diff = arrival_time - last_note_arrival_time
-                print(f'{track_id}-{diff:.3f}, ', end='')
+                diff_beat = diff / beat_Msec
+                print(f'{track_id}-{diff_beat:.3f}, ', end='')
                 last_note_arrival_time = arrival_time
 
 
@@ -351,13 +353,14 @@ if __name__ == "__main__":
     analyzer = NoteAnalyzer()
     id = '7.50'
     state = {
-        #'video_name': '踊',
-        'video_name': f'test_{id}',
-        #'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
-        'detect_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
+        'video_name': '踊',
+        #'video_name': f'test_{id}',
+        'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
+        #'detect_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
         'debug': True,
         'video_fps': 60,
-        'bpm': 170, # test
+        'bpm': 120,
+        #'bpm': 170, # test
     }
     analyzer.process(state)
     #analyzer.draw_circle(state['detect_video_path'])
