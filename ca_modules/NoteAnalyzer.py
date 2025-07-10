@@ -9,7 +9,66 @@ class NoteAnalyzer:
         self.track_results_all = {}
         self.predict_results_all = {}
         self.metadata = {}
-        self.avg_speed = -1
+        self.note_DefaultMsec = -1
+        self.touch_DefaultMsec = -1
+
+    
+    
+    def get_DefaultMsec(self, detected_note_speed, fps, circle_radius):
+
+        def get_standard_DefaultMsec(ui_speed):
+            # 游戏源码实现
+            OptionNotespeed = int(ui_speed * 100 + 100) # 6.25 = 725
+            NoteSpeedForBeat = 1000 / (OptionNotespeed / 60)
+            DefaultMsec = NoteSpeedForBeat * 4
+            return DefaultMsec
+
+        offset = -5
+        # detected_note_speed 单位是 像素/帧
+        Msec_per_frame = 1000 / fps
+        detected_note_speed_per_Msec = detected_note_speed / Msec_per_frame
+
+        total_dist = circle_radius * 0.75
+        note_lifetime = total_dist / detected_note_speed_per_Msec + offset
+
+        # 查找最接近的 DefaultMsec
+        cloest_DefaultMsec = 0
+        cloest_i = 0
+        i = 1
+        while i <= 10:
+            DefaultMsec = get_standard_DefaultMsec(i)
+            if abs(DefaultMsec - note_lifetime) < abs(cloest_DefaultMsec - note_lifetime):
+                cloest_DefaultMsec = DefaultMsec
+                cloest_i = i
+            i += 0.25
+
+        print(f"estimate speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {note_lifetime:.3f}ms)")
+
+        return cloest_DefaultMsec
+
+
+
+    def draw_circle(self, video_path):
+        try:
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                raise Exception(f"Cannot open video file: {video_path}")
+            circle_center_x = 540
+            circle_center_y = 540
+            circle_radius = 120
+            while True:
+                ret, frame = cap.read()
+                if not ret: break
+                # 绘制圆
+                cv2.circle(frame, (circle_center_x, circle_center_y), circle_radius, (0, 255, 0), 2)
+                # 显示当前帧
+                cv2.imshow('Circle', frame)
+                # 按 'q' 键退出
+                key = cv2.waitKey(0)
+                if key & 0xFF == ord('q'):
+                    break
+        except Exception as e:
+            raise Exception(f"Error in draw_circle: {e}")
 
 
 
@@ -17,18 +76,20 @@ class NoteAnalyzer:
         try:
             circle_center_x = 540
             circle_center_y = 540
-            circle_radius = 474
+            circle_radius = 478
             circle_info = (circle_center_x, circle_center_y, circle_radius)
             video_name = state['video_name']
             detect_video_path = state['detect_video_path']
             output_dir = os.path.dirname(detect_video_path)
             debug = state['debug']
+            fps = state['video_fps']
             
             # Load detection data
             self.final_tracks, self.track_results_all, self.predict_results_all, self.metadata = self.load_detection_data(output_dir, video_name)
 
-            # Calculate average speed
-            self.avg_speed = self.calculate_avg_speed(circle_info, debug)
+            # Calculate speed
+            self.note_speed = self.calculate_note_speed(circle_info, fps, debug)
+            #self.touch_speed = self.calculate_touch_speed(circle_info, debug)
 
 
         except Exception as e:
@@ -36,10 +97,12 @@ class NoteAnalyzer:
 
 
 
-    def calculate_avg_speed(self, circle_info, debug):
+    def calculate_note_speed(self, circle_info, fps, debug):
         try:
             circle_center_x, circle_center_y, circle_radius = circle_info
+
             dist_to_center_dict = {}
+
             # read final_tracks
             for track_id, track_data in self.final_tracks.items():
                 if 'path' not in track_data: continue
@@ -47,77 +110,67 @@ class NoteAnalyzer:
                 if len(track_path) < 5: continue
                 class_id = int(track_data['class_id'])
 
-                if class_id != 2: continue
+                if class_id != 2: continue # tap
                 dist_to_center_dict[track_id] = []
 
                 for track_box in track_path:
                     track_frame_num = int(track_box['frame'])
                     track_center_x = int(track_box['center_x'])
                     track_center_y = int(track_box['center_y'])
-                    track_width = int(track_box['width'])
-                    track_height = int(track_box['height'])
-                    track_conf = float(track_box['conf'])
 
-                    dist_to_center = circle_radius - np.sqrt(((track_center_x - circle_center_x)**2 + (track_center_y - circle_center_y)**2))
+                    dist_to_center = np.sqrt(((track_center_x - circle_center_x)**2 + (track_center_y - circle_center_y)**2))
                     dist_to_center_dict[track_id].append((dist_to_center, track_frame_num))
 
-                    '''
-                    predict_results_list = self.predict_results_all[track_frame_num]
-                    for predict_result in predict_results_list:
-                        predict_class_id = int(predict_result['class'])
-                        if predict_class_id != class_id: continue
-                        predict_box = predict_result['box']
-                        predict_x1 = int(predict_box['x1'])
-                        predict_y1 = int(predict_box['y1'])
-                        predict_x2 = int(predict_box['x2'])
-                        predict_y2 = int(predict_box['y2'])
-                        predict_center_x = int((predict_x1 + predict_x2) / 2)
-                        predict_center_y = int((predict_y1 + predict_y2) / 2)
 
-                        tolerance = circle_radius * 0.05
-                        if abs(track_center_x - predict_center_x) < tolerance and abs(track_center_y - predict_center_y) < tolerance:
-                            pass
-                    '''
-
-            speed_tolerance = circle_radius * 0.03
+            start_tolerance = circle_radius * 0.02
+            end_tolerance = circle_radius * 0.15
+            dist_start = circle_radius * 0.25
+            dist_end = circle_radius
             final_tap_speed = {}
             for track_id, distances in dist_to_center_dict.items():
                 
                 distances.sort(key=lambda x: x[1]) # 按frame排序
-                last_distance = -1
-                last_frame = -1
-                speed_list = []
-                for i in range(len(distances)-1): # skip last frame
-                    dist, frame = distances[i]
-                    dist_diff = last_distance - dist
-                    frame_diff = frame-last_frame
-                    last_distance = dist
-                    last_frame = frame
-                    if dist_diff > speed_tolerance and frame_diff > 0:
-                        speed = dist_diff / frame_diff
-                        speed_list.append(speed)
-                    
-                if len(speed_list) > 5:
-                    average_speed = sum(speed_list) / len(speed_list)
-                    final_tap_speed[track_id] = average_speed
+                leave_start = (0, 0)
+                reach_end = (0, 0)
+                for dist, frame_num in distances:
+                    if abs(dist - dist_start) < start_tolerance:
+                        leave_start = (dist, frame_num)
+                        continue
+                    elif abs(dist - dist_end) < end_tolerance:
+                        reach_end = (dist, frame_num)
+                        continue
+                
+                #print(f"track_id: {track_id}, leave_start: {leave_start}, reach_end: {reach_end}")
+                if leave_start[1] > 0 and reach_end[1] > 0 and reach_end[1] > leave_start[1]:
+                    total_dist = reach_end[0] - leave_start[0]
+                    total_frame = reach_end[1] - leave_start[1]
+                    note_speed = total_dist / total_frame
+                    final_tap_speed[track_id] = note_speed
+
 
             # calcualte average speed
             if not final_tap_speed:
+                print('2')
                 return 0
-
+            
             if debug:
                 data = list(final_tap_speed.values())
-                min = np.min(data)
-                max = np.max(data)
-                mean = sum(data) / len(data)
-                median = np.median(data)
-                std_dev = np.std(data)
-                print(f"  Mean: {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev:.3f}")
+                mean = np.mean(data)
+                #min = np.min(data)
+                #max = np.max(data)
+                #median = np.median(data)
+                #std_dev = np.std(data)
+                #print(f"note speed: Mean: {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev:.3f}")
 
-            return round(mean, 3)
+            DefaultMsec = self.get_DefaultMsec(mean, fps, circle_radius)
+
+            return round(DefaultMsec, 3)
 
         except Exception as e:
-            raise Exception(f"Error in calculate_avg_speed: {e}")
+            raise Exception(f"Error in calculate_note_speed: {e}")
+        
+    #touch_size_min = circle_radius * 0.245
+    #touch_size_max = circle_radius * 0.386
         
 
 
@@ -167,12 +220,16 @@ class NoteAnalyzer:
             raise Exception(f"Error in load_detection_data: {e}")
 
 
+
 if __name__ == "__main__":
     analyzer = NoteAnalyzer()
+    id = '7.50'
     state = {
-        'video_name': 'test_6.0',
+        #'video_name': '踊',
+        'video_name': f'test_{id}',
         #'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
-        'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\test\test_6.0_tracked.mp4",
-        'debug': True
+        'detect_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
+        'debug': True,
+        'video_fps': 60
     }
     analyzer.process(state)
