@@ -12,11 +12,111 @@ class NoteAnalyzer:
         self.note_DefaultMsec = -1
         self.touch_DefaultMsec = -1
 
-    
-    
-    def get_DefaultMsec(self, detected_note_speed, fps, circle_radius):
 
-        def get_standard_DefaultMsec(ui_speed):
+
+    def calculate_tap_direction(self, circle_center_x, circle_center_y, note_x, note_y):
+            x_diff = note_x - circle_center_x
+            y_diff = note_y - circle_center_y
+            if x_diff > 0 and y_diff < 0:
+                # 1, 2
+                if abs(x_diff) < abs(y_diff):
+                    return 1
+                else:
+                    return 2
+            elif x_diff > 0 and y_diff > 0:
+                # 3, 4
+                if abs(x_diff) > abs(y_diff):
+                    return 3
+                else:
+                    return 4
+            elif x_diff < 0 and y_diff > 0:
+                # 5, 6
+                if abs(x_diff) < abs(y_diff):
+                    return 5
+                else:
+                    return 6
+            elif x_diff < 0 and y_diff < 0:
+                # 7, 8
+                if abs(x_diff) > abs(y_diff):
+                    return 7
+                else:
+                    return 8
+                
+
+
+    def get_touch_DefaultMsec(self, detected_touch_DefaultMsec):
+
+        def get_standard_touch_DefaultMsec(ui_speed):
+            # 游戏源码实现
+            option_touchspeed_dict = {
+                1.00: 175.0,
+                1.25: 183.0,
+                1.50: 200.0,
+                1.75: 212.0,
+                2.00: 225.0,
+                2.25: 237.0,
+                2.50: 250.0,
+                2.75: 262.0,
+                3.00: 275.0,
+                3.25: 283.0,
+                3.50: 300.0,
+                3.75: 312.0,
+                4.00: 325.0,
+                4.25: 337.0,
+                4.50: 350.0,
+                4.75: 375.0,
+                5.00: 400.0,
+                5.25: 425.0,
+                5.50: 450.0,
+                5.75: 475.0,
+                6.00: 500.0,
+                6.25: 525.0,
+                6.50: 550.0,
+                6.75: 575.0,
+                7.00: 600.0,
+                7.25: 625.0,
+                7.50: 650.0,
+                7.75: 675.0,
+                8.00: 700.0,
+                8.25: 725.0,
+                8.50: 750.0,
+                8.75: 775.0,
+                9.00: 800.0,
+                9.25: 825.0,
+                9.50: 850.0,
+                9.75: 875.0,
+                10.00: 900.0
+            }
+            ui_speed = f'{ui_speed:.2f}'
+            OptionNotespeed = option_touchspeed_dict[float(ui_speed)]
+            NoteSpeedForBeat = 1000 / (OptionNotespeed / 60)
+            DefaultMsec = NoteSpeedForBeat * 4
+            return DefaultMsec
+        
+        offset = 5
+        detected_touch_DefaultMsec += offset
+        # 检查 detected_touch_DefaultMsec 距离哪个标准值最近
+        closest_DefaultMsec = 0
+        closest_i = 0
+        i = 1
+        while i <= 10:
+            DefaultMsec = get_standard_touch_DefaultMsec(i)
+
+            if abs(DefaultMsec - detected_touch_DefaultMsec) < abs(closest_DefaultMsec - detected_touch_DefaultMsec):
+                closest_DefaultMsec = DefaultMsec
+                closest_i = i
+            i += 0.25
+
+        print(f"estimate touch speed: {closest_i:.2f} - {closest_DefaultMsec:.3f}ms (detect {detected_touch_DefaultMsec:.3f}ms)")
+
+        return closest_DefaultMsec
+
+
+    
+    
+    def get_note_DefaultMsec(self, detected_note_speed, fps, circle_radius):
+
+        def get_standard_note_DefaultMsec(ui_speed):
             # 游戏源码实现
             OptionNotespeed = int(ui_speed * 100 + 100) # 6.25 = 725
             NoteSpeedForBeat = 1000 / (OptionNotespeed / 60)
@@ -24,11 +124,11 @@ class NoteAnalyzer:
             return DefaultMsec
 
         offset = 5
+        total_dist = circle_radius * 0.75
+
         # detected_note_speed 单位是 像素/帧
         Msec_per_frame = 1000 / fps
         detected_note_speed_per_Msec = detected_note_speed / Msec_per_frame
-
-        total_dist = circle_radius * 0.75
         note_lifetime = total_dist / detected_note_speed_per_Msec + offset
 
         # 查找最接近的 DefaultMsec
@@ -36,13 +136,15 @@ class NoteAnalyzer:
         cloest_i = 0
         i = 1
         while i <= 10:
-            DefaultMsec = get_standard_DefaultMsec(i)
+
+            DefaultMsec = get_standard_note_DefaultMsec(i)
+
             if abs(DefaultMsec - note_lifetime) < abs(cloest_DefaultMsec - note_lifetime):
                 cloest_DefaultMsec = DefaultMsec
                 cloest_i = i
             i += 0.25
 
-        print(f"estimate speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {note_lifetime:.3f}ms)")
+        print(f"estimate note speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {note_lifetime:.3f}ms)")
 
         return cloest_DefaultMsec
     
@@ -105,7 +207,7 @@ class NoteAnalyzer:
 
             # Calculate speed
             self.note_speed = self.calculate_note_speed(circle_info, fps, debug)
-            #self.touch_speed = self.calculate_touch_speed(circle_info, debug)
+            self.touch_speed = self.calculate_touch_speed(circle_info, fps, debug)
 
             # Calculate note time
             self.calculate_tap_info(circle_info, fps, bpm, debug)
@@ -117,35 +219,6 @@ class NoteAnalyzer:
 
 
     def calculate_tap_info(self, circle_info, fps, bpm, debug):
-
-        def calculate_tap_direction(circle_center_x, circle_center_y, note_x, note_y):
-            x_diff = note_x - circle_center_x
-            y_diff = note_y - circle_center_y
-            if x_diff > 0 and y_diff < 0:
-                # 1, 2
-                if abs(x_diff) < abs(y_diff):
-                    return 1
-                else:
-                    return 2
-            elif x_diff > 0 and y_diff > 0:
-                # 3, 4
-                if abs(x_diff) > abs(y_diff):
-                    return 3
-                else:
-                    return 4
-            elif x_diff < 0 and y_diff > 0:
-                # 5, 6
-                if abs(x_diff) < abs(y_diff):
-                    return 5
-                else:
-                    return 6
-            elif x_diff < 0 and y_diff < 0:
-                # 7, 8
-                if abs(x_diff) > abs(y_diff):
-                    return 7
-                else:
-                    return 8
-
 
         try:
             circle_center_x, circle_center_y, circle_radius = circle_info
@@ -170,7 +243,7 @@ class NoteAnalyzer:
                     track_center_y = int(track_box['center_y'])
 
                     if not is_direction_calculated:
-                        direction = calculate_tap_direction(circle_center_x, circle_center_y, track_center_x, track_center_y)
+                        direction = self.calculate_tap_direction(circle_center_x, circle_center_y, track_center_x, track_center_y)
                         direction_dict[track_id] = direction
                         is_direction_calculated = True
 
@@ -248,11 +321,11 @@ class NoteAnalyzer:
                 if first == 0:
                     first = arrival_time
                     last_note_arrival_time = arrival_time
-                    print(f'{track_id}-{direction}-{arrival_time:.3f}, ', end='')
+                    print(f'{direction}-{arrival_time:.3f}, ', end='')
                     continue
                 diff = arrival_time - last_note_arrival_time
                 diff_beat = diff / beat_Msec
-                print(f'{track_id}-{direction}-{diff_beat:.3f}, ', end='')
+                print(f'{direction}-{diff_beat:.3f}, ', end='')
                 last_note_arrival_time = arrival_time
 
 
@@ -322,21 +395,138 @@ class NoteAnalyzer:
             if debug:
                 data = list(final_tap_speed.values())
                 mean = np.mean(data)
-                #min = np.min(data)
-                #max = np.max(data)
-                #median = np.median(data)
-                #std_dev = np.std(data)
-                #print(f"note speed: Mean: {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev:.3f}")
+                min = np.min(data)
+                max = np.max(data)
+                median = np.median(data)
+                std_dev = np.std(data)
+                print(f"note speed: Mean: {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev:.3f}")
 
-            DefaultMsec = self.get_DefaultMsec(mean, fps, circle_radius)
+            DefaultMsec = self.get_note_DefaultMsec(mean, fps, circle_radius)
 
             return round(DefaultMsec, 3)
 
         except Exception as e:
             raise Exception(f"Error in calculate_note_speed: {e}")
         
-    #touch_size_min = circle_radius * 0.245
-    #touch_size_max = circle_radius * 0.386
+
+
+    def calculate_touch_speed(self, circle_info, fps, debug):
+
+        #正向：
+        #根据 time_progress = (current_time - (move_start_time - 0.25*DefaultMsec)) / DefaultMsec 获得 time_progress
+        #应用缓动函数，location_progress = 缓动函数(time_progress)
+        #假设touch note在刚开始move时的尺寸边长是start_size，完全闭合的尺寸变成是end_size，则根据location_progress决定新的size.
+        #例如如果location_progress=0.5，则此时size=start_size + (end_size - start_size) * location_progress
+
+        #逆向：
+        #根据touch note的size，计算location_progress = (touch_size_max - size) / (touch_size_max - touch_size_min)
+        #二分法，通过location_progress反推出time_progress ( y -> x )
+        #根据 DefaultMsec = (current_time - move_start_time) / (time_progress - 0.25) 反推出 DefaultMsec
+
+        def find_x_for_y(y, tolerance=0.000001):
+            # 二分查找求解 y = 3.5x⁴ - 3.75x³ + 1.45x² - 0.05x + 0.0005 的反函数
+            low, high = 0.0, 1.0
+            
+            while high - low > tolerance:
+                mid = (low + high) / 2
+                eased_y = 3.5 * mid**4 - 3.75 * mid**3 + 1.45 * mid**2 - 0.05 * mid + 0.0005
+                
+                if abs(eased_y - y) < tolerance:
+                    return mid
+                elif eased_y < y:
+                    low = mid  # 标准的二分查找更新
+                else:
+                    high = mid
+            return (low + high) / 2
+
+        try:
+            circle_center_x, circle_center_y, circle_radius = circle_info
+
+            size_dict = {}
+
+            # read final_tracks
+            for track_id, track_data in self.final_tracks.items():
+                if 'path' not in track_data: continue
+                track_path = track_data['path']
+                if len(track_path) < 5: continue
+                class_id = int(track_data['class_id'])
+
+                if class_id != 3: continue # touch
+                size_dict[track_id] = []
+
+                for track_box in track_path:
+                    track_frame_num = int(track_box['frame'])
+                    #track_center_x = int(track_box['center_x'])
+                    #track_center_y = int(track_box['center_y'])
+                    track_width = int(track_box['width'])
+                    track_height = int(track_box['height'])
+
+                    size = (track_height + track_width) / 2
+                    size_dict[track_id].append((size, track_frame_num))
+
+
+            touch_size_min = circle_radius * 0.245
+            touch_size_max = circle_radius * 0.385
+            tolerance = circle_radius * 0.03
+            note_lifetimes = []
+            for track_id, sizes in size_dict.items():
+                
+                sizes.sort(key=lambda x: x[1]) # 按frame排序;
+
+                # simple note_lifetime
+                size_init, frame_num_init = sizes[0]
+                if abs(size_init - touch_size_max) > tolerance:
+                    print(f"track_id: {track_id} has invalid size_init: {size_init:.2f} ({touch_size_max:.2f})")
+                    continue
+                size_last, frame_num_last = sizes[-1]
+                if abs(size_last - touch_size_min) > tolerance:
+                    print(f"track_id: {track_id} has invalid size_last: {size_last:.2f} ({touch_size_max:.2f})")
+                    continue
+
+                note_lifetime = (frame_num_last - frame_num_init) / fps * 1000  # 转换为毫秒
+                note_lifetimes.append(note_lifetime)
+
+
+                '''
+                for size, frame_num in sizes:
+
+                    if abs(size - touch_size_max) < tolerance or abs(size - touch_size_min) < tolerance:
+                        continue
+
+                    # 计算location_progress
+                    location_progress = (touch_size_max - size) / (touch_size_max - touch_size_min)
+                    if location_progress < 0.15 or location_progress > 0.97: continue
+                    # 反推出time_progress
+                    time_progress = find_x_for_y(location_progress)
+                    # 反推出 DefaultMsec
+                    current_time = frame_num / fps * 1000  # 转换为毫秒
+                    DefaultMsec = (current_time - leave_start_time) / (time_progress - 0.25)
+                    DefaultMsecs.append(DefaultMsec)
+                    print(f"track_id: {track_id}, size: {size:.2f}, frame_num: {frame_num}, leave_start: {leave_start_time:.4f}, location_progress: {location_progress:.5f}, time_progress: {time_progress:.6f}, DefaultMsec: {DefaultMsec:.3f}")
+
+                print()
+                '''
+
+            # calcualte average speed
+            if not note_lifetimes:
+                print('3')
+                return 0
+            
+            if debug:
+                data = np.array(note_lifetimes)
+                mean = np.mean(data)
+                min = np.min(data)
+                max = np.max(data)
+                median = np.median(data)
+                std_dev = np.std(data)
+                print(f"touch speed: Mean: {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev:.3f}")
+
+            DefaultMsec = self.get_touch_DefaultMsec(mean*0.86)
+
+            return round(DefaultMsec, 3)
+
+        except Exception as e:
+            raise Exception(f"Error in calculate_touch_speed: {e}")
         
 
 
@@ -389,7 +579,7 @@ class NoteAnalyzer:
 
 if __name__ == "__main__":
     analyzer = NoteAnalyzer()
-    id = '7.50'
+    id = '6.75'
     state = {
         #'video_name': '踊',
         'video_name': f'test_{id}',
