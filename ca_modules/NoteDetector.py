@@ -423,9 +423,6 @@ class NoteDetector:
                             # 计算中心点
                             center_x = (x1 + x2) // 2
                             center_y = (y1 + y2) // 2
-                            # 计算检测框尺寸
-                            width = x2 - x1
-                            height = y2 - y1
                             
                             # 记录当前帧中存在的轨迹ID
                             current_track_ids.add(track_id)
@@ -434,10 +431,10 @@ class NoteDetector:
                             final_tracks[track_id]['class_id'] = class_id
                             final_tracks[track_id]['path'].append({
                                 'frame': frame_count,
-                                'center_x': center_x,
-                                'center_y': center_y,
-                                'width': width,
-                                'height': height,
+                                'x1': x1,
+                                'y1': y1,
+                                'x2': x2,
+                                'y2': y2,
                                 'confidence': conf
                             })
 
@@ -639,10 +636,10 @@ class NoteDetector:
                 for point in track_data['path']:
                     serializable_point = {
                         'frame': int(point['frame']),
-                        'center_x': int(point['center_x']),
-                        'center_y': int(point['center_y']),
-                        'width': int(point['width']),
-                        'height': int(point['height']),
+                        'x1': int(point['x1']),
+                        'y1': int(point['y1']),
+                        'x2': int(point['x2']),
+                        'y2': int(point['y2']),
                         'conf': round(float(point['confidence']), 2)
                     }
                     final_tracks_serializable[str(track_id)]['path'].append(serializable_point)
@@ -683,7 +680,7 @@ class NoteDetector:
                     'description': 'Dictionary with track_id as key',
                     'structure': {
                         'class_id': 'int - object class (0=hold, 1=slide, 2=tap, 3=touch, 4=touch_hold)',
-                        'path': 'list of notes with format dict{frame, center_x, center_y, width, height, conf}'
+                        'path': 'list of notes with format dict{frame, x1, y1, x2, y2, conf}'
                     }
                 },
                 'track_results_format': {
@@ -761,7 +758,7 @@ if __name__ == "__main__":
     #video_path = r"C:\Users\ck273\Desktop\踊.mp4"
     #start=380
     #end=9670
-    video_path = r"D:\git\mai-chart-analyse\yolo-train\input\test_7.50.mp4"
+    video_path = r"D:\git\mai-chart-analyse\yolo-train\input\test_6.00.mp4"
     start = 520
     end = 2910
 

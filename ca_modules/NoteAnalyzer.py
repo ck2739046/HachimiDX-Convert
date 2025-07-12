@@ -219,6 +219,9 @@ class NoteAnalyzer:
 
         except Exception as e:
             raise Exception(f"Error in NoteAnalyzer: {e}")
+        finally:
+            if self.cap is not None:
+                self.cap.release()
         
 
 
