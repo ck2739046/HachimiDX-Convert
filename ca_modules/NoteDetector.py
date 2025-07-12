@@ -12,6 +12,7 @@ from ultralytics.utils import LOGGER
 import logging
 import subprocess
 import json
+import shutil
 
 original_level = LOGGER.level
 LOGGER.setLevel(logging.ERROR) # 只显示错误信息，忽略 Warning
@@ -587,6 +588,11 @@ class NoteDetector:
                 if os.path.exists(temp_final_path):
                     os.remove(temp_final_path)
 
+            # 复制 standardlized 视频到输出目录
+            final_standardlized_path = os.path.join(final_output_dir, f'{video_name_og}_standardlized.mp4')
+            if os.path.exists(final_standardlized_path):
+                os.remove(final_standardlized_path)
+            shutil.copy(input_path_final, final_standardlized_path)
 
             # 清理临时目录
             if not os.listdir(self.temp_dir):

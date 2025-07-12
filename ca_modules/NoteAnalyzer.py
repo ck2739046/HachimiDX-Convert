@@ -11,6 +11,7 @@ class NoteAnalyzer:
         self.metadata = {}
         self.note_DefaultMsec = -1
         self.touch_DefaultMsec = -1
+        self.cap = None
 
 
 
@@ -201,6 +202,9 @@ class NoteAnalyzer:
             debug = state['debug']
             fps = state['video_fps']
             bpm = state['bpm']
+            std_video = state['std_video_path']
+
+            self.cap = cv2.VideoCapture(std_video)
             
             # Load detection data
             self.final_tracks, self.track_results_all, self.predict_results_all, self.metadata = self.load_detection_data(output_dir, video_name)
@@ -585,6 +589,7 @@ if __name__ == "__main__":
         'video_name': f'test_{id}',
         #'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
         'detect_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
+        'std_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_standardlized.mp4",
         'debug': True,
         'video_fps': 60,
         #'bpm': 120,
