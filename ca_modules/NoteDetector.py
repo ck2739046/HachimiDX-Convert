@@ -113,7 +113,7 @@ class NoteDetector:
                     output_total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                     cap.release()
                     if output_width == 1080 and output_height == 1080:
-                        if output_total_frames == (end-start):
+                        if abs(output_total_frames - (end-start)) < 40:
                             print(f"Standardlize video: Output file already exists")
                             return output_path # 输出文件已存在，直接返回
                     raise Exception('standardlized video exists but invalid')
@@ -356,9 +356,6 @@ class NoteDetector:
                 ret, frame = cap.read()
                 if not ret: break # end of video
 
-                frame_count += 1
-                fps_counter += 1
-
                 # 使用模型预测当前帧
                 results = model.predict(
                     source=frame,
@@ -532,6 +529,9 @@ class NoteDetector:
                     fps_counter = 0
                     progress = (frame_count / total_frames) * 100 
                     print(f"progress: {frame_count}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps", end="\r", flush=True)
+
+                frame_count += 1
+                fps_counter += 1
 
             end_time = time.time()
             average_fps_rate = frame_count / (end_time - start_time_fixed)
@@ -755,12 +755,12 @@ if __name__ == "__main__":
     # raw 踊
     # 380, 9670, (1702, 702), r 568
 
-    #video_path = r"C:\Users\ck273\Desktop\踊.mp4"
-    #start=380
-    #end=9670
-    video_path = r"D:\git\mai-chart-analyse\yolo-train\input\test_6.00.mp4"
-    start = 520
-    end = 2910
+    video_path = r"C:\Users\ck273\Desktop\踊.mp4"
+    start=380
+    end=9670
+    #video_path = r"D:\git\mai-chart-analyse\yolo-train\input\test_6.00.mp4"
+    #start = 520
+    #end = 2910
 
     # O (1702, 702), R 568, start=400, end=9670
     cap = cv2.VideoCapture(video_path)

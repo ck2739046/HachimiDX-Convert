@@ -12,6 +12,7 @@ class NoteAnalyzer:
         self.note_DefaultMsec = -1
         self.touch_DefaultMsec = -1
         self.cap = None
+        self.show_note_img = True
 
 
 
@@ -187,9 +188,85 @@ class NoteAnalyzer:
                     break
         except Exception as e:
             raise Exception(f"Error in draw_circle: {e}")
+        
 
 
+    def get_precise_center(self, frame_num, track_points, class_id, track_id):
 
+        try:
+            x1, y1, x2, y2 = track_points
+
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            ret, frame = self.cap.read()
+
+            # 0 hold, 1 slide, 2 tap, 3 touch, 4 touch_hold
+            if class_id == 2:
+
+                # 裁剪获得略大的note图像
+                bigger = 60
+                x1 = max(0, x1 - bigger)
+                y1 = max(0, y1 - bigger)
+                x2 = min(1080, x2 + bigger)
+                y2 = min(1080, y2 + bigger)
+                note_img = frame[y1:y2, x1:x2]
+                # 图像处理
+                gray_frame = cv2.cvtColor(note_img, cv2.COLOR_BGR2GRAY)
+                _, threshold_frame = cv2.threshold(gray_frame, 170, 255, cv2.THRESH_BINARY)
+                # 寻找轮廓
+                circles = {}
+                contours, _ = cv2.findContours(threshold_frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                for contour in contours:
+                    # 验证轮廓是否接近圆形（圆形度大于0.9）
+                    (x, y), radius = cv2.minEnclosingCircle(contour)
+                    area = cv2.contourArea(contour)
+                    circle_area = 3.14 * radius * radius
+                    if circle_area <= 0: continue
+                    circularity = area / circle_area
+                    if circularity < 0.9: continue
+                    # 如果中心相近（允许x,y各有±5的误差），保留最大半径的音符
+                    found_similar = False
+                    similar_key = None
+                    for existing_key in circles.keys():
+                        if abs(existing_key[0] - x) <= 5 and abs(existing_key[1] - y) <= 5:
+                            found_similar = True
+                            similar_key = existing_key
+                            break
+                    if found_similar:
+                        if circles[similar_key][2] < radius:
+                            del circles[similar_key]
+                            circles[(x, y)] = (x, y, radius)
+                    else:
+                        circles[(x, y)] = (x, y, radius)
+                # 如果找到多个圆形，选择与原始音符中心最接近的圆形
+                if not circles:
+                    print(f"Warning: No circles found for frame {frame_num}, track_id {track_id}")
+                    return None, None
+                og_center_x = (x1 + x2) / 2
+                og_center_y = (y1 + y2) / 2
+                closest_circle = min(circles.values(), key=lambda c: np.sqrt((c[0] - og_center_x) ** 2 + (c[1] - og_center_y) ** 2))
+                x, y, r = closest_circle
+                # 在新窗口中显示note图像和圆
+                if not self.show_note_img: return
+                cv2.circle(note_img, (int(x), int(y)), int(r), (0, 255, 0), 2)
+                cv2.circle(note_img, (int(x), int(y)), 3, (0, 0, 255), -1)
+                cv2.imshow('Note', note_img)
+                key = cv2.waitKey(0) & 0xFF
+                if key == ord('r'):
+                    self.show_note_img = False
+                cv2.destroyAllWindows()
+                # 返回精确的圆心坐标
+                precise_center_x = int(x + x1)
+                precise_center_y = int(y + y1)
+                return precise_center_x, precise_center_y
+            
+            else:
+                return None, None
+
+        except Exception as e:
+            raise Exception(f"Error in get_precise_center: {e}")
+
+
+    # debug
     def process(self, state: dict):
         try:
             circle_center_x = 540
@@ -210,11 +287,12 @@ class NoteAnalyzer:
             self.final_tracks, self.track_results_all, self.predict_results_all, self.metadata = self.load_detection_data(output_dir, video_name)
 
             # Calculate speed
+            print(f"Calculating note speed...")
             self.note_speed = self.calculate_note_speed(circle_info, fps, debug)
-            self.touch_speed = self.calculate_touch_speed(circle_info, fps, debug)
+            #self.touch_speed = self.calculate_touch_speed(circle_info, fps, debug)
 
             # Calculate note time
-            self.calculate_tap_info(circle_info, fps, bpm, debug)
+            #self.calculate_tap_info(circle_info, fps, bpm, debug)
 
 
         except Exception as e:
@@ -342,6 +420,11 @@ class NoteAnalyzer:
 
 
     def calculate_note_speed(self, circle_info, fps, debug):
+
+        # use predict only:
+        # note speed: Mean: 19.569, Min: 17.747, Max: 21.186, Median: 19.678, Std Dev: 0.691
+        # estimate note speed: 6.75 - 309.677ms (detect 310.329ms)
+
         try:
             circle_center_x, circle_center_y, circle_radius = circle_info
 
@@ -359,9 +442,18 @@ class NoteAnalyzer:
 
                 for track_box in track_path:
                     track_frame_num = int(track_box['frame'])
-                    track_center_x = int(track_box['center_x'])
-                    track_center_y = int(track_box['center_y'])
+                    track_x1 = int(track_box['x1'])
+                    track_y1 = int(track_box['y1'])
+                    track_x2 = int(track_box['x2'])
+                    track_y2 = int(track_box['y2'])
+                    track_points = (track_x1, track_y1, track_x2, track_y2)
+                    
+                    #precise_center_x, precise_center_y = self.get_precise_center(track_frame_num, track_points, class_id, track_id)
+                    self.get_precise_center(track_frame_num, track_points, class_id, track_id)
 
+                    #dist_to_center = np.sqrt(((precise_center_x - circle_center_x)**2 + (precise_center_y - circle_center_y)**2))
+                    track_center_x = int((track_x1 + track_x2) / 2)
+                    track_center_y = int((track_y1 + track_y2) / 2)
                     dist_to_center = np.sqrt(((track_center_x - circle_center_x)**2 + (track_center_y - circle_center_y)**2))
                     dist_to_center_dict[track_id].append((dist_to_center, track_frame_num))
 
@@ -586,7 +678,7 @@ class NoteAnalyzer:
 
 if __name__ == "__main__":
     analyzer = NoteAnalyzer()
-    id = '6.75'
+    id = '6.00'
     state = {
         #'video_name': '踊',
         'video_name': f'test_{id}',
