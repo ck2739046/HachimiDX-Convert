@@ -2,47 +2,308 @@ import json
 import os
 import cv2
 import numpy as np
+import functools
+import traceback
+
+error_trace = []
+
+def log_error(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            error_trace.append(f'{func.__name__}')
+            raise
+    return wrapper
+
+
 
 class NoteAnalyzer:
     def __init__(self):
-        self.final_tracks = {}
-        self.track_results_all = {}
-        self.predict_results_all = {}
-        self.metadata = {}
         self.note_DefaultMsec = -1
         self.touch_DefaultMsec = -1
         self.cap = None
-        self.show_note_img = True
 
 
 
-    def calculate_tap_direction(self, circle_center_x, circle_center_y, note_x, note_y):
-            x_diff = note_x - circle_center_x
-            y_diff = note_y - circle_center_y
-            if x_diff > 0 and y_diff < 0:
-                # 1, 2
-                if abs(x_diff) < abs(y_diff):
-                    return 1
-                else:
-                    return 2
-            elif x_diff > 0 and y_diff > 0:
-                # 3, 4
-                if abs(x_diff) > abs(y_diff):
-                    return 3
-                else:
-                    return 4
-            elif x_diff < 0 and y_diff > 0:
-                # 5, 6
-                if abs(x_diff) < abs(y_diff):
-                    return 5
-                else:
-                    return 6
-            elif x_diff < 0 and y_diff < 0:
-                # 7, 8
-                if abs(x_diff) > abs(y_diff):
-                    return 7
-                else:
-                    return 8
+    @log_error
+    def preprocess_tap_data(self, final_tracks, track_results_all, predict_results_all, circle_info):
+        '''
+        坐标使用predict_results_all的数据
+        过滤scale阶段的数据, 只保留move阶段的数据
+
+        返回格式:
+        dict{
+            key: (track_id, direction),
+            value: note path list
+            [
+                {
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'center_x': center_x,
+                    'center_y': center_y,
+                    'dist': dist_to_center
+                },
+                ...
+            ]
+        }
+        '''
+
+        circle_center_x, circle_center_y, circle_radius = circle_info
+        tap_data = {}
+
+        close_tolerance = circle_radius * 0.05
+        start_tolerance = circle_radius * 0.02
+        dist_start = circle_radius * 0.25
+        dist_end = circle_radius
+
+        # read final_tracks
+        for track_id, track_data in final_tracks.items():
+            if 'path' not in track_data: continue
+            track_path = track_data['path']
+            if len(track_path) < 5: continue
+            class_id = int(track_data['class_id'])
+            if class_id != 2: continue # tap
+
+            predict_track_path = []
+
+            for track_box in track_path:
+                track_frame_num = int(track_box['frame'])
+                track_conf = float(track_box['conf'])
+                track_x1 = int(track_box['x1'])
+                track_y1 = int(track_box['y1'])
+                track_x2 = int(track_box['x2'])
+                track_y2 = int(track_box['y2'])
+                track_center_x = (track_x1 + track_x2) / 2
+                track_center_y = (track_y1 + track_y2) / 2
+
+                match_found = []
+
+                # 从predict_results_all中获取对应的音符
+                predict_results_list = predict_results_all[track_frame_num]
+                for predict_result in predict_results_list:
+
+                    # 判断 conf
+                    predict_conf = float(predict_result['confidence'])
+                    if track_conf != predict_conf: continue
+                    # 判断 class_id
+                    predict_class_id = int(predict_result['class'])
+                    if predict_class_id != class_id: continue
+                    # 判断 中心距离
+                    box = predict_result['box']
+                    predict_x1 = int(box['x1'])
+                    predict_y1 = int(box['y1'])
+                    predict_x2 = int(box['x2'])
+                    predict_y2 = int(box['y2'])
+                    predict_center_x = (predict_x1 + predict_x2) / 2
+                    predict_center_y = (predict_y1 + predict_y2) / 2
+                    if abs(track_center_x - predict_center_x) > close_tolerance or \
+                        abs(track_center_y - predict_center_y) > close_tolerance: continue 
+                    # 计算距离圆心的距离
+                    dist_to_center = np.sqrt(((predict_center_x - circle_center_x)**2 + (predict_center_y - circle_center_y)**2))                   
+                    # 计算方向(1-8)
+                    direction = self.calculate_oct_direction(circle_center_x, circle_center_y, predict_center_x, predict_center_y)
+                    # 添加到匹配列表
+                    match_found.append((track_frame_num,
+                                        predict_x1,
+                                        predict_y1,
+                                        predict_x2,
+                                        predict_y2,
+                                        predict_center_x,
+                                        predict_center_y,
+                                        direction,
+                                        dist_to_center))
+
+
+                if not match_found:
+                    print(f"preprocess_tap_data: no match found for track_id {track_id} at frame {track_frame_num}")
+                    continue
+                elif len(match_found) > 1:
+                    print(f"preprocess_tap_data: multiple matches found for track_id {track_id} at frame {track_frame_num}")
+                    match_found.sort(key=lambda x: x[-1]) # 按距离排序
+
+                # 过滤 scale 阶段的数据
+                dist_to_center = match_found[0][-1]
+                if abs(dist_to_center - dist_start) < start_tolerance:
+                    continue # 掐头
+                elif dist_to_center > dist_end:
+                    continue # 去尾
+
+                predict_track_path.append(match_found[0])
+
+            
+            if not predict_track_path:
+                print(f"preprocess_tap_data: predict_track_path not found for track_id {track_id}")
+                continue
+            predict_track_path.sort(key=lambda x: x[0]) # 按frame排序
+            # 检验长度
+            if len(predict_track_path) < 5:
+                print(f"preprocess_tap_data: predict_track_path too short for track_id {track_id}, length: {len(predict_track_path)}")
+                continue
+            # 检验方向
+            directions = [x[7] for x in predict_track_path]
+            if len(set(directions)) != 1:
+                print(f"preprocess_tap_data: directions not consistent for track_id {track_id}")
+                continue
+            # 添加到tap_data
+            path = []
+            for frame_num, x1, y1, x2, y2, center_x, center_y, direction, dist_to_center in predict_track_path:
+                path.append({
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'center_x': center_x,
+                    'center_y': center_y,
+                    'dist': dist_to_center
+                })
+            tap_data[(track_id, directions[0])] = path
+
+        if not tap_data:
+            print("preprocess_tap_data: no tap data")
+            return {}
+
+        return tap_data
+    
+
+
+    @log_error
+    def estimate_note_DefaultMsec(self, tap_data, circle_info, fps):
+        """
+        估计 DefaultMsec
+
+        正向：
+        音符移动阶段的生命周期是 DefaultMsec (ms)
+        音符从起点移动到判定线需要耗时 DefaultMsec (ms)
+
+        时间进度 = (current_Msec - leave_start_Msec) / DefaultMsec
+        travelled_dist = total_dist * time_progress
+        current_dist = startPos + travelled_dist
+        """
+
+        note_speeds = []
+
+        for (track_id, direction), path in tap_data.items():
+            frame_num_start = path[0]['frame']
+            frame_num_end = path[-1]['frame']
+            dist_start = path[0]['dist']
+            dist_end = path[-1]['dist']
+
+            frame_num_diff = frame_num_end - frame_num_start
+            total_dist = dist_end - dist_start
+            note_speed = total_dist / frame_num_diff # pixel/frame
+            note_speeds.append(note_speed)
+
+            #self.draw_path_on_frame(track_id, frame_num_start, path, circle_info)
+
+        mean = np.mean(note_speeds)
+        min = np.min(note_speeds)
+        max = np.max(note_speeds)
+        median = np.median(note_speeds)
+        std_dev = np.std(note_speeds)
+        print(f"Avg note speed: Mean {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev:.3f}")
+
+        note_DefaultMsec = self.get_note_DefaultMsec(mean, fps, circle_info[2])
+        return note_DefaultMsec
+
+
+
+    @log_error
+    def get_note_DefaultMsec(self, detected_note_speed, fps, circle_radius):
+
+        def get_standard_note_DefaultMsec(ui_speed):
+            # 游戏源码实现
+            OptionNotespeed = int(ui_speed * 100 + 100) # 6.25 = 725
+            NoteSpeedForBeat = 1000 / (OptionNotespeed / 60)
+            DefaultMsec = NoteSpeedForBeat * 4
+            return DefaultMsec
+
+        offset = 0.985
+        total_dist = circle_radius * 0.75
+        detected_note_speed = detected_note_speed * fps / 1000 # pixel/frame to pixel/ms
+        note_lifetime = total_dist / detected_note_speed * offset
+
+        # 查找最接近的 DefaultMsec
+        cloest_DefaultMsec = 0
+        cloest_i = 0
+        i = 1
+        while i <= 10:
+
+            DefaultMsec = get_standard_note_DefaultMsec(i)
+
+            if abs(DefaultMsec - note_lifetime) < abs(cloest_DefaultMsec - note_lifetime):
+                cloest_DefaultMsec = DefaultMsec
+                cloest_i = i
+            i += 0.25
+
+        print(f"estimate note speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {note_lifetime:.3f}ms)")
+
+        return cloest_DefaultMsec
+
+
+
+
+
+
+
+    @log_error
+    def draw_path_on_frame(self, track_id, frame_num, path, circle_info):
+          
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+        ret, frame = self.cap.read()
+        if not ret:
+            print(f"draw_path_on_frame: failed to read frame {frame_num}")
+            return
+        
+        circle_center_x, circle_center_y, circle_radius = circle_info
+        cv2.putText(frame, f"track_id: {track_id}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.circle(frame, (int(circle_center_x), int(circle_center_y)), int(circle_radius*0.25), (0, 255, 0), 2)
+
+        for point in path:
+            frame_num = point['frame']
+            center_x = point['center_x']
+            center_y = point['center_y']
+            cv2.circle(frame, (int(center_x), int(center_y)), 3, (0, 0, 255), -1)
+
+        cv2.imshow('Note Speed', frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+
+
+    @log_error
+    def calculate_oct_direction(self, circle_center_x, circle_center_y, note_x, note_y):
+        x_diff = note_x - circle_center_x
+        y_diff = note_y - circle_center_y
+        if x_diff > 0 and y_diff < 0:
+            # 1, 2
+            if abs(x_diff) < abs(y_diff):
+                return 1
+            else:
+                return 2
+        elif x_diff > 0 and y_diff > 0:
+            # 3, 4
+            if abs(x_diff) > abs(y_diff):
+                return 3
+            else:
+                return 4
+        elif x_diff < 0 and y_diff > 0:
+            # 5, 6
+            if abs(x_diff) < abs(y_diff):
+                return 5
+            else:
+                return 6
+        elif x_diff < 0 and y_diff < 0:
+            # 7, 8
+            if abs(x_diff) > abs(y_diff):
+                return 7
+            else:
+                return 8
                 
 
 
@@ -115,41 +376,7 @@ class NoteAnalyzer:
 
 
     
-    
-    def get_note_DefaultMsec(self, detected_note_speed, fps, circle_radius):
 
-        def get_standard_note_DefaultMsec(ui_speed):
-            # 游戏源码实现
-            OptionNotespeed = int(ui_speed * 100 + 100) # 6.25 = 725
-            NoteSpeedForBeat = 1000 / (OptionNotespeed / 60)
-            DefaultMsec = NoteSpeedForBeat * 4
-            return DefaultMsec
-
-        offset = 5
-        total_dist = circle_radius * 0.75
-
-        # detected_note_speed 单位是 像素/帧
-        Msec_per_frame = 1000 / fps
-        detected_note_speed_per_Msec = detected_note_speed / Msec_per_frame
-        note_lifetime = total_dist / detected_note_speed_per_Msec + offset
-
-        # 查找最接近的 DefaultMsec
-        cloest_DefaultMsec = 0
-        cloest_i = 0
-        i = 1
-        while i <= 10:
-
-            DefaultMsec = get_standard_note_DefaultMsec(i)
-
-            if abs(DefaultMsec - note_lifetime) < abs(cloest_DefaultMsec - note_lifetime):
-                cloest_DefaultMsec = DefaultMsec
-                cloest_i = i
-            i += 0.25
-
-        print(f"estimate note speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {note_lifetime:.3f}ms)")
-
-        return cloest_DefaultMsec
-    
 
 
     def predict_note_remaining_time(self, dist, circle_info):
@@ -165,105 +392,6 @@ class NoteAnalyzer:
 
         return remaining_Msec
 
-
-
-    def draw_circle(self, video_path):
-        try:
-            cap = cv2.VideoCapture(video_path)
-            if not cap.isOpened():
-                raise Exception(f"Cannot open video file: {video_path}")
-            circle_center_x = 540
-            circle_center_y = 540
-            circle_radius = int(478 * 0.9)
-            while True:
-                ret, frame = cap.read()
-                if not ret: break
-                # 绘制圆
-                cv2.circle(frame, (circle_center_x, circle_center_y), circle_radius, (0, 255, 0), 2)
-                # 显示当前帧
-                cv2.imshow('Circle', frame)
-                # 按 'q' 键退出
-                key = cv2.waitKey(0)
-                if key & 0xFF == ord('q'):
-                    break
-        except Exception as e:
-            raise Exception(f"Error in draw_circle: {e}")
-        
-
-
-    def get_precise_center(self, frame_num, track_points, class_id, track_id):
-
-        try:
-            x1, y1, x2, y2 = track_points
-
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-            ret, frame = self.cap.read()
-
-            # 0 hold, 1 slide, 2 tap, 3 touch, 4 touch_hold
-            if class_id == 2:
-
-                # 裁剪获得略大的note图像
-                bigger = 60
-                x1 = max(0, x1 - bigger)
-                y1 = max(0, y1 - bigger)
-                x2 = min(1080, x2 + bigger)
-                y2 = min(1080, y2 + bigger)
-                note_img = frame[y1:y2, x1:x2]
-                # 图像处理
-                gray_frame = cv2.cvtColor(note_img, cv2.COLOR_BGR2GRAY)
-                _, threshold_frame = cv2.threshold(gray_frame, 170, 255, cv2.THRESH_BINARY)
-                # 寻找轮廓
-                circles = {}
-                contours, _ = cv2.findContours(threshold_frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-                for contour in contours:
-                    # 验证轮廓是否接近圆形（圆形度大于0.9）
-                    (x, y), radius = cv2.minEnclosingCircle(contour)
-                    area = cv2.contourArea(contour)
-                    circle_area = 3.14 * radius * radius
-                    if circle_area <= 0: continue
-                    circularity = area / circle_area
-                    if circularity < 0.9: continue
-                    # 如果中心相近（允许x,y各有±5的误差），保留最大半径的音符
-                    found_similar = False
-                    similar_key = None
-                    for existing_key in circles.keys():
-                        if abs(existing_key[0] - x) <= 5 and abs(existing_key[1] - y) <= 5:
-                            found_similar = True
-                            similar_key = existing_key
-                            break
-                    if found_similar:
-                        if circles[similar_key][2] < radius:
-                            del circles[similar_key]
-                            circles[(x, y)] = (x, y, radius)
-                    else:
-                        circles[(x, y)] = (x, y, radius)
-                # 如果找到多个圆形，选择与原始音符中心最接近的圆形
-                if not circles:
-                    print(f"Warning: No circles found for frame {frame_num}, track_id {track_id}")
-                    return None, None
-                og_center_x = (x1 + x2) / 2
-                og_center_y = (y1 + y2) / 2
-                closest_circle = min(circles.values(), key=lambda c: np.sqrt((c[0] - og_center_x) ** 2 + (c[1] - og_center_y) ** 2))
-                x, y, r = closest_circle
-                # 在新窗口中显示note图像和圆
-                if not self.show_note_img: return
-                cv2.circle(note_img, (int(x), int(y)), int(r), (0, 255, 0), 2)
-                cv2.circle(note_img, (int(x), int(y)), 3, (0, 0, 255), -1)
-                cv2.imshow('Note', note_img)
-                key = cv2.waitKey(0) & 0xFF
-                if key == ord('r'):
-                    self.show_note_img = False
-                cv2.destroyAllWindows()
-                # 返回精确的圆心坐标
-                precise_center_x = int(x + x1)
-                precise_center_y = int(y + y1)
-                return precise_center_x, precise_center_y
-            
-            else:
-                return None, None
-
-        except Exception as e:
-            raise Exception(f"Error in get_precise_center: {e}")
 
 
     # debug
@@ -284,11 +412,14 @@ class NoteAnalyzer:
             self.cap = cv2.VideoCapture(std_video)
             
             # Load detection data
-            self.final_tracks, self.track_results_all, self.predict_results_all, self.metadata = self.load_detection_data(output_dir, video_name)
+            final_tracks, track_results_all, predict_results_all, metadata = self.load_detection_data(output_dir, video_name)
+
+            tap_data = self.preprocess_tap_data(final_tracks, track_results_all, predict_results_all, circle_info)
+            self.note_DefaultMsec = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
 
             # Calculate speed
-            print(f"Calculating note speed...")
-            self.note_speed = self.calculate_note_speed(circle_info, fps, debug)
+            #print(f"Calculating note speed...")
+            #self.note_speed = self.calculate_note_speed(circle_info, fps, debug)
             #self.touch_speed = self.calculate_touch_speed(circle_info, fps, debug)
 
             # Calculate note time
@@ -417,96 +548,6 @@ class NoteAnalyzer:
         except Exception as e:
             raise Exception(f"Error in calculate_tap_info: {e}")
 
-
-
-    def calculate_note_speed(self, circle_info, fps, debug):
-
-        # use predict only:
-        # note speed: Mean: 19.569, Min: 17.747, Max: 21.186, Median: 19.678, Std Dev: 0.691
-        # estimate note speed: 6.75 - 309.677ms (detect 310.329ms)
-
-        try:
-            circle_center_x, circle_center_y, circle_radius = circle_info
-
-            dist_to_center_dict = {}
-
-            # read final_tracks
-            for track_id, track_data in self.final_tracks.items():
-                if 'path' not in track_data: continue
-                track_path = track_data['path']
-                if len(track_path) < 5: continue
-                class_id = int(track_data['class_id'])
-
-                if class_id != 2: continue # tap
-                dist_to_center_dict[track_id] = []
-
-                for track_box in track_path:
-                    track_frame_num = int(track_box['frame'])
-                    track_x1 = int(track_box['x1'])
-                    track_y1 = int(track_box['y1'])
-                    track_x2 = int(track_box['x2'])
-                    track_y2 = int(track_box['y2'])
-                    track_points = (track_x1, track_y1, track_x2, track_y2)
-                    
-                    #precise_center_x, precise_center_y = self.get_precise_center(track_frame_num, track_points, class_id, track_id)
-                    self.get_precise_center(track_frame_num, track_points, class_id, track_id)
-
-                    #dist_to_center = np.sqrt(((precise_center_x - circle_center_x)**2 + (precise_center_y - circle_center_y)**2))
-                    track_center_x = int((track_x1 + track_x2) / 2)
-                    track_center_y = int((track_y1 + track_y2) / 2)
-                    dist_to_center = np.sqrt(((track_center_x - circle_center_x)**2 + (track_center_y - circle_center_y)**2))
-                    dist_to_center_dict[track_id].append((dist_to_center, track_frame_num))
-
-
-            start_tolerance = circle_radius * 0.05
-            end_tolerance = circle_radius * 0.15
-            dist_start = circle_radius * 0.25
-            dist_end = circle_radius
-            final_tap_speed = {}
-            for track_id, distances in dist_to_center_dict.items():
-                
-                distances.sort(key=lambda x: x[1]) # 按frame排序
-                leave_start = (0, 0)
-                reach_end = (0, 0)
-                for dist, frame_num in distances:
-                    # 只取中间段的数据
-                    if abs(dist - dist_start) < start_tolerance:
-                        continue
-                    elif abs(dist - dist_end) < end_tolerance:
-                        continue
-                    
-                    if leave_start[1] == 0: leave_start = (dist, frame_num)
-                    reach_end = (dist, frame_num)
-                
-                #print(f"track_id: {track_id}, leave_start: {leave_start}, reach_end: {reach_end}")
-                if leave_start[1] > 0 and reach_end[1] > 0 and reach_end[1] > leave_start[1]:
-                    total_dist = reach_end[0] - leave_start[0]
-                    total_frame = reach_end[1] - leave_start[1]
-                    note_speed = total_dist / total_frame
-                    final_tap_speed[track_id] = note_speed
-
-
-            # calcualte average speed
-            if not final_tap_speed:
-                print('2')
-                return 0
-            
-            if debug:
-                data = list(final_tap_speed.values())
-                mean = np.mean(data)
-                min = np.min(data)
-                max = np.max(data)
-                median = np.median(data)
-                std_dev = np.std(data)
-                print(f"note speed: Mean: {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev:.3f}")
-
-            DefaultMsec = self.get_note_DefaultMsec(mean, fps, circle_radius)
-
-            return round(DefaultMsec, 3)
-
-        except Exception as e:
-            raise Exception(f"Error in calculate_note_speed: {e}")
-        
 
 
     def calculate_touch_speed(self, circle_info, fps, debug):
@@ -677,18 +718,27 @@ class NoteAnalyzer:
 
 
 if __name__ == "__main__":
+
     analyzer = NoteAnalyzer()
-    id = '6.00'
-    state = {
-        #'video_name': '踊',
+    
+    id = '7.50'
+    state1 = {
         'video_name': f'test_{id}',
-        #'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
         'detect_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
         'std_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_standardlized.mp4",
         'debug': True,
         'video_fps': 60,
-        #'bpm': 120,
         'bpm': 170, # test
     }
-    analyzer.process(state)
-    #analyzer.draw_circle(state['detect_video_path'])
+    
+
+    state2 = {
+        'video_name': '踊',
+        'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
+        'std_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_standardlized.mp4",
+        'debug': True,
+        'video_fps': 60,
+        'bpm': 120, # 踊
+    }
+
+    analyzer.process(state1)

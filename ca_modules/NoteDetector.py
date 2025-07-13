@@ -392,7 +392,7 @@ class NoteDetector:
                                         if i == 4:  # track_id
                                             track_values.append(int(val))
                                         elif i == 5:  # confidence
-                                            track_values.append(round(float(val), 2))
+                                            track_values.append(round(float(val), 5))
                                         elif i == 6:  # class_id
                                             track_values.append(int(val))
                                         else:  # x1, y1, x2, y2
@@ -640,7 +640,7 @@ class NoteDetector:
                         'y1': int(point['y1']),
                         'x2': int(point['x2']),
                         'y2': int(point['y2']),
-                        'conf': round(float(point['confidence']), 2)
+                        'conf': round(float(point['confidence']), 5)
                     }
                     final_tracks_serializable[str(track_id)]['path'].append(serializable_point)
             
@@ -752,17 +752,33 @@ class NoteDetector:
 
 if __name__ == "__main__":
 
-    # raw 踊
-    # 380, 9670, (1702, 702), r 568
 
+    test = 0
+
+    if test == 1:
+        for id in ['6.00', '6.25', '6.50', '6.75', '7.00', '7.25', '7.50']:
+            video_path = rf"D:\git\mai-chart-analyse\yolo-train\input\test_{id}.mp4"
+            start = 520
+            end = 2910 
+            cap = cv2.VideoCapture(video_path)
+            state = {
+                'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+                'circle_center': (1702, 703),
+                'circle_radius': 568,
+                'debug': True
+            }
+            cap.release()
+            detector = NoteDetector()
+            detector.main(state, video_path, start, end)
+
+        exit(0)
+
+
+    # raw 踊
+    # 380, 9670, (1702, 703), r 568
     video_path = r"C:\Users\ck273\Desktop\踊.mp4"
     start=380
     end=9670
-    #video_path = r"D:\git\mai-chart-analyse\yolo-train\input\test_6.00.mp4"
-    #start = 520
-    #end = 2910
-
-    # O (1702, 702), R 568, start=400, end=9670
     cap = cv2.VideoCapture(video_path)
     state = {
         'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
@@ -773,7 +789,5 @@ if __name__ == "__main__":
         'debug': True
     }
     cap.release()
-
     detector = NoteDetector()
     detector.main(state, video_path, start, end)
-    #detector.main(state, start=400)
