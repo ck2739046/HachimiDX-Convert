@@ -21,8 +21,10 @@ def log_error(func):
 
 class NoteAnalyzer:
     def __init__(self):
-        self.note_DefaultMsec = -1
-        self.touch_DefaultMsec = -1
+        self.note_DefaultMsec = 0
+        self.note_OptionNotespeed = 0
+        self.touch_DefaultMsec = 0
+        self.touch_OptionNotespeed = 0
         self.cap = None
 
 
@@ -175,15 +177,8 @@ class NoteAnalyzer:
     @log_error
     def estimate_note_DefaultMsec(self, tap_data, circle_info, fps):
         """
-        估计 DefaultMsec
-
-        正向：
         音符移动阶段的生命周期是 DefaultMsec (ms)
-        音符从起点移动到判定线需要耗时 DefaultMsec (ms)
-
-        时间进度 = (current_Msec - leave_start_Msec) / DefaultMsec
-        travelled_dist = total_dist * time_progress
-        current_dist = startPos + travelled_dist
+        从起点移动到判定线需要耗时 DefaultMsec (ms)
         """
 
         note_speeds = []
@@ -208,8 +203,72 @@ class NoteAnalyzer:
         std_dev = np.std(note_speeds)
         print(f"Avg note speed: Mean {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev:.3f}")
 
-        note_DefaultMsec = self.get_note_DefaultMsec(mean, fps, circle_info[2])
-        return note_DefaultMsec
+        note_DefaultMsec, note_OptionNotespeed = self.get_note_DefaultMsec(mean, fps, circle_info[2])
+        return note_DefaultMsec, note_OptionNotespeed
+    
+
+
+    @log_error
+    def analyze_tap_data(self, tap_data, circle_info, fps, bpm):
+
+        tap_info = {}
+        for (track_id, direction), path in tap_data.items():
+            # 平均所有轨迹的到达时间
+            times = []
+            for point in path:
+                frame_num = point['frame']
+                dist = point['dist']
+                reach_end_Msec2 = self.predict_note_reach_end_time(dist, frame_num, circle_info[2], fps)
+                times.append(reach_end_Msec2)
+            mean = np.mean(times)
+            tap_info[(track_id, direction)] = mean
+
+        # 打印结果
+        last_time = 0
+        for (track_id, direction), time in tap_info.items():
+            if last_time == 0:
+                last_time = time
+                print(f"{direction}-{time:.3f}, ", end='')
+                continue
+            diff_Msec = time - last_time
+            diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
+            print(f"{direction}-{diff_beat:.3f}, ", end='')
+
+            last_time = time
+
+
+
+    @log_error
+    def predict_note_reach_end_time(self, cur_dist, cur_frame, circle_radius, fps):
+        '''
+        正向:
+        [dist_offset] = -1/120 * 总距离 * (OptionNotespeed/150f -1)
+
+        时间进度 = (current_Msec - leave_start_Msec) / [DefaultMsec]
+        travelled_dist = 时间进度 * [total_dist]
+        current_dist = [startPos] + travelled_dist + [dist_offset]
+
+        逆向:
+        已知 current_dist, [dist_offset], [startPos]
+        -> travelled_dist = current_dist - startPos - dist_offset
+        已知 travelled_dist, [total_dist]
+        -> 时间进度 = travelled_dist / total_dist
+        已知 时间进度, [DefaultMsec], current_Msec
+        -> leave_start_Msec = current_Msec - 时间进度 * DefaultMsec
+        -> reach_end_Msec = leave_start_Msec + DefaultMsec
+        '''
+
+        cur_time = cur_frame / fps * 1000 # 转换为毫秒
+        total_dist = circle_radius * 0.75
+        dist_offset = -1/120 * total_dist * (self.note_OptionNotespeed / 150 - 1)
+        start_pos = circle_radius * 0.25
+
+        travelled_dist = cur_dist - start_pos - dist_offset
+        time_progress = travelled_dist / total_dist
+        leave_start_Msec = cur_time - time_progress * self.note_DefaultMsec
+        reached_end_Msec = leave_start_Msec + self.note_DefaultMsec
+
+        return reached_end_Msec
 
 
 
@@ -221,7 +280,7 @@ class NoteAnalyzer:
             OptionNotespeed = int(ui_speed * 100 + 100) # 6.25 = 725
             NoteSpeedForBeat = 1000 / (OptionNotespeed / 60)
             DefaultMsec = NoteSpeedForBeat * 4
-            return DefaultMsec
+            return DefaultMsec, OptionNotespeed
 
         offset = 0.985
         total_dist = circle_radius * 0.75
@@ -231,19 +290,22 @@ class NoteAnalyzer:
         # 查找最接近的 DefaultMsec
         cloest_DefaultMsec = 0
         cloest_i = 0
+        cloest_OptionNotespeed = 0
         i = 1
         while i <= 10:
 
-            DefaultMsec = get_standard_note_DefaultMsec(i)
+            DefaultMsec, OptionNotespeed = get_standard_note_DefaultMsec(i)
 
             if abs(DefaultMsec - note_lifetime) < abs(cloest_DefaultMsec - note_lifetime):
                 cloest_DefaultMsec = DefaultMsec
                 cloest_i = i
+                cloest_OptionNotespeed = OptionNotespeed
             i += 0.25
 
         print(f"estimate note speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {note_lifetime:.3f}ms)")
 
-        return cloest_DefaultMsec
+        return cloest_DefaultMsec, cloest_OptionNotespeed
+    
 
 
 
@@ -379,19 +441,6 @@ class NoteAnalyzer:
 
 
 
-    def predict_note_remaining_time(self, dist, circle_info):
-
-        circle_center_x, circle_center_y, circle_radius = circle_info
-        start = circle_radius * 0.25
-        end = circle_radius
-        total_dist = end - start
-
-        travelled_dist = (dist - start) / total_dist
-        travelled_Msec = travelled_dist * self.note_DefaultMsec
-        remaining_Msec = self.note_DefaultMsec - travelled_Msec
-
-        return remaining_Msec
-
 
 
     # debug
@@ -415,7 +464,8 @@ class NoteAnalyzer:
             final_tracks, track_results_all, predict_results_all, metadata = self.load_detection_data(output_dir, video_name)
 
             tap_data = self.preprocess_tap_data(final_tracks, track_results_all, predict_results_all, circle_info)
-            self.note_DefaultMsec = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
+            self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
+            self.analyze_tap_data(tap_data, circle_info, fps, bpm)
 
             # Calculate speed
             #print(f"Calculating note speed...")
@@ -741,4 +791,4 @@ if __name__ == "__main__":
         'bpm': 120, # 踊
     }
 
-    analyzer.process(state1)
+    analyzer.process(state2)
