@@ -215,7 +215,8 @@ class NoteAnalyzer:
         max = np.max(note_speeds)
         median = np.median(note_speeds)
         std_dev = np.std(note_speeds)
-        print(f"Avg note speed: Mean {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev:.3f}")
+        std_dev_percent = std_dev / mean * 100
+        print(f"Avg note speed: Mean {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev_percent:.3f}%")
 
         note_DefaultMsec, note_OptionNotespeed = self.get_note_DefaultMsec(mean, fps, circle_info[2])
         return note_DefaultMsec, note_OptionNotespeed
@@ -520,10 +521,14 @@ class NoteAnalyzer:
             if len(set(positions)) != 1:
                 print(f"preprocess_tap_data: positions not consistent for track_id {track_id}")
                 continue
+            # 打印所有dist
+            # dists = [x[8] for x in path]
+            # dists.sort()
+            # print(f"[track_id {track_id}] dists: {[f'{d:.3f}' for d in dists]}")
             # 添加到touch_data
-            path = []
+            final_path = []
             for frame_num, x1, y1, x2, y2, center_x, center_y, position, dist_to_center in path:
-                path.append({
+                final_path.append({
                     'frame': frame_num,
                     'x1': x1,
                     'y1': y1,
@@ -533,7 +538,7 @@ class NoteAnalyzer:
                     'center_y': center_y,
                     'dist': dist_to_center
                 })
-            touch_data[(track_id, positions[0])] = path
+            touch_data[(track_id, positions[0])] = final_path
 
             counter += 1
             print(f"preprocessing touch data...{counter}", end='\r')
@@ -543,6 +548,7 @@ class NoteAnalyzer:
             return {}
         
         return touch_data
+
 
 
     @log_error
@@ -769,11 +775,40 @@ class NoteAnalyzer:
                 closeset_dist = dist
         
         return closeset_label
-
+    
 
 
     @log_error
-    def get_touch_DefaultMsec(self, detected_touch_DefaultMsec):
+    def estimate_touch_DefaultMsec(self, touch_data, circle_info, fps):
+
+        touch_speeds = []
+
+        for (track_id, direction), path in touch_data.items():
+            frame_num_start = path[0]['frame']
+            frame_num_end = path[-1]['frame']
+            dist_start = path[0]['dist']
+            dist_end = path[-1]['dist']
+
+            frame_num_diff = frame_num_end - frame_num_start
+            total_dist = dist_start - dist_end
+            touch_speed = total_dist / frame_num_diff
+            touch_speeds.append(touch_speed)
+
+        mean = np.mean(touch_speeds)
+        min = np.min(touch_speeds)
+        max = np.max(touch_speeds)
+        median = np.median(touch_speeds)
+        std_dev = np.std(touch_speeds)
+        std_dev_percent = std_dev / mean * 100
+        print(f"Avg touch speed: Mean {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev_percent:.3f}%")
+
+        touch_DefaultMsec, touch_OptionNotespeed = self.get_touch_DefaultMsec(mean, fps, circle_info[2])
+        return touch_DefaultMsec, touch_OptionNotespeed
+    
+
+
+    @log_error
+    def get_touch_DefaultMsec(self, detected_touch_speed, fps, circle_radius):
 
         def get_standard_touch_DefaultMsec(ui_speed):
             # 游戏源码实现
@@ -793,25 +828,32 @@ class NoteAnalyzer:
             OptionNotespeed = option_touchspeed_dict[float(ui_speed)]
             NoteSpeedForBeat = 1000 / (OptionNotespeed / 60)
             DefaultMsec = NoteSpeedForBeat * 4
-            return DefaultMsec
+            return DefaultMsec, OptionNotespeed
         
-        offset = 5
-        detected_touch_DefaultMsec += offset
-        # 检查 detected_touch_DefaultMsec 距离哪个标准值最近
-        closest_DefaultMsec = 0
-        closest_i = 0
+
+        offset = 0.97
+        total_dist = circle_radius * 0.07
+        detected_touch_speed = detected_touch_speed * fps / 1000 # pixel/frame to pixel/ms
+        note_lifetime = total_dist / detected_touch_speed * offset
+
+        # 查找最接近的 DefaultMsec
+        cloest_DefaultMsec = 0
+        cloest_i = 0
+        cloest_OptionNotespeed = 0
         i = 1
         while i <= 10:
-            DefaultMsec = get_standard_touch_DefaultMsec(i)
 
-            if abs(DefaultMsec - detected_touch_DefaultMsec) < abs(closest_DefaultMsec - detected_touch_DefaultMsec):
-                closest_DefaultMsec = DefaultMsec
-                closest_i = i
+            DefaultMsec, OptionNotespeed = get_standard_touch_DefaultMsec(i)
+
+            if abs(DefaultMsec - note_lifetime) < abs(cloest_DefaultMsec - note_lifetime):
+                cloest_DefaultMsec = DefaultMsec
+                cloest_i = i
+                cloest_OptionNotespeed = OptionNotespeed
             i += 0.25
 
-        print(f"estimate touch speed: {closest_i:.2f} - {closest_DefaultMsec:.3f}ms (detect {detected_touch_DefaultMsec:.3f}ms)")
+        print(f"estimate touch speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {note_lifetime:.3f}ms)")
 
-        return closest_DefaultMsec
+        return cloest_DefaultMsec, cloest_OptionNotespeed
 
 
     
@@ -862,12 +904,15 @@ class NoteAnalyzer:
             # tap
             print("Processing tap notes...", end = '\r')
             tap_data = self.preprocess_tap_data(final_tracks, track_results_all, predict_results_all, circle_info)
-            self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
-            tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps, bpm)
+            if tap_data:
+                self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
+                tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps, bpm)
 
             # touch
             print("Processing touch notes...", end = '\r')
             touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
+            if touch_data:
+                self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
 
 
 
@@ -1097,7 +1142,7 @@ if __name__ == "__main__":
     }
 
     
-    id = '6.00'
+    id = '7.50'
     state1 = {
         'video_name': f'test_{id}',
         'detect_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
@@ -1139,4 +1184,4 @@ if __name__ == "__main__":
         'touch_areas': touch_areas,
     }
 
-    analyzer.process(state1)
+    analyzer.process(state3)
