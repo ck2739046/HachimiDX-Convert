@@ -5,6 +5,7 @@ import numpy as np
 import functools
 import traceback
 from ultralytics import YOLO
+import time
 
 error_trace = []
 
@@ -172,6 +173,8 @@ class NoteAnalyzer:
                 })
             tap_data[(track_id, directions[0])] = path
 
+            #self.draw_path_on_frame(track_id, path[0]['frame']+3, path, circle_info)
+
         if not tap_data:
             print("preprocess_tap_data: no tap data")
             return {}
@@ -229,9 +232,7 @@ class NoteAnalyzer:
             mean = np.mean(times)
             tap_info[(track_id, direction)] = mean
 
-        return tap_info
-
-        '''
+        #'''
         last_time = 0
         for (track_id, direction), time in tap_info.items():
             if last_time == 0:
@@ -243,7 +244,10 @@ class NoteAnalyzer:
             print(f"{direction}-{diff_beat:.3f}, ", end='')
 
             last_time = time
-        '''
+        print() # 换行
+        #'''
+
+        return tap_info
 
 
     @log_error
@@ -251,8 +255,10 @@ class NoteAnalyzer:
         '''
         正向:
         [dist_offset] = -1/120 * 总距离 * (OptionNotespeed/150f -1)
+        [time_offset] = (OptionNotespeed/150f -1) * (-0.5 / (OptionNotespeed/150f -1)) * 1.6 * 1000 / 60
+        高速的dist和time偏移都是负值
 
-        时间进度 = (current_Msec - leave_start_Msec) / [DefaultMsec]
+        时间进度 = (current_Msec - leave_start_Msec + time_offset) / [DefaultMsec]
         travelled_dist = 时间进度 * [total_dist]
         current_dist = [startPos] + travelled_dist + [dist_offset]
 
@@ -261,19 +267,20 @@ class NoteAnalyzer:
         -> travelled_dist = current_dist - startPos - dist_offset
         已知 travelled_dist, [total_dist]
         -> 时间进度 = travelled_dist / total_dist
-        已知 时间进度, [DefaultMsec], current_Msec
-        -> leave_start_Msec = current_Msec - 时间进度 * DefaultMsec
+        已知 时间进度, [DefaultMsec], current_Msec, [time_offset]
+        -> leave_start_Msec = current_Msec - 时间进度 * DefaultMsec + time_offset
         -> reach_end_Msec = leave_start_Msec + DefaultMsec
         '''
 
         cur_time = cur_frame / fps * 1000 # 转换为毫秒
         total_dist = circle_radius * 0.75
         dist_offset = -1/120 * total_dist * (self.note_OptionNotespeed / 150 - 1)
+        time_offset = (self.note_OptionNotespeed / 150 - 1) * (-0.5 / (self.note_OptionNotespeed / 150 - 1)) * 1.6 * 1000 / 60
         start_pos = circle_radius * 0.25
 
         travelled_dist = cur_dist - start_pos - dist_offset
         time_progress = travelled_dist / total_dist
-        leave_start_Msec = cur_time - time_progress * self.note_DefaultMsec
+        leave_start_Msec = cur_time - time_progress * self.note_DefaultMsec + time_offset
         reached_end_Msec = leave_start_Msec + self.note_DefaultMsec
 
         return reached_end_Msec
@@ -335,7 +342,12 @@ class NoteAnalyzer:
             center_y = point['center_y']
             cv2.circle(frame, (int(center_x), int(center_y)), 3, (0, 0, 255), -1)
 
-        cv2.imshow('Note Speed', frame)
+        # Resize and show frame
+        resized_frame = cv2.resize(frame, None, fx=0.8, fy=0.8, interpolation=cv2.INTER_AREA)
+        window_name = f'Tap ID: {track_id}'
+        cv2.namedWindow(window_name)
+        cv2.moveWindow(window_name, 500, 80)
+        cv2.imshow(window_name, resized_frame)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -585,7 +597,11 @@ class NoteAnalyzer:
         # show frame in window
         thresh_roi_bgr = cv2.cvtColor(thresh_roi, cv2.COLOR_GRAY2BGR)
         combined_view = np.hstack((roi, thresh_roi_bgr))
-        cv2.imshow(f'ID{track_id}-{frame_num}-{i}', combined_view)
+        window_name = f'ID{track_id}-{frame_num}-{i}'
+        cv2.namedWindow(window_name)
+        cv2.moveWindow(window_name, 500, 500)
+        time.sleep(0.005)
+        cv2.imshow(window_name, combined_view)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
