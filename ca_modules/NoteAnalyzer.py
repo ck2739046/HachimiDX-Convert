@@ -823,13 +823,14 @@ class NoteAnalyzer:
     # debug
     def process(self, state: dict):
         try:
+            video_name = state['video_name']
+            print(f"NoteAnalyzer: {video_name}")
             print("NoteAnalyzer Initialize...", end = '\r')
 
             circle_center_x = 540
             circle_center_y = 540
             circle_radius = 478
             circle_info = (circle_center_x, circle_center_y, circle_radius)
-            video_name = state['video_name']
             detect_video_path = state['detect_video_path']
             output_dir = os.path.dirname(detect_video_path)
             debug = state['debug']
@@ -1138,4 +1139,4 @@ if __name__ == "__main__":
         'touch_areas': touch_areas,
     }
 
-    analyzer.process(state3)
+    analyzer.process(state1)

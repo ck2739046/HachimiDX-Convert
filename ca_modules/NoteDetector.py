@@ -301,7 +301,7 @@ class NoteDetector:
                     track_high_thresh=0.25,
                     track_low_thresh=0.1,
                     new_track_thresh=0.25,
-                    track_buffer=30,
+                    track_buffer=30 if thresh > 0.9 else 10,  # 减少touch/touch_hold缓冲区
                     match_thresh=thresh,   # 自定义阈值
                     fuse_score=True,
                     # min_box_area=10,
@@ -753,7 +753,7 @@ class NoteDetector:
 if __name__ == "__main__":
 
 
-    test = 4
+    test = 3
 
     if test == 1:
         for id in ['6.00', '6.25', '6.50', '6.75', '7.00', '7.25', '7.50']:
