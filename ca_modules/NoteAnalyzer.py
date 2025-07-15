@@ -233,23 +233,38 @@ class NoteAnalyzer:
             mean = np.mean(times)
             tap_info[(track_id, direction)] = mean
 
-        #'''
-        last_time = 0
-        for (track_id, direction), time in tap_info.items():
-            if last_time == 0:
+        '''
+        txt_path = r"C:\Users\ck273\Desktop\the EmpErroR\maidata.txt"
+        if os.path.exists(txt_path):
+            os.remove(txt_path)
+        with open(txt_path, 'w', encoding='utf-8') as f:
+            f.write('&title=the EmpErroR_test\n')
+            f.write('&artist=sasakure.UK\n')
+            f.write('&first=0.0333\n')
+            f.write('&des_3=ck273\n')
+            f.write('&lv_3=10.6\n')
+            f.write(f'&inote_3=({bpm})' + '{1},,,,{8}\n')
+            last_time = 0
+            for (track_id, direction), time in tap_info.items():
+                if last_time == 0:
+                    last_time = time
+                    print(f"[{time:.3f}] 5", end='')
+                    f.write(f'{direction}')
+                    continue
+                diff_Msec = time - last_time
+                diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
+                diff_beat_32 = abs(diff_beat) * 8
+                print(f"-{round(diff_beat_32, 1)}, {direction}", end='')
+
+                if round(diff_beat_32) == 0:
+                    f.write(f"/{direction}")
+                else:
+                    f.write(f"{round(diff_beat_32)*','}\n{direction}")
+
                 last_time = time
-                print(f"{direction}-{time:.3f}, ", end='')
-                continue
-            diff_Msec = time - last_time
-            diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
-
-            diff_beat_32 = round(diff_beat * 32)
-
-            print(f"{direction}-{diff_beat:.3f}, ", end='')
-
-            last_time = time
-        print() # 换行
-        #'''
+            print() # 换行
+            f.write(',E\n')
+        '''
 
         return tap_info
 
@@ -966,4 +981,14 @@ if __name__ == "__main__":
         'touch_areas': touch_areas,
     }
 
-    analyzer.process(state3)
+    state4 = {
+        'video_name': 'the EmpErroR',
+        'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\the emperror\the emperror_tracked.mp4",
+        'std_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\the emperror\the emperror_standardlized.mp4",
+        'debug': True,
+        'video_fps': 60,
+        'bpm': 240, # the EmpErroR
+        'touch_areas': touch_areas,
+    }
+
+    analyzer.process(state4)

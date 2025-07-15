@@ -753,7 +753,7 @@ class NoteDetector:
 if __name__ == "__main__":
 
 
-    test = 3
+    test = 4
 
     if test == 1:
         for id in ['6.00', '6.25', '6.50', '6.75', '7.00', '7.25', '7.50']:
@@ -784,8 +784,6 @@ if __name__ == "__main__":
         state = {
             'total_frames': round(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
             'circle_center': (1702, 703),
-            # 1920x1080: 959, 539
-            # 1080x1080: 539, 539
             'circle_radius': 568,
             'debug': True
         }
@@ -805,6 +803,21 @@ if __name__ == "__main__":
             # 1920x1080: 959, 539
             # 1080x1080: 539, 539
             'circle_radius': 478,
+            'debug': True
+        }
+        cap.release()
+        detector = NoteDetector()
+        detector.main(state, video_path, start, end)
+
+    if test == 4:
+        video_path = r"C:\Users\ck273\Desktop\the emperror.mp4"
+        start=550
+        end=8170
+        cap = cv2.VideoCapture(video_path)
+        state = {
+            'total_frames': round(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+            'circle_center': (1702, 703),
+            'circle_radius': 568,
             'debug': True
         }
         cap.release()
