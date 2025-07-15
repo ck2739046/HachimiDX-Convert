@@ -45,7 +45,7 @@ class NoteAnalyzer:
 
         返回格式:
         dict{
-            key: (track_id, direction),
+            key: (track_id, position),
             value: note path list
             [
                 {
@@ -65,6 +65,7 @@ class NoteAnalyzer:
 
         circle_center_x, circle_center_y, circle_radius = circle_info
         tap_data = {}
+        counter = 0
 
         close_tolerance = circle_radius * 0.05
         start_tolerance = circle_radius * 0.02
@@ -116,7 +117,7 @@ class NoteAnalyzer:
                     # 计算距离圆心的距离
                     dist_to_center = np.sqrt(((predict_center_x - circle_center_x)**2 + (predict_center_y - circle_center_y)**2))                   
                     # 计算方向(1-8)
-                    direction = self.calculate_oct_direction(circle_center_x, circle_center_y, predict_center_x, predict_center_y)
+                    position = self.calculate_oct_position(circle_center_x, circle_center_y, predict_center_x, predict_center_y)
                     # 添加到匹配列表
                     match_found.append((track_frame_num,
                                         predict_x1,
@@ -125,7 +126,7 @@ class NoteAnalyzer:
                                         predict_y2,
                                         predict_center_x,
                                         predict_center_y,
-                                        direction,
+                                        position,
                                         dist_to_center))
 
 
@@ -154,14 +155,14 @@ class NoteAnalyzer:
             if len(predict_track_path) < 5:
                 print(f"preprocess_tap_data: predict_track_path too short for track_id {track_id}, length: {len(predict_track_path)}")
                 continue
-            # 检验方向
-            directions = [x[7] for x in predict_track_path]
-            if len(set(directions)) != 1:
-                print(f"preprocess_tap_data: directions not consistent for track_id {track_id}")
+            # 检验方位
+            positions = [x[7] for x in predict_track_path]
+            if len(set(positions)) != 1:
+                print(f"preprocess_tap_data: positions not consistent for track_id {track_id}")
                 continue
             # 添加到tap_data
             path = []
-            for frame_num, x1, y1, x2, y2, center_x, center_y, direction, dist_to_center in predict_track_path:
+            for frame_num, x1, y1, x2, y2, center_x, center_y, position, dist_to_center in predict_track_path:
                 path.append({
                     'frame': frame_num,
                     'x1': x1,
@@ -172,7 +173,10 @@ class NoteAnalyzer:
                     'center_y': center_y,
                     'dist': dist_to_center
                 })
-            tap_data[(track_id, directions[0])] = path
+            tap_data[(track_id, positions[0])] = path
+
+            counter += 1
+            print(f"preprocessing tap data...{counter}", end='\r')
 
             #self.draw_path_on_frame(track_id, path[0]['frame']+3, path, circle_info)
 
@@ -233,38 +237,38 @@ class NoteAnalyzer:
             mean = np.mean(times)
             tap_info[(track_id, direction)] = mean
 
-        '''
-        txt_path = r"C:\Users\ck273\Desktop\the EmpErroR\maidata.txt"
-        if os.path.exists(txt_path):
-            os.remove(txt_path)
-        with open(txt_path, 'w', encoding='utf-8') as f:
-            f.write('&title=the EmpErroR_test\n')
-            f.write('&artist=sasakure.UK\n')
-            f.write('&first=0.0333\n')
-            f.write('&des_3=ck273\n')
-            f.write('&lv_3=10.6\n')
-            f.write(f'&inote_3=({bpm})' + '{1},,,,{8}\n')
-            last_time = 0
-            for (track_id, direction), time in tap_info.items():
-                if last_time == 0:
-                    last_time = time
-                    print(f"[{time:.3f}] 5", end='')
-                    f.write(f'{direction}')
-                    continue
-                diff_Msec = time - last_time
-                diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
-                diff_beat_32 = abs(diff_beat) * 8
-                print(f"-{round(diff_beat_32, 1)}, {direction}", end='')
+        
+        # txt_path = r"C:\Users\ck273\Desktop\the EmpErroR\maidata.txt"
+        # if os.path.exists(txt_path):
+        #     os.remove(txt_path)
+        # with open(txt_path, 'w', encoding='utf-8') as f:
+        #     f.write('&title=the EmpErroR_test\n')
+        #     f.write('&artist=sasakure.UK\n')
+        #     f.write('&first=0.0333\n')
+        #     f.write('&des_3=ck273\n')
+        #     f.write('&lv_3=10.6\n')
+        #     f.write(f'&inote_3=({bpm})' + '{1},,,,{8}\n')
+        #     last_time = 0
+        #     for (track_id, direction), time in tap_info.items():
+        #         if last_time == 0:
+        #             last_time = time
+        #             print(f"[{time:.3f}] 5", end='')
+        #             f.write(f'{direction}')
+        #             continue
+        #         diff_Msec = time - last_time
+        #         diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
+        #         diff_beat_32 = abs(diff_beat) * 8
+        #         print(f"-{round(diff_beat_32, 1)}, {direction}", end='')
 
-                if round(diff_beat_32) == 0:
-                    f.write(f"/{direction}")
-                else:
-                    f.write(f"{round(diff_beat_32)*','}\n{direction}")
+        #         if round(diff_beat_32) == 0:
+        #             f.write(f"/{direction}")
+        #         else:
+        #             f.write(f"{round(diff_beat_32)*','}\n{direction}")
 
-                last_time = time
-            print() # 换行
-            f.write(',E\n')
-        '''
+        #         last_time = time
+        #     print()
+        #     f.write(',E\n')
+        
 
         return tap_info
 
@@ -373,7 +377,7 @@ class NoteAnalyzer:
 
 
     @log_error
-    def calculate_oct_direction(self, circle_center_x, circle_center_y, note_x, note_y):
+    def calculate_oct_position(self, circle_center_x, circle_center_y, note_x, note_y):
         x_diff = note_x - circle_center_x
         y_diff = note_y - circle_center_y
         if x_diff > 0 and y_diff < 0:
@@ -438,6 +442,7 @@ class NoteAnalyzer:
 
         circle_center_x, circle_center_y, circle_radius = circle_info
         touch_data = {}
+        counter = 0
 
         # read final_tracks
         for track_id, track_data in final_tracks.items():
@@ -454,6 +459,8 @@ class NoteAnalyzer:
             temp_y2 = round(track_path[9]['y2'])
             temp_frame_num = round(track_path[9]['frame'])
             type_name, roi_threshold = self.classify_touch_type(temp_x1, temp_y1, temp_x2, temp_y2, temp_frame_num, track_id)
+
+            path = []
 
             for i in range(len(track_path)):
 
@@ -480,9 +487,62 @@ class NoteAnalyzer:
                     if not is_scale: continue
                 
                 # 计算精确位置
-                self.detect_precise_touch(i, roi, thresh_roi, circle_info, track_frame_num, track_id)
+                x1, y1, x2, y2, cx, cy, dist = self.detect_precise_touch(i, roi, thresh_roi, circle_info, track_frame_num, track_id)
+                if x1 is None or y1 is None or x2 is None or y2 is None or cx is None or cy is None or dist is None:
+                    print(f"preprocess_touch_data: [track_id {track_id}] fail to detect precise touch at frame {track_frame_num}")
+                    continue
+                
+                # 转换为frame坐标
+                x1 = round(x1 + track_x1 - 5)
+                y1 = round(y1 + track_y1 - 5)
+                x2 = round(x2 + track_x1 - 5)
+                y2 = round(y2 + track_y1 - 5)
+                cx = round(cx + track_x1 - 5)
+                cy = round(cy + track_y1 - 5)
+
+                # 计算方位
+                position = self.calculate_all_position(cx, cy)
+
+                # 添加轨迹点
+                path.append((track_frame_num, x1, y1, x2, y2, cx, cy, position, dist))
 
 
+            if not path:
+                print(f"preprocess_touch_data: path not found for track_id {track_id}")
+                continue
+            path.sort(key=lambda x: x[0]) # 按frame排序
+            # 检验长度
+            if len(path) < 5:
+                print(f"preprocess_tap_data: path too short for track_id {track_id}, length: {len(path)}")
+                continue
+            # 检验方位
+            positions = [x[7] for x in path]
+            if len(set(positions)) != 1:
+                print(f"preprocess_tap_data: positions not consistent for track_id {track_id}")
+                continue
+            # 添加到touch_data
+            path = []
+            for frame_num, x1, y1, x2, y2, center_x, center_y, position, dist_to_center in path:
+                path.append({
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'center_x': center_x,
+                    'center_y': center_y,
+                    'dist': dist_to_center
+                })
+            touch_data[(track_id, positions[0])] = path
+
+            counter += 1
+            print(f"preprocessing touch data...{counter}", end='\r')
+
+        if not touch_data:
+            print("preprocess_touch_data: no touch data")
+            return {}
+        
+        return touch_data
 
 
     @log_error
@@ -532,19 +592,51 @@ class NoteAnalyzer:
     def detect_precise_touch(self, i, roi, thresh_roi, circle_info, frame_num, track_id):
 
         circle_center_x, circle_center_y, circle_radius = circle_info
-        touch_radiu_min = circle_radius * 0.035
-        touch_radiu_max = circle_radius * 0.055
+        touch_radius_min = circle_radius * 0.035
+        touch_radius_max = circle_radius * 0.055
+        center_dot_min = circle_radius * 0.02
+        center_dot_max = circle_radius * 0.04
+        None_result = (None, None, None, None, None, None, None)
 
+        # 寻找中心点
+        note_cx = 0
+        note_cy = 0
+        roi_cx = (roi.shape[1] - 1) / 2
+        roi_cy = (roi.shape[0] - 1) / 2
+        gray_dot_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        _, thresh_dot_roi = cv2.threshold(gray_dot_roi, 160, 255, cv2.THRESH_BINARY)
         # 轮廓识别
-        frame_cx = roi.shape[1] // 2
-        frame_cy = roi.shape[0] // 2
+        contours, _ = cv2.findContours(thresh_dot_roi, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours: return None_result
+        for contour in contours:
+            (x, y), radius = cv2.minEnclosingCircle(contour)         
+            # 尺寸合适 
+            if radius < center_dot_min or radius > center_dot_max: continue
+            # 验证轮廓圆形度 (0.8)
+            area = cv2.contourArea(contour)
+            circle_area = 3.14 * radius * radius + 1e-6 # 避免除0错误
+            circularity = area / circle_area
+            if circularity < 0.8: continue
+            # 验证是否在中心附近
+            if abs(x - roi_cx) > center_dot_max or abs(y - roi_cy) > center_dot_max: continue
+            # 视为合法结果
+            note_cx = x
+            note_cy = y
+
+        if note_cx == 0 or note_cy == 0:
+            print(f"detect_precise_touch: [track_id {track_id}] no valid center point at frame {frame_num}")
+            return None_result
+
+
+        valid_points = {}
+        # 轮廓识别
         contours, _ = cv2.findContours(thresh_roi, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours: return None
+        if not contours: return None_result
         for contour in contours:
 
             # 尺寸合适
             (x, y), radius = cv2.minEnclosingCircle(contour)          
-            if radius < touch_radiu_min or radius > touch_radiu_max:
+            if radius < touch_radius_min or radius > touch_radius_max:
                 continue
 
             # 轮廓是三角形
@@ -566,15 +658,15 @@ class NoteAnalyzer:
             
             # 方向正确
             # 获取包围圆的上下左右四个点
-            up = (round(x), round(y - radius))
-            left = (round(x - radius), round(y))
-            down = (round(x), round(y + radius))
-            right = (round(x + radius), round(y))
+            up = (x, y - radius)
+            left = (x - radius, y)
+            down = (x, y + radius)
+            right = (x + radius, y)
             box_points = [up, left, down, right]
             # 计算轮廓的几何中心（centroid）
             M = cv2.moments(contour)
-            cx = round(M["m10"] / M["m00"])
-            cy = round(M["m01"] / M["m00"])
+            cx = M["m10"] / M["m00"]
+            cy = M["m01"] / M["m00"]
             # 计算三角形方向 (取离几何中心最近的点)
             distances = [np.linalg.norm(np.array((cx, cy)) - np.array(point)) for point in box_points]
             closest_index = np.argmin(distances)
@@ -582,52 +674,101 @@ class NoteAnalyzer:
             closest_box_point = box_points[closest_index]
             # 排除非法方向
             if orientation == "up":
-                if frame_cy - cy > 0: continue
+                if note_cy - cy > 0: continue
             elif orientation == "left":
-                if frame_cx - cx > 0: continue
+                if note_cx - cx > 0: continue
             elif orientation == "down":
-                if frame_cy - cy < 0: continue
+                if note_cy - cy < 0: continue
             elif orientation == "right":
-                if frame_cx - cx < 0: continue
+                if note_cx - cx < 0: continue
+            # 计算cloest_box_point到音符中心的距离
+            dist = np.sqrt(((closest_box_point[0] - note_cx) ** 2 + (closest_box_point[1] - note_cy) ** 2))
+            # 保存结果 
+            if orientation not in valid_points.keys():
+                valid_points[orientation] = (radius, dist, closest_box_point, contour, round(x), round(y))
+            else:
+                # 如果同方向已存在，取半径较小的
+                existing_radius = valid_points[orientation][0]
+                if radius < existing_radius:
+                    valid_points[orientation] = (radius, dist)
 
-            # Draw contour
-            cv2.drawContours(roi, [contour], 0, (0, 255, 0), 2)
-            cv2.circle(roi, closest_box_point, 2, (0, 0, 255), 2)
-            cv2.circle(roi, (frame_cx, frame_cy), 2, (255, 0, 0), 2)
-            cv2.putText(roi, f'{round(radius)}', (round(x), round(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 1)
+
+        # 计算精准的尺寸
+        dists = [value[1] for value in valid_points.values()]
+        if len(dists) <= 1:
+            print(f"detect_precise_touch: [track_id {track_id}] not enough valid points at frame {frame_num}")
 
 
-        # if i < 8:
-        #     if roi_threshold == 150:
-        #         output_dir = r'C:\Users\ck273\Desktop\touch_scale\天蓋_regular'
-        #     else:
-        #         output_dir = r'C:\Users\ck273\Desktop\touch_scale\天蓋_each'
-        #     if not os.path.exists(output_dir):
-        #         os.makedirs(output_dir)
-        #     filename = f"天蓋_{track_id}_{frame_num}.jpg"
-        #     output_path = os.path.join(output_dir, filename)
-        #     if os.path.exists(output_path):
-        #         os.remove(output_path)
-        #     cv2.imwrite(output_path, thresh_roi)
+            # show frame
+            thresh_roi_bgr = cv2.cvtColor(thresh_roi, cv2.COLOR_GRAY2BGR)
+            combined_view = np.hstack((roi, thresh_roi_bgr))
+            window_name = f'ID{track_id}-{frame_num}-{i}'
+            cv2.namedWindow(window_name)
+            cv2.moveWindow(window_name, 500, 500)
+            time.sleep(0.005)
+            cv2.imshow(window_name, combined_view)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+
+            return None_result
+        avg_dist = np.mean(dists)
+        touch_outer = circle_radius * 0.08
+        precise_x1 = note_cx - avg_dist - touch_outer
+        precise_y1 = note_cy - avg_dist - touch_outer
+        precise_x2 = note_cx + avg_dist + touch_outer
+        precise_y2 = note_cy + avg_dist + touch_outer
+
+
+        # cv2.rectangle(roi, (round(precise_x1), round(precise_y1)), (round(precise_x2), round(precise_y2)), (0, 255, 0), 2)
+        # cv2.circle(roi, (round(note_cx), round(note_cy)), 3, (255, 0, 0), 2)
+        # # draw contour
+        # for radius, dist, closest_box_point, contour, x, y in valid_points.values():
+        #     cv2.drawContours(roi, [contour], 0, (0, 255, 0), 2)
+        #     cv2.circle(roi, (round(closest_box_point[0]), round(closest_box_point[1])), 2, (0, 0, 255), 2)
+        #     cv2.putText(roi, f'{round(radius)}', (round(x), round(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 1)
+        # # show window
+        # thresh_roi_bgr = cv2.cvtColor(thresh_roi, cv2.COLOR_GRAY2BGR)
+        # combined_view = np.hstack((roi, thresh_roi_bgr))
+        # window_name = f'ID{track_id}-{frame_num}-{i}'
+        # cv2.namedWindow(window_name)
+        # cv2.moveWindow(window_name, 500, 500)
+        # time.sleep(0.005)
+        # cv2.imshow(window_name, combined_view)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+
+        # if roi_threshold == 150:
+        #     output_dir = r'C:\Users\ck273\Desktop\touch_scale\天蓋_regular'
+        # else:
+        #     output_dir = r'C:\Users\ck273\Desktop\touch_scale\天蓋_each'
+        # if not os.path.exists(output_dir):
+        #     os.makedirs(output_dir)
+        # filename = f"天蓋_{track_id}_{frame_num}.jpg"
+        # output_path = os.path.join(output_dir, filename)
+        # if os.path.exists(output_path):
+        #     os.remove(output_path)
+        # cv2.imwrite(output_path, thresh_roi)
+
+        return (precise_x1, precise_y1, precise_x2, precise_y2, note_cx, note_cy, avg_dist)
+    
+
+
+    @log_error
+    def calculate_all_position(self, note_x, note_y):
         
-        # return
+        closeset_label = None
+        closeset_dist = 999
 
-
-        # show frame in window
-        thresh_roi_bgr = cv2.cvtColor(thresh_roi, cv2.COLOR_GRAY2BGR)
-        combined_view = np.hstack((roi, thresh_roi_bgr))
-        window_name = f'ID{track_id}-{frame_num}-{i}'
-        cv2.namedWindow(window_name)
-        cv2.moveWindow(window_name, 500, 500)
-        time.sleep(0.005)
-        cv2.imshow(window_name, combined_view)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-
-
-
-
+        for label, data in self.touch_areas.items():
+            (cx, cy) = data['center']
+            dist = np.sqrt(((note_x - cx) ** 2 + (note_y - cy) ** 2))
+            if dist < closeset_dist:
+                closeset_label = label
+                closeset_dist = dist
+        
+        return closeset_label
 
 
 
@@ -682,6 +823,8 @@ class NoteAnalyzer:
     # debug
     def process(self, state: dict):
         try:
+            print("NoteAnalyzer Initialize...", end = '\r')
+
             circle_center_x = 540
             circle_center_y = 540
             circle_radius = 478
@@ -715,11 +858,15 @@ class NoteAnalyzer:
             # Load detection data
             final_tracks, track_results_all, predict_results_all, metadata = self.load_detection_data(output_dir, video_name)
 
+            # tap
+            print("Processing tap notes...", end = '\r')
             tap_data = self.preprocess_tap_data(final_tracks, track_results_all, predict_results_all, circle_info)
             self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
             tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps, bpm)
 
-            #self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
+            # touch
+            print("Processing touch notes...", end = '\r')
+            touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
 
 
 
@@ -991,4 +1138,4 @@ if __name__ == "__main__":
         'touch_areas': touch_areas,
     }
 
-    analyzer.process(state4)
+    analyzer.process(state3)
