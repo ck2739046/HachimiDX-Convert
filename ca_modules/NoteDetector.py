@@ -42,9 +42,9 @@ class NoteDetector:
         try:
             # 获取基础参数
             cap = cv2.VideoCapture(input_video)
-            video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS)
             cap.release()
             circle_radius = state['circle_radius']
@@ -85,10 +85,10 @@ class NoteDetector:
                 crop_y = (video_height - crop_size) // 2
             else:
                 # 裁出圆形区域
-                crop_size = int(circle_radius * 2.28)
+                crop_size = round(circle_radius * 2.28)
                 # 圆形区域左上角
-                crop_x = circle_center[0] - int(circle_radius * 1.14)
-                crop_y = circle_center[1] - int(circle_radius * 1.14)
+                crop_x = circle_center[0] - round(circle_radius * 1.14)
+                crop_y = circle_center[1] - round(circle_radius * 1.14)
 
             # 定义resize参数
             if crop_size == 1080:
@@ -108,9 +108,9 @@ class NoteDetector:
             if os.path.exists(output_path):
                 try:
                     cap = cv2.VideoCapture(output_path)
-                    output_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    output_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    output_total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    output_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    output_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    output_total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                     cap.release()
                     if output_width == 1080 and output_height == 1080:
                         if abs(output_total_frames - (end-start)) < 40:
@@ -220,12 +220,12 @@ class NoteDetector:
                     #aspect_ratio = width / height
                     #if aspect_ratio > 1.25: continue
                     # 增大slide检测框尺寸1.4x, 改善追踪效果
-                    new_width = int(width * 1.4)
-                    new_height = int(height * 1.4)
+                    new_width = round(width * 1.4)
+                    new_height = round(height * 1.4)
                     center_x = (x1 + x2) / 2
                     center_y = (y1 + y2) / 2
-                    new_x1 = max(0, int(center_x - new_width // 2))
-                    new_y1 = max(0, int(center_y - new_height // 2))
+                    new_x1 = max(0, round(center_x - new_width // 2))
+                    new_y1 = max(0, round(center_y - new_height // 2))
                     new_x2 = min(orig_shape[1], new_x1 + new_width)
                     new_y2 = min(orig_shape[0], new_y1 + new_height)
                     # 创建新box然后保存
@@ -277,10 +277,10 @@ class NoteDetector:
             print(f'Predict initialize...', end='\r', flush=True)
             # 重新获取处理后的视频信息
             cap = cv2.VideoCapture(input_path_final)
-            video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = round(cap.get(cv2.CAP_PROP_FPS))
+            total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             # 输出视频设置
             output_path = os.path.join(self.temp_dir, f'{video_name_final}_tracked.mp4')
             if os.path.exists(output_path):
@@ -390,13 +390,13 @@ class NoteDetector:
                                     track_values = []
                                     for i, val in enumerate(track[:7]):
                                         if i == 4:  # track_id
-                                            track_values.append(int(val))
+                                            track_values.append(round(val))
                                         elif i == 5:  # confidence
                                             track_values.append(round(float(val), 5))
                                         elif i == 6:  # class_id
-                                            track_values.append(int(val))
+                                            track_values.append(round(val))
                                         else:  # x1, y1, x2, y2
-                                            track_values.append(int(val))
+                                            track_values.append(round(val))
                                     track_results_serializable.append(track_values)
                     # 写入文件
                     track_frame_data = {
@@ -416,7 +416,7 @@ class NoteDetector:
                             # 获取轨迹信息
                             if len(track) < 7: continue
                             x1, y1, x2, y2, track_id, conf, class_id = track[:7]
-                            x1, y1, x2, y2, track_id, class_id = int(x1), int(y1), int(x2), int(y2), int(track_id), int(class_id)
+                            x1, y1, x2, y2, track_id, class_id = round(x1), round(y1), round(x2), round(y2), round(track_id), round(class_id)
                             # 计算中心点
                             center_x = (x1 + x2) // 2
                             center_y = (y1 + y2) // 2
@@ -630,16 +630,16 @@ class NoteDetector:
             final_tracks_serializable = {}
             for track_id, track_data in dict(final_tracks).items():
                 final_tracks_serializable[str(track_id)] = {
-                    'class_id': int(track_data['class_id']) if track_data['class_id'] is not None else None,
+                    'class_id': round(track_data['class_id']) if track_data['class_id'] is not None else None,
                     'path': []
                 }
                 for point in track_data['path']:
                     serializable_point = {
-                        'frame': int(point['frame']),
-                        'x1': int(point['x1']),
-                        'y1': int(point['y1']),
-                        'x2': int(point['x2']),
-                        'y2': int(point['y2']),
+                        'frame': round(point['frame']),
+                        'x1': round(point['x1']),
+                        'y1': round(point['y1']),
+                        'x2': round(point['x2']),
+                        'y2': round(point['y2']),
                         'conf': round(float(point['confidence']), 5)
                     }
                     final_tracks_serializable[str(track_id)]['path'].append(serializable_point)
@@ -762,7 +762,7 @@ if __name__ == "__main__":
             end = 2910 
             cap = cv2.VideoCapture(video_path)
             state = {
-                'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+                'total_frames': round(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
                 'circle_center': (1702, 703),
                 'circle_radius': 568,
                 'debug': True
@@ -782,7 +782,7 @@ if __name__ == "__main__":
         end=9670
         cap = cv2.VideoCapture(video_path)
         state = {
-            'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+            'total_frames': round(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
             'circle_center': (1702, 703),
             # 1920x1080: 959, 539
             # 1080x1080: 539, 539
@@ -800,7 +800,7 @@ if __name__ == "__main__":
         end=8300
         cap = cv2.VideoCapture(video_path)
         state = {
-            'total_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+            'total_frames': round(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
             'circle_center': (539, 539),
             # 1920x1080: 959, 539
             # 1080x1080: 539, 539

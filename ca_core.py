@@ -87,10 +87,10 @@ class ChartAnalyzer:
             
             # get video info
             video_name = os.path.basename(video_path).rsplit('.', 1)[0]
-            width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-            total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            width = round(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = round(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = round(self.cap.get(cv2.CAP_PROP_FPS))
+            total_frames = round(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
             if total_frames < 600: # 10s
                 raise Exception("load_video: video too short")
             

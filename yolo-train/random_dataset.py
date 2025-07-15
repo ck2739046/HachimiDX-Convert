@@ -45,7 +45,7 @@ def move_samples_to_valid(input_num):
         print("错误: 样本数量必须在0-1之间!")
         return False
 
-    num_samples = int(input_num * len(image_files))
+    num_samples = round(input_num * len(image_files))
     
     # 随机选择样本
     selected_files = random.sample(image_files, num_samples)
@@ -132,7 +132,7 @@ def move_samples_to_valid_advanced(input_num, round=None):
         print("错误: 样本数量必须在0-1之间!")
         return False
 
-    num_samples = int(input_num * len(image_files))
+    num_samples = round(input_num * len(image_files))
     
     # 随机选择样本
     selected_files = random.sample(list(image_files.items()), num_samples)

@@ -80,8 +80,8 @@ class ChartStartDetector:
 
             cap.set(cv2.CAP_PROP_POS_FRAMES, state['chart_start']) 
             circle_center = state["circle_center"]
-            outer_radius = int(state["circle_radius"] * 0.8)
-            inner_radius = int(state["circle_radius"] * 0.4)
+            outer_radius = round(state["circle_radius"] * 0.8)
+            inner_radius = round(state["circle_radius"] * 0.4)
             frame_number = state['chart_start']
             total_frames = state["total_frames"]
 
@@ -137,8 +137,8 @@ class ChartStartDetector:
                 raise Exception("find_outline_mask: Cannot read frame")
             
             circle_center = state["circle_center"]
-            outer_radius = int(state["circle_radius"] * 1.2)  # 120% radius
-            inner_radius = int(state["circle_radius"] * 0.8)  # 80% radius
+            outer_radius = round(state["circle_radius"] * 1.2)  # 120% radius
+            inner_radius = round(state["circle_radius"] * 0.8)  # 80% radius
             
             # Create outer mask (120% radius)
             outer_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
@@ -162,7 +162,7 @@ class ChartStartDetector:
             # 在新窗口中显示轮廓遮罩
             if state.get("debug", True):
                 # crop and resize
-                screen_r = int(state["circle_radius"] / 0.88)
+                screen_r = round(state["circle_radius"] / 0.88)
                 x1 = circle_center[0] - screen_r
                 x2 = circle_center[0] + screen_r
                 y1 = circle_center[1] - screen_r
@@ -190,7 +190,7 @@ class ChartStartDetector:
 
             cap.set(cv2.CAP_PROP_POS_FRAMES, first_black_frame + 60) 
             circle_center = state["circle_center"]
-            inner_radius = int(state["circle_radius"] * 0.8)
+            inner_radius = round(state["circle_radius"] * 0.8)
             frame_number = first_black_frame + 60
             total_frames = state["total_frames"]
 
@@ -267,7 +267,7 @@ class ChartStartDetector:
                 template_resampled = template.copy()
             
             # Calculate sample interval between beats
-            sample_interval = int(beat_interval * audio_sr)
+            sample_interval = round(beat_interval * audio_sr)
             template_length = len(template_resampled)
             
             # Create 4-beat template with proper intervals
@@ -301,7 +301,7 @@ class ChartStartDetector:
             # Convert chart_start frame to audio sample position
             offset = 5 * state["video_fps"]
             chart_start_time = (chart_start+offset) / state["video_fps"]
-            chart_start_sample = int(chart_start_time * audio_sr)
+            chart_start_sample = round(chart_start_time * audio_sr)
             if chart_start_sample >= len(audio_data):
                 raise Exception(f"template_match: chart_start exceeds audio length")
             
@@ -335,7 +335,7 @@ class ChartStartDetector:
             
             # Convert sample position to match frame
             match_time = max_pos / audio_sr
-            audio_start = int(match_time * state["video_fps"])
+            audio_start = round(match_time * state["video_fps"])
             if not 0 <= audio_start <= state["total_frames"]:
                 raise Exception(f"audio start {audio_start} out of bounds (0, {state['total_frames']})")
 

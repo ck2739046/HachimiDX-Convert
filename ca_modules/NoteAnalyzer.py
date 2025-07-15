@@ -6,6 +6,7 @@ import functools
 import traceback
 from ultralytics import YOLO
 import time
+from math import gcd
 
 error_trace = []
 
@@ -75,18 +76,18 @@ class NoteAnalyzer:
             if 'path' not in track_data: continue
             track_path = track_data['path']
             if len(track_path) < 5: continue
-            class_id = int(track_data['class_id'])
+            class_id = round(track_data['class_id'])
             if class_id != 2: continue # tap
 
             predict_track_path = []
 
             for track_box in track_path:
-                track_frame_num = int(track_box['frame'])
+                track_frame_num = round(track_box['frame'])
                 track_conf = float(track_box['conf'])
-                track_x1 = int(track_box['x1'])
-                track_y1 = int(track_box['y1'])
-                track_x2 = int(track_box['x2'])
-                track_y2 = int(track_box['y2'])
+                track_x1 = round(track_box['x1'])
+                track_y1 = round(track_box['y1'])
+                track_x2 = round(track_box['x2'])
+                track_y2 = round(track_box['y2'])
                 track_center_x = (track_x1 + track_x2) / 2
                 track_center_y = (track_y1 + track_y2) / 2
 
@@ -100,14 +101,14 @@ class NoteAnalyzer:
                     predict_conf = float(predict_result['confidence'])
                     if track_conf != predict_conf: continue
                     # 判断 class_id
-                    predict_class_id = int(predict_result['class'])
+                    predict_class_id = round(predict_result['class'])
                     if predict_class_id != class_id: continue
                     # 判断 中心距离
                     box = predict_result['box']
-                    predict_x1 = int(box['x1'])
-                    predict_y1 = int(box['y1'])
-                    predict_x2 = int(box['x2'])
-                    predict_y2 = int(box['y2'])
+                    predict_x1 = round(box['x1'])
+                    predict_y1 = round(box['y1'])
+                    predict_x2 = round(box['x2'])
+                    predict_y2 = round(box['y2'])
                     predict_center_x = (predict_x1 + predict_x2) / 2
                     predict_center_y = (predict_y1 + predict_y2) / 2
                     if abs(track_center_x - predict_center_x) > close_tolerance or \
@@ -241,6 +242,9 @@ class NoteAnalyzer:
                 continue
             diff_Msec = time - last_time
             diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
+
+            diff_beat_32 = round(diff_beat * 32)
+
             print(f"{direction}-{diff_beat:.3f}, ", end='')
 
             last_time = time
@@ -292,7 +296,7 @@ class NoteAnalyzer:
 
         def get_standard_note_DefaultMsec(ui_speed):
             # 游戏源码实现
-            OptionNotespeed = int(ui_speed * 100 + 100) # 6.25 = 725
+            OptionNotespeed = round(ui_speed * 100 + 100) # 6.25 = 725
             NoteSpeedForBeat = 1000 / (OptionNotespeed / 60)
             DefaultMsec = NoteSpeedForBeat * 4
             return DefaultMsec, OptionNotespeed
@@ -334,13 +338,13 @@ class NoteAnalyzer:
         
         circle_center_x, circle_center_y, circle_radius = circle_info
         cv2.putText(frame, f"track_id: {track_id}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        cv2.circle(frame, (int(circle_center_x), int(circle_center_y)), int(circle_radius*0.25), (0, 255, 0), 2)
+        cv2.circle(frame, (round(circle_center_x), round(circle_center_y)), round(circle_radius*0.25), (0, 255, 0), 2)
 
         for point in path:
             frame_num = point['frame']
             center_x = point['center_x']
             center_y = point['center_y']
-            cv2.circle(frame, (int(center_x), int(center_y)), 3, (0, 0, 255), -1)
+            cv2.circle(frame, (round(center_x), round(center_y)), 3, (0, 0, 255), -1)
 
         # Resize and show frame
         resized_frame = cv2.resize(frame, None, fx=0.8, fy=0.8, interpolation=cv2.INTER_AREA)
@@ -425,25 +429,25 @@ class NoteAnalyzer:
             if 'path' not in track_data: continue
             track_path = track_data['path']
             if len(track_path) < 10: continue
-            class_id = int(track_data['class_id'])
+            class_id = round(track_data['class_id'])
             if class_id != 3: continue # touch
 
             # classify touch type
-            temp_x1 = int(track_path[9]['x1'])
-            temp_y1 = int(track_path[9]['y1'])
-            temp_x2 = int(track_path[9]['x2'])
-            temp_y2 = int(track_path[9]['y2'])
-            temp_frame_num = int(track_path[9]['frame'])
+            temp_x1 = round(track_path[9]['x1'])
+            temp_y1 = round(track_path[9]['y1'])
+            temp_x2 = round(track_path[9]['x2'])
+            temp_y2 = round(track_path[9]['y2'])
+            temp_frame_num = round(track_path[9]['frame'])
             type_name, roi_threshold = self.classify_touch_type(temp_x1, temp_y1, temp_x2, temp_y2, temp_frame_num, track_id)
 
             for i in range(len(track_path)):
 
                 track_box = track_path[i]
-                track_frame_num = int(track_box['frame'])
-                track_x1 = int(track_box['x1'])
-                track_y1 = int(track_box['y1'])
-                track_x2 = int(track_box['x2'])
-                track_y2 = int(track_box['y2'])
+                track_frame_num = round(track_box['frame'])
+                track_x1 = round(track_box['x1'])
+                track_y1 = round(track_box['y1'])
+                track_x2 = round(track_box['x2'])
+                track_y2 = round(track_box['y2'])
 
                 # 读取视频帧
                 self.cap.set(cv2.CAP_PROP_POS_FRAMES, track_frame_num)
@@ -547,15 +551,15 @@ class NoteAnalyzer:
             
             # 方向正确
             # 获取包围圆的上下左右四个点
-            up = (int(x), int(y - radius))
-            left = (int(x - radius), int(y))
-            down = (int(x), int(y + radius))
-            right = (int(x + radius), int(y))
+            up = (round(x), round(y - radius))
+            left = (round(x - radius), round(y))
+            down = (round(x), round(y + radius))
+            right = (round(x + radius), round(y))
             box_points = [up, left, down, right]
             # 计算轮廓的几何中心（centroid）
             M = cv2.moments(contour)
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
+            cx = round(M["m10"] / M["m00"])
+            cy = round(M["m01"] / M["m00"])
             # 计算三角形方向 (取离几何中心最近的点)
             distances = [np.linalg.norm(np.array((cx, cy)) - np.array(point)) for point in box_points]
             closest_index = np.argmin(distances)
@@ -575,7 +579,7 @@ class NoteAnalyzer:
             cv2.drawContours(roi, [contour], 0, (0, 255, 0), 2)
             cv2.circle(roi, closest_box_point, 2, (0, 0, 255), 2)
             cv2.circle(roi, (frame_cx, frame_cy), 2, (255, 0, 0), 2)
-            cv2.putText(roi, f'{int(radius)}', (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 1)
+            cv2.putText(roi, f'{round(radius)}', (round(x), round(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 1)
 
 
         # if i < 8:
@@ -700,7 +704,7 @@ class NoteAnalyzer:
             self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
             tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps, bpm)
 
-            self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
+            #self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
 
 
 
@@ -752,17 +756,17 @@ class NoteAnalyzer:
                 if 'path' not in track_data: continue
                 track_path = track_data['path']
                 if len(track_path) < 5: continue
-                class_id = int(track_data['class_id'])
+                class_id = round(track_data['class_id'])
 
                 if class_id != 3: continue # touch
                 size_dict[track_id] = []
 
                 for track_box in track_path:
-                    track_frame_num = int(track_box['frame'])
-                    #track_center_x = int(track_box['center_x'])
-                    #track_center_y = int(track_box['center_y'])
-                    track_width = int(track_box['width'])
-                    track_height = int(track_box['height'])
+                    track_frame_num = round(track_box['frame'])
+                    #track_center_x = round(track_box['center_x'])
+                    #track_center_y = round(track_box['center_y'])
+                    track_width = round(track_box['width'])
+                    track_height = round(track_box['height'])
 
                     size = (track_height + track_width) / 2
                     size_dict[track_id].append((size, track_frame_num))

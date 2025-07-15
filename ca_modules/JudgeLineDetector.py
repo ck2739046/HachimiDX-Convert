@@ -55,8 +55,8 @@ class JudgeLineDetector:
             total_frames = state["total_frames"]
             circles_detected = []
             circles = 0
-            r_small = int(state["video_height"] * 0.3)
-            r_large = int(state["video_height"] * 0.6)
+            r_small = round(state["video_height"] * 0.3)
+            r_large = round(state["video_height"] * 0.6)
 
             # Process frames
             while frame_counter < total_frames:
@@ -86,14 +86,14 @@ class JudgeLineDetector:
                     circularity = area / circle_area
                     # 如果轮廓接近圆形（圆形度大于0.9）
                     if circularity > 0.9:
-                        valid_circles.append((x, y, int(radius)))
+                        valid_circles.append((x, y, round(radius)))
                 
                 # 如果找到合适的圆形，选择半径最大的
                 if valid_circles:
                     valid_circles.sort(key=lambda x: x[2], reverse=True)
                     x, y, radius = valid_circles[0]
-                    judge_line_r = int(radius * 0.88)
-                    circles_detected.append((int(x), int(y), judge_line_r))
+                    judge_line_r = round(radius * 0.88)
+                    circles_detected.append((round(x), round(y), judge_line_r))
                     circles += 1
                     if circles == target: break
                     
@@ -103,7 +103,7 @@ class JudgeLineDetector:
                 raise Exception("detect circle: Not enough circles detected")
             
             # 取出现次数最多的圆
-            circles_detected = [(int(x), int(y), int(r)) for x, y, r in circles_detected]
+            circles_detected = [(round(x), round(y), round(r)) for x, y, r in circles_detected]
             most_common = max(set(circles_detected), key=circles_detected.count)
             circle_center = (most_common[0], most_common[1])
             circle_radius = most_common[2]
@@ -164,8 +164,8 @@ class JudgeLineDetector:
                 # Calculate center
                 M = cv2.moments(approx)
                 if M["m00"] == 0: continue
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
+                cx = round(M["m10"] / M["m00"])
+                cy = round(M["m01"] / M["m00"])
                 # Append to regions
                 regions.append({
                     "center": (cx, cy),
@@ -268,7 +268,7 @@ class JudgeLineDetector:
     def draw_frames(self, frame, state, isPaused):
         """Draw cirle and touch areas with labels"""
         try:
-            screen_r = int(self.circle_radius / 0.88)
+            screen_r = round(self.circle_radius / 0.88)
             font_size = 1
             thickness = 3
 
