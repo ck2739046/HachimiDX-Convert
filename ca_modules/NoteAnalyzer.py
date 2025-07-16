@@ -521,10 +521,6 @@ class NoteAnalyzer:
             if len(set(positions)) != 1:
                 print(f"preprocess_tap_data: positions not consistent for track_id {track_id}")
                 continue
-            # 打印所有dist
-            # dists = [x[8] for x in path]
-            # dists.sort()
-            # print(f"[track_id {track_id}] dists: {[f'{d:.3f}' for d in dists]}")
             # 添加到touch_data
             final_path = []
             for frame_num, x1, y1, x2, y2, center_x, center_y, position, dist_to_center in path:
@@ -704,7 +700,6 @@ class NoteAnalyzer:
         if len(dists) <= 1:
             print(f"detect_precise_touch: [track_id {track_id}] not enough valid points at frame {frame_num}")
 
-
             # show frame
             thresh_roi_bgr = cv2.cvtColor(thresh_roi, cv2.COLOR_GRAY2BGR)
             combined_view = np.hstack((roi, thresh_roi_bgr))
@@ -716,8 +711,10 @@ class NoteAnalyzer:
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-
             return None_result
+        
+
+        # 转换为外框尺寸 ( offset = 0.08 * radius )
         avg_dist = np.mean(dists)
         touch_outer = circle_radius * 0.08
         precise_x1 = note_cx - avg_dist - touch_outer
@@ -780,35 +777,76 @@ class NoteAnalyzer:
 
     @log_error
     def estimate_touch_DefaultMsec(self, touch_data, circle_info, fps):
+        '''
+        正向：
+        根据 time_progress = (current_time - move_start_time) / DefaultMsec 获得 time_progress
+        应用缓动函数, location_progress = 缓动函数(time_progress)
+        根据 location_progress 决定4个三角距离中心点的距离
+        current_Dist = total_Dist * (1 - location_progress) 纯线性的
+
+        逆向：
+        反推 location_progress = 1 - current_Dist / total_Dist
+        二分法, 通过location_progress反推出time_progress ( y -> x )
+        反推 DefaultMsec = (current_time - move_start_time) / time_progress
+
+        方案:
+        已知 current_dist, current_time, 求解 DefaultMsec, move_start_time
+        通过dump游戏得知total_Dist = 34 (对于标准1920x1080屏幕)
+        DispAdjustFlame: 0 (时间微调参数没有影响, 可以忽略)
+        DefaultCorlsPos Values: [(0.0, 34.0, -1.0), (0.0, -34.0, -1.0), (34.0, 0.0, 0.0), (-34.0, 0.0, 0.0)]
+
+        首先反推出每个点的time_progress, 将0.5-0.96的点添加到list (对应location_progress 0.0925-0.948273)
+        选择缓动函数斜率较大的区间，因为这些区间对时间变化更敏感
+        选两个点相减消除未知的move_start_time常量
+        -> DefaultMsec = (current_time1 - current_time2) / (time_progress1 - time_progress2)
+
+        计算多个数据点对的 DefaultMsec 然后取平均值
+        '''
+
+        def find_x_for_y(y, tolerance=0.000001):
+            # 二分查找求解 y = 3.5x⁴ - 3.75x³ + 1.45x² - 0.05x + 0.0005 的反函数
+            low, high = 0.0, 1.0
+            
+            while high - low > tolerance:
+                mid = (low + high) / 2
+                eased_y = 3.5 * mid**4 - 3.75 * mid**3 + 1.45 * mid**2 - 0.05 * mid + 0.0005
+                
+                if abs(eased_y - y) < tolerance:
+                    return mid
+                elif eased_y < y:
+                    low = mid  # 标准的二分查找更新
+                else:
+                    high = mid
+            return (low + high) / 2
+
+
 
         touch_speeds = []
-
+        dist_min = 17.5
+        dist_max = 51.5
         for (track_id, direction), path in touch_data.items():
-            frame_num_start = path[0]['frame']
-            frame_num_end = path[-1]['frame']
-            dist_start = path[0]['dist']
-            dist_end = path[-1]['dist']
+            # 打印path的所有dist
+            dists = [x['dist'] for x in path]
+            dists.sort()
 
-            frame_num_diff = frame_num_end - frame_num_start
-            total_dist = dist_start - dist_end
-            touch_speed = total_dist / frame_num_diff
-            touch_speeds.append(touch_speed)
+            
+            
+        # mean = np.mean(touch_speeds)
+        # min = np.min(touch_speeds)
+        # max = np.max(touch_speeds)
+        # median = np.median(touch_speeds)
+        # std_dev = np.std(touch_speeds)
+        # std_dev_percent = std_dev / mean * 100
+        # print(f"Avg touch speed: Mean {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev_percent:.3f}%")
 
-        mean = np.mean(touch_speeds)
-        min = np.min(touch_speeds)
-        max = np.max(touch_speeds)
-        median = np.median(touch_speeds)
-        std_dev = np.std(touch_speeds)
-        std_dev_percent = std_dev / mean * 100
-        print(f"Avg touch speed: Mean {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev_percent:.3f}%")
-
-        touch_DefaultMsec, touch_OptionNotespeed = self.get_touch_DefaultMsec(mean, fps, circle_info[2])
-        return touch_DefaultMsec, touch_OptionNotespeed
+        # touch_DefaultMsec, touch_OptionNotespeed = self.get_touch_DefaultMsec(mean, fps, circle_info[2])
+        # return touch_DefaultMsec, touch_OptionNotespeed
+        return 0, 0
     
 
 
     @log_error
-    def get_touch_DefaultMsec(self, detected_touch_speed, fps, circle_radius):
+    def get_touch_DefaultMsec(self, detected_touch_DefaultMsec, circle_radius):
 
         def get_standard_touch_DefaultMsec(ui_speed):
             # 游戏源码实现
@@ -830,12 +868,6 @@ class NoteAnalyzer:
             DefaultMsec = NoteSpeedForBeat * 4
             return DefaultMsec, OptionNotespeed
         
-
-        offset = 0.97
-        total_dist = circle_radius * 0.07
-        detected_touch_speed = detected_touch_speed * fps / 1000 # pixel/frame to pixel/ms
-        note_lifetime = total_dist / detected_touch_speed * offset
-
         # 查找最接近的 DefaultMsec
         cloest_DefaultMsec = 0
         cloest_i = 0
@@ -845,18 +877,17 @@ class NoteAnalyzer:
 
             DefaultMsec, OptionNotespeed = get_standard_touch_DefaultMsec(i)
 
-            if abs(DefaultMsec - note_lifetime) < abs(cloest_DefaultMsec - note_lifetime):
+            if abs(DefaultMsec - detected_touch_DefaultMsec) < abs(cloest_DefaultMsec - detected_touch_DefaultMsec):
                 cloest_DefaultMsec = DefaultMsec
                 cloest_i = i
                 cloest_OptionNotespeed = OptionNotespeed
             i += 0.25
 
-        print(f"estimate touch speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {note_lifetime:.3f}ms)")
+        print(f"estimate touch speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {detected_touch_DefaultMsec:.3f}ms)")
 
         return cloest_DefaultMsec, cloest_OptionNotespeed
-
-
     
+
 
 
 
@@ -922,133 +953,6 @@ class NoteAnalyzer:
             if self.cap is not None:
                 self.cap.release()
         
-
-
-   
-    def calculate_touch_speed(self, circle_info, fps, debug):
-
-        #正向：
-        #根据 time_progress = (current_time - (move_start_time - 0.25*DefaultMsec)) / DefaultMsec 获得 time_progress
-        #应用缓动函数，location_progress = 缓动函数(time_progress)
-        #假设touch note在刚开始move时的尺寸边长是start_size，完全闭合的尺寸变成是end_size，则根据location_progress决定新的size.
-        #例如如果location_progress=0.5，则此时size=start_size + (end_size - start_size) * location_progress
-
-        #逆向：
-        #根据touch note的size，计算location_progress = (touch_size_max - size) / (touch_size_max - touch_size_min)
-        #二分法，通过location_progress反推出time_progress ( y -> x )
-        #根据 DefaultMsec = (current_time - move_start_time) / (time_progress - 0.25) 反推出 DefaultMsec
-
-        def find_x_for_y(y, tolerance=0.000001):
-            # 二分查找求解 y = 3.5x⁴ - 3.75x³ + 1.45x² - 0.05x + 0.0005 的反函数
-            low, high = 0.0, 1.0
-            
-            while high - low > tolerance:
-                mid = (low + high) / 2
-                eased_y = 3.5 * mid**4 - 3.75 * mid**3 + 1.45 * mid**2 - 0.05 * mid + 0.0005
-                
-                if abs(eased_y - y) < tolerance:
-                    return mid
-                elif eased_y < y:
-                    low = mid  # 标准的二分查找更新
-                else:
-                    high = mid
-            return (low + high) / 2
-
-        try:
-            circle_center_x, circle_center_y, circle_radius = circle_info
-
-            size_dict = {}
-
-            # read final_tracks
-            for track_id, track_data in self.final_tracks.items():
-                if 'path' not in track_data: continue
-                track_path = track_data['path']
-                if len(track_path) < 5: continue
-                class_id = round(track_data['class_id'])
-
-                if class_id != 3: continue # touch
-                size_dict[track_id] = []
-
-                for track_box in track_path:
-                    track_frame_num = round(track_box['frame'])
-                    #track_center_x = round(track_box['center_x'])
-                    #track_center_y = round(track_box['center_y'])
-                    track_width = round(track_box['width'])
-                    track_height = round(track_box['height'])
-
-                    size = (track_height + track_width) / 2
-                    size_dict[track_id].append((size, track_frame_num))
-
-
-            touch_size_min = circle_radius * 0.245
-            touch_size_max = circle_radius * 0.385
-            tolerance = circle_radius * 0.03
-            note_lifetimes = []
-            for track_id, sizes in size_dict.items():
-                
-                sizes.sort(key=lambda x: x[1]) # 按frame排序;
-
-                # simple note_lifetime
-                size_init, frame_num_init = sizes[0]
-                if abs(size_init - touch_size_max) > tolerance:
-                    print(f"track_id: {track_id} has invalid size_init: {size_init:.2f} ({touch_size_max:.2f})")
-                    continue
-                size_last, frame_num_last = sizes[-1]
-                if abs(size_last - touch_size_min) > tolerance:
-                    print(f"track_id: {track_id} has invalid size_last: {size_last:.2f} ({touch_size_max:.2f})")
-                    continue
-
-                note_lifetime = (frame_num_last - frame_num_init) / fps * 1000  # 转换为毫秒
-                note_lifetimes.append(note_lifetime)
-
-
-                '''
-                for size, frame_num in sizes:
-
-                    if abs(size - touch_size_max) < tolerance or abs(size - touch_size_min) < tolerance:
-                        continue
-
-                    # 计算location_progress
-                    location_progress = (touch_size_max - size) / (touch_size_max - touch_size_min)
-                    if location_progress < 0.15 or location_progress > 0.97: continue
-                    # 反推出time_progress
-                    time_progress = find_x_for_y(location_progress)
-                    # 反推出 DefaultMsec
-                    current_time = frame_num / fps * 1000  # 转换为毫秒
-                    DefaultMsec = (current_time - leave_start_time) / (time_progress - 0.25)
-                    DefaultMsecs.append(DefaultMsec)
-                    print(f"track_id: {track_id}, size: {size:.2f}, frame_num: {frame_num}, leave_start: {leave_start_time:.4f}, location_progress: {location_progress:.5f}, time_progress: {time_progress:.6f}, DefaultMsec: {DefaultMsec:.3f}")
-
-                print()
-                '''
-
-            # calcualte average speed
-            if not note_lifetimes:
-                print('3')
-                return 0
-            
-            if debug:
-                data = np.array(note_lifetimes)
-                mean = np.mean(data)
-                min = np.min(data)
-                max = np.max(data)
-                median = np.median(data)
-                std_dev = np.std(data)
-                print(f"touch speed: Mean: {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev:.3f}")
-
-            DefaultMsec = self.get_touch_DefaultMsec(mean*0.86)
-
-            return round(DefaultMsec, 3)
-
-        except Exception as e:
-            raise Exception(f"Error in calculate_touch_speed: {e}")
-        
-
-
-
-
-
-
 
 
 
