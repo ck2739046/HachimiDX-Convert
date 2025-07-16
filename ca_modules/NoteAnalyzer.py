@@ -197,7 +197,7 @@ class NoteAnalyzer:
 
         note_speeds = []
 
-        for (track_id, direction), path in tap_data.items():
+        for (track_id, position), path in tap_data.items():
             frame_num_start = path[0]['frame']
             frame_num_end = path[-1]['frame']
             dist_start = path[0]['dist']
@@ -216,7 +216,7 @@ class NoteAnalyzer:
         median = np.median(note_speeds)
         std_dev = np.std(note_speeds)
         std_dev_percent = std_dev / mean * 100
-        print(f"Avg note speed: Mean {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev_percent:.3f}%")
+        print(f"note speed: [Mean {mean:.3f}], Min {min:.3f}, Max {max:.3f}, Median {median:.3f}, Std Dev {std_dev_percent:.3f}%")
 
         note_DefaultMsec, note_OptionNotespeed = self.get_note_DefaultMsec(mean, fps, circle_info[2])
         return note_DefaultMsec, note_OptionNotespeed
@@ -795,7 +795,7 @@ class NoteAnalyzer:
         DispAdjustFlame: 0 (时间微调参数没有影响, 可以忽略)
         DefaultCorlsPos Values: [(0.0, 34.0, -1.0), (0.0, -34.0, -1.0), (34.0, 0.0, 0.0), (-34.0, 0.0, 0.0)]
 
-        首先反推出每个点的time_progress, 将0.5-0.96的点添加到list (对应location_progress 0.0925-0.948273)
+        首先反推出每个点的time_progress, 将0.6-0.95的点添加到list (对应location_progress 0.14-0.91)
         选择缓动函数斜率较大的区间，因为这些区间对时间变化更敏感
         选两个点相减消除未知的move_start_time常量
         -> DefaultMsec = (current_time1 - current_time2) / (time_progress1 - time_progress2)
@@ -803,7 +803,7 @@ class NoteAnalyzer:
         计算多个数据点对的 DefaultMsec 然后取平均值
         '''
 
-        def find_x_for_y(y, tolerance=0.000001):
+        def reverse_function(y, tolerance=0.000001):
             # 二分查找求解 y = 3.5x⁴ - 3.75x³ + 1.45x² - 0.05x + 0.0005 的反函数
             low, high = 0.0, 1.0
             
@@ -814,39 +814,70 @@ class NoteAnalyzer:
                 if abs(eased_y - y) < tolerance:
                     return mid
                 elif eased_y < y:
-                    low = mid  # 标准的二分查找更新
+                    low = mid  # 二分查找更新
                 else:
                     high = mid
             return (low + high) / 2
 
 
-
-        touch_speeds = []
+        DefaultMsecs = []
         dist_min = 17.5
-        dist_max = 51.5
-        for (track_id, direction), path in touch_data.items():
-            # 打印path的所有dist
-            dists = [x['dist'] for x in path]
-            dists.sort()
+        #dist_max = 51.5
+        total_dist = 34
+        for (track_id, position), path in touch_data.items():
 
-            
-            
-        # mean = np.mean(touch_speeds)
-        # min = np.min(touch_speeds)
-        # max = np.max(touch_speeds)
-        # median = np.median(touch_speeds)
-        # std_dev = np.std(touch_speeds)
-        # std_dev_percent = std_dev / mean * 100
-        # print(f"Avg touch speed: Mean {mean:.3f}, Min: {min:.3f}, Max: {max:.3f}, Median: {median:.3f}, Std Dev: {std_dev_percent:.3f}%")
+            # 过滤掉斜率较小的轨迹点
+            big_slope_points = []
+            for point in path:
+                # 反推 location_progress
+                dist = point['dist']
+                cur_dist = dist - dist_min if dist >= dist_min else 0
+                location_progress = 1 - cur_dist / total_dist
+                if location_progress < 0.14 or location_progress > 0.91:
+                    continue
+                # 反推 time_progress
+                time_progress = reverse_function(location_progress)
+                if time_progress < 0.6 or time_progress > 0.95:
+                    continue
+                # 加入列表
+                cur_time = point['frame'] / fps * 1000 # 转换为毫秒
+                big_slope_points.append((cur_time, time_progress))
 
-        # touch_DefaultMsec, touch_OptionNotespeed = self.get_touch_DefaultMsec(mean, fps, circle_info[2])
-        # return touch_DefaultMsec, touch_OptionNotespeed
-        return 0, 0
+            if len(big_slope_points) < 4:
+                print(f"estimate_touch_DefaultMsec: [track_id {track_id}] not enough big slope points, length: {len(big_slope_points)}")
+                continue
+
+            # 轨迹点配对并计算 DefaultMsec
+            big_slope_points.sort(key=lambda x: x[1]) # 按 time_progress 排序
+            for i in range(len(big_slope_points)):
+                for j in range(i + 1, len(big_slope_points)):
+                    time1, progress1 = big_slope_points[i]
+                    time2, progress2 = big_slope_points[j]
+                    if abs(progress1 - progress2) < 0.2:
+                        continue # 忽略相近的 progress 减少误差 (2%) 
+                    default_msec_estimate = abs(time1 - time2) / abs(progress1 - progress2)
+                    DefaultMsecs.append(default_msec_estimate)
+
+
+        if not DefaultMsecs:
+            print("estimate_touch_DefaultMsec: no valid touch data")
+            return 0, 0
+        
+        mean = np.mean(DefaultMsecs)
+        min = np.min(DefaultMsecs)
+        max = np.max(DefaultMsecs)
+        median = np.median(DefaultMsecs)
+        std_dev = np.std(DefaultMsecs)
+        std_dev_percent = std_dev / mean * 100
+        print(f"touch DefaultMsec: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev_percent:.3f}%")
+
+        touch_DefaultMsec, touch_OptionNotespeed = self.get_touch_DefaultMsec(median)
+        return touch_DefaultMsec, touch_OptionNotespeed
     
 
 
     @log_error
-    def get_touch_DefaultMsec(self, detected_touch_DefaultMsec, circle_radius):
+    def get_touch_DefaultMsec(self, detected_touch_DefaultMsec):
 
         def get_standard_touch_DefaultMsec(ui_speed):
             # 游戏源码实现
@@ -933,14 +964,12 @@ class NoteAnalyzer:
             final_tracks, track_results_all, predict_results_all, metadata = self.load_detection_data(output_dir, video_name)
 
             # tap
-            print("Processing tap notes...", end = '\r')
             tap_data = self.preprocess_tap_data(final_tracks, track_results_all, predict_results_all, circle_info)
             if tap_data:
                 self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
                 tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps, bpm)
 
             # touch
-            print("Processing touch notes...", end = '\r')
             touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
             if touch_data:
                 self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
@@ -1046,7 +1075,7 @@ if __name__ == "__main__":
     }
 
     
-    id = '7.50'
+    id = '6.25'
     state1 = {
         'video_name': f'test_{id}',
         'detect_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
