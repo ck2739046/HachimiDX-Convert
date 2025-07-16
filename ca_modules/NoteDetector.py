@@ -757,7 +757,7 @@ if __name__ == "__main__":
 
     if test == 1:
         for id in ['6.00', '6.25', '6.50', '6.75', '7.00', '7.25', '7.50']:
-            video_path = rf"D:\git\mai-chart-analyse\yolo-train\input\test_{id}.mp4"
+            video_path = rf"D:\git\mai-chart-analyze\yolo-train\input\test_{id}.mp4"
             start = 520
             end = 2910 
             cap = cv2.VideoCapture(video_path)

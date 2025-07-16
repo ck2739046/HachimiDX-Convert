@@ -108,7 +108,7 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"D:\git\mai-chart-analyse\yolo-train\temp\test_6.00_standardlized.mp4"
+    video = r"D:\git\mai-chart-analyze\yolo-train\temp\test_6.00_standardlized.mp4"
     ca = ChartAnalyzer()
     ca.analyze(video, 102, 1, True)
 

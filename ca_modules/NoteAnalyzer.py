@@ -1063,17 +1063,17 @@ class NoteAnalyzer:
             self.touch_areas = state['touch_areas']
             self.cap = cv2.VideoCapture(std_video)
 
-            touch_type_classify_model_path = r"D:\git\mai-chart-analyse\yolo-train\runs\classify\touch_type_classify\weights\best.pt"
+            touch_type_classify_model_path = r"D:\git\mai-chart-analyze\yolo-train\runs\classify\touch_type_classify\weights\best.pt"
             if not os.path.exists(touch_type_classify_model_path):
                 raise FileNotFoundError(f"Touch type classify model not found: {touch_type_classify_model_path}")
             self.touch_type_classify_model = YOLO(touch_type_classify_model_path)
 
-            touch_scale_classify_regular_model_path = r"D:\git\mai-chart-analyse\yolo-train\runs\classify\touch_scale_classify_regular\weights\best.pt"
+            touch_scale_classify_regular_model_path = r"D:\git\mai-chart-analyze\yolo-train\runs\classify\touch_scale_classify_regular\weights\best.pt"
             if not os.path.exists(touch_scale_classify_regular_model_path):
                 raise FileNotFoundError(f"Touch scale classify regular model not found: {touch_scale_classify_regular_model_path}")
             self.touch_scale_classify_regular_model = YOLO(touch_scale_classify_regular_model_path)
 
-            touch_scale_classify_each_model_path = r"D:\git\mai-chart-analyse\yolo-train\runs\classify\touch_scale_classify_each\weights\best.pt"
+            touch_scale_classify_each_model_path = r"D:\git\mai-chart-analyze\yolo-train\runs\classify\touch_scale_classify_each\weights\best.pt"
             if not os.path.exists(touch_scale_classify_each_model_path):
                 raise FileNotFoundError(f"Touch scale classify each model not found: {touch_scale_classify_each_model_path}")
             self.touch_scale_classify_each_model = YOLO(touch_scale_classify_each_model_path)
@@ -1201,8 +1201,8 @@ if __name__ == "__main__":
     id = '6.25'
     state1 = {
         'video_name': f'test_{id}',
-        'detect_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
-        'std_video_path': rf"D:\git\mai-chart-analyse\yolo-train\runs\detect\test_{id}\test_{id}_standardlized.mp4",
+        'detect_video_path': rf"D:\git\mai-chart-analyze\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
+        'std_video_path': rf"D:\git\mai-chart-analyze\yolo-train\runs\detect\test_{id}\test_{id}_standardlized.mp4",
         'debug': True,
         'video_fps': 60,
         'bpm': 170, # test
@@ -1212,8 +1212,8 @@ if __name__ == "__main__":
 
     state2 = {
         'video_name': '踊',
-        'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_tracked.mp4",
-        'std_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\踊\踊_standardlized.mp4",
+        'detect_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\踊\踊_tracked.mp4",
+        'std_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\踊\踊_standardlized.mp4",
         'debug': True,
         'video_fps': 60,
         'bpm': 128, # 踊
@@ -1222,8 +1222,8 @@ if __name__ == "__main__":
 
     state3 = {
         'video_name': '[maimai谱面确认] 天蓋 MASTER-p01-116',
-        'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\[maimai谱面确认] 天蓋 MASTER-p01-116\[maimai谱面确认] 天蓋 MASTER-p01-116_tracked.mp4",
-        'std_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\[maimai谱面确认] 天蓋 MASTER-p01-116\[maimai谱面确认] 天蓋 MASTER-p01-116_standardlized.mp4",
+        'detect_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\[maimai谱面确认] 天蓋 MASTER-p01-116\[maimai谱面确认] 天蓋 MASTER-p01-116_tracked.mp4",
+        'std_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\[maimai谱面确认] 天蓋 MASTER-p01-116\[maimai谱面确认] 天蓋 MASTER-p01-116_standardlized.mp4",
         'debug': True,
         'video_fps': 60,
         'bpm': 178, # 天蓋
@@ -1232,8 +1232,8 @@ if __name__ == "__main__":
 
     state4 = {
         'video_name': 'the EmpErroR',
-        'detect_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\the emperror\the emperror_tracked.mp4",
-        'std_video_path': r"D:\git\mai-chart-analyse\yolo-train\runs\detect\the emperror\the emperror_standardlized.mp4",
+        'detect_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\the emperror\the emperror_tracked.mp4",
+        'std_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\the emperror\the emperror_standardlized.mp4",
         'debug': True,
         'video_fps': 60,
         'bpm': 240, # the EmpErroR

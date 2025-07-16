@@ -1,6 +1,7 @@
 import os
 import random
 import shutil
+import time
 
 
 # 全局路径
@@ -138,17 +139,7 @@ def move_samples_to_valid_advanced(input_num, round=None):
     selected_files = random.sample(list(image_files.items()), num_samples)
     
     print(f"正在移动 {num_samples} 个样本到 valid...")
-    
-    # 保存选中的文件key到txt文件
-    if round is not None:
-        selected_keys_file = os.path.join(script_dir, f'selected_keys_round{round}.txt')
-        if os.path.exists(selected_keys_file):
-            os.remove(selected_keys_file)
-        with open(selected_keys_file, 'w', encoding='utf-8') as f:
-            for image_key, image_list in selected_files:
-                f.write(f"{image_key}\n")
-        print(f"已保存选中的样本key到: {selected_keys_file}")
-    
+
     # 移动选中的文件
     moved_count = 0
     for image_key, image_list in selected_files:
@@ -183,7 +174,15 @@ def move_samples_to_valid_advanced(input_num, round=None):
             
         except Exception as e:
             print(f"移动文件时出错 {image_file}: {e}")
-    
+
+    # 保存选中的文件key到txt文件
+    if round is not None:
+        current_time = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+        save_path = os.path.join(script_dir, f'{current_time}_valid_list_round{round}.txt')
+        success = generate_valid_list(save_path)
+    else:
+        success = generate_valid_list()
+
     # 显示移动后的统计信息
     valid_total = len(os.listdir(valid_images_dir))
     train_total = len(os.listdir(train_images_dir))
@@ -275,6 +274,40 @@ def move_back_to_train():
     print(f"移动完成:")
     print(f"  - train数据集: {train_total} 个样本")
     
+    return True
+
+
+
+def generate_valid_list(save_path=None):
+    '''
+    访问valid/images文件夹，获取所有文件名并保存为txt文件
+    '''
+    
+    # 检查valid/images目录是否存在
+    if not os.path.exists(valid_images_dir):
+        print("错误: valid/images目录不存在!")
+        return False
+    
+    # 获取所有图片文件
+    image_files = []
+    for image in os.listdir(valid_images_dir):
+        if image.lower().endswith(('.jpg', '.jpeg', '.png')):
+            image_files.append(image)
+    
+    if len(image_files) == 0:
+        print("valid/images目录中没有找到图片文件")
+        return False
+    
+    # 保存文件名列表到txt文件
+    if save_path is None:
+        current_time = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+        save_path = os.path.join(script_dir, f'{current_time}_valid_list.txt')
+
+    with open(save_path, 'w', encoding='utf-8') as f:
+        for image_file in image_files:
+            f.write(image_file + '\n')
+
+    print(f"valid列表已保存到: {save_path}")
     return True
 
 
