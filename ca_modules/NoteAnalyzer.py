@@ -1083,12 +1083,14 @@ class NoteAnalyzer:
             final_tracks, track_results_all, predict_results_all, metadata = self.load_detection_data(output_dir, video_name)
 
             # tap
+            tap_info = {}
             tap_data = self.preprocess_tap_data(final_tracks, track_results_all, predict_results_all, circle_info)
             if tap_data:
                 self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
                 tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps)
 
             # touch
+            touch_info = {}
             touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
             if touch_data:
                 self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
