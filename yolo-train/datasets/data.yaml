@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 5
+names: ['hold', 'slide', 'tap', 'touch', 'touch_hold']
+
+roboflow:
+  workspace: sdez
+  project: sdez
+  version: 16
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/sdez/sdez/dataset/16

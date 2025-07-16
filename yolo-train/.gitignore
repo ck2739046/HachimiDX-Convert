@@ -1,0 +1,14 @@
+*.mp4
+dataset*/
+!datasets/daya.yaml
+runs/
+*.pt
+yolo11*.pt
+debug_output/
+input/
+__pycache__/
+*.pyc
+*.log
+*.zip
+sdez*/
+*.jsonl

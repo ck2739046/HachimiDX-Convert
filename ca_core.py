@@ -3,6 +3,8 @@ import os
 
 from ca_modules.JudgeLineDetector import JudgeLineDetector
 from ca_modules.ChartStartDetector import ChartStartDetector
+from ca_modules.NoteDetector import NoteDetector
+#from ca_modules.NoteAnalyzer import NoteAnalyzer
 
 class ChartAnalyzer:
     def __init__(self):
@@ -13,8 +15,10 @@ class ChartAnalyzer:
         # state -------------
         self.state = {}
         # bpm, notes_style (0/1)
-        # video_width, video_height, video_fps, total_frames, video_path
-        # circle_center, circle_radius, touch_areas, chart_start, audio_start
+        # video_width, video_height, video_fps, total_frames, video_path, video_name
+        # circle_center, circle_radius, touch_areas
+        # chart_start, audio_start, outline_mask
+        # detect_video_path
 
 
     def update_state(self, key: str, value) -> None:
@@ -36,17 +40,31 @@ class ChartAnalyzer:
             detector = JudgeLineDetector()
             self.state['circle_center'], \
             self.state['circle_radius'], \
-            self.state['touch_areas'] = detector.process(self.cap, self.state)
+            self.state['touch_areas'],\
+            self.state['chart_start'] = detector.process(self.cap, self.state)
 
             # get chart start
             detector = ChartStartDetector()
             self.state['chart_start'], \
-            self.state['audio_start'] = detector.process(self.cap, self.state)
+            self.state['audio_start'], \
+            self.state['outline_mask'] = detector.process(self.cap, self.state)
 
+            # get notes
+            detector = NoteDetector()
+            self.state['detect_video_path'] = detector.process(self.state)
+
+            # analyze results
+            #analyzer = NoteAnalyzer()
+            #txt = analyzer.process(self.state)
+            
             return True
         
+        except KeyboardInterrupt:
+            print("\n中断")
+            return False
         except Exception as e:
             print(f"Error in analyze: {e}")
+            print(e.stacktrace())
             return False
 
 
@@ -68,10 +86,11 @@ class ChartAnalyzer:
                 raise Exception("load_video: fail set cv2.VideoCapture()")
             
             # get video info
-            width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = int(self.cap.get(cv2.CAP_PROP_FPS))
-            total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            video_name = os.path.basename(video_path).rsplit('.', 1)[0]
+            width = round(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = round(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = round(self.cap.get(cv2.CAP_PROP_FPS))
+            total_frames = round(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
             if total_frames < 600: # 10s
                 raise Exception("load_video: video too short")
             
@@ -81,6 +100,7 @@ class ChartAnalyzer:
             self.update_state("video_fps", fps)
             self.update_state("total_frames", total_frames)
             self.update_state("video_path", video_path)
+            self.update_state("video_name", video_name)
             return
         
         except Exception as e:
@@ -88,7 +108,7 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] MORNINGLOOM MASTER-p01-116.mp4"
+    video = r"D:\git\mai-chart-analyse\yolo-train\temp\test_6.00_standardlized.mp4"
     ca = ChartAnalyzer()
     ca.analyze(video, 102, 1, True)
 

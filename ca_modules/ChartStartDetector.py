@@ -17,14 +17,17 @@ class ChartStartDetector:
 
     def process(self, cap, state: dict) -> float:
         """Main process
-        arg: cap, state(circle_center, circle_radius, total_frames, debug, bpm, video_fps, video_path)
-        ret: chart_start_frame, audio_start_frame
+        arg: cap, state(circle_center, circle_radius, total_frames, debug, bpm, video_fps, video_path, chart_start)
+        ret: chart_start_frame, audio_start_frame, outline_mask
         """
         try:
             print("Chart Start Detector...", end="\r")
 
             # Find first frame when the inner circle is completely black
             first_black_frame = self.find_first_black_frame(cap, state)
+
+            # Find outline mask
+            outline_mask = self.find_outline_mask(cap, state)
             
             # Find first frame when the first note appears
             chart_start = self.find_chart_start_frame(cap, state, first_black_frame)
@@ -48,7 +51,7 @@ class ChartStartDetector:
             else:
                 audio_start = -666
 
-            print(f"Chart Start Detector...Done                                ")
+            print(f"Chart Start Detector...Done                              ")
             if not is_audio_success:
                 print("  Warning: Fail to get audio start due to audio detection error")
 
@@ -60,7 +63,7 @@ class ChartStartDetector:
             
             # Reset to start of video and return
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            return chart_start-5, audio_start
+            return chart_start-5, audio_start, outline_mask
                    # 保险起见，提前5帧
 
         except Exception as e:
@@ -75,10 +78,11 @@ class ChartStartDetector:
         try:
             print("Chart Start Detector...Find_first_black_frame...", end="\r")
 
+            cap.set(cv2.CAP_PROP_POS_FRAMES, state['chart_start']) 
             circle_center = state["circle_center"]
-            outer_radius = int(state["circle_radius"] * 0.8)
-            inner_radius = int(state["circle_radius"] * 0.4)
-            frame_number = 0
+            outer_radius = round(state["circle_radius"] * 0.8)
+            inner_radius = round(state["circle_radius"] * 0.4)
+            frame_number = state['chart_start']
             total_frames = state["total_frames"]
 
             while frame_number < total_frames:
@@ -120,6 +124,60 @@ class ChartStartDetector:
             
         except Exception as e:
             raise Exception(f"Error in find_first_black_frame: {e}")
+        
+
+    def find_outline_mask(self, cap, state) -> np.ndarray:
+        """Find outline mask by detecting non-black pixels in the ring area
+        arg: cap, state(circle_center, circle_radius, debug)
+        ret: outline_mask
+        """
+        try:            
+            ret, frame = cap.read()
+            if not ret:
+                raise Exception("find_outline_mask: Cannot read frame")
+            
+            circle_center = state["circle_center"]
+            outer_radius = round(state["circle_radius"] * 1.2)  # 120% radius
+            inner_radius = round(state["circle_radius"] * 0.8)  # 80% radius
+            
+            # Create outer mask (120% radius)
+            outer_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            cv2.circle(outer_mask, circle_center, outer_radius, 255, -1)
+            # Create inner mask (80% radius)
+            inner_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            cv2.circle(inner_mask, circle_center, inner_radius, 255, -1)
+            # Create ring area mask (outer - inner)
+            ring_mask = cv2.bitwise_and(outer_mask, cv2.bitwise_not(inner_mask))
+            # Apply ring mask to frame
+            masked_frame = cv2.bitwise_and(frame, frame, mask=ring_mask)
+            
+            # Convert to grayscale
+            gray = cv2.cvtColor(masked_frame, cv2.COLOR_BGR2GRAY)
+            # Create mask for all non-black pixels
+            outline_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            outline_mask[gray > 160] = 255
+            # Only keep pixels that are also in the ring area
+            outline_mask = cv2.bitwise_and(outline_mask, ring_mask)
+
+            # 在新窗口中显示轮廓遮罩
+            if state.get("debug", True):
+                # crop and resize
+                screen_r = round(state["circle_radius"] / 0.88)
+                x1 = circle_center[0] - screen_r
+                x2 = circle_center[0] + screen_r
+                y1 = circle_center[1] - screen_r
+                y2 = circle_center[1] + screen_r
+                outline_mask_crop = outline_mask[y1:y2, x1:x2]
+                outline_mask_crop = cv2.resize(outline_mask_crop, (1000, 1000))
+                # show
+                cv2.imshow("Outline Mask Preview", outline_mask_crop)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+            
+            return outline_mask
+            
+        except Exception as e:
+            raise Exception(f"Error in find_outline_mask: {e}")
 
 
     def find_chart_start_frame(self, cap, state, first_black_frame) -> int:
@@ -132,7 +190,7 @@ class ChartStartDetector:
 
             cap.set(cv2.CAP_PROP_POS_FRAMES, first_black_frame + 60) 
             circle_center = state["circle_center"]
-            inner_radius = int(state["circle_radius"] * 0.8)
+            inner_radius = round(state["circle_radius"] * 0.8)
             frame_number = first_black_frame + 60
             total_frames = state["total_frames"]
 
@@ -170,6 +228,8 @@ class ChartStartDetector:
         ret: template, template_sr, audio_data, audio_sr
         """
         try:
+            print("Chart Start Detector...audio_match...                        ", end="\r")
+            
             template_path_full = os.path.join(os.path.dirname(os.path.dirname(__file__)), self.template_path)
             if not os.path.exists(template_path_full):
                 raise Exception("load_template_and_video: Template start_sound not found")
@@ -194,7 +254,6 @@ class ChartStartDetector:
         ret: full_template
         """
         try:
-            print(f"Chart Start Detector...generate_template...", end="\r")
             beat_interval = 60.0 / state.get("bpm")
             
             # Resample template to audio sample rate if needed
@@ -208,7 +267,7 @@ class ChartStartDetector:
                 template_resampled = template.copy()
             
             # Calculate sample interval between beats
-            sample_interval = int(beat_interval * audio_sr)
+            sample_interval = round(beat_interval * audio_sr)
             template_length = len(template_resampled)
             
             # Create 4-beat template with proper intervals
@@ -239,12 +298,10 @@ class ChartStartDetector:
         ret: audio_start
         """
         try:
-            print("Chart Start Detector...template_match...", end="\r")
-
             # Convert chart_start frame to audio sample position
             offset = 5 * state["video_fps"]
             chart_start_time = (chart_start+offset) / state["video_fps"]
-            chart_start_sample = int(chart_start_time * audio_sr)
+            chart_start_sample = round(chart_start_time * audio_sr)
             if chart_start_sample >= len(audio_data):
                 raise Exception(f"template_match: chart_start exceeds audio length")
             
@@ -278,7 +335,7 @@ class ChartStartDetector:
             
             # Convert sample position to match frame
             match_time = max_pos / audio_sr
-            audio_start = int(match_time * state["video_fps"])
+            audio_start = round(match_time * state["video_fps"])
             if not 0 <= audio_start <= state["total_frames"]:
                 raise Exception(f"audio start {audio_start} out of bounds (0, {state['total_frames']})")
 

@@ -13,13 +13,14 @@ class JudgeLineDetector:
         """main process
         arg: cap, state(video_width, video_height, debug)
         ret: circle_center, circle_radius,
-             touch_areas{label: {center, polygon, original_pos}}
+             touch_areas{label: {center, polygon, original_pos}},
+             chart_start
         """
         try:
             print("Judge Line Detector...", end="\r")
 
             # detect circle
-            self.circle_center, self.circle_radius = self.detect_circle(cap, state)
+            self.circle_center, self.circle_radius, chart_start = self.detect_circle(cap, state)
 
             # detect touch areas
             template = self.load_template()
@@ -30,11 +31,13 @@ class JudgeLineDetector:
             print("Judge Line Detector...Done                       ")
             if state['debug']:
                 print(f"  DEBUG: O {self.circle_center}, R {self.circle_radius}")
+                #for label, area in self.touch_areas.items():
+                #    print(f"         {label} Center: {area['center']}")
                 self.display_preview(cap, state)
 
             # Reset to start of video and return
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            return (self.circle_center, self.circle_radius, self.touch_areas)
+            return (self.circle_center, self.circle_radius, self.touch_areas, chart_start)
 
         except Exception as e:
             raise Exception(f"Error in JudgeLineDetector: {e}")
@@ -43,7 +46,7 @@ class JudgeLineDetector:
     def detect_circle(self, cap, state, target=15) -> list:
         """采样15个帧, 检测判定线圆形，返回圆心和半径
         arg: cap, state(video_height, total_frames), target(可选,默认15)
-        ret: circle_center(x, y), circle_radius
+        ret: circle_center(x, y), circle_radius, chart_start
         """
         try:
             print(f"Judge Line Detector...Detect_circle...", end="\r")
@@ -52,8 +55,8 @@ class JudgeLineDetector:
             total_frames = state["total_frames"]
             circles_detected = []
             circles = 0
-            r_small = int(state["video_height"] * 0.3)
-            r_large = int(state["video_height"] * 0.6)
+            r_small = round(state["video_height"] * 0.3)
+            r_large = round(state["video_height"] * 0.6)
 
             # Process frames
             while frame_counter < total_frames:
@@ -83,14 +86,14 @@ class JudgeLineDetector:
                     circularity = area / circle_area
                     # 如果轮廓接近圆形（圆形度大于0.9）
                     if circularity > 0.9:
-                        valid_circles.append((x, y, int(radius)))
+                        valid_circles.append((x, y, round(radius)))
                 
                 # 如果找到合适的圆形，选择半径最大的
                 if valid_circles:
                     valid_circles.sort(key=lambda x: x[2], reverse=True)
                     x, y, radius = valid_circles[0]
-                    judge_line_r = int(radius * 0.88)
-                    circles_detected.append((int(x), int(y), judge_line_r))
+                    judge_line_r = round(radius * 0.88)
+                    circles_detected.append((round(x), round(y), judge_line_r))
                     circles += 1
                     if circles == target: break
                     
@@ -100,12 +103,12 @@ class JudgeLineDetector:
                 raise Exception("detect circle: Not enough circles detected")
             
             # 取出现次数最多的圆
-            circles_detected = [(int(x), int(y), int(r)) for x, y, r in circles_detected]
+            circles_detected = [(round(x), round(y), round(r)) for x, y, r in circles_detected]
             most_common = max(set(circles_detected), key=circles_detected.count)
             circle_center = (most_common[0], most_common[1])
             circle_radius = most_common[2]
 
-            return circle_center, circle_radius
+            return circle_center, circle_radius, frame_counter
 
         except Exception as e:
             raise Exception(f"Error in detect_circle: {e}")
@@ -161,8 +164,8 @@ class JudgeLineDetector:
                 # Calculate center
                 M = cv2.moments(approx)
                 if M["m00"] == 0: continue
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
+                cx = round(M["m10"] / M["m00"])
+                cy = round(M["m01"] / M["m00"])
                 # Append to regions
                 regions.append({
                     "center": (cx, cy),
@@ -265,7 +268,7 @@ class JudgeLineDetector:
     def draw_frames(self, frame, state, isPaused):
         """Draw cirle and touch areas with labels"""
         try:
-            screen_r = int(self.circle_radius / 0.88)
+            screen_r = round(self.circle_radius / 0.88)
             font_size = 1
             thickness = 3
 
@@ -333,21 +336,3 @@ class JudgeLineDetector:
     
         except Exception as e:
             raise Exception(f"Error in draw_frames: {e}")
-
-
-if __name__ == "__main__":
-    # prepare parameters from ca_core.py
-    # cap
-    video_path = r"C:\Code\Ariake-720p.mp4"
-    cap = cv2.VideoCapture(video_path)
-    # state
-    state = {}
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    state["video_width"] = max(width, height)
-    state["video_height"] = min(width, height)
-    state["debug"] = True
-    # call process()
-    detector = JudgeLineDetector()
-    detector.process(cap, state)
-    cap.release()
