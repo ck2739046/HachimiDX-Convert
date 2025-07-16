@@ -991,7 +991,7 @@ class NoteAnalyzer:
         f.write('&first=0.0333\n')
         f.write('&des_5=ck273\n')
         f.write('&lv_5=10\n')
-        f.write(f'&inote_5=({bpm})' + '{1},,{32}\n')
+        f.write(f'&inote_5=({bpm})' + '{1},,')
 
 
         # 合并 tap_info 和 touch_info
