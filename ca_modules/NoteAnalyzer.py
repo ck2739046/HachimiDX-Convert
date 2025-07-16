@@ -224,7 +224,7 @@ class NoteAnalyzer:
 
 
     @log_error
-    def analyze_tap_reach_time(self, tap_data, circle_info, fps, bpm):
+    def analyze_tap_reach_time(self, tap_data, circle_info, fps):
 
         tap_info = {}
         for (track_id, direction), path in tap_data.items():
@@ -233,43 +233,10 @@ class NoteAnalyzer:
             for point in path:
                 frame_num = point['frame']
                 dist = point['dist']
-                reach_end_Msec2 = self.predict_note_reach_end_time(dist, frame_num, circle_info[2], fps)
-                times.append(reach_end_Msec2)
+                reach_end_Msec = self.predict_note_reach_end_time(dist, frame_num, circle_info[2], fps)
+                times.append(reach_end_Msec)
             mean = np.mean(times)
             tap_info[(track_id, direction)] = mean
-
-        
-        # txt_path = r"C:\Users\ck273\Desktop\the EmpErroR\maidata.txt"
-        # if os.path.exists(txt_path):
-        #     os.remove(txt_path)
-        # with open(txt_path, 'w', encoding='utf-8') as f:
-        #     f.write('&title=the EmpErroR_test\n')
-        #     f.write('&artist=sasakure.UK\n')
-        #     f.write('&first=0.0333\n')
-        #     f.write('&des_3=ck273\n')
-        #     f.write('&lv_3=10.6\n')
-        #     f.write(f'&inote_3=({bpm})' + '{1},,,,{8}\n')
-        #     last_time = 0
-        #     for (track_id, direction), time in tap_info.items():
-        #         if last_time == 0:
-        #             last_time = time
-        #             print(f"[{time:.3f}] 5", end='')
-        #             f.write(f'{direction}')
-        #             continue
-        #         diff_Msec = time - last_time
-        #         diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
-        #         diff_beat_32 = abs(diff_beat) * 8
-        #         print(f"-{round(diff_beat_32, 1)}, {direction}", end='')
-
-        #         if round(diff_beat_32) == 0:
-        #             f.write(f"/{direction}")
-        #         else:
-        #             f.write(f"{round(diff_beat_32)*','}\n{direction}")
-
-        #         last_time = time
-        #     print()
-        #     f.write(',E\n')
-        
 
         return tap_info
 
@@ -795,7 +762,7 @@ class NoteAnalyzer:
         DispAdjustFlame: 0 (时间微调参数没有影响, 可以忽略)
         DefaultCorlsPos Values: [(0.0, 34.0, -1.0), (0.0, -34.0, -1.0), (34.0, 0.0, 0.0), (-34.0, 0.0, 0.0)]
 
-        首先反推出每个点的time_progress, 将0.6-0.95的点添加到list (对应location_progress 0.14-0.91)
+        首先反推出每个点的time_progress, (只保留location_progress 0.15-0.85)
         选择缓动函数斜率较大的区间，因为这些区间对时间变化更敏感
         选两个点相减消除未知的move_start_time常量
         -> DefaultMsec = (current_time1 - current_time2) / (time_progress1 - time_progress2)
@@ -833,12 +800,10 @@ class NoteAnalyzer:
                 dist = point['dist']
                 cur_dist = dist - dist_min if dist >= dist_min else 0
                 location_progress = 1 - cur_dist / total_dist
-                if location_progress < 0.14 or location_progress > 0.91:
+                if location_progress < 0.15 or location_progress > 0.85:
                     continue
                 # 反推 time_progress
                 time_progress = reverse_function(location_progress)
-                if time_progress < 0.6 or time_progress > 0.95:
-                    continue
                 # 加入列表
                 cur_time = point['frame'] / fps * 1000 # 转换为毫秒
                 big_slope_points.append((cur_time, time_progress))
@@ -868,7 +833,7 @@ class NoteAnalyzer:
         max = np.max(DefaultMsecs)
         median = np.median(DefaultMsecs)
         std_dev = np.std(DefaultMsecs)
-        std_dev_percent = std_dev / mean * 100
+        std_dev_percent = std_dev / median * 100
         print(f"touch DefaultMsec: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev_percent:.3f}%")
 
         touch_DefaultMsec, touch_OptionNotespeed = self.get_touch_DefaultMsec(median)
@@ -920,7 +885,119 @@ class NoteAnalyzer:
     
 
 
+    @log_error
+    def analyze_touch_reach_time(self, touch_data, fps):
 
+        touch_info = {}
+        for (track_id, position), path in touch_data.items():
+            # 平均所有轨迹的到达时间
+            times = []
+            for point in path:
+                frame_num = point['frame']
+                dist = point['dist']
+                reach_end_Msec = self.predict_touch_reach_end_time(dist, frame_num, fps)
+                if reach_end_Msec != 0:
+                    times.append(reach_end_Msec)
+                    
+            mean = np.mean(times)
+            touch_info[(track_id, position)] = mean
+
+        return touch_info
+    
+
+
+    @log_error
+    def predict_touch_reach_end_time(self, dist, cur_frame, fps):
+        '''
+        正向：
+        根据 time_progress = (current_time - move_start_time) / DefaultMsec 获得 time_progress
+        应用缓动函数, location_progress = 缓动函数(time_progress)
+        根据 location_progress 决定4个三角距离中心点的距离
+        current_Dist = total_Dist * (1 - location_progress) 纯线性的
+
+        逆向：
+        反推 location_progress = 1 - current_Dist / total_Dist
+        二分法, 通过location_progress反推出time_progress ( y -> x )
+        反推 move_start_time = current_time - time_progress * DefaultMsec
+        '''
+
+        def reverse_function(y, tolerance=0.000001):
+            # 二分查找求解 y = 3.5x⁴ - 3.75x³ + 1.45x² - 0.05x + 0.0005 的反函数
+            low, high = 0.0, 1.0
+            
+            while high - low > tolerance:
+                mid = (low + high) / 2
+                eased_y = 3.5 * mid**4 - 3.75 * mid**3 + 1.45 * mid**2 - 0.05 * mid + 0.0005
+                
+                if abs(eased_y - y) < tolerance:
+                    return mid
+                elif eased_y < y:
+                    low = mid  # 二分查找更新
+                else:
+                    high = mid
+            return (low + high) / 2
+
+
+        # 反推 location_progress
+        cur_dist = dist - 17.5 if dist >= 17.5 else 0
+        total_dist = 34
+        location_progress = 1 - cur_dist / total_dist
+        if location_progress < 0.15 or location_progress > 0.85:
+            return 0
+        # 反推 time_progress
+        time_progress = reverse_function(location_progress)
+        # 反推 move_start_time
+        cur_time = cur_frame / fps * 1000  # 转换为毫秒
+        move_start_time = cur_time - time_progress * self.touch_DefaultMsec
+        reach_end_time = move_start_time + self.touch_DefaultMsec
+
+        return reach_end_time
+    
+
+
+    # debug
+    @log_error
+    def analyze_all_notes_info(self, bpm, tap_info, touch_info):
+
+        txt_path = r"C:\Users\ck273\Desktop\天蓋\maidata.txt"
+        if os.path.exists(txt_path):
+            os.remove(txt_path)
+        f = open(txt_path, 'w', encoding='utf-8')
+        f.write('&title=天蓋_test\n')
+        f.write('&artist=ck273\n')
+        f.write('&first=0.0333\n')
+        f.write('&des_5=ck273\n')
+        f.write('&lv_5=10\n')
+        f.write(f'&inote_5=({bpm})' + '{1},,{32}\n')
+
+
+        # 合并 tap_info 和 touch_info
+        all_notes_info = {**tap_info, **touch_info}
+        # 按时间排序
+        sorted_notes = sorted(all_notes_info.items(), key=lambda item: item[1])
+
+        last_time = 0
+        for (track_id, position), time in sorted_notes:
+            if last_time == 0:
+                last_time = time
+                print(f"[{time:.3f}] {position}", end='')
+                continue
+            
+            diff_Msec = time - last_time
+            diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
+            diff_beat_frac = abs(diff_beat) * 32
+            print(f"-{round(diff_beat_frac, 2):.2f}, {position}", end='')
+
+            if round(diff_beat_frac) == 0:
+                f.write(f"/{position}")
+            else:
+                f.write(f"{round(diff_beat_frac)*','}\n{position}")
+
+            last_time = time
+
+        print()
+        f.write(',E\n')
+        f.close()
 
 
 
@@ -967,12 +1044,16 @@ class NoteAnalyzer:
             tap_data = self.preprocess_tap_data(final_tracks, track_results_all, predict_results_all, circle_info)
             if tap_data:
                 self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
-                tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps, bpm)
+                tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps)
 
             # touch
             touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
             if touch_data:
                 self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
+                touch_info = self.analyze_touch_reach_time(touch_data, fps)
+
+            # analyze all notes info
+            self.analyze_all_notes_info(bpm, tap_info, touch_info)
 
 
 
