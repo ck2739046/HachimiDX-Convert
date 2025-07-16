@@ -965,8 +965,11 @@ class NoteAnalyzer:
             base_numerator = round(diff_beat * base_denominator)
             if base_numerator == 0:
                 return 0, 1, 0
-            # 只处理 one > 1 的情况
-            elif base_numerator > base_denominator:
+            # 先处理整倍数
+            if base_numerator // base_denominator >= 1 and base_numerator % base_denominator == 0:
+                return base_numerator // base_denominator, 1, 0
+            # 处理分数
+            if base_numerator > base_denominator:
                 one = base_numerator // base_denominator
                 if one > 1:
                     base_numerator = base_numerator % base_denominator
@@ -1000,6 +1003,7 @@ class NoteAnalyzer:
         last_position = None
         last_denominator = 0
         for (track_id, position), time in sorted_notes:
+
             if last_time == 0:
                 last_time = time
                 last_position = position
@@ -1009,7 +1013,6 @@ class NoteAnalyzer:
             diff_Msec = time - last_time
             diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
             numerator, denominator, one = get_fraction(diff_beat, 32)
-            print(f"{last_position}-{numerator}/{denominator}, ", end='')
 
             if round(numerator) == 0:
                 last_time = time
@@ -1018,14 +1021,17 @@ class NoteAnalyzer:
 
             if one > 0:
                 commas = f'{"," * numerator}' + '{1}' + f'{"," * one}'
+                print(f"{last_position}-{numerator}/{denominator}+{one}, ", end='')
             else:
                 commas = f'{"," * numerator}'
+                print(f"{last_position}-{numerator}/{denominator}, ", end='')
 
             if denominator != last_denominator:
                 f.write('\n{' + f'{denominator}' + '}' + f'{last_position}{commas}')
             else:
                 f.write(f'{last_position}{commas}')
 
+            if one > 0: denominator = 1
             last_denominator = denominator
             last_position = position
             last_time = time
