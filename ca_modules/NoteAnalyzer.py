@@ -959,6 +959,26 @@ class NoteAnalyzer:
     @log_error
     def analyze_all_notes_info(self, bpm, tap_info, touch_info):
 
+        def get_fraction(diff_beat, base_denominator):
+            #numerator分子, denominator分母
+            one = 0
+            base_numerator = round(diff_beat * base_denominator)
+            if base_numerator == 0:
+                return 0, 1, 0
+            # 只处理 one > 1 的情况
+            elif base_numerator > base_denominator:
+                one = base_numerator // base_denominator
+                if one > 1:
+                    base_numerator = base_numerator % base_denominator
+                else:
+                    one = 0
+            # 约分
+            gcd_num = gcd(base_numerator, base_denominator)
+            numerator = base_numerator // gcd_num
+            denominator = base_denominator // gcd_num
+            return numerator, denominator, one
+
+
         txt_path = r"C:\Users\ck273\Desktop\天蓋\maidata.txt"
         if os.path.exists(txt_path):
             os.remove(txt_path)
@@ -977,26 +997,42 @@ class NoteAnalyzer:
         sorted_notes = sorted(all_notes_info.items(), key=lambda item: item[1])
 
         last_time = 0
+        last_position = None
+        last_denominator = 0
         for (track_id, position), time in sorted_notes:
             if last_time == 0:
                 last_time = time
-                print(f"[{time:.3f}] {position}", end='')
+                last_position = position
+                print(f"[{time:.3f}] ", end='')
                 continue
             
             diff_Msec = time - last_time
             diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
-            diff_beat_frac = abs(diff_beat) * 32
-            print(f"-{round(diff_beat_frac, 2):.2f}, {position}", end='')
+            numerator, denominator, one = get_fraction(diff_beat, 32)
+            print(f"{last_position}-{numerator}/{denominator}, ", end='')
 
-            if round(diff_beat_frac) == 0:
-                f.write(f"/{position}")
+            if round(numerator) == 0:
+                last_time = time
+                last_position = f'{last_position}/{position}'
+                continue
+
+            if one > 0:
+                commas = f'{"," * numerator}' + '{1}' + f'{"," * one}'
             else:
-                f.write(f"{round(diff_beat_frac)*','}\n{position}")
+                commas = f'{"," * numerator}'
 
+            if denominator != last_denominator:
+                f.write('\n{' + f'{denominator}' + '}' + f'{last_position}{commas}')
+            else:
+                f.write(f'{last_position}{commas}')
+
+            last_denominator = denominator
+            last_position = position
             last_time = time
+                
 
-        print()
-        f.write(',E\n')
+        print(f'{last_position}-E')
+        f.write(f'{last_position},E\n')
         f.close()
 
 
