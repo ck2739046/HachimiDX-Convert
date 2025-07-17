@@ -999,12 +999,18 @@ class NoteAnalyzer:
         # 按时间排序
         sorted_notes = sorted(all_notes_info.items(), key=lambda item: item[1])
 
+        init_time = 0
         last_time = 0
+        base_numerator_counter = 0
         last_position = None
         last_denominator = 0
+
+        base_denominator = 16  # 基准分母
+
         for (track_id, position), time in sorted_notes:
 
             if last_time == 0:
+                init_time = time
                 last_time = time
                 last_position = position
                 print(f"[{time:.3f}] ", end='')
@@ -1012,10 +1018,17 @@ class NoteAnalyzer:
             
             diff_Msec = time - last_time
             diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
-            numerator, denominator, one = get_fraction(diff_beat, 32)
+            numerator, denominator, one = get_fraction(diff_beat, base_denominator)
+
+            # update last_time
+            # 使用估计后的时间，而不是原始时间，避免误差累计
+            base_numerator = round(diff_beat * base_denominator)
+            base_numerator_counter += base_numerator
+            passed_beat = base_numerator_counter / base_denominator
+            passed_beat_Msec = passed_beat * (60 / bpm * 1000 * 4)
+            last_time = passed_beat_Msec + init_time
 
             if round(numerator) == 0:
-                last_time = time
                 last_position = f'{last_position}/{position}'
                 continue
 
@@ -1034,7 +1047,6 @@ class NoteAnalyzer:
             if one > 0: denominator = 1
             last_denominator = denominator
             last_position = position
-            last_time = time
                 
 
         print(f'{last_position}-E')
