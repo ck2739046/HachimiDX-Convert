@@ -2,11 +2,12 @@ import json
 import os
 import cv2
 import numpy as np
+import math
 import functools
 import traceback
 from ultralytics import YOLO
 import time
-from math import gcd
+from math import dist, gcd
 
 error_trace = []
 
@@ -968,7 +969,7 @@ class NoteAnalyzer:
         返回格式:
         dict{
             key: (track_id, position),
-            value: note path list
+            value: two note path list (前半/后半)
             [
                 {
                     'frame': frame_num,
@@ -981,9 +982,119 @@ class NoteAnalyzer:
                     'dist': dist_to_center
                 },
                 ...
-            ]
+            ],
+            ...
         }
         '''
+
+        def split_dist(frame_num, x1, y1, x2, y2, tan_22_5, long, short, circle_info, position):
+
+            circle_center_x, circle_center_y, circle_radius = circle_info
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+            height = abs(y2 - y1)
+            width = abs(x2 - x1)
+
+            # 正方形
+            if abs(width - height) < circle_radius * 0.02:
+                dist_to_center = np.sqrt(((cx - circle_center_x) ** 2 + (cy - circle_center_y) ** 2))
+                return dist_to_center, dist_to_center
+
+            if width > height:
+                # 横向长方形 (2/3/6/7)
+                x_offset = abs(cx - x1) - short
+                y_offset = abs(cy - y1) - long
+            else:
+                # 纵向长方形 (1/4/5/8)
+                x_offset = abs(cx - x1) - long
+                y_offset = abs(cy - y1) - short
+
+            y_offset_baseX = y_offset / tan_22_5
+            x_offset_baseY = x_offset * tan_22_5
+            final_x_offset = (x_offset + x_offset_baseY) / 2
+            final_y_offset = (y_offset + y_offset_baseX) / 2
+
+            if position == 1 or position == 2:
+                tail_cx = cx - final_x_offset
+                tail_cy = cy + final_y_offset
+                head_cx = cx + final_x_offset
+                head_cy = cy - final_y_offset
+            elif position == 3 or position == 4:
+                tail_cx = cx - final_x_offset
+                tail_cy = cy - final_y_offset
+                head_cx = cx + final_x_offset
+                head_cy = cy + final_y_offset
+            elif position == 5 or position == 6:
+                tail_cx = cx + final_x_offset
+                tail_cy = cy - final_y_offset
+                head_cx = cx - final_x_offset
+                head_cy = cy + final_y_offset
+            elif position == 7 or position == 8:
+                tail_cx = cx + final_x_offset
+                tail_cy = cy + final_y_offset
+                head_cx = cx - final_x_offset
+                head_cy = cy - final_y_offset
+
+
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            ret, frame = self.cap.read()
+            # 绘制点
+            cv2.circle(frame, (round(cx), round(cy)), 2, (255, 0, 0), 2)
+            cv2.circle(frame, (round(tail_cx), round(tail_cy)), 2, (0, 255, 0), 2)
+            cv2.circle(frame, (round(head_cx), round(head_cy)), 2, (0, 0, 255), 2)
+
+            # 显示窗口
+            window_name = f'ID{track_id}-{frame_num}'
+            cv2.namedWindow(window_name)
+            cv2.moveWindow(window_name, 500, 50)
+            time.sleep(0.005)
+            cv2.imshow(window_name, frame)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+
+
+
+            # if position == 1 or position == 2:
+            #     x, y = x1, y2
+            # elif position == 3 or position == 4:
+            #     x, y = x1, y1
+            # elif position == 5 or position == 6:
+            #     x, y = x2, y1
+            # elif position == 7 or position == 8:
+            #     x, y = x2, y2
+
+            # if position == 1:
+            #     point_x = x + long
+            #     point_y = y - short
+            # elif position == 2:
+            #     point_x = x + short
+            #     point_y = y - long
+            # elif position == 3:
+            #     point_x = x + short
+            #     point_y = y + long
+            # elif position == 4:
+            #     point_x = x + long
+            #     point_y = y + short
+            # elif position == 5:
+            #     point_x = x - long
+            #     point_y = y + short
+            # elif position == 6:
+            #     point_x = x - short
+            #     point_y = y + long
+            # elif position == 7:
+            #     point_x = x - short
+            #     point_y = y - long
+            # elif position == 8:
+            #     point_x = x - long
+            #     point_y = y - short
+
+            return 0, 0
+
+
+
+
+
 
         circle_center_x, circle_center_y, circle_radius = circle_info
         hold_data = {}
@@ -991,10 +1102,16 @@ class NoteAnalyzer:
 
         close_tolerance = circle_radius * 0.05
         start_tolerance = circle_radius * 0.02
-        mid_tolerance = circle_radius * 0.04
+        mid_tolerance = circle_radius * 0.015
         dist_start = circle_radius * 0.25
         dist_end = circle_radius
         dist_mid = circle_radius * (0.25 + 0.75/2)
+        radian = math.radians(47.02034)
+        base_dist = circle_radius * 0.175
+        short = round(math.cos(radian) * base_dist)
+        long = round(math.sin(radian) * base_dist)
+        radian_22_5 = math.radians(22.5)
+        tan_22_5 = math.tan(radian_22_5)
 
         # read final_tracks
         for track_id, track_data in final_tracks.items():
@@ -1068,6 +1185,10 @@ class NoteAnalyzer:
                 elif dist_to_center > dist_end:
                     continue # 去尾
 
+                # 过滤 mid 阶段的数据
+                if abs(dist_to_center - dist_mid) < mid_tolerance:
+                    continue
+
                 predict_track_path.append(match_found[0])
 
             
@@ -1085,8 +1206,14 @@ class NoteAnalyzer:
                 print(f"preprocess_hold_data: positions not consistent for track_id {track_id}")
                 continue
             # 添加到hold_data
-            path = []
+            path1 = [] # 前半
+            path2 = [] # 后半
             for frame_num, x1, y1, x2, y2, center_x, center_y, position, dist_to_center in predict_track_path:
+
+                path = path1 if dist_to_center < dist_mid else path2
+                dist_head, dist_tail = split_dist(frame_num, x1, y1, x2, y2, tan_22_5, long, short, circle_info, position)
+                dist = dist_head if dist_to_center < dist_mid else dist_tail
+
                 path.append({
                     'frame': frame_num,
                     'x1': x1,
@@ -1095,9 +1222,14 @@ class NoteAnalyzer:
                     'y2': y2,
                     'center_x': center_x,
                     'center_y': center_y,
-                    'dist': dist_to_center
+                    'dist': dist
                 })
-            hold_data[(track_id, positions[0])] = path
+            
+            if len(path1) < 5 or len(path2) < 5:
+                print(f"preprocess_hold_data: path1 or path2 too short for track_id {track_id}, length: {len(path1)}, {len(path2)}")
+                continue
+
+            hold_data[(track_id, positions[0])] = (path1, path2)
 
             counter += 1
             print(f"preprocessing hold data...{counter}", end='\r')
@@ -1109,6 +1241,50 @@ class NoteAnalyzer:
             return {}
 
         return hold_data
+    
+
+
+    @log_error
+    def analyze_hold_reach_time(self, hold_data, circle_info, fps):
+
+        hold_info = {}
+        for (track_id, direction), (path1, path2) in hold_data.items():
+            # 计算前半段的到达时间
+            times = []
+            for point in path1:
+                frame_num = point['frame']
+                dist = point['dist']
+                reach_end_Msec = self.predict_note_reach_end_time(dist, frame_num, circle_info[2], fps)
+                times.append(reach_end_Msec)
+            mean1 = np.mean(times)
+
+            min1 = np.min(times)
+            max1 = np.max(times)
+            median1 = np.median(times)
+            std_dev1 = np.std(times)
+            std_dev_percent1 = std_dev1 / mean1 * 100
+            print(f"hold track_id {track_id}, direction {direction}\n  Mean {mean1:.3f}, Min {min1:.3f}, Max {max1:.3f}, Median {median1:.3f}, Std Dev {std_dev_percent1:.3f}%")
+
+            # 计算后半段的到达时间
+            times = []
+            for point in path2:
+                frame_num = point['frame']
+                dist = point['dist']
+                reach_end_Msec = self.predict_note_reach_end_time(dist, frame_num, circle_info[2], fps)
+                times.append(reach_end_Msec)
+            mean2 = np.mean(times)
+
+            min2 = np.min(times)
+            max2 = np.max(times)
+            median2 = np.median(times)
+            std_dev2 = np.std(times)
+            std_dev_percent2 = std_dev2 / mean2 * 100
+            print(f"  Mean {mean2:.3f}, Min {min2:.3f}, Max {max2:.3f}, Median {median2:.3f}, Std Dev {std_dev_percent2:.3f}%")
+
+            hold_info[(track_id, direction)] = (mean1, mean2)
+
+
+        return hold_info
 
 
 
@@ -1117,7 +1293,7 @@ class NoteAnalyzer:
 
     # debug
     @log_error
-    def analyze_all_notes_info(self, bpm, tap_info, touch_info):
+    def analyze_all_notes_info(self, bpm, tap_info, touch_info, hold_info):
 
         def get_fraction(diff_beat, base_denominator):
             #numerator分子, denominator分母
@@ -1154,8 +1330,8 @@ class NoteAnalyzer:
         f.write(f'&inote_5=({bpm})' + '{1},,')
 
 
-        # 合并 tap_info 和 touch_info
-        all_notes_info = {**tap_info, **touch_info}
+        # 合并所有info
+        all_notes_info = {**tap_info, **touch_info, **hold_info}
         # 按时间排序
         sorted_notes = sorted(all_notes_info.items(), key=lambda item: item[1])
 
@@ -1169,6 +1345,19 @@ class NoteAnalyzer:
         base_denominator = 32  # 基准分母
 
         for (track_id, position), time in sorted_notes:
+
+            # 处理 length 信息
+            if isinstance(time, tuple):
+                length = time[1] - time[0]
+                time = time[0]
+                
+                length_beat = length / (60 / bpm * 1000 * 4)
+                numerator, denominator, one = get_fraction(length_beat, base_denominator)
+                if numerator != 0:
+                    if one == 0:
+                        numerator = numerator + one * denominator
+                    position = f'{position}[{denominator}:{numerator}]'
+
 
             if last_time == 0:
                 init_time = time
@@ -1193,7 +1382,7 @@ class NoteAnalyzer:
             time_deviation = real_time_diff - passed_beat_Msec
             time_deviations.append(time_deviation)
 
-            if round(numerator) == 0:
+            if numerator == 0:
                 last_position = f'{last_position}/{position}'
                 continue
 
@@ -1275,7 +1464,7 @@ class NoteAnalyzer:
                 tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps)
 
             # touch
-            # touch_info = {}
+            touch_info = {}
             # touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
             # if touch_data:
             #     self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
@@ -1283,9 +1472,12 @@ class NoteAnalyzer:
 
             # hold
             hold_data = self.preprocess_hold_data(final_tracks, track_results_all, predict_results_all, circle_info)
-
+            if hold_data:
+                hold_info = self.analyze_hold_reach_time(hold_data, circle_info, fps)
+            
+            tap_info = {} # temp
             # analyze all notes info
-            #self.analyze_all_notes_info(bpm, tap_info, touch_info)
+            self.analyze_all_notes_info(bpm, tap_info, touch_info, hold_info)
 
 
 

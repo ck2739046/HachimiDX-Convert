@@ -397,6 +397,16 @@ class NoteDetector:
                 if rect_area <= 0: continue
                 fill_ratio = area / rect_area
                 if fill_ratio < 0.7: continue
+
+                # 获取包围盒(非旋转)
+                rect2 = cv2.boundingRect(contour)
+                rect2_points = np.array([
+                    (rect2[0], rect2[1]),
+                    (rect2[0] + rect2[2], rect2[1]),
+                    (rect2[0] + rect2[2], rect2[1] + rect2[3]),
+                    (rect2[0], rect2[1] + rect2[3])
+                ], dtype=np.int32)
+
                 # 检查轮廓是否有连续三个120度的角
                 if self.has_three_consecutive_120_angles(contour):
                     box_points = np.intp(cv2.boxPoints(rect))
@@ -412,13 +422,13 @@ class NoteDetector:
                         og_box_tail = holds[og_tail_key][3]
                         # box首尾相接1
                         if is_close(og_box_tail, box_head):
-                            holds[tail] = (og_head, tail, og_box_head, box_tail, dist1, dist2)
+                            holds[tail] = (og_head, tail, og_box_head, box_tail, dist1, dist2, rect2_points)
                             del holds[og_tail_key]
                             is_merged = True
                             break
                         # box首尾相接2
                         if is_close(og_box_head, box_tail):
-                            holds[og_tail_key] = (head, og_tail, box_head, og_box_tail, dist1, dist2)
+                            holds[og_tail_key] = (head, og_tail, box_head, og_box_tail, dist1, dist2, rect2_points)
                             is_merged = True
                             break
                         # 首或尾相同
@@ -426,14 +436,14 @@ class NoteDetector:
                             # 如果新的更远则更新
                             if abs(og_head[0] - og_tail[0]) < abs(head[0] - tail[0]) and \
                                abs(og_head[1] - og_tail[1]) < abs(head[1] - tail[1]):
-                                holds[tail] = (head, tail, box_head, og_box_tail, dist1, dist2)
+                                holds[tail] = (head, tail, box_head, og_box_tail, dist1, dist2, rect2_points)
                                 del holds[og_tail_key]
                             is_merged = True
                             break
 
                     # 如果未合并则添加新hold
                     if not is_merged:
-                        holds[tail] = (head, tail, box_head, box_tail, dist1, dist2)
+                        holds[tail] = (head, tail, box_head, box_tail, dist1, dist2, rect2_points)
                     continue
 
             if holds is None:
@@ -441,13 +451,14 @@ class NoteDetector:
             
             detected_notes = []
 
-            for (head, tail, _, _, dist1, dist2) in holds.values():
+            for (head, tail, _, _, dist1, dist2, rect2_points) in holds.values():
                 note = {
                     'box_points': generate_box_points(tail, head, hold_width2),
                     'tail': tail,
                     'head': head,
                     'dist1': dist1,
-                    'dist2': dist2
+                    'dist2': dist2,
+                    'rect': rect2_points
                 }
                 detected_notes.append(note)
 
@@ -918,7 +929,51 @@ class NoteDetector:
                 tail = note['tail']
                 dist1 = note['dist1']
                 dist2 = note['dist2']
+                rect = note['rect']
+
+
+
+
+                closest_dist_from_head_to_rect = 999
+                closest_rect_point_to_head = (0, 0)
+                for point in rect:
+                    rectx = point[0]
+                    recty = point[1]
+                    headx = head[0]
+                    heady = head[1]
+                    dist = np.sqrt((headx - rectx) ** 2 + (heady - recty) ** 2)
+                    if dist < closest_dist_from_head_to_rect:
+                        closest_dist_from_head_to_rect = dist
+                        closest_rect_point_to_head = (rectx, recty)
                 
+                closest_dist_from_tail_to_rect = 999
+                closest_rect_point_to_tail = (0, 0)
+                for point in rect:
+                    rectx = point[0]
+                    recty = point[1]
+                    tailx = tail[0]
+                    taily = tail[1]
+                    dist = np.sqrt((tailx - rectx) ** 2 + (taily - recty) ** 2)
+                    if dist < closest_dist_from_tail_to_rect:
+                        closest_dist_from_tail_to_rect = dist
+                        closest_rect_point_to_tail = (rectx, recty)
+
+                # Draw the rect
+                cv2.polylines(frame, [rect], isClosed=True, color=(255, 0, 0), thickness=1)
+                # Draw closest rect points
+                cv2.circle(frame, closest_rect_point_to_head, 3, (0, 0, 255), -1)
+                cv2.circle(frame, closest_rect_point_to_tail, 3, (0, 0, 255), -1)
+                # Draw dist
+                cv2.putText(frame, f"{closest_dist_from_head_to_rect:.3f}", 
+                            (head[0] + 10, head[1] + 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+                cv2.putText(frame, f"{closest_dist_from_tail_to_rect:.3f}",
+                            (tail[0] + 10, tail[1] + 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+
+
+
+
                 # Draw bounding box (rotated rectangle)
                 cv2.polylines(frame, [bbox], isClosed=True, color=(0, 255, 0), thickness=2)
                 
@@ -929,12 +984,12 @@ class NoteDetector:
                 cv2.line(frame, tail, head, (255, 0, 255), 1)
 
                 # Draw dist
-                cv2.putText(frame, f"{dist1:.2f}", 
-                            (head[0] + 10, head[1] + 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-                cv2.putText(frame, f"{dist2:.2f}", 
-                            (tail[0] + 10, tail[1] + 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                #cv2.putText(frame, f"{dist1:.2f}", 
+                            #(head[0] + 10, head[1] + 10),
+                            #cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+                #cv2.putText(frame, f"{dist2:.2f}", 
+                            #(tail[0] + 10, tail[1] + 10),
+                            #cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
                 
                 
                 
