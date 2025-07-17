@@ -957,6 +957,164 @@ class NoteAnalyzer:
     
 
 
+
+    # debug
+    @log_error
+    def preprocess_hold_data(self, final_tracks, track_results_all, predict_results_all, circle_info):
+        '''
+        坐标使用predict_results_all的数据
+        过滤scale阶段的数据, 只保留move阶段的数据
+
+        返回格式:
+        dict{
+            key: (track_id, position),
+            value: note path list
+            [
+                {
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'center_x': center_x,
+                    'center_y': center_y,
+                    'dist': dist_to_center
+                },
+                ...
+            ]
+        }
+        '''
+
+        circle_center_x, circle_center_y, circle_radius = circle_info
+        hold_data = {}
+        counter = 0
+
+        close_tolerance = circle_radius * 0.05
+        start_tolerance = circle_radius * 0.02
+        mid_tolerance = circle_radius * 0.04
+        dist_start = circle_radius * 0.25
+        dist_end = circle_radius
+        dist_mid = circle_radius * (0.25 + 0.75/2)
+
+        # read final_tracks
+        for track_id, track_data in final_tracks.items():
+            if 'path' not in track_data: continue
+            track_path = track_data['path']
+            if len(track_path) < 5: continue
+            class_id = round(track_data['class_id'])
+            if class_id != 0: continue # hold
+
+            predict_track_path = []
+
+            for track_box in track_path:
+                track_frame_num = round(track_box['frame'])
+                track_conf = float(track_box['conf'])
+                track_x1 = round(track_box['x1'])
+                track_y1 = round(track_box['y1'])
+                track_x2 = round(track_box['x2'])
+                track_y2 = round(track_box['y2'])
+                track_center_x = (track_x1 + track_x2) / 2
+                track_center_y = (track_y1 + track_y2) / 2
+
+                match_found = []
+
+                # 从predict_results_all中获取对应的音符
+                predict_results_list = predict_results_all[track_frame_num]
+                for predict_result in predict_results_list:
+
+                    # 判断 conf
+                    predict_conf = float(predict_result['confidence'])
+                    if track_conf != predict_conf: continue
+                    # 判断 class_id
+                    predict_class_id = round(predict_result['class'])
+                    if predict_class_id != class_id: continue
+                    # 判断 中心距离
+                    box = predict_result['box']
+                    predict_x1 = round(box['x1'])
+                    predict_y1 = round(box['y1'])
+                    predict_x2 = round(box['x2'])
+                    predict_y2 = round(box['y2'])
+                    predict_center_x = (predict_x1 + predict_x2) / 2
+                    predict_center_y = (predict_y1 + predict_y2) / 2
+                    if abs(track_center_x - predict_center_x) > close_tolerance or \
+                        abs(track_center_y - predict_center_y) > close_tolerance: continue 
+                    # 计算距离圆心的距离
+                    dist_to_center = np.sqrt(((predict_center_x - circle_center_x)**2 + (predict_center_y - circle_center_y)**2))                   
+                    # 计算方向(1-8)
+                    position = self.calculate_oct_position(circle_center_x, circle_center_y, predict_center_x, predict_center_y)
+                    # 添加到匹配列表
+                    match_found.append((track_frame_num,
+                                        predict_x1,
+                                        predict_y1,
+                                        predict_x2,
+                                        predict_y2,
+                                        predict_center_x,
+                                        predict_center_y,
+                                        position,
+                                        dist_to_center))
+
+
+                if not match_found:
+                    print(f"preprocess_hold_data: no match found for track_id {track_id} at frame {track_frame_num}")
+                    continue
+                elif len(match_found) > 1:
+                    print(f"preprocess_hold_data: multiple matches found for track_id {track_id} at frame {track_frame_num}")
+                    match_found.sort(key=lambda x: x[-1]) # 按距离排序
+
+                # 过滤 scale 阶段的数据
+                dist_to_center = match_found[0][-1]
+                if abs(dist_to_center - dist_start) < start_tolerance:
+                    continue # 掐头
+                elif dist_to_center > dist_end:
+                    continue # 去尾
+
+                predict_track_path.append(match_found[0])
+
+            
+            if not predict_track_path:
+                print(f"preprocess_hold_data: predict_track_path not found for track_id {track_id}")
+                continue
+            predict_track_path.sort(key=lambda x: x[0]) # 按frame排序
+            # 检验长度
+            if len(predict_track_path) < 5:
+                print(f"preprocess_hold_data: predict_track_path too short for track_id {track_id}, length: {len(predict_track_path)}")
+                continue
+            # 检验方位
+            positions = [x[7] for x in predict_track_path]
+            if len(set(positions)) != 1:
+                print(f"preprocess_hold_data: positions not consistent for track_id {track_id}")
+                continue
+            # 添加到hold_data
+            path = []
+            for frame_num, x1, y1, x2, y2, center_x, center_y, position, dist_to_center in predict_track_path:
+                path.append({
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'center_x': center_x,
+                    'center_y': center_y,
+                    'dist': dist_to_center
+                })
+            hold_data[(track_id, positions[0])] = path
+
+            counter += 1
+            print(f"preprocessing hold data...{counter}", end='\r')
+
+            #self.draw_path_on_frame(track_id, path[0]['frame']+3, path, circle_info)
+
+        if not hold_data:
+            print("preprocess_hold_data: no hold data")
+            return {}
+
+        return hold_data
+
+
+
+    
+
+
     # debug
     @log_error
     def analyze_all_notes_info(self, bpm, tap_info, touch_info):
@@ -1117,14 +1275,17 @@ class NoteAnalyzer:
                 tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps)
 
             # touch
-            touch_info = {}
-            touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
-            if touch_data:
-                self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
-                touch_info = self.analyze_touch_reach_time(touch_data, fps)
+            # touch_info = {}
+            # touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
+            # if touch_data:
+            #     self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
+            #     touch_info = self.analyze_touch_reach_time(touch_data, fps)
+
+            # hold
+            hold_data = self.preprocess_hold_data(final_tracks, track_results_all, predict_results_all, circle_info)
 
             # analyze all notes info
-            self.analyze_all_notes_info(bpm, tap_info, touch_info)
+            #self.analyze_all_notes_info(bpm, tap_info, touch_info)
 
 
 
