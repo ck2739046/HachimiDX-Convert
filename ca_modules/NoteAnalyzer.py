@@ -1004,96 +1004,60 @@ class NoteAnalyzer:
                 # 横向长方形 (2/3/6/7)
                 x_offset = abs(cx - x1) - short
                 y_offset = abs(cy - y1) - long
+                x_offset_baseY = y_offset / tan_22_5
+                y_offset_baseX = x_offset * tan_22_5
+                final_x_offset = (x_offset + x_offset_baseY) / 2
+                final_y_offset = (y_offset + y_offset_baseX) / 2
             else:
                 # 纵向长方形 (1/4/5/8)
                 x_offset = abs(cx - x1) - long
                 y_offset = abs(cy - y1) - short
-
-            y_offset_baseX = y_offset / tan_22_5
-            x_offset_baseY = x_offset * tan_22_5
-            final_x_offset = (x_offset + x_offset_baseY) / 2
-            final_y_offset = (y_offset + y_offset_baseX) / 2
+                x_offset_baseY = y_offset * tan_22_5
+                y_offset_baseX = x_offset / tan_22_5
+                final_x_offset = (x_offset + x_offset_baseY) / 2
+                final_y_offset = (y_offset + y_offset_baseX) / 2
 
             if position == 1 or position == 2:
-                tail_cx = cx - final_x_offset
-                tail_cy = cy + final_y_offset
-                head_cx = cx + final_x_offset
-                head_cy = cy - final_y_offset
+                tail_x = cx - final_x_offset
+                tail_y = cy + final_y_offset
+                head_x = cx + final_x_offset
+                head_y = cy - final_y_offset
             elif position == 3 or position == 4:
-                tail_cx = cx - final_x_offset
-                tail_cy = cy - final_y_offset
-                head_cx = cx + final_x_offset
-                head_cy = cy + final_y_offset
+                tail_x = cx - final_x_offset
+                tail_y = cy - final_y_offset
+                head_x = cx + final_x_offset
+                head_y = cy + final_y_offset
             elif position == 5 or position == 6:
-                tail_cx = cx + final_x_offset
-                tail_cy = cy - final_y_offset
-                head_cx = cx - final_x_offset
-                head_cy = cy + final_y_offset
+                tail_x = cx + final_x_offset
+                tail_y = cy - final_y_offset
+                head_x = cx - final_x_offset
+                head_y = cy + final_y_offset
             elif position == 7 or position == 8:
-                tail_cx = cx + final_x_offset
-                tail_cy = cy + final_y_offset
-                head_cx = cx - final_x_offset
-                head_cy = cy - final_y_offset
+                tail_x = cx + final_x_offset
+                tail_y = cy + final_y_offset
+                head_x = cx - final_x_offset
+                head_y = cy - final_y_offset
 
+            # # 读取帧
+            # self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            # ret, frame = self.cap.read()
+            # # 绘制点
+            # cv2.circle(frame, (round(cx), round(cy)), 2, (255, 0, 0), 2)
+            # cv2.circle(frame, (round(tail_x), round(tail_y)), 2, (0, 255, 0), 2)
+            # cv2.circle(frame, (round(head_x), round(head_y)), 2, (0, 0, 255), 2)
+            # # 显示窗口
+            # window_name = f'ID{track_id}-{frame_num}'
+            # cv2.namedWindow(window_name)
+            # cv2.moveWindow(window_name, 500, 50)
+            # time.sleep(0.005)
+            # cv2.imshow(window_name, frame)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
 
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-            ret, frame = self.cap.read()
-            # 绘制点
-            cv2.circle(frame, (round(cx), round(cy)), 2, (255, 0, 0), 2)
-            cv2.circle(frame, (round(tail_cx), round(tail_cy)), 2, (0, 255, 0), 2)
-            cv2.circle(frame, (round(head_cx), round(head_cy)), 2, (0, 0, 255), 2)
-
-            # 显示窗口
-            window_name = f'ID{track_id}-{frame_num}'
-            cv2.namedWindow(window_name)
-            cv2.moveWindow(window_name, 500, 50)
-            time.sleep(0.005)
-            cv2.imshow(window_name, frame)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-
-
-
-
-            # if position == 1 or position == 2:
-            #     x, y = x1, y2
-            # elif position == 3 or position == 4:
-            #     x, y = x1, y1
-            # elif position == 5 or position == 6:
-            #     x, y = x2, y1
-            # elif position == 7 or position == 8:
-            #     x, y = x2, y2
-
-            # if position == 1:
-            #     point_x = x + long
-            #     point_y = y - short
-            # elif position == 2:
-            #     point_x = x + short
-            #     point_y = y - long
-            # elif position == 3:
-            #     point_x = x + short
-            #     point_y = y + long
-            # elif position == 4:
-            #     point_x = x + long
-            #     point_y = y + short
-            # elif position == 5:
-            #     point_x = x - long
-            #     point_y = y + short
-            # elif position == 6:
-            #     point_x = x - short
-            #     point_y = y + long
-            # elif position == 7:
-            #     point_x = x - short
-            #     point_y = y - long
-            # elif position == 8:
-            #     point_x = x - long
-            #     point_y = y - short
-
-            return 0, 0
-
-
-
-
+            dist_head = np.sqrt(((head_x - circle_center_x) ** 2 + (head_y - circle_center_y) ** 2))
+            dist_tail = np.sqrt(((tail_x - circle_center_x) ** 2 + (tail_y - circle_center_y) ** 2))
+            return dist_head, dist_tail
+        
 
 
         circle_center_x, circle_center_y, circle_radius = circle_info
@@ -1107,7 +1071,7 @@ class NoteAnalyzer:
         dist_end = circle_radius
         dist_mid = circle_radius * (0.25 + 0.75/2)
         radian = math.radians(47.02034)
-        base_dist = circle_radius * 0.175
+        base_dist = circle_radius * 0.18
         short = round(math.cos(radian) * base_dist)
         long = round(math.sin(radian) * base_dist)
         radian_22_5 = math.radians(22.5)
@@ -1258,12 +1222,12 @@ class NoteAnalyzer:
                 times.append(reach_end_Msec)
             mean1 = np.mean(times)
 
-            min1 = np.min(times)
-            max1 = np.max(times)
-            median1 = np.median(times)
-            std_dev1 = np.std(times)
-            std_dev_percent1 = std_dev1 / mean1 * 100
-            print(f"hold track_id {track_id}, direction {direction}\n  Mean {mean1:.3f}, Min {min1:.3f}, Max {max1:.3f}, Median {median1:.3f}, Std Dev {std_dev_percent1:.3f}%")
+            # min1 = np.min(times)
+            # max1 = np.max(times)
+            # median1 = np.median(times)
+            # std_dev1 = np.std(times)
+            # std_dev_percent1 = std_dev1 / mean1 * 100
+            # print(f"hold track_id {track_id}, direction {direction}\n  Mean {mean1:.3f}, Min {min1:.3f}, Max {max1:.3f}, Median {median1:.3f}, Std Dev {std_dev_percent1:.3f}%")
 
             # 计算后半段的到达时间
             times = []
@@ -1274,12 +1238,12 @@ class NoteAnalyzer:
                 times.append(reach_end_Msec)
             mean2 = np.mean(times)
 
-            min2 = np.min(times)
-            max2 = np.max(times)
-            median2 = np.median(times)
-            std_dev2 = np.std(times)
-            std_dev_percent2 = std_dev2 / mean2 * 100
-            print(f"  Mean {mean2:.3f}, Min {min2:.3f}, Max {max2:.3f}, Median {median2:.3f}, Std Dev {std_dev_percent2:.3f}%")
+            # min2 = np.min(times)
+            # max2 = np.max(times)
+            # median2 = np.median(times)
+            # std_dev2 = np.std(times)
+            # std_dev_percent2 = std_dev2 / mean2 * 100
+            # print(f"  Mean {mean2:.3f}, Min {min2:.3f}, Max {max2:.3f}, Median {median2:.3f}, Std Dev {std_dev_percent2:.3f}%")
 
             hold_info[(track_id, direction)] = (mean1, mean2)
 
@@ -1333,7 +1297,7 @@ class NoteAnalyzer:
         # 合并所有info
         all_notes_info = {**tap_info, **touch_info, **hold_info}
         # 按时间排序
-        sorted_notes = sorted(all_notes_info.items(), key=lambda item: item[1])
+        sorted_notes = sorted(all_notes_info.items(), key=lambda item: item[1][0] if isinstance(item[1], tuple) else item[1])
 
         init_time = 0
         last_time = 0
@@ -1465,17 +1429,16 @@ class NoteAnalyzer:
 
             # touch
             touch_info = {}
-            # touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
-            # if touch_data:
-            #     self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
-            #     touch_info = self.analyze_touch_reach_time(touch_data, fps)
+            touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
+            if touch_data:
+                self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
+                touch_info = self.analyze_touch_reach_time(touch_data, fps)
 
             # hold
             hold_data = self.preprocess_hold_data(final_tracks, track_results_all, predict_results_all, circle_info)
             if hold_data:
                 hold_info = self.analyze_hold_reach_time(hold_data, circle_info, fps)
             
-            tap_info = {} # temp
             # analyze all notes info
             self.analyze_all_notes_info(bpm, tap_info, touch_info, hold_info)
 
