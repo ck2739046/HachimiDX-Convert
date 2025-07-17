@@ -1193,7 +1193,7 @@ class NoteAnalyzer:
                 print(f"preprocess_hold_data: path1 or path2 too short for track_id {track_id}, length: {len(path1)}, {len(path2)}")
                 continue
 
-            hold_data[(track_id, positions[0])] = (path1, path2)
+            hold_data[(track_id, f'{positions[0]}h')] = (path1, path2)
 
             counter += 1
             print(f"preprocessing hold data...{counter}", end='\r')
