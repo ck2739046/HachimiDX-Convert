@@ -210,13 +210,14 @@ class NoteAnalyzer:
 
             #self.draw_path_on_frame(track_id, frame_num_start, path, circle_info)
 
+        length = len(note_speeds)
         mean = np.mean(note_speeds)
         min = np.min(note_speeds)
         max = np.max(note_speeds)
         median = np.median(note_speeds)
         std_dev = np.std(note_speeds)
         std_dev_percent = std_dev / mean * 100
-        print(f"note speed: [Mean {mean:.3f}], Min {min:.3f}, Max {max:.3f}, Median {median:.3f}, Std Dev {std_dev_percent:.3f}%")
+        print(f"note speed {length}: [Mean {mean:.3f}], Min {min:.3f}, Max {max:.3f}, Median {median:.3f}, Std Dev {std_dev_percent:.3f}%")
 
         note_DefaultMsec, note_OptionNotespeed = self.get_note_DefaultMsec(mean, fps, circle_info[2])
         return note_DefaultMsec, note_OptionNotespeed
@@ -247,7 +248,7 @@ class NoteAnalyzer:
         正向:
         [dist_offset] = -1/120 * 总距离 * (OptionNotespeed/150f -1)
         [time_offset] = (OptionNotespeed/150f -1) * (-0.5 / (OptionNotespeed/150f -1)) * 1.6 * 1000 / 60
-        高速的dist和time偏移都是负值
+        高速的dist和time偏移都是负值 (实测后取消应用 time_offset)
 
         时间进度 = (current_Msec - leave_start_Msec + time_offset) / [DefaultMsec]
         travelled_dist = 时间进度 * [total_dist]
@@ -266,12 +267,12 @@ class NoteAnalyzer:
         cur_time = cur_frame / fps * 1000 # 转换为毫秒
         total_dist = circle_radius * 0.75
         dist_offset = -1/120 * total_dist * (self.note_OptionNotespeed / 150 - 1)
-        time_offset = (self.note_OptionNotespeed / 150 - 1) * (-0.5 / (self.note_OptionNotespeed / 150 - 1)) * 1.6 * 1000 / 60
+        #time_offset = (self.note_OptionNotespeed / 150 - 1) * (-0.5 / (self.note_OptionNotespeed / 150 - 1)) * 1.6 * 1000 / 60
         start_pos = circle_radius * 0.25
 
         travelled_dist = cur_dist - start_pos - dist_offset
         time_progress = travelled_dist / total_dist
-        leave_start_Msec = cur_time - time_progress * self.note_DefaultMsec + time_offset
+        leave_start_Msec = cur_time - time_progress * self.note_DefaultMsec # + time_offset
         reached_end_Msec = leave_start_Msec + self.note_DefaultMsec
 
         return reached_end_Msec
@@ -828,13 +829,14 @@ class NoteAnalyzer:
             print("estimate_touch_DefaultMsec: no valid touch data")
             return 0, 0
         
+        length = len(DefaultMsecs)
         mean = np.mean(DefaultMsecs)
         min = np.min(DefaultMsecs)
         max = np.max(DefaultMsecs)
         median = np.median(DefaultMsecs)
         std_dev = np.std(DefaultMsecs)
         std_dev_percent = std_dev / median * 100
-        print(f"touch DefaultMsec: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev_percent:.3f}%")
+        print(f"touch DefaultMsec {length}: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev_percent:.3f}%")
 
         touch_DefaultMsec, touch_OptionNotespeed = self.get_touch_DefaultMsec(median)
         return touch_DefaultMsec, touch_OptionNotespeed
@@ -1004,8 +1006,9 @@ class NoteAnalyzer:
         base_numerator_counter = 0
         last_position = None
         last_denominator = 0
+        time_deviations = []
 
-        base_denominator = 16  # 基准分母
+        base_denominator = 32  # 基准分母
 
         for (track_id, position), time in sorted_notes:
 
@@ -1021,12 +1024,16 @@ class NoteAnalyzer:
             numerator, denominator, one = get_fraction(diff_beat, base_denominator)
 
             # update last_time
-            # 使用估计后的时间，而不是原始时间，避免误差累计
             base_numerator = round(diff_beat * base_denominator)
             base_numerator_counter += base_numerator
             passed_beat = base_numerator_counter / base_denominator
             passed_beat_Msec = passed_beat * (60 / bpm * 1000 * 4)
             last_time = passed_beat_Msec + init_time
+
+            # 统计误差
+            real_time_diff = time - init_time
+            time_deviation = real_time_diff - passed_beat_Msec
+            time_deviations.append(time_deviation)
 
             if round(numerator) == 0:
                 last_position = f'{last_position}/{position}'
@@ -1052,6 +1059,14 @@ class NoteAnalyzer:
         print(f'{last_position}-E')
         f.write(f'{last_position},E\n')
         f.close()
+
+        length = len(time_deviations)
+        mean = np.mean(time_deviations)
+        min = np.min(time_deviations)
+        max = np.max(time_deviations)
+        median = np.median(time_deviations)
+        std_dev = np.std(time_deviations)
+        print(f"Time deviations {length}: Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
 
 
