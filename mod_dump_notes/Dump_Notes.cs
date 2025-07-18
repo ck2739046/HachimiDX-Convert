@@ -10,6 +10,8 @@ using Monitor;
 using Monitor.Game;
 using Manager;
 using Main;
+using Process;
+using DB;
 
 [assembly: MelonInfo(typeof(default_namespace.Dump_notes), "Dump_Notes", "1.0.0", "Simon273")]
 [assembly: MelonGame("sega-interactive", "Sinmai")]
@@ -23,6 +25,8 @@ namespace default_namespace {
         private static bool _isFileCreated = false;
         private static bool _isDumpEnabled = true;
         private static bool _lastKeyState = false; // 上一帧按键状态 
+        private static string _currentMusicInfo = ""; // 当前乐曲信息
+        private static bool _gameStartDetected = false; // 游戏开始检测标志 
 
         public class NoteInfo
         {
@@ -50,6 +54,85 @@ namespace default_namespace {
             _activeNoteListField = gameCtrlType.GetField("_activeNoteList", BindingFlags.NonPublic | BindingFlags.Instance);
 
             _fieldsInitialized = true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GameProcess), "OnStart")]
+        public static void GameProcess_OnStart_Postfix(GameProcess __instance)
+        {
+            try
+            {
+                // 获取乐曲信息
+                var musicInfo = GetCurrentMusicInfo();
+                if (!string.IsNullOrEmpty(musicInfo))
+                {
+                    _currentMusicInfo = musicInfo;
+                    _gameStartDetected = true;
+                    MelonLogger.Msg($"Game started: {_currentMusicInfo}");
+                }
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Error($"Error getting music info on game start: {e}");
+            }
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GameProcess), "OnRelease")]
+        public static void GameProcess_OnRelease_Postfix(GameProcess __instance)
+        {
+            try
+            {
+                if (_gameStartDetected)
+                {
+                    // 乐曲结束，重置状态
+                    _isFileCreated = false;
+                    _gameStartDetected = false;
+                    MelonLogger.Msg($"Game ended, ready for next track.");
+                }
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Error($"Error on game end: {e}");
+            }
+        }
+
+        private static string GetCurrentMusicInfo()
+        {
+            try
+            {
+                // 获取当前选择的音乐ID (第一个玩家)
+                int musicId = GameManager.SelectMusicID[0];
+                
+                // 获取音乐数据
+                var musicData = DataManager.Instance.GetMusic(musicId);
+                if (musicData == null) return "";
+                
+                // 获取难度信息
+                int difficulty = GameManager.SelectDifficultyID[0];
+                string[] difficultyNames = { "Basic", "Advanced", "Expert", "Master", "Re:Master" };
+                string difficultyName = difficulty < difficultyNames.Length ? difficultyNames[difficulty] : $"Unknown({difficulty})";
+                
+                // 获取等级
+                string level = "?";
+                if (musicData.notesData != null && difficulty < musicData.notesData.Count && musicData.notesData[difficulty] != null)
+                {
+                    level = musicData.notesData[difficulty].level.ToString();
+                    if (musicData.notesData[difficulty].levelDecimal > 0)
+                    {
+                        level += $".{musicData.notesData[difficulty].levelDecimal}";
+                    }
+                }
+                
+                // 构建信息字符串
+                string musicName = musicData.name?.str ?? "Unknown";
+                return $"ID:{musicId} | {musicName} | {difficultyName} | Lv.{level}";
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Warning($"Failed to get music info: {e.Message}");
+                return "";
+            }
         }
 
         [HarmonyPostfix]
@@ -166,10 +249,13 @@ namespace default_namespace {
                 if (!_isFileCreated)
                 {
                     var desktopPath = @"C:\Users\ck273\Desktop";
-                    _outputFilePath = Path.Combine(desktopPath, $"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt");
+                    var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                    var musicInfo = !string.IsNullOrEmpty(_currentMusicInfo) ? _currentMusicInfo.Replace("|", "_").Replace(":", "").Replace("?", "") : "Unknown";
+                    _outputFilePath = Path.Combine(desktopPath, $"{timestamp}_{musicInfo}.txt");
 
                     // 创建文件并写入头部信息
                     File.WriteAllText(_outputFilePath, $"Note Dump Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
+                    File.AppendAllText(_outputFilePath, $"Music Info: {_currentMusicInfo}\n");
                     File.AppendAllText(_outputFilePath, "Format: Time|Type|Index|PosX|PosY|LocalX|LocalY|Status|AppearMsec\n");
                     File.AppendAllText(_outputFilePath, "=".PadRight(100, '=') + "\n");
 
