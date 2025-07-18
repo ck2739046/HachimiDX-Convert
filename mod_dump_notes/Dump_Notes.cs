@@ -25,8 +25,8 @@ namespace default_namespace {
         private static bool _isFileCreated = false;
         private static bool _isDumpEnabled = true;
         private static bool _lastKeyState = false; // 上一帧按键状态 
-        private static string _currentMusicInfo = ""; // 当前乐曲信息
-        private static bool _gameStartDetected = false; // 游戏开始检测标志 
+        private static List<string> _currentMusicInfo = new List<string> { "Unknown" };
+        private static bool _gameStartDetected = false; // 乐曲开始标志
 
         public class NoteInfo
         {
@@ -63,17 +63,31 @@ namespace default_namespace {
             try
             {
                 // 获取乐曲信息
-                var musicInfo = GetCurrentMusicInfo();
-                if (!string.IsNullOrEmpty(musicInfo))
+                _currentMusicInfo = GetCurrentMusicInfo();
+                _gameStartDetected = true;
+                MelonLogger.Msg($"track start: {string.Join(" - ", _currentMusicInfo)}");
+                // 创建txt
+                if (!_isFileCreated)
                 {
-                    _currentMusicInfo = musicInfo;
-                    _gameStartDetected = true;
-                    MelonLogger.Msg($"Game started: {_currentMusicInfo}");
+                    var desktopPath = @"C:\Users\ck273\Desktop";
+                    var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                    var musicID = _currentMusicInfo[0];
+                    _outputFilePath = Path.Combine(desktopPath, $"{musicID}_{timestamp}.txt");
+
+                    // 创建文件并写入头部信息
+                    File.WriteAllText(_outputFilePath, $"Note Dump Started at {timestamp}\n");
+                    File.AppendAllText(_outputFilePath, $"Music Info: {string.Join(" - ", _currentMusicInfo)}\n");
+                    File.AppendAllText(_outputFilePath, "Format: Type/Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec\n");
+                    File.AppendAllText(_outputFilePath, "=".PadRight(30, '=') + "\n");
+
+                    _isFileCreated = true;
+                    MelonLogger.Msg($"Note dump output file: {_outputFilePath}");
                 }
+                
             }
             catch (Exception e)
             {
-                MelonLogger.Error($"Error getting music info on game start: {e}");
+                MelonLogger.Error($"Error getting music info on track start: {e}");
             }
         }
 
@@ -88,50 +102,39 @@ namespace default_namespace {
                     // 乐曲结束，重置状态
                     _isFileCreated = false;
                     _gameStartDetected = false;
-                    MelonLogger.Msg($"Game ended, ready for next track.");
+                    MelonLogger.Msg($"track end, ready for next track.");
                 }
             }
             catch (Exception e)
             {
-                MelonLogger.Error($"Error on game end: {e}");
+                MelonLogger.Error($"Error on track end: {e}");
             }
         }
 
-        private static string GetCurrentMusicInfo()
+        private static List<string> GetCurrentMusicInfo()
         {
             try
             {
                 // 获取当前选择的音乐ID (第一个玩家)
                 int musicId = GameManager.SelectMusicID[0];
-                
+
                 // 获取音乐数据
                 var musicData = DataManager.Instance.GetMusic(musicId);
-                if (musicData == null) return "";
-                
+                if (musicData == null) return new List<string> { "Unknown" };
+
                 // 获取难度信息
                 int difficulty = GameManager.SelectDifficultyID[0];
                 string[] difficultyNames = { "Basic", "Advanced", "Expert", "Master", "Re:Master" };
                 string difficultyName = difficulty < difficultyNames.Length ? difficultyNames[difficulty] : $"Unknown({difficulty})";
-                
-                // 获取等级
-                string level = "?";
-                if (musicData.notesData != null && difficulty < musicData.notesData.Count && musicData.notesData[difficulty] != null)
-                {
-                    level = musicData.notesData[difficulty].level.ToString();
-                    if (musicData.notesData[difficulty].levelDecimal > 0)
-                    {
-                        level += $".{musicData.notesData[difficulty].levelDecimal}";
-                    }
-                }
-                
-                // 构建信息字符串
+
+                // 构建信息
                 string musicName = musicData.name?.str ?? "Unknown";
-                return $"ID:{musicId} | {musicName} | {difficultyName} | Lv.{level}";
+                return new List<string> { musicId.ToString(), musicName, difficultyName };
             }
             catch (Exception e)
             {
                 MelonLogger.Warning($"Failed to get music info: {e.Message}");
-                return "";
+                return new List<string> { "Unknown" };
             }
         }
 
@@ -168,14 +171,11 @@ namespace default_namespace {
                     {
                         if (note != null && note.gameObject.activeSelf)
                         {
-                            // 只处理 Tap 和 Hold 音符
-                            string noteType = GetNoteTypeName(note);
-                            if (noteType == "Tap" || noteType == "Hold")
-                            {
-                                var noteInfo = GetNoteInfo(note, noteType);
-                                if (noteInfo != null)
-                                    allNotes.Add(noteInfo);
-                            }
+                            // 获取音符
+                            string typeName = note.GetType().Name;
+                            var noteInfo = GetNoteInfo(note, typeName);
+                            if (noteInfo != null)
+                                allNotes.Add(noteInfo);
                         }
                     }
                 }
@@ -230,17 +230,6 @@ namespace default_namespace {
             }
         }
 
-        private static string GetNoteTypeName(NoteBase noteBase)
-        {
-            string typeName = noteBase.GetType().Name;
-
-            // 简化类型名称，只识别 Tap 和 Hold
-            if (typeName.Contains("Tap") && !typeName.Contains("Hold")) return "Tap";
-            if (typeName.Contains("Hold")) return "Hold";
-
-            return "Other";  // 其他类型暂时不处理
-        }
-
         private static void PrintNoteFrame(float currentTime, List<NoteInfo> notes)
         {
             try
@@ -250,14 +239,14 @@ namespace default_namespace {
                 {
                     var desktopPath = @"C:\Users\ck273\Desktop";
                     var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                    var musicInfo = !string.IsNullOrEmpty(_currentMusicInfo) ? _currentMusicInfo.Replace("|", "_").Replace(":", "").Replace("?", "") : "Unknown";
-                    _outputFilePath = Path.Combine(desktopPath, $"{timestamp}_{musicInfo}.txt");
+                    var musicID = _currentMusicInfo[0];
+                    _outputFilePath = Path.Combine(desktopPath, $"{musicID}_{timestamp}.txt");
 
                     // 创建文件并写入头部信息
-                    File.WriteAllText(_outputFilePath, $"Note Dump Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
-                    File.AppendAllText(_outputFilePath, $"Music Info: {_currentMusicInfo}\n");
-                    File.AppendAllText(_outputFilePath, "Format: Time|Type|Index|PosX|PosY|LocalX|LocalY|Status|AppearMsec\n");
-                    File.AppendAllText(_outputFilePath, "=".PadRight(100, '=') + "\n");
+                    File.WriteAllText(_outputFilePath, $"Note Dump Started at {timestamp}\n");
+                    File.AppendAllText(_outputFilePath, $"Music Info: {string.Join(" - ", _currentMusicInfo)}\n");
+                    File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec\n");
+                    File.AppendAllText(_outputFilePath, "=".PadRight(30, '=') + "\n");
 
                     _isFileCreated = true;
                     MelonLogger.Msg($"Note dump output file: {_outputFilePath}");
@@ -265,14 +254,14 @@ namespace default_namespace {
 
                 // 构建数据行
                 var lines = new List<string>();
-                lines.Add($"Frame:{currentTime:F2}|Count:{notes.Count}");
+                lines.Add($"Frame:{currentTime:F4}|Count:{notes.Count}");
 
                 foreach (var note in notes.OrderBy(n => n.NoteType).ThenBy(n => n.NoteIndex))
                 {
-                    var line = $"{currentTime:F2}|{note.NoteType}|{note.NoteIndex}|" +
-                            $"{note.Position.x:F2}|{note.Position.y:F2}|" +
-                            $"{note.LocalPosition.x:F2}|{note.LocalPosition.y:F2}|" +
-                            $"{note.Status}|{note.AppearMsec:F1}";
+                    var line = $"{note.NoteType}-{note.NoteIndex} | " +
+                            $"{note.Position.x:F4}, {note.Position.y:F4} | " +
+                            $"{note.LocalPosition.x:F4}, {note.LocalPosition.y:F4} | " +
+                            $"{note.Status} | {note.AppearMsec:F4}";
                     lines.Add(line);
                 }
 
