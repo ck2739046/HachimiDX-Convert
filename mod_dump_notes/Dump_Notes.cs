@@ -9,6 +9,7 @@ using System.IO;
 using Monitor;
 using Monitor.Game;
 using Manager;
+using Main;
 
 [assembly: MelonInfo(typeof(default_namespace.Dump_notes), "Dump_Notes", "1.0.0", "Simon273")]
 [assembly: MelonGame("sega-interactive", "Sinmai")]
@@ -19,7 +20,9 @@ namespace default_namespace {
         private static FieldInfo _activeNoteListField;
         private static bool _fieldsInitialized = false;
         private static string _outputFilePath = "";
-        private static bool _firstFrame = true;
+        private static bool _isFileCreated = false;
+        private static bool _isDumpEnabled = true;
+        private static bool _lastKeyState = false; // 上一帧按键状态 
 
         public class NoteInfo
         {
@@ -37,7 +40,7 @@ namespace default_namespace {
         public override void OnInitializeMelon()
         {
             HarmonyInstance.PatchAll(typeof(Dump_notes));
-            MelonLogger.Msg($"Load success.");
+            MelonLogger.Msg($"Load success. Press I to toggle note dumping.");
         }
 
         static void InitializeFields()
@@ -57,6 +60,7 @@ namespace default_namespace {
             try
             {
                 InitializeFields();
+                if (!_isDumpEnabled) return;
                 DumpAllNotePositions(__instance);
             }
             catch (Exception e)
@@ -112,7 +116,7 @@ namespace default_namespace {
                 // 获取实际的音符位置
                 Vector3 actualPosition = Vector3.zero;
                 Vector3 actualLocalPosition = Vector3.zero;
-                
+
                 try
                 {
                     // 尝试通过反射获取 NoteObj
@@ -122,7 +126,7 @@ namespace default_namespace {
                         // 如果在子类中找不到，尝试在基类中查找
                         noteObjField = typeof(NoteBase).GetField("NoteObj", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                     }
-                    
+
                     if (noteObjField != null)
                     {
                         var noteObj = noteObjField.GetValue(noteBase) as GameObject;
@@ -141,7 +145,7 @@ namespace default_namespace {
                         {
                             getNoteYPositionMethod = typeof(NoteBase).GetMethod("GetNoteYPosition", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                         }
-                        
+
                         if (getNoteYPositionMethod != null)
                         {
                             float yPosition = (float)getNoteYPositionMethod.Invoke(noteBase, null);
@@ -212,11 +216,11 @@ namespace default_namespace {
         private static string GetNoteTypeName(NoteBase noteBase)
         {
             string typeName = noteBase.GetType().Name;
-            
+
             // 简化类型名称，只识别 Tap 和 Hold
             if (typeName.Contains("Tap") && !typeName.Contains("Hold")) return "Tap";
             if (typeName.Contains("Hold")) return "Hold";
-            
+
             return "Other";  // 其他类型暂时不处理
         }
 
@@ -225,24 +229,24 @@ namespace default_namespace {
             try
             {
                 // 设置输出文件路径（第一帧时）
-                if (_firstFrame)
+                if (!_isFileCreated)
                 {
                     var desktopPath = @"C:\Users\ck273\Desktop";
                     _outputFilePath = Path.Combine(desktopPath, $"{currentTime:F0}.txt");
-                    
+
                     // 创建文件并写入头部信息
                     File.WriteAllText(_outputFilePath, $"Note Dump Started at {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
                     File.AppendAllText(_outputFilePath, "Format: Time|Type|Index|PosX|PosY|PosZ|LocalX|LocalY|LocalZ|Status|ButtonId|AppearMsec\n");
                     File.AppendAllText(_outputFilePath, "=".PadRight(100, '=') + "\n");
-                    
-                    _firstFrame = false;
+
+                    _isFileCreated = true;
                     MelonLogger.Msg($"Note dump output file: {_outputFilePath}");
                 }
 
                 // 构建数据行
                 var lines = new List<string>();
                 lines.Add($"Frame:{currentTime:F2}|Count:{notes.Count}");
-                
+
                 foreach (var note in notes.OrderBy(n => n.NoteType).ThenBy(n => n.NoteIndex))
                 {
                     var line = $"{currentTime:F2}|{note.NoteType}|{note.NoteIndex}|" +
@@ -251,7 +255,7 @@ namespace default_namespace {
                             $"{note.Status}|{note.ButtonId}|{note.AppearMsec:F1}";
                     lines.Add(line);
                 }
-                
+
                 // 追加到文件
                 File.AppendAllLines(_outputFilePath, lines);
             }
@@ -259,6 +263,36 @@ namespace default_namespace {
             {
                 MelonLogger.Error($"Failed to write note frame to file: {e.Message}");
             }
+        }
+        
+        // 热键监听
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GameMainObject), "Update")]
+        public static void OnGameMainObjectUpdate()
+        {
+            // 检测 I 键按下
+            bool currentKeyState = Input.GetKey(KeyCode.I);
+
+            // 检测按键从释放到按下的状态变化（边沿检测）
+            if (currentKeyState && !_lastKeyState)
+            {
+                if (_isDumpEnabled)
+                {
+                    // 关闭
+                    _isDumpEnabled = false;
+                    _isFileCreated = false; 
+                    MelonLogger.Msg("stop dump notes.");
+                }
+                else
+                {
+                    // 开启
+                    _isFileCreated = false;
+                    _isDumpEnabled = true;
+                    MelonLogger.Msg("start dump notes.");
+                }
+            }
+            
+            _lastKeyState = currentKeyState;
         }
     }
 }
