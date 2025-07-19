@@ -39,11 +39,9 @@ namespace default_namespace {
             public bool IsEnd { get; set; }
             public float AppearMsec { get; set; }
 
-            // 新增尺寸相关属性
-            public Vector3[] TouchDecorPositions { get; set; }  // Touch装饰位置数组
-            public Vector3 TouchOverallScale { get; set; }      // Touch整体缩放
-            public Vector2 HoldBodySize { get; set; }          // Hold身体尺寸
-            public bool IsBodyActive { get; set; }              // Hold激活状态
+            // 尺寸相关属性
+            public Vector3 TouchDecorPosition { get; set; }  // Touch装饰位置
+            public Vector2 HoldBodySize { get; set; }           // Hold尺寸
         }
 
         public override void OnInitializeMelon()
@@ -83,7 +81,7 @@ namespace default_namespace {
                     // 创建文件并写入头部信息
                     File.WriteAllText(_outputFilePath, $"Note Dump Started at {timestamp}\n");
                     File.AppendAllText(_outputFilePath, $"Music Info: {string.Join(" - ", _currentMusicInfo)}\n");
-                    File.AppendAllText(_outputFilePath, "Format: Type/Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec\n");
+                    File.AppendAllText(_outputFilePath, "Format: Type/Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | (size for touch/hold)\n");
                     File.AppendAllText(_outputFilePath, "=".PadRight(30, '=') + "\n");
 
                     _isFileCreated = true;
@@ -211,7 +209,7 @@ namespace default_namespace {
                 actualLocalPosition = noteObj.transform.localPosition;
 
                 // 初始化尺寸数据
-                Vector3[] touchDecorPositions = null;
+                Vector3 touchDecorPosition = Vector3.zero;
                 Vector3 touchOverallScale = Vector3.zero;
                 Vector2 holdBodySize = Vector2.zero;
                 bool isBodyActive = false;
@@ -222,49 +220,15 @@ namespace default_namespace {
                     // 获取ColorsObject数组
                     var colorsField = noteBase.GetType().GetField("ColorsObject", BindingFlags.NonPublic | BindingFlags.Instance);
                     var colors = colorsField.GetValue(noteBase) as SpriteRenderer[];
-                    
-                    if (colors != null)
-                    {
-                        touchDecorPositions = new Vector3[colors.Length];
-                        for (int i = 0; i < colors.Length; i++)
-                        {
-                            if (colors[i] != null)
-                            {
-                                touchDecorPositions[i] = colors[i].transform.localPosition;
-                            }
-                        }
-                    }
-
-                    // 获取整体缩放
-                    touchOverallScale = noteObj.transform.localScale;
+                    touchDecorPosition = colors[0].transform.localPosition;
                 }
                 
-                // 处理Hold音符尺寸（包括所有变种类型）
+                // 处理Hold音符尺寸
                 else if (noteType.Contains("Hold"))
-                {
-                    // 尝试获取BodyOn状态（支持不同Hold变种）
-                    var bodyOnField = noteBase.GetType().GetField("BodyOn", BindingFlags.NonPublic | BindingFlags.Instance);
-                    if (bodyOnField != null)
-                    {
-                        isBodyActive = (bool)bodyOnField.GetValue(noteBase);
-                    }
-
-                    // 尝试获取SpriteRenderer（支持不同命名方式）
-                    var spriteRenderField = noteBase.GetType().GetField("_spriteRender", BindingFlags.NonPublic | BindingFlags.Instance);
-                    if (spriteRenderField == null)
-                    {
-                        // 如果没有找到_spriteRender，尝试其他常见命名
-                        spriteRenderField = noteBase.GetType().GetField("SpriteRender", BindingFlags.NonPublic | BindingFlags.Instance);
-                    }
-
-                    if (spriteRenderField != null)
-                    {
-                        var spriteRender = spriteRenderField.GetValue(noteBase) as SpriteRenderer;
-                        if (spriteRender != null)
-                        {
-                            holdBodySize = spriteRender.size;
-                        }
-                    }
+                {                    
+                    var spriteRenderField = noteBase.GetType().GetField("SpriteRender", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var spriteRender = spriteRenderField.GetValue(noteBase) as SpriteRenderer;
+                    holdBodySize = spriteRender.size;
                 }
 
                 // 获取基本信息
@@ -278,11 +242,10 @@ namespace default_namespace {
                     IsActive = gameObject.activeSelf,
                     IsEnd = noteBase.IsEnd(),
                     AppearMsec = -1f,  // 默认值
-                    // 设置尺寸数据
-                    TouchDecorPositions = touchDecorPositions,
-                    TouchOverallScale = touchOverallScale,
+
+                    // touch/hold尺寸数据
+                    TouchDecorPosition = touchDecorPosition,
                     HoldBodySize = holdBodySize,
-                    IsBodyActive = isBodyActive
                 };
 
                 // 通过反射获取AppearMsec
@@ -332,21 +295,16 @@ namespace default_namespace {
                                $"{note.LocalPosition.x:F4}, {note.LocalPosition.y:F4} | " +
                                $"{note.Status} | {note.AppearMsec:F4}";
 
-                    // 添加尺寸信息
-                    if (note.NoteType == "TouchNoteB")
+                    // touch尺寸信息
+                    if (note.NoteType.Contains("Touch"))
                     {
-                        // Touch装饰位置信息
-                        if (note.TouchDecorPositions != null && note.TouchDecorPositions.Length > 0)
-                        {
-                            var decorPositions = string.Join("; ", note.TouchDecorPositions
-                                .Select(pos => $"{pos.x:F4},{pos.y:F4},{pos.z:F4}" ));
-                            line += $" | TouchDecorPositions: [{decorPositions}] | TouchScale: {note.TouchOverallScale.x:F4},{note.TouchOverallScale.y:F4},{note.TouchOverallScale.z:F4}";
-                        }
+                        var decorPosition = note.TouchDecorPosition;
+                        line += $" | TouchDecorPosition: {decorPosition.y:F4}";
                     }
-                    else if (note.NoteType == "HoldNote")
+                    // hold尺寸信息
+                    else if (note.NoteType.Contains("Hold"))
                     {
-                        // Hold身体尺寸信息
-                        line += $" | HoldBodySize: {note.HoldBodySize.x:F4},{note.HoldBodySize.y:F4} | IsBodyActive: {note.IsBodyActive}";
+                        line += $" | HoldBodySize: {note.HoldBodySize.y:F4}";
                     }
 
                     lines.Add(line);
