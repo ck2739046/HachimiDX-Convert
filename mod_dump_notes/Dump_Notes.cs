@@ -42,6 +42,10 @@ namespace default_namespace {
             // 尺寸相关属性
             public Vector3 TouchDecorPosition { get; set; }  // Touch装饰位置
             public Vector2 HoldBodySize { get; set; }           // Hold尺寸
+            
+            // StarNote相关属性
+            public Vector3 StarLocalScale { get; set; }         // StarNote的localScale
+            public float UserNoteSize { get; set; }             // 用户设置的音符大小
         }
 
         public override void OnInitializeMelon()
@@ -210,9 +214,9 @@ namespace default_namespace {
 
                 // 初始化尺寸数据
                 Vector3 touchDecorPosition = Vector3.zero;
-                Vector3 touchOverallScale = Vector3.zero;
                 Vector2 holdBodySize = Vector2.zero;
-                bool isBodyActive = false;
+                Vector3 starLocalScale = Vector3.zero;
+                float userNoteSize = 1f;
 
                 // 处理Touch音符尺寸
                 if (noteType.Contains("Touch"))
@@ -230,6 +234,26 @@ namespace default_namespace {
                     var spriteRender = spriteRenderField.GetValue(noteBase) as SpriteRenderer;
                     holdBodySize = spriteRender.size;
                 }
+                
+                // 处理StarNote尺寸
+                else if (noteType.Contains("Star"))
+                {
+                    // 获取NoteObj的localScale
+                    starLocalScale = noteObj.transform.localScale;
+                    
+                    // 获取用户设置的音符大小
+                    try
+                    {
+                        if (GamePlayManager.Instance != null)
+                        {
+                            userNoteSize = GamePlayManager.Instance.GetGameScore(0).UserOption.NoteSize.GetValue();
+                        }
+                    }
+                    catch
+                    {
+                        userNoteSize = 1f; // 默认值
+                    }
+                }
 
                 // 获取基本信息
                 var noteInfo = new NoteInfo
@@ -243,9 +267,11 @@ namespace default_namespace {
                     IsEnd = noteBase.IsEnd(),
                     AppearMsec = -1f,  // 默认值
 
-                    // touch/hold尺寸数据
+                    // touch/hold/star尺寸数据
                     TouchDecorPosition = touchDecorPosition,
                     HoldBodySize = holdBodySize,
+                    StarLocalScale = starLocalScale,
+                    UserNoteSize = userNoteSize
                 };
 
                 // 通过反射获取AppearMsec
@@ -305,6 +331,11 @@ namespace default_namespace {
                     else if (note.NoteType.Contains("Hold"))
                     {
                         line += $" | HoldBodySize: {note.HoldBodySize.y:F4}";
+                    }
+                    // star尺寸信息
+                    else if (note.NoteType.Contains("Star"))
+                    {
+                        line += $" | StarScale: {note.StarLocalScale.x:F4},{note.StarLocalScale.y:F4} | UserNoteSize: {note.UserNoteSize:F4}";
                     }
 
                     lines.Add(line);
