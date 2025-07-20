@@ -12,6 +12,8 @@ using Manager;
 using Main;
 using Process;
 using DB;
+using Util;
+using MAI2.Util;
 
 [assembly: MelonInfo(typeof(default_namespace.Dump_notes), "Dump_Notes", "1.0.0", "Simon273")]
 [assembly: MelonGame("sega-interactive", "Sinmai")]
@@ -51,7 +53,10 @@ namespace default_namespace {
         public override void OnInitializeMelon()
         {
             HarmonyInstance.PatchAll(typeof(Dump_notes));
-            MelonLogger.Msg($"Load success. Press I to toggle note dumping.");
+            MelonLogger.Msg($"Load success. 热键说明:");
+            MelonLogger.Msg($"  I键: 切换音符数据导出");
+            MelonLogger.Msg($"  K键: 打印游戏结束状态调试信息");
+            MelonLogger.Msg($"  L键: 打印最后一个音符详细信息");
         }
 
         static void InitializeFields()
@@ -378,6 +383,183 @@ namespace default_namespace {
             }
             
             _lastKeyState = currentKeyState;
+        }
+
+        // 热键调试：K键打印游戏结束状态
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GameProcess), "OnUpdate")]
+        public static void GameProcess_OnUpdate_Debug(GameProcess __instance)
+        {
+            try
+            {
+                // 检测 K 键按下
+                if (Input.GetKeyDown(KeyCode.K))
+                {
+                    MelonLogger.Msg("=== 游戏结束状态调试信息 ===");
+                    
+                    // 获取GameMonitor数组
+                    var monitorsField = typeof(GameProcess).GetField("_monitors", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var monitors = (Monitor.GameMonitor[])monitorsField.GetValue(__instance);
+                    
+                    if (monitors != null)
+                    {
+                        for (int i = 0; i < monitors.Length; i++)
+                        {
+                            if (monitors[i] != null)
+                            {
+                                var monitorIndex = i;
+                                var gameScore = MAI2.Util.Singleton<GamePlayManager>.Instance.GetGameScore(monitorIndex);
+                                
+                                MelonLogger.Msg($"--- 玩家 {i + 1} 状态 ---");
+                                MelonLogger.Msg($"  IsAllJudged: {gameScore.IsAllJudged()}");
+                                MelonLogger.Msg($"  IsTrackSkip: {gameScore.IsTrackSkip}");
+                                MelonLogger.Msg($"  IsEnable: {gameScore.IsEnable}");
+                                MelonLogger.Msg($"  Life: {gameScore.Life}");
+                                
+                                // 检查音符判定状态
+                                var judgeResultListField = gameScore.GetType().GetField("_judgeResultList", BindingFlags.NonPublic | BindingFlags.Instance);
+                                if (judgeResultListField != null)
+                                {
+                                    var judgeResults = judgeResultListField.GetValue(gameScore);
+                                    if (judgeResults != null)
+                                    {
+                                        var resultsArray = judgeResults as Array;
+                                        if (resultsArray != null)
+                                        {
+                                            int totalNotes = resultsArray.Length;
+                                            int judgedNotes = 0;
+                                            
+                                            for (int j = 0; j < resultsArray.Length; j++)
+                                            {
+                                                var result = resultsArray.GetValue(j);
+                                                var judgedField = result.GetType().GetField("Judged");
+                                                if (judgedField != null && (bool)judgedField.GetValue(result))
+                                                {
+                                                    judgedNotes++;
+                                                }
+                                            }
+                                            
+                                            MelonLogger.Msg($"  音符状态: {judgedNotes}/{totalNotes} 已判定");
+                                        }
+                                    }
+                                }
+                                
+                                // 检查对象状态
+                                var isAllObjectEnd = monitors[i].IsAllObjectEnd();
+                                var isAnyObjectActiveField = typeof(Monitor.GameMonitor).GetField("IsAnyObjectActive", BindingFlags.NonPublic | BindingFlags.Instance);
+                                var isAnyObjectActive = isAnyObjectActiveField?.GetValue(monitors[i]) as bool? ?? false;
+                                
+                                MelonLogger.Msg($"  IsAllObjectEnd: {isAllObjectEnd}");
+                                MelonLogger.Msg($"  IsAnyObjectActive: {isAnyObjectActive}");
+                            }
+                        }
+                    }
+                    
+                    // 检查音乐状态
+                    MelonLogger.Msg($"--- 音乐状态 ---");
+                    MelonLogger.Msg($"  IsEndMusic: {Manager.SoundManager.IsEndMusic()}");
+                    MelonLogger.Msg($"  IsPlayingMusic: {!Manager.SoundManager.IsEndMusic()}");
+                    
+                    // 检查当前游戏序列
+                    var sequenceField = typeof(GameProcess).GetField("_sequence", BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (sequenceField != null)
+                    {
+                        var sequence = sequenceField.GetValue(__instance);
+                        MelonLogger.Msg($"  当前游戏序列: {sequence}");
+                    }
+                    
+                    // 检查当前时间
+                    var currentTime = Manager.NotesManager.GetCurrentMsec();
+                    MelonLogger.Msg($"  当前游戏时间: {currentTime:F2}ms");
+                    
+                    MelonLogger.Msg("=== 调试信息结束 ===");
+                }
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Error($"调试信息获取失败: {e.Message}");
+            }
+        }
+
+        // 热键调试：L键打印最后一个音符的详细信息
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(GameProcess), "OnUpdate")]
+        public static void GameProcess_OnUpdate_LastNoteDebug(GameProcess __instance)
+        {
+            try
+            {
+                // 检测 L 键按下
+                if (Input.GetKeyDown(KeyCode.L))
+                {
+                    MelonLogger.Msg("=== 最后一个音符调试信息 ===");
+                    
+                    // 获取当前游戏时间
+                    var currentTime = Manager.NotesManager.GetCurrentMsec();
+                    
+                    // 获取所有monitor的音符信息
+                    for (int player = 0; player < 2; player++)
+                    {
+                        var gameScore = MAI2.Util.Singleton<GamePlayManager>.Instance.GetGameScore(player);
+                        if (gameScore == null || !gameScore.IsEnable) continue;
+                        
+                        MelonLogger.Msg($"--- 玩家 {player + 1} 音符信息 ---");
+                        
+                        // 获取音符数据
+                        var judgeResultListField = gameScore.GetType().GetField("_judgeResultList", BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (judgeResultListField != null)
+                        {
+                            var judgeResults = judgeResultListField.GetValue(gameScore);
+                            if (judgeResults != null)
+                            {
+                                var resultsArray = judgeResults as Array;
+                                if (resultsArray != null && resultsArray.Length > 0)
+                                {
+                                    // 查找最后一个音符
+                                    var lastNote = resultsArray.GetValue(resultsArray.Length - 1);
+                                    if (lastNote != null)
+                                    {
+                                        var typeField = lastNote.GetType().GetField("type");
+                                        var timeField = lastNote.GetType().GetField("time");
+                                        var judgedField = lastNote.GetType().GetField("Judged");
+                                        var judgeResultField = lastNote.GetType().GetField("judgeResult");
+                                        
+                                        if (typeField != null && timeField != null)
+                                        {
+                                            var noteType = typeField.GetValue(lastNote);
+                                            var noteTime = (float)timeField.GetValue(lastNote);
+                                            var isJudged = judgedField != null && (bool)judgedField.GetValue(lastNote);
+                                            var judgeResult = judgeResultField?.GetValue(lastNote)?.ToString() ?? "Unknown";
+                                            
+                                            MelonLogger.Msg($"  最后一个音符:");
+                                            MelonLogger.Msg($"    类型: {noteType}");
+                                            MelonLogger.Msg($"    时间: {noteTime:F2}ms");
+                                            MelonLogger.Msg($"    已判定: {isJudged}");
+                                            MelonLogger.Msg($"    判定结果: {judgeResult}");
+                                            MelonLogger.Msg($"    与当前时间差: {currentTime - noteTime:F2}ms");
+                                        }
+                                    }
+                                    
+                                    MelonLogger.Msg($"  总音符数: {resultsArray.Length}");
+                                }
+                            }
+                        }
+                        
+                        // 获取理论成就值
+                        var theoryAchivementField = gameScore.GetType().GetMethod("GetTheoryAchivement");
+                        if (theoryAchivementField != null)
+                        {
+                            var theoryAchivement = theoryAchivementField.Invoke(gameScore, null);
+                            MelonLogger.Msg($"  理论成就值: {theoryAchivement}");
+                        }
+                    }
+                    
+                    MelonLogger.Msg("=== 最后一个音符调试结束 ===");
+                }
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Error($"最后一个音符调试信息获取失败: {e.Message}");
+            }
         }
     }
 }
