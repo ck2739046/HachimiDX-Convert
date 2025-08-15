@@ -26,7 +26,7 @@ namespace default_namespace {
         private static string _outputFilePath = "";
         private static bool _isFileCreated = false;
         private static bool _isDumpEnabled = false;
-        private static bool _lastKeyState = false; // 上一帧按键状态 
+    // 注: 使用 GetKeyDown 进行边沿触发，不再需要上一帧状态
         private static List<string> _currentMusicInfo = new List<string> { "Unknown" };
         private static bool _gameStartDetected = false; // 乐曲开始标志
 
@@ -78,23 +78,8 @@ namespace default_namespace {
                 _currentMusicInfo = GetCurrentMusicInfo();
                 _gameStartDetected = true;
                 MelonLogger.Msg($"track start: {string.Join(" - ", _currentMusicInfo)}");
-                // 创建txt
-                if (!_isFileCreated)
-                {
-                    var desktopPath = @"C:\Users\ck273\Desktop";
-                    var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                    var musicID = _currentMusicInfo[0];
-                    _outputFilePath = Path.Combine(desktopPath, $"{musicID}_{timestamp}.txt");
-
-                    // 创建文件并写入头部信息
-                    File.WriteAllText(_outputFilePath, $"Note Dump Started at {timestamp}\n");
-                    File.AppendAllText(_outputFilePath, $"Music Info: {string.Join(" - ", _currentMusicInfo)}\n");
-                    File.AppendAllText(_outputFilePath, "Format: Type/Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | (size for touch/hold)\n");
-                    File.AppendAllText(_outputFilePath, "=".PadRight(30, '=') + "\n");
-
-                    _isFileCreated = true;
-                    MelonLogger.Msg($"Note dump output file: {_outputFilePath}");
-                }
+                // 不在这里创建文件，仅在真正开始导出并写入首帧时延迟创建
+                _isFileCreated = false;
                 
             }
             catch (Exception e)
@@ -298,7 +283,7 @@ namespace default_namespace {
                 // 设置输出文件路径（第一帧时）
                 if (!_isFileCreated)
                 {
-                    var desktopPath = @"C:\Users\ck273\Desktop";
+                    var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                     var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
                     var musicID = _currentMusicInfo[0];
                     _outputFilePath = Path.Combine(desktopPath, $"{musicID}_{timestamp}.txt");
@@ -306,7 +291,7 @@ namespace default_namespace {
                     // 创建文件并写入头部信息
                     File.WriteAllText(_outputFilePath, $"Note Dump Started at {timestamp}\n");
                     File.AppendAllText(_outputFilePath, $"Music Info: {string.Join(" - ", _currentMusicInfo)}\n");
-                    File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec\n");
+                    File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | (TouchDecor/HoldSize/StarScale+UserNoteSize)\n");
                     File.AppendAllText(_outputFilePath, "=".PadRight(30, '=') + "\n");
 
                     _isFileCreated = true;
@@ -359,11 +344,8 @@ namespace default_namespace {
         [HarmonyPatch(typeof(GameMainObject), "Update")]
         public static void OnGameMainObjectUpdate()
         {
-            // 检测 I 键按下
-            bool currentKeyState = Input.GetKey(KeyCode.I);
-
-            // 检测按键从释放到按下的状态变化（边沿检测）
-            if (currentKeyState && !_lastKeyState)
+            // 边沿触发：按下一次 I 键，切换导出开关
+            if (Input.GetKeyDown(KeyCode.I))
             {
                 if (_isDumpEnabled)
                 {
@@ -380,8 +362,6 @@ namespace default_namespace {
                     MelonLogger.Msg("start dump notes.");
                 }
             }
-            
-            _lastKeyState = currentKeyState;
         }
 
         // 热键调试：K键打印游戏结束状态
