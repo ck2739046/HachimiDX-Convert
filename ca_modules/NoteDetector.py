@@ -811,9 +811,9 @@ if __name__ == "__main__":
 
 
     if test == 4:
-        video_path = r"C:\Users\ck273\Desktop\训练视频\11741.mp4"
-        start=385
-        end=9360
+        video_path = r"C:\Users\ck273\Desktop\训练视频\11537.mp4"
+        start=410
+        end=9520
         cap = cv2.VideoCapture(video_path)
         state = {
             'total_frames': round(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
