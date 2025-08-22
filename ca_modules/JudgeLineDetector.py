@@ -107,6 +107,7 @@ class JudgeLineDetector:
             most_common = max(set(circles_detected), key=circles_detected.count)
             circle_center = (most_common[0], most_common[1])
             circle_radius = most_common[2]
+            circle_radius = round(circle_radius * 1.01)
 
             return circle_center, circle_radius, frame_counter
 
@@ -302,10 +303,14 @@ class JudgeLineDetector:
                 )
 
             # crop and resize frame
+            if screen_r >= state["video_height"] / 2:
+                screen_r = round(state["video_height"] / 2 - 10)
+    
             x1 = self.circle_center[0] - screen_r
             x2 = self.circle_center[0] + screen_r
             y1 = self.circle_center[1] - screen_r
             y2 = self.circle_center[1] + screen_r
+
             frame = frame[y1:y2, x1:x2]
             frame = cv2.resize(frame, (1000, 1000))
 

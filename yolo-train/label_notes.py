@@ -235,11 +235,63 @@ def parse_note_line(line, frame_time):
 
 def manual_align(video_path, txt_path, notes):
 
-    video_start = 0
+    frame_counter = 0
 
-    return video_start
+    cap = cv2.VideoCapture(video_path)
+    total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    notes1 = notes[0] if notes else []
+
+    window_name = 'Label Notes Preview'
+    cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+    
+    # Display frames
+    while True:
+        ret, raw_frame = cap.read()
+        if not ret: break  # end of video
+        
+        # 绘制识别音符
+        result_frame = draw_tap_notes(raw_frame, notes1)
+        #result_frame = debug_draw_slide_notes(result_frame, frame_counter)
+        #result_frame = debug_draw_hold_notes(result_frame, frame_counter)
+        #result_frame = debug_draw_touch_notes(result_frame, frame_counter)
+
+        # 添加文字
+        cv2.putText(result_frame, f"Frame: {frame_counter}/{total_frames}", 
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.putText(result_frame, "Press 'q' to quit, 'arrow key' to go back", 
+                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+
+        # resize
+        scale = 1000 / 1080
+        new_size = (int(1080*scale), 1000)
+        result_frame = cv2.resize(result_frame, new_size, interpolation=cv2.INTER_LINEAR)
+        cv2.imshow(window_name, result_frame)
+
+        key = cv2.waitKey(0) & 0xFF
+        if key == ord('q'): # quit
+            break
+        elif key == 0: # '方向键'
+            frame_counter = max(0, frame_counter - 1) # Last frame
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_counter)
+        else:
+            frame_counter += 1 # Next frame
+    
+    cv2.destroyWindow(window_name)
+
+    return frame_counter
 
 
+
+def draw_tap_notes(frame, notes):
+
+    for note in notes:
+        # draw circle
+        center = (round(1080+note.posX)+1, round(120-note.posY))
+        radius = round(1080 * 0.042)
+        cv2.circle(frame, center, radius, (0, 255, 0), 2)
+
+    return frame
 
 
 def main(video_path, txt_path, output_dir, mode):

@@ -108,9 +108,9 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"D:\git\mai-chart-analyze\yolo-train\temp\test_6.00_standardlized.mp4"
+    video = r"C:\Users\ck273\Desktop\mira.mp4"
     ca = ChartAnalyzer()
-    ca.analyze(video, 102, 1, True)
+    ca.analyze(video, 148, 1, True)
 
     # morningloom 102 337-488-4.351
     # decide 163 384-486-4.697
