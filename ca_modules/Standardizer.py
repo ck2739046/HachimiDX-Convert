@@ -46,7 +46,7 @@ class Standardizer:
             self.circle_center, self.circle_radius = self.detect_circle(cap, video_height, total_frames, video_mode)
             cap.release()
             
-            print(f"Detected circle - Center: {self.circle_center}, Radius: {self.circle_radius}")
+            # print(f"Detected circle - Center: {self.circle_center}, Radius: {self.circle_radius}")
             
             # 3. 显示预览窗口
             self.display_preview(video_path, video_width, video_height, start_frame, end_frame)
@@ -555,7 +555,6 @@ class Standardizer:
             
             print(f"  Debug: Use FFmpeg command: {' '.join(cmd)}")
             
-            print("Video standardization completed")
             return output_path
             
         except Exception as e:
@@ -567,10 +566,10 @@ if __name__ == "__main__":
     standardizer = Standardizer()
     
     # 示例参数
-    video_path = r"C:\Users\ck273\Desktop\殿ッ！？ご乱心！？(BASIC_Lv.6)#maimai - maimai BASIC & ADVANCED譜面置き場 (720p, h264).mp4"
-    start_frame = 150
-    end_frame = 4120
-    video_mode = "camera shot"
+    video_path = r"C:\Users\ck273\Desktop\训练视频\11753.mp4"
+    start_frame = 450
+    end_frame = 9940
+    video_mode = "source"
     # "source" or "camera shot"
     
     try:

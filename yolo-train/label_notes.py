@@ -331,7 +331,7 @@ def manual_align(video_path, txt_path, notes):
 
         # 等待按键（如果播放中使用帧延迟，否则无限等待）
         wait_time = frame_delay if is_playing else 0
-        key = cv2.waitKey(wait_time) & 0xFF
+        key = cv2.waitKey(wait_time-6) & 0xFF
         
         if key == ord('q') or key == ord('Q'):  # 退出
             print("\n" + "=" * 60)
@@ -356,7 +356,7 @@ def manual_align(video_path, txt_path, notes):
             status = "播放" if is_playing else "暂停"
             print(f"{status}中...")
                 
-        elif key == 83:  # 右箭头
+        elif key == 1:  # 右箭头
             is_playing = False  # 箭头操作时暂停
             if mode == 1:
                 # 模式1：只前进视频帧
@@ -366,7 +366,7 @@ def manual_align(video_path, txt_path, notes):
                 video_frame_counter = min(video_frame_counter + 1, total_video_frames - 1)
                 notes_frame_counter = min(notes_frame_counter + 1, total_notes_frames - 1)
                 
-        elif key == 81:  # 左箭头
+        elif key == 0:  # 左箭头
             is_playing = False  # 箭头操作时暂停
             if mode == 1:
                 # 模式1：只后退视频帧
@@ -683,7 +683,7 @@ def main(video_path, txt_path, output_dir, mode):
 
 if __name__ == "__main__":
 
-    video_path = r"C:\Users\ck273\Desktop\训练视频\11753.mp4"
+    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_standardized.mp4"
     txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-08-15_21-47-03.txt"
     output_dir = r"C:\Users\ck273\Desktop\训练视频\11753"
     mode = 0
