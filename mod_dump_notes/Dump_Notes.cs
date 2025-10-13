@@ -300,7 +300,7 @@ namespace default_namespace {
 
                 // 构建数据行
                 var lines = new List<string>();
-                lines.Add($"Frame:{currentTime:F4}|Count:{notes.Count}");
+                lines.Add($"Time:{currentTime:F4}|Count:{notes.Count}");
 
                 foreach (var note in notes.OrderBy(n => n.NoteType).ThenBy(n => n.NoteIndex))
                 {
