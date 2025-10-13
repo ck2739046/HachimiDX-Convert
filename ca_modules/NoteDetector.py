@@ -13,6 +13,7 @@ import logging
 import subprocess
 import json
 import shutil
+import traceback
 
 original_level = LOGGER.level
 LOGGER.setLevel(logging.ERROR) # 只显示错误信息，忽略 Warning
@@ -369,7 +370,7 @@ class NoteDetector:
                 # 流式写入预测结果
                 predict_frame_data = {
                     'frame': frame_count,
-                    'results': json.loads(results[0].tojson())
+                    'results': json.loads(results[0].to_json())
                 }
                 predict_results_file.write(json.dumps(predict_frame_data, ensure_ascii=False) + '\n')
                 predict_results_file.flush()  # 确保数据写入
@@ -734,7 +735,7 @@ class NoteDetector:
             print("\n中断")
         except Exception as e:
             print(f"Error in main: {e}")
-            print(e.stacktrace())
+            print(traceback.format_exc())
 
 
 
@@ -753,7 +754,7 @@ class NoteDetector:
 if __name__ == "__main__":
 
 
-    test = 4
+    test = 3
 
     if test == 1:
         for id in ['6.00', '6.25', '6.50', '6.75', '7.00', '7.25', '7.50']:
@@ -793,15 +794,16 @@ if __name__ == "__main__":
 
 
     if test == 3:
-        video_path = r"C:\Users\ck273\Desktop\ウェルテル\[maimai谱面确认] 天蓋 MASTER-p01-116.mp4"
-        start=360
-        end=8300
+        video_path = r"C:\Users\ck273\Desktop\Hurtling Boys\Hurtling Boys EXPERT.mp4"
+        start=80
+        end=6820
         cap = cv2.VideoCapture(video_path)
         state = {
             'total_frames': round(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-            'circle_center': (539, 539),
-            # 1920x1080: 959, 539
-            # 1080x1080: 539, 539
+            'circle_center': (959, 539),
+            # 1920x1080: 959, 539, 478
+            # 1080x1080: 539, 539, 478
+            # 油管：656, 370, 295
             'circle_radius': 478,
             'debug': True
         }

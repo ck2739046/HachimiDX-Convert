@@ -1,5 +1,6 @@
 import cv2
 import os
+import traceback
 
 from ca_modules.JudgeLineDetector import JudgeLineDetector
 from ca_modules.ChartStartDetector import ChartStartDetector
@@ -64,7 +65,7 @@ class ChartAnalyzer:
             return False
         except Exception as e:
             print(f"Error in analyze: {e}")
-            print(e.stacktrace())
+            traceback.print_exc()
             return False
 
 
@@ -108,9 +109,10 @@ class ChartAnalyzer:
 
 
 if __name__ == "__main__":
-    video = r"C:\Users\ck273\Desktop\mira.mp4"
+    video = r"C:\Users\ck273\Desktop\殿ッ！？ご乱心！？(BASIC_Lv.6)#maimai - maimai BASIC & ADVANCED譜面置き場 (720p, h264).mp4"
+    #video = r"C:\Users\ck273\Desktop\训练视频\11753.mp4"
     ca = ChartAnalyzer()
-    ca.analyze(video, 148, 1, True)
+    ca.analyze(video, 125, 1, True)
 
     # morningloom 102 337-488-4.351
     # decide 163 384-486-4.697

@@ -1257,7 +1257,7 @@ class NoteAnalyzer:
 
     # debug
     @log_error
-    def analyze_all_notes_info(self, bpm, tap_info, touch_info, hold_info):
+    def analyze_all_notes_info(self, video_name, bpm, tap_info, touch_info, hold_info):
 
         def get_fraction(diff_beat, base_denominator):
             #numerator分子, denominator分母
@@ -1282,16 +1282,16 @@ class NoteAnalyzer:
             return numerator, denominator, one
 
 
-        txt_path = r"C:\Users\ck273\Desktop\天蓋\maidata.txt"
+        txt_path = rf"C:\Users\ck273\Desktop\{video_name}.txt"
         if os.path.exists(txt_path):
             os.remove(txt_path)
         f = open(txt_path, 'w', encoding='utf-8')
-        f.write('&title=天蓋_test\n')
+        f.write(f'&title={video_name}\n')
         f.write('&artist=ck273\n')
-        f.write('&first=0.0333\n')
-        f.write('&des_5=ck273\n')
-        f.write('&lv_5=10\n')
-        f.write(f'&inote_5=({bpm})' + '{1},,')
+        f.write('&first=0\n')
+        f.write('&des_4=ck273\n')
+        f.write('&lv_4=10\n')
+        f.write(f'&inote_4=({bpm})' + '{1},,')
 
 
         # 合并所有info
@@ -1306,7 +1306,7 @@ class NoteAnalyzer:
         last_denominator = 0
         time_deviations = []
 
-        base_denominator = 32  # 基准分母
+        base_denominator = 16  # 基准分母
 
         for (track_id, position), time in sorted_notes:
 
@@ -1440,7 +1440,7 @@ class NoteAnalyzer:
                 hold_info = self.analyze_hold_reach_time(hold_data, circle_info, fps)
             
             # analyze all notes info
-            self.analyze_all_notes_info(bpm, tap_info, touch_info, hold_info)
+            self.analyze_all_notes_info(video_name, bpm, tap_info, touch_info, hold_info)
 
 
 
@@ -1576,13 +1576,13 @@ if __name__ == "__main__":
     }
 
     state4 = {
-        'video_name': 'the EmpErroR',
-        'detect_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\the emperror\the emperror_tracked.mp4",
-        'std_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\the emperror\the emperror_standardlized.mp4",
+        'video_name': 'Hurtling Boys EXPERT',
+        'detect_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\Hurtling Boys EXPERT\Hurtling Boys EXPERT_tracked.mp4",
+        'std_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\Hurtling Boys EXPERT\Hurtling Boys EXPERT_standardlized.mp4",
         'debug': True,
         'video_fps': 60,
-        'bpm': 240, # the EmpErroR
+        'bpm': 195,
         'touch_areas': touch_areas,
     }
 
-    analyzer.process(state3)
+    analyzer.process(state4)
