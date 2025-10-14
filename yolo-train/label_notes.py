@@ -139,12 +139,13 @@ def parse_txt(txt_path):
     return time_notes
 
 
-def find_closest_notes(time_notes, target_time):
+def find_closest_notes(time_notes, sorted_times, target_time):
     """
     根据目标时间查找最接近的notes数据
     
     参数:
         time_notes: 按时间组织的notes字典 {时间戳: [notes列表]}
+        sorted_times: 已排序的时间戳列表
         target_time: 目标时间(毫秒)
         
     返回:
@@ -152,9 +153,6 @@ def find_closest_notes(time_notes, target_time):
     """
     if not time_notes:
         return []
-    
-    # 获取所有时间戳并排序
-    sorted_times = sorted(time_notes.keys())
     
     # 如果目标时间小于等于第一个时间戳，返回第一个时间戳的notes
     if target_time <= sorted_times[0]:
@@ -288,7 +286,7 @@ def manual_align(video_path, txt_path, time_notes):
     
     操作说明：
     - 空格：播放/暂停
-    - 模式1（初始对齐模式）：音符保持不变
+    - 模式1（对齐模式）：音符保持不变
     - 按'c'键切换到模式2
     - 模式2（验证模式）：视频和音符同步
     - 左/右箭头：暂停并前进/后退一帧
@@ -299,7 +297,8 @@ def manual_align(video_path, txt_path, time_notes):
     
     video_frame_counter = 0  # 视频当前帧
     notes_frame_counter = 0  # notes的虚拟帧计数器（独立于视频）
-    mode = 1  # 1=初始对齐模式, 2=验证模式
+    last_video_frame_counter = -1  # 上一次的视频帧计数器
+    mode = 1  # 1=对齐模式, 2=验证模式
     is_playing = False  # 播放状态
 
     cap = cv2.VideoCapture(video_path)
@@ -312,18 +311,16 @@ def manual_align(video_path, txt_path, time_notes):
         return 0
 
     # 获取所有时间戳并排序
-    sorted_times = sorted(time_notes.keys())
-    min_time = sorted_times[0]
-    max_time = sorted_times[-1]
-    
+    sorted_times = sorted(time_notes.keys())    
     window_name = 'Label Notes Alignment Tool'
     cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
-    
 
-    
     while True:
         # 设置视频到指定帧
-        cap.set(cv2.CAP_PROP_POS_FRAMES, video_frame_counter)
+        if video_frame_counter - last_video_frame_counter != 1: # 不是下一帧
+            cap.set(cv2.CAP_PROP_POS_FRAMES, video_frame_counter)
+
+        last_video_frame_counter = video_frame_counter
         ret, raw_frame = cap.read()
         
         if not ret:
@@ -338,7 +335,7 @@ def manual_align(video_path, txt_path, time_notes):
         current_notes_time_from_frame = frame_to_time(notes_frame_counter, fps)
         
         # 根据notes虚拟帧时间查找最接近的音符
-        current_notes = find_closest_notes(time_notes, current_notes_time_from_frame)
+        current_notes = find_closest_notes(time_notes, sorted_times, current_notes_time_from_frame)
         
         # 绘制音符
         result_frame = draw_all_notes(raw_frame, current_notes)
@@ -367,7 +364,7 @@ def manual_align(video_path, txt_path, time_notes):
         cv2.imshow(window_name, result_frame)
 
         # 等待按键
-        key = cv2.waitKey(1) & 0xFF
+        key = cv2.waitKey(6) & 0xFF
         
         if key == ord('q') or key == ord('Q'):  # 退出
             # 计算帧数差
