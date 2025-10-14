@@ -305,8 +305,6 @@ def manual_align(video_path, txt_path, time_notes):
     cap = cv2.VideoCapture(video_path)
     total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    #frame_delay = int(1000 / fps) if fps > 0 else 33  # 毫秒
-    frame_delay = 1
     
     if not time_notes:
         print("没有找到音符数据！")
@@ -343,8 +341,7 @@ def manual_align(video_path, txt_path, time_notes):
         current_notes = find_closest_notes(time_notes, current_notes_time_from_frame)
         
         # 绘制音符
-        result_frame = raw_frame.copy()
-        result_frame = draw_all_notes(result_frame, current_notes)
+        result_frame = draw_all_notes(raw_frame, current_notes)
         
         # 显示信息
         play_status = "[PLAYING]" if is_playing else "[PAUSED]"
@@ -366,23 +363,11 @@ def manual_align(video_path, txt_path, time_notes):
                     (10, result_frame.shape[0] - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
         cv2.putText(result_frame, "Arrow: Last frame",
                     (10, result_frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-
-        # 调整窗口大小
-        if result_frame.shape[0] > result_frame.shape[1]:
-            scale = 1000 / result_frame.shape[0]
-            new_width = int(result_frame.shape[1] * scale)
-            new_height = 1000
-        else:
-            scale = 1000 / result_frame.shape[1]
-            new_width = 1000
-            new_height = int(result_frame.shape[0] * scale)
-        result_frame = cv2.resize(result_frame, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
         
         cv2.imshow(window_name, result_frame)
 
-        # 等待按键（如果播放中使用帧延迟，否则无限等待）
-        wait_time = frame_delay if is_playing else 0
-        key = cv2.waitKey(wait_time) & 0xFF
+        # 等待按键
+        key = cv2.waitKey(1) & 0xFF
         
         if key == ord('q') or key == ord('Q'):  # 退出
             # 计算帧数差
