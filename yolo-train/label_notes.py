@@ -7,6 +7,7 @@ class Note:
                  local_posX=None, local_posY=None, status=None, 
                  appearMsec=None, touchDecor=None, holdSize=None, 
                  starScale=None, userNoteSize=None):
+        
         self.frameTime = frameTime
         self.type = type
         self.index = index
@@ -21,75 +22,6 @@ class Note:
         self.starScale = starScale
         self.userNoteSize = userNoteSize
     
-    # 赋值方法
-    def set_frameTime(self, frameTime):
-        self.frameTime = frameTime
-
-    def set_type(self, type):
-        self.type = type
-    
-    def set_index(self, index):
-        self.index = index
-    
-    def set_position(self, posX, posY):
-        self.posX = posX
-        self.posY = posY
-    
-    def set_local_position(self, local_posX, local_posY):
-        self.local_posX = local_posX
-        self.local_posY = local_posY
-    
-    def set_status(self, status):
-        self.status = status
-    
-    def set_appearMsec(self, appearMsec):
-        self.appearMsec = appearMsec
-    
-    def set_touchDecor(self, touchDecor):
-        self.touchDecor = touchDecor
-    
-    def set_holdSize(self, holdSize):
-        self.holdSize = holdSize
-    
-    def set_starScale(self, starScale):
-        self.starScale = starScale
-    
-    def set_userNoteSize(self, userNoteSize):
-        self.userNoteSize = userNoteSize
-    
-    # 查询方法
-    def get_frameTime(self):
-        return self.frameTime
-
-    def get_type(self):
-        return self.type
-    
-    def get_index(self):
-        return self.index
-    
-    def get_position(self):
-        return (self.posX, self.posY)
-    
-    def get_local_position(self):
-        return (self.local_posX, self.local_posY)
-    
-    def get_status(self):
-        return self.status
-    
-    def get_appearMsec(self):
-        return self.appearMsec
-    
-    def get_touchDecor(self):
-        return self.touchDecor
-    
-    def get_holdSize(self):
-        return self.holdSize
-    
-    def get_starScale(self):
-        return self.starScale
-    
-    def get_userNoteSize(self):
-        return self.userNoteSize
     
 
 
@@ -251,13 +183,13 @@ def parse_note_line(line, frame_time):
             if 'touch' in type_name.lower():
                 if 'TouchDecorPosition:' in extra_data:
                     touch_decor = float(extra_data.split('TouchDecorPosition:')[1].strip())
-                    note.set_touchDecor(touch_decor)
+                    note.touchDecor = touch_decor
             
             # 处理Hold类型的holdSize数据
             elif 'hold' in type_name.lower():
                 if 'HoldSize:' in extra_data:
                     hold_size = float(extra_data.split('HoldSize:')[1].strip())
-                    note.set_holdSize(hold_size)
+                    note.holdSize = hold_size
             
             # 处理Star类型的StarScale和UserNoteSize数据
             elif 'star' in type_name.lower():
@@ -266,11 +198,11 @@ def parse_note_line(line, frame_time):
                     star_scale_part = extra_data.split('StarScale:')[1].split('|')[0].strip()
                     star_scale_values = star_scale_part.split(',')
                     star_scale = (float(star_scale_values[0]), float(star_scale_values[1]))
-                    note.set_starScale(star_scale)
+                    note.starScale = star_scale
                     
                     # 解析UserNoteSize
                     user_note_size = float(extra_data.split('UserNoteSize:')[1].strip())
-                    note.set_userNoteSize(user_note_size)
+                    note.userNoteSize = user_note_size
         
         return note
         
@@ -427,12 +359,13 @@ def draw_tap_note(note, isBreak):
         list: 4个点的坐标 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
               这4个点构成一个可能带旋转角度的矩形
     """
-    # TODO: 实现具体逻辑
-    # 目前返回一个基于音符位置的简单矩形
+
+    if note.status.lower() != "move": return None
+
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
-    size = 1080 * 0.042  # 基础大小
-    
+    size = 1080 * 0.047
+
     # 返回4个角点（左上、右上、右下、左下）
     points = [
         (center_x - size, center_y - size),  # 左上
@@ -462,7 +395,7 @@ def draw_hold_note(note, isBreak):
     size = 1080 * 0.042
     
     # 如果有holdSize，可以用来调整矩形大小
-    hold_size = note.get_holdSize() if note.get_holdSize() else 1.0
+    hold_size = note.holdSize if note.holdSize else 1.0
     
     points = [
         (center_x - size, center_y - size),
@@ -518,7 +451,7 @@ def draw_touch_note(note):
     center_y = 120 - note.posY
     size = 1080 * 0.042
     
-    touch_decor = note.get_touchDecor() if note.get_touchDecor() else 0.0
+    touch_decor = note.touchDecor if note.touchDecor else 0.0
     
     points = [
         (center_x - size, center_y - size),
@@ -587,7 +520,7 @@ def draw_all_notes(frame, notes):
     使用独立的绘制函数为每种音符类型生成矩形框
     """
     for note in notes:
-        note_type = note.get_type().lower()
+        note_type = note.type.lower()
         
         # 根据音符类型调用对应的绘制函数
         points = None
@@ -635,7 +568,7 @@ def draw_all_notes(frame, notes):
             points = draw_touch_note(note)
             color = (255, 0, 255)
             label = 'TOUCH'
-        
+            
         # 绘制矩形框
         if points:
             frame = draw_rotated_rect(frame, points, color, thickness=2)
@@ -649,7 +582,7 @@ def draw_all_notes(frame, notes):
                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
             
             # 显示索引号
-            cv2.putText(frame, str(note.get_index()), 
+            cv2.putText(frame, str(note.index), 
                        (center_x - 8, center_y - 20), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
