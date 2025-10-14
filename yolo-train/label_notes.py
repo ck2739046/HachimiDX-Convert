@@ -85,7 +85,7 @@ def find_closest_notes(time_notes, sorted_times, target_time):
     """
     if not time_notes:
         return []
-    
+
     # 如果目标时间小于等于第一个时间戳，返回第一个时间戳的notes
     if target_time <= sorted_times[0]:
         return time_notes[sorted_times[0]]
@@ -270,7 +270,7 @@ def manual_align(video_path, txt_path, time_notes):
         current_notes = find_closest_notes(time_notes, sorted_times, current_notes_time_from_frame)
         
         # 绘制音符
-        result_frame = draw_all_notes(raw_frame, current_notes)
+        result_frame = draw_all_notes(raw_frame, current_notes, current_notes_time_from_frame)
         
         # 显示信息
         play_status = "[PLAYING]" if is_playing else "[PAUSED]"
@@ -348,7 +348,7 @@ def manual_align(video_path, txt_path, time_notes):
 
 
 
-def draw_tap_note(note):
+def draw_tap_note(note, target_time):
     """
     绘制单个Tap音符
     
@@ -364,20 +364,50 @@ def draw_tap_note(note):
 
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
+    ox = 540
+    oy = 540
     size = 1080 * 0.047
+
+    # 假设速度 7.50
+    # OptionNotespeed = 850
+    # DefaultMsec = 1000 / (850 / 60) * 4 = 282.35294
+    # 说明音符走完全程要 282ms
+    # 在标准 1080p 下，全程是 474 像素
+    # 所以此时移动速度为 474 / 282 = 1.68 像素/毫秒
+    speed = 1.68
+    time_diff = target_time - note.frameTime
+    new_distance_to_o = note.local_posY + speed * time_diff
+    # local_posY就是到屏幕中心的距离
+
+    # 以 O (屏幕中心) 为中心，沿直线获得距离为 new_distance_to_o 的两个点
+    a = (center_y - oy) / (center_x - ox)
+    dx = new_distance_to_o / ((1 + a**2)**0.5)
+    dy = a * dx
+    p1x = ox + dx
+    p1y = oy + dy
+    p2x = ox - dx
+    p2y = oy - dy
+
+    # 更接近 center 的点就是新的中心点
+    if abs(p1x - center_x) > abs(p2x - center_x):
+        new_center_x = p2x
+        new_center_y = p2y
+    else:
+        new_center_x = p1x
+        new_center_y = p1y
 
     # 返回4个角点（左上、右上、右下、左下）
     points = [
-        (center_x - size, center_y - size),  # 左上
-        (center_x + size, center_y - size),  # 右上
-        (center_x + size, center_y + size),  # 右下
-        (center_x - size, center_y + size),  # 左下
+        (new_center_x - size, new_center_y - size),  # 左上
+        (new_center_x + size, new_center_y - size),  # 右上
+        (new_center_x + size, new_center_y + size),  # 右下
+        (new_center_x - size, new_center_y + size),  # 左下
     ]
     
     return points
 
 
-def draw_hold_note(note):
+def draw_hold_note(note, target_time):
     """
     绘制单个Hold音符
     
@@ -432,7 +462,7 @@ def draw_hold_note(note):
 
 
 
-def draw_slide_note(note):
+def draw_slide_note(note, target_time):
     """
     绘制单个Slide音符
     
@@ -459,7 +489,7 @@ def draw_slide_note(note):
     return points
 
 
-def draw_touch_note(note):
+def draw_touch_note(note, target_time):
     """
     绘制单个Touch音符
     
@@ -488,7 +518,7 @@ def draw_touch_note(note):
     return points
 
 
-def draw_touch_hold_note(note):
+def draw_touch_hold_note(note, target_time):
     """
     绘制单个Touch-Hold音符
     
@@ -539,7 +569,7 @@ def draw_rotated_rect(frame, points, color, thickness=2):
     return frame
 
 
-def draw_all_notes(frame, notes):
+def draw_all_notes(frame, notes, target_time):
     """
     绘制所有类型的音符
     使用独立的绘制函数为每种音符类型生成矩形框
@@ -554,43 +584,43 @@ def draw_all_notes(frame, notes):
         
         # Tap音符：绿色
         if note_type == 'tapnote':
-            points = draw_tap_note(note)
+            points = draw_tap_note(note, target_time)
             color = (0, 255, 0)
             label = 'TAP'
         elif note_type == 'breaknote':
-            points = draw_tap_note(note)
+            points = draw_tap_note(note, target_time)
             color = (0, 255, 0)
             label = 'TAP-B'
 
         # Hold音符：蓝色
         elif note_type == 'holdnote':
-            points = draw_hold_note(note)
+            points = draw_hold_note(note, target_time)
             color = (255, 0, 0)
             label = 'HOLD'
         elif note_type == 'breakholdnote':
-            points = draw_hold_note(note)
+            points = draw_hold_note(note, target_time)
             color = (255, 0, 0)
             label = 'HOLD-B'
         
         # Slide音符：黄色
         elif note_type == 'starnote':
-            points = draw_slide_note(note)
+            points = draw_slide_note(note, target_time)
             color = (0, 255, 255)
             label = 'SLIDE'
         elif note_type == 'breakstarnote':
-            points = draw_slide_note(note)
+            points = draw_slide_note(note, target_time)
             color = (0, 255, 255)
             label = 'SLIDE-B'
         
         # Touch-Hold音符：青色
         elif 'touchhold' in note_type:
-            points = draw_touch_hold_note(note)
+            points = draw_touch_hold_note(note, target_time)
             color = (255, 255, 0)
             label = 'TOUCH-HOLD'
         
         # Touch音符：紫色
         elif 'touch' in note_type:
-            points = draw_touch_note(note)
+            points = draw_touch_note(note, target_time)
             color = (255, 0, 255)
             label = 'TOUCH'
             
@@ -735,7 +765,7 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
         current_notes = find_closest_notes(time_notes, target_time)
         
         # 绘制notes
-        result_frame = draw_all_notes(frame, current_notes)
+        result_frame = draw_all_notes(frame, current_notes, target_time)
         
         # 显示帧
         cv2.imshow(window_name, result_frame)
