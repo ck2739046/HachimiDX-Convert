@@ -102,7 +102,6 @@ def parse_txt(txt_path):
     键为时间戳(毫秒)，值为该时间点的notes列表
     """
     if not os.path.exists(txt_path):
-        print(f"Text file not found: {txt_path}")
         return {}
     
     time_notes = {}  # 存储按时间组织的notes字典
@@ -277,9 +276,7 @@ def parse_note_line(line, frame_time):
         
         return note
         
-    except Exception as e:
-        print(f"Error parsing note line: {line}")
-        print(f"Error: {e}")
+    except Exception:
         return None
 
 
@@ -308,7 +305,8 @@ def manual_align(video_path, txt_path, time_notes):
     cap = cv2.VideoCapture(video_path)
     total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    frame_delay = int(1000 / fps) if fps > 0 else 33  # 毫秒
+    #frame_delay = int(1000 / fps) if fps > 0 else 33  # 毫秒
+    frame_delay = 1
     
     if not time_notes:
         print("没有找到音符数据！")
@@ -323,19 +321,7 @@ def manual_align(video_path, txt_path, time_notes):
     window_name = 'Label Notes Alignment Tool'
     cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
     
-    print("=" * 60)
-    print("手动对齐工具")
-    print(f"视频帧率: {fps:.2f} FPS")
-    print(f"音符时间范围: {min_time:.2f}ms - {max_time:.2f}ms")
-    print("=" * 60)
-    print("基本操作：")
-    print("  - 空格：播放/暂停")
-    print("  - 左/右箭头：暂停并后退/前进一帧")
-    print("  - 按'c'：切换模式")
-    print("  - 按'q'：退出并保存")
-    print("\n模式1（初始对齐）：音符保持在当前进度")
-    print("模式2（验证模式）：视频和音符同步播放")
-    print("=" * 60)
+
     
     while True:
         # 设置视频到指定帧
@@ -343,7 +329,6 @@ def manual_align(video_path, txt_path, time_notes):
         ret, raw_frame = cap.read()
         
         if not ret:
-            print(f"无法读取视频帧 {video_frame_counter}")
             video_frame_counter = min(video_frame_counter, total_video_frames - 1)
             is_playing = False
             continue
@@ -357,102 +342,66 @@ def manual_align(video_path, txt_path, time_notes):
         # 根据notes虚拟帧时间查找最接近的音符
         current_notes = find_closest_notes(time_notes, current_notes_time_from_frame)
         
-        # 找到实际使用的notes时间戳（用于显示）
-        actual_notes_time = None
-        if current_notes:
-            # 从time_notes中找到包含这些notes的时间戳
-            for t, notes_list in time_notes.items():
-                if notes_list == current_notes:
-                    actual_notes_time = t
-                    break
-        
         # 绘制音符
         result_frame = raw_frame.copy()
         result_frame = draw_all_notes(result_frame, current_notes)
         
         # 显示信息
         play_status = "[PLAYING]" if is_playing else "[PAUSED]"
-        mode_text = f"{play_status} Mode 1: Initial Alignment" if mode == 1 else f"{play_status} Mode 2: Verification"
+        mode_text = f"{play_status} Mode 1: Alignment" if mode == 1 else f"{play_status} Mode 2: Sync"
         mode_color = (0, 255, 255) if mode == 1 else (0, 255, 0)
+        frame_diff = notes_frame_counter - video_frame_counter
         
         cv2.putText(result_frame, mode_text,
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, mode_color, 2)
-        cv2.putText(result_frame, f"Video Frame: {video_frame_counter}/{total_video_frames}",
+        cv2.putText(result_frame, f"Video: {video_frame_counter}/{total_video_frames} frame ({current_video_time:.2f}ms)",
                     (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(result_frame, f"Video Time: {current_video_time:.2f}ms",
+        cv2.putText(result_frame, f"Notes: {notes_frame_counter} frame ({current_notes_time_from_frame:.2f}ms)",
                     (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
-        cv2.putText(result_frame, f"Notes Frame: {notes_frame_counter}",
-                    (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(result_frame, f"Notes Virtual Time: {current_notes_time_from_frame:.2f}ms",
-                    (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
-        if actual_notes_time is not None:
-            cv2.putText(result_frame, f"Actual Notes Time: {actual_notes_time:.2f}ms",
-                        (10, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            
-            # 显示时间差（视频时间 vs 实际notes时间）
-            time_diff = actual_notes_time - current_video_time
-            diff_color = (0, 255, 0) if mode == 2 else (255, 255, 255)
-            cv2.putText(result_frame, f"Time Offset: {time_diff:.2f}ms",
-                        (10, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.7, diff_color, 2)
-        
-        cv2.putText(result_frame, f"Notes Count: {len(current_notes)}",
-                    (10, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
-        cv2.putText(result_frame, "Q:Quit | C:Mode | Space:Play/Pause | Left/Right:Step",
+        cv2.putText(result_frame, f"Diff: {frame_diff} frames",
+                    (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+        cv2.putText(result_frame, "Q:Quit | C:Mode",
+                    (10, result_frame.shape[0] - 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        cv2.putText(result_frame, "Space: Play/Pause",
+                    (10, result_frame.shape[0] - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        cv2.putText(result_frame, "Arrow: Last frame",
                     (10, result_frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
         # 调整窗口大小
-        scale = 1000 / result_frame.shape[0]
-        new_width = int(result_frame.shape[1] * scale)
-        new_height = 1000
+        if result_frame.shape[0] > result_frame.shape[1]:
+            scale = 1000 / result_frame.shape[0]
+            new_width = int(result_frame.shape[1] * scale)
+            new_height = 1000
+        else:
+            scale = 1000 / result_frame.shape[1]
+            new_width = 1000
+            new_height = int(result_frame.shape[0] * scale)
         result_frame = cv2.resize(result_frame, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
         
         cv2.imshow(window_name, result_frame)
 
         # 等待按键（如果播放中使用帧延迟，否则无限等待）
         wait_time = frame_delay if is_playing else 0
-        key = cv2.waitKey(wait_time-6) & 0xFF
+        key = cv2.waitKey(wait_time) & 0xFF
         
         if key == ord('q') or key == ord('Q'):  # 退出
-            print("\n" + "=" * 60)
+            # 计算帧数差
+            frame_diff = notes_frame_counter - video_frame_counter
+            time_diff_ms = frame_to_time(abs(frame_diff), fps)
+            
             print(f"对齐完成！")
-            if actual_notes_time is not None:
-                time_offset = actual_notes_time - current_video_time
-                print(f"时间偏移量: {time_offset:.2f}ms")
-                print(f"(Video time {current_video_time:.2f}ms + {time_offset:.2f}ms = Notes time {actual_notes_time:.2f}ms)")
-            else:
-                time_offset = 0
-                print(f"未找到有效的notes数据")
-            print("=" * 60)
+            print(f"Diff: {frame_diff} frames ({time_diff_ms:.2f} ms)")
+            time_offset = time_diff_ms if frame_diff >= 0 else -time_diff_ms
             break
             
         elif key == ord('c') or key == ord('C'):  # 切换模式
-            is_playing = False  # 切换模式时暂停
-            if mode == 1:
-                mode = 2
-                print(f"\n切换到验证模式。视频帧: {video_frame_counter}, Notes帧: {notes_frame_counter}")
-            else:
-                mode = 1
-                print(f"\n切换回初始对齐模式。视频帧: {video_frame_counter}, Notes帧: {notes_frame_counter}")
+            is_playing = False
+            mode = 2 if mode == 1 else 1
         
         elif key == 32:  # 空格：播放/暂停
             is_playing = not is_playing
-            status = "播放" if is_playing else "暂停"
-            print(f"{status}中...")
                 
-        elif key == 1:  # 右箭头
-            is_playing = False  # 箭头操作时暂停
-            if mode == 1:
-                # 模式1：只前进视频帧，notes进度不变
-                video_frame_counter = min(video_frame_counter + 1, total_video_frames - 1)
-            else:
-                # 模式2：视频和notes同时前进
-                video_frame_counter = min(video_frame_counter + 1, total_video_frames - 1)
-                notes_frame_counter += 1
-                
-        elif key == 0:  # 左箭头
+        elif key == 0:  # 四个箭头键 (四个键都是0，不知道怎么区分)
             is_playing = False  # 箭头操作时暂停
             if mode == 1:
                 # 模式1：只后退视频帧，notes进度不变
@@ -738,24 +687,13 @@ def main(video_path, txt_path, output_dir, mode):
         return
 
     # 解析txt文件
-    print(f"正在解析文件: {txt_path}")
     time_notes = parse_txt(txt_path)
-    print(f"解析完成！共找到 {len(time_notes)} 个时间点的音符数据")
     
     if len(time_notes) == 0:
         print("错误：没有找到任何音符数据！")
         return
     
-    # 统计总音符数
-    total_notes = sum(len(notes) for notes in time_notes.values())
-    print(f"总共 {total_notes} 个音符")
-    
-    # 获取时间范围
-    sorted_times = sorted(time_notes.keys())
-    print(f"时间范围: {sorted_times[0]:.2f}ms - {sorted_times[-1]:.2f}ms")
-    
     # 手动对齐
-    print(f"\n正在打开视频: {video_path}")
     time_offset = manual_align(video_path, txt_path, time_notes)
     
     # 保存对齐结果
@@ -765,8 +703,7 @@ def main(video_path, txt_path, output_dir, mode):
             f.write(f"Video File: {video_path}\n")
             f.write(f"Notes File: {txt_path}\n")
             f.write(f"Time Offset: {time_offset}ms\n")
-            f.write(f"(Video time + {time_offset}ms = Notes time)\n")
-        print(f"\n对齐结果已保存到: {result_file}")
+        print(f"对齐结果已保存到: {result_file}")
     
     return time_offset
 
@@ -787,13 +724,11 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
     # 解析notes数据
     time_notes = parse_txt(txt_path)
     if not time_notes:
-        print("没有找到音符数据！")
         return
     
     # 打开视频
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"无法打开视频: {video_path}")
         return
     
     # 获取视频属性
@@ -808,11 +743,6 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
         out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
     else:
         out = None
-    
-    print(f"处理视频: {video_path}")
-    print(f"帧率: {fps:.2f} FPS")
-    print(f"总帧数: {total_frames}")
-    print(f"时间偏移: {time_offset}ms")
     
     # 创建窗口
     window_name = 'Video with Notes'
@@ -835,14 +765,6 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
         # 绘制notes
         result_frame = draw_all_notes(frame, current_notes)
         
-        # 显示信息
-        cv2.putText(result_frame, f"Frame: {frame_num}/{total_frames}",
-                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(result_frame, f"Time: {current_time:.2f}ms",
-                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(result_frame, f"Notes: {len(current_notes)}",
-                    (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
         # 显示帧
         cv2.imshow(window_name, result_frame)
         
@@ -860,8 +782,6 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
     if out:
         out.release()
     cv2.destroyWindow(window_name)
-    
-    print("视频处理完成！")
 
 
 if __name__ == "__main__":
