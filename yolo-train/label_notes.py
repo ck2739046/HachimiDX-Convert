@@ -187,8 +187,8 @@ def parse_note_line(line, frame_time):
             
             # 处理Hold类型的holdSize数据
             elif 'hold' in type_name.lower():
-                if 'HoldSize:' in extra_data:
-                    hold_size = float(extra_data.split('HoldSize:')[1].strip())
+                if 'HoldBodySize:' in extra_data:
+                    hold_size = float(extra_data.split('HoldBodySize:')[1].strip())
                     note.holdSize = hold_size
             
             # 处理Star类型的StarScale和UserNoteSize数据
@@ -296,7 +296,7 @@ def manual_align(video_path, txt_path, time_notes):
         cv2.imshow(window_name, result_frame)
 
         # 等待按键
-        key = cv2.waitKey(6) & 0xFF
+        key = cv2.waitKey(1) & 0xFF
         
         if key == ord('q') or key == ord('Q'):  # 退出
             # 计算帧数差
@@ -388,23 +388,48 @@ def draw_hold_note(note):
         list: 4个点的坐标 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
               这4个点构成一个可能带旋转角度的矩形
     """
-    # TODO: 实现具体逻辑
-    # Hold音符可能需要考虑holdSize来确定矩形大小
+
+    if note.status.lower() != "move": return None
+
+    box_width = 140 * 0.5 * 0.78
+    box_length = box_width + (note.holdSize - 140) * 0.5 * 1.05
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
-    size = 1080 * 0.042
+    ox = 540
+    oy = 540
+
+    # y = ax + b
+    a = (center_y - oy) / (center_x - ox)
     
-    # 如果有holdSize，可以用来调整矩形大小
-    hold_size = note.holdSize if note.holdSize else 1.0
-    
-    points = [
-        (center_x - size, center_y - size),
-        (center_x + size, center_y - size),
-        (center_x + size, center_y + size),
-        (center_x - size, center_y + size),
+    # 以 center xy 为中心，沿直线获得距离为 box_length 的两个点
+    # 这两个点是 hold 的头尾两条边的中点
+    dx = box_length / ((1 + a**2)**0.5)
+    dy = a * dx
+    mid1x = center_x - dx
+    mid1y = center_y - dy
+    mid2x = center_x + dx
+    mid2y = center_y + dy
+
+    # 现在根据头尾两条边的中点，计算出四个角点
+    a_perpendicular = -1 / a
+
+    dx1 = box_width / ((1 + a_perpendicular**2)**0.5)
+    dy1 = a_perpendicular * dx1
+    p1 = (mid1x - dx1, mid1y - dy1)
+    p2 = (mid1x + dx1, mid1y + dy1)
+
+    dx2 = box_width / ((1 + a_perpendicular**2)**0.5)
+    dy2 = a_perpendicular * dx2
+    p3 = (mid2x + dx2, mid2y + dy2)
+    p4 = (mid2x - dx2, mid2y - dy2)
+
+    return [
+        (round(p1[0]), round(p1[1])),
+        (round(p2[0]), round(p2[1])),
+        (round(p3[0]), round(p3[1])),
+        (round(p4[0]), round(p4[1])),
     ]
-    
-    return points
+
 
 
 def draw_slide_note(note):
@@ -587,6 +612,37 @@ def draw_all_notes(frame, notes):
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
     return frame
+
+
+def calculate_oct_position(circle_center_x, circle_center_y, note_x, note_y):
+    x_diff = note_x - circle_center_x
+    y_diff = note_y - circle_center_y
+    if x_diff > 0 and y_diff < 0:
+        # 1, 2
+        if abs(x_diff) < abs(y_diff):
+            return 1
+        else:
+            return 2
+    elif x_diff > 0 and y_diff > 0:
+        # 3, 4
+        if abs(x_diff) > abs(y_diff):
+            return 3
+        else:
+            return 4
+    elif x_diff < 0 and y_diff > 0:
+        # 5, 6
+        if abs(x_diff) < abs(y_diff):
+            return 5
+        else:
+            return 6
+    elif x_diff < 0 and y_diff < 0:
+        # 7, 8
+        if abs(x_diff) > abs(y_diff):
+            return 7
+        else:
+            return 8
+    else:
+        return 0
 
 
 def main(video_path, txt_path, output_dir, mode):

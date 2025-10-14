@@ -43,6 +43,7 @@ class Standardizer:
             
             # 2. 检测圆心和半径
             cap = cv2.VideoCapture(video_path)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             self.circle_center, self.circle_radius = self.detect_circle(cap, video_height, total_frames, video_mode)
             cap.release()
             
@@ -83,7 +84,7 @@ class Standardizer:
             frame_counter = 0
             circles_detected = []
             circles = 0
-            r_small = round(video_height * 0.3)
+            r_small = round(video_height * 0.2)
             r_large = round(video_height * 0.6)
             
             # 处理帧
@@ -97,7 +98,7 @@ class Standardizer:
                 
                 # 如果是录屏，直接固定阈值二值化
                 if mode == 'source':
-                    _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+                    _, binary = cv2.threshold(gray, 30, 255, cv2.THRESH_BINARY)
                 # 如果是拍摄，使用Canny边缘检测
                 elif mode == 'camera shot':
                     # 自适应Canny边缘检测
@@ -148,7 +149,6 @@ class Standardizer:
             most_common = max(set(circles_detected), key=circles_detected.count)
             circle_center = (most_common[0], most_common[1])
             circle_radius = most_common[2]
-            circle_radius = round(circle_radius * 1.01)
             
             return circle_center, circle_radius
             
@@ -260,7 +260,7 @@ class Standardizer:
         """
         try:
             screen_r = round(self.circle_radius / 0.88)
-            font_size = 1
+            font_size = 0.7
 
             if video_height < 600:
                 thickness = 1
@@ -316,7 +316,7 @@ class Standardizer:
                     cv2.FONT_HERSHEY_SIMPLEX,
                     font_size,
                     (255, 255, 255),
-                    thickness
+                    2
                 )
             
             # 左下角提示 - 2行
@@ -329,7 +329,7 @@ class Standardizer:
                     cv2.FONT_HERSHEY_SIMPLEX,
                     font_size,
                     (0, 255, 255),
-                    thickness
+                    2
                 )
             
             # 第2行：圆形坐标和半径
@@ -341,7 +341,7 @@ class Standardizer:
                 cv2.FONT_HERSHEY_SIMPLEX,
                 font_size,
                 (255, 255, 255),
-                thickness
+                2
             )
             
             return frame
@@ -472,10 +472,10 @@ class Standardizer:
                 crop_y = (video_height - crop_size) // 2
             else:
                 # 裁出圆形区域
-                crop_size = round(circle_radius * 2.28)
+                crop_size = round(circle_radius / 0.88 * 2)
                 # 圆形区域左上角
-                crop_x = circle_center[0] - round(circle_radius * 1.14)
-                crop_y = circle_center[1] - round(circle_radius * 1.14)
+                crop_x = circle_center[0] - round(circle_radius / 0.88)
+                crop_y = circle_center[1] - round(circle_radius / 0.88)
             
             # 定义resize参数
             if crop_size == 1080:
@@ -566,10 +566,15 @@ if __name__ == "__main__":
     standardizer = Standardizer()
     
     # 示例参数
-    video_path = r"C:\Users\ck273\Desktop\训练视频\11753.mp4"
-    start_frame = 450
-    end_frame = 9940
-    video_mode = "source"
+    #video_path = r"C:\Users\ck273\Desktop\训练视频\11753.mp4"
+    #video_mode = "source"
+    #start_frame = 1080
+    #end_frame = 19920
+
+    video_path = r"C:\Users\ck273\Desktop\殿ッ！？ご乱心！？(BASIC_Lv.6).mp4"
+    video_mode = "camera shot"
+    start_frame = 150
+    end_frame = 4100
     # "source" or "camera shot"
     
     try:
