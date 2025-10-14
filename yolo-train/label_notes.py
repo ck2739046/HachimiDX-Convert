@@ -348,7 +348,7 @@ def manual_align(video_path, txt_path, time_notes):
 
 
 
-def draw_tap_note(note, isBreak):
+def draw_tap_note(note):
     """
     绘制单个Tap音符
     
@@ -377,7 +377,7 @@ def draw_tap_note(note, isBreak):
     return points
 
 
-def draw_hold_note(note, isBreak):
+def draw_hold_note(note):
     """
     绘制单个Hold音符
     
@@ -407,7 +407,7 @@ def draw_hold_note(note, isBreak):
     return points
 
 
-def draw_slide_note(note, isBreak):
+def draw_slide_note(note):
     """
     绘制单个Slide音符
     
@@ -529,31 +529,31 @@ def draw_all_notes(frame, notes):
         
         # Tap音符：绿色
         if note_type == 'tapnote':
-            points = draw_tap_note(note, 0)
+            points = draw_tap_note(note)
             color = (0, 255, 0)
             label = 'TAP'
         elif note_type == 'breaknote':
-            points = draw_tap_note(note, 1)
+            points = draw_tap_note(note)
             color = (0, 255, 0)
             label = 'TAP-B'
 
         # Hold音符：蓝色
         elif note_type == 'holdnote':
-            points = draw_hold_note(note, 0)
+            points = draw_hold_note(note)
             color = (255, 0, 0)
             label = 'HOLD'
         elif note_type == 'breakholdnote':
-            points = draw_hold_note(note, 1)
+            points = draw_hold_note(note)
             color = (255, 0, 0)
             label = 'HOLD-B'
         
         # Slide音符：黄色
         elif note_type == 'starnote':
-            points = draw_slide_note(note, 0)
+            points = draw_slide_note(note)
             color = (0, 255, 255)
             label = 'SLIDE'
         elif note_type == 'breakstarnote':
-            points = draw_slide_note(note, 1)
+            points = draw_slide_note(note)
             color = (0, 255, 255)
             label = 'SLIDE-B'
         
