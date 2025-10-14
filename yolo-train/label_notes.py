@@ -416,7 +416,7 @@ def manual_align(video_path, txt_path, time_notes):
 
 
 
-def draw_tap_note(note):
+def draw_tap_note(note, isBreak):
     """
     绘制单个Tap音符
     
@@ -444,7 +444,7 @@ def draw_tap_note(note):
     return points
 
 
-def draw_hold_note(note):
+def draw_hold_note(note, isBreak):
     """
     绘制单个Hold音符
     
@@ -474,7 +474,7 @@ def draw_hold_note(note):
     return points
 
 
-def draw_slide_note(note):
+def draw_slide_note(note, isBreak):
     """
     绘制单个Slide音符
     
@@ -594,32 +594,44 @@ def draw_all_notes(frame, notes):
         color = (255, 255, 255)  # 默认白色
         label = ""
         
-        if 'tap' in note_type and 'hold' not in note_type:
-            # Tap音符：绿色
-            points = draw_tap_note(note)
+        # Tap音符：绿色
+        if note_type == 'tapnote':
+            points = draw_tap_note(note, 0)
             color = (0, 255, 0)
             label = 'TAP'
-            
-        elif 'hold' in note_type and 'touch' not in note_type:
-            # Hold音符：蓝色
-            points = draw_hold_note(note)
+        elif note_type == 'breaknote':
+            points = draw_tap_note(note, 1)
+            color = (0, 255, 0)
+            label = 'TAP-B'
+
+        # Hold音符：蓝色
+        elif note_type == 'holdnote':
+            points = draw_hold_note(note, 0)
             color = (255, 0, 0)
             label = 'HOLD'
-            
-        elif 'slide' in note_type:
-            # Slide音符：黄色
-            points = draw_slide_note(note)
+        elif note_type == 'breakholdnote':
+            points = draw_hold_note(note, 1)
+            color = (255, 0, 0)
+            label = 'HOLD-B'
+        
+        # Slide音符：黄色
+        elif note_type == 'starnote':
+            points = draw_slide_note(note, 0)
             color = (0, 255, 255)
             label = 'SLIDE'
-            
-        elif 'touch' in note_type and 'hold' in note_type:
-            # Touch-Hold音符：青色
+        elif note_type == 'breakstarnote':
+            points = draw_slide_note(note, 1)
+            color = (0, 255, 255)
+            label = 'SLIDE-B'
+        
+        # Touch-Hold音符：青色
+        elif 'touchhold' in note_type:
             points = draw_touch_hold_note(note)
             color = (255, 255, 0)
-            label = 'T-HOLD'
-            
+            label = 'TOUCH-HOLD'
+        
+        # Touch音符：紫色
         elif 'touch' in note_type:
-            # Touch音符：紫色
             points = draw_touch_note(note)
             color = (255, 0, 255)
             label = 'TOUCH'
@@ -640,17 +652,6 @@ def draw_all_notes(frame, notes):
             cv2.putText(frame, str(note.get_index()), 
                        (center_x - 8, center_y - 20), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
-    return frame
-
-
-def draw_tap_notes(frame, notes):
-    """保留原函数以兼容"""
-    for note in notes:
-        # draw circle
-        center = (round(1080+note.posX)+1, round(120-note.posY))
-        radius = round(1080 * 0.042)
-        cv2.circle(frame, center, radius, (0, 255, 0), 2)
 
     return frame
 
