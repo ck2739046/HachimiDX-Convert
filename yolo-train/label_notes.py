@@ -397,7 +397,11 @@ def draw_tap_note(note, target_time):
     center_y = 120 - note.posY
     ox = 540
     oy = 540
-    size = 1080 * 0.047
+
+    if note.isEX:
+        size = 1080 * 0.055
+    else:
+        size = 1080 * 0.049
 
     # 假设速度 7.50
     # OptionNotespeed = 850
@@ -654,6 +658,11 @@ def draw_all_notes(frame, notes, target_time):
             points, center = draw_touch_note(note, target_time)
             color = (255, 0, 255)
             label = 'TOUCH'
+
+        if note.isEX:
+            label += '-EX'
+
+        label += f' {note.index}'
             
         # 绘制矩形框
         if points:
@@ -666,13 +675,8 @@ def draw_all_notes(frame, notes, target_time):
             cv2.circle(frame, (center_x, center_y), 2, (0, 0, 255), 3)
 
             # 显示音符类型标签
-            cv2.putText(frame, label, (center_x - 25, center_y + 5), 
+            cv2.putText(frame, label, (center_x - 35, center_y + 20), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
-            
-            # 显示索引号
-            cv2.putText(frame, str(note.index), 
-                       (center_x - 8, center_y - 20), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
     return frame
 
@@ -822,7 +826,7 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
 if __name__ == "__main__":
 
     video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-15_14-30-10.txt"
+    txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-15_15-53-36.txt"
     output_dir = r"C:\Users\ck273\Desktop\训练视频\11753"
     mode = 0
 
