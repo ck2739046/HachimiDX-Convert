@@ -6,7 +6,7 @@ import numpy as np
 class Note:
     def __init__(self, frameTime=None, type=None, index=None, posX=None, posY=None, 
                  local_posX=None, local_posY=None, status=None, 
-                 appearMsec=None, touchDecor=None, holdSize=None, 
+                 appearMsec=None, isEX=None, touchDecor=None, holdSize=None, 
                  starScale=None, userNoteSize=None):
         
         self.frameTime = frameTime
@@ -18,6 +18,7 @@ class Note:
         self.local_posY = local_posY
         self.status = status
         self.appearMsec = appearMsec
+        self.isEX = isEX
         self.touchDecor = touchDecor
         self.holdSize = holdSize
         self.starScale = starScale
@@ -140,7 +141,7 @@ def parse_note_line(line, frame_time):
     try:
         # 分割主要部分
         parts = line.split(' | ')
-        if len(parts) < 5:
+        if len(parts) < 6:
             return None
         
         # 解析type和index
@@ -162,6 +163,10 @@ def parse_note_line(line, frame_time):
         
         # 解析出现时间
         appear_msec = float(parts[4].strip())
+
+        # 解析是否为EX
+        isEX_str = parts[5].strip().lower()
+        isEX = True if isEX_str == 'ex:y' else False
         
         # 创建Note对象
         note = Note(
@@ -173,12 +178,13 @@ def parse_note_line(line, frame_time):
             local_posX=local_posX,
             local_posY=local_posY,
             status=status,
-            appearMsec=appear_msec
+            appearMsec=appear_msec,
+            isEX=isEX
         )
         
-        # 处理额外数据（如果存在第6部分）
-        if len(parts) >= 6:
-            extra_data = parts[5].strip()
+        # 处理额外数据（如果存在第7部分）
+        if len(parts) >= 7:
+            extra_data = parts[6].strip()
             
             # 处理Touch类型的touchDecor数据
             if 'touch' in type_name.lower():

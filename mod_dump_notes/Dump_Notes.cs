@@ -40,6 +40,7 @@ namespace default_namespace {
             public bool IsActive { get; set; }
             public bool IsEnd { get; set; }
             public float AppearMsec { get; set; }
+            public bool IsExNote { get; set; }  // EX音符标志 (适用于Tap、Hold、Break)
 
             // 尺寸相关属性
             public Vector3 TouchDecorPosition { get; set; }  // Touch装饰位置
@@ -255,6 +256,7 @@ namespace default_namespace {
                     IsActive = gameObject.activeSelf,
                     IsEnd = noteBase.IsEnd(),
                     AppearMsec = -1f,  // 默认值
+                    IsExNote = noteBase.ExNote,  // 获取EX音符标志
 
                     // touch/hold/star尺寸数据
                     TouchDecorPosition = touchDecorPosition,
@@ -291,7 +293,7 @@ namespace default_namespace {
                     // 创建文件并写入头部信息
                     File.WriteAllText(_outputFilePath, $"Note Dump Started at {timestamp}\n");
                     File.AppendAllText(_outputFilePath, $"Music Info: {string.Join(" - ", _currentMusicInfo)}\n");
-                    File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | (TouchDecor/HoldSize/StarScale+UserNoteSize)\n");
+                    File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | IsEX | (TouchDecor/HoldSize/StarScale+UserNoteSize)\n");
                     File.AppendAllText(_outputFilePath, "=".PadRight(30, '=') + "\n");
 
                     _isFileCreated = true;
@@ -308,7 +310,8 @@ namespace default_namespace {
                     var line = $"{note.NoteType}-{note.NoteIndex} | " +
                                $"{note.Position.x:F4}, {note.Position.y:F4} | " +
                                $"{note.LocalPosition.x:F4}, {note.LocalPosition.y:F4} | " +
-                               $"{note.Status} | {note.AppearMsec:F4}";
+                               $"{note.Status} | {note.AppearMsec:F4} | " +
+                               $"EX:{(note.IsExNote ? "Y" : "N")}";
 
                     // touch尺寸信息
                     if (note.NoteType.Contains("Touch"))
