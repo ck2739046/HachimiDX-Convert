@@ -218,29 +218,46 @@ def manual_align(video_path, txt_path, time_notes):
     
     操作说明：
     - 空格：播放/暂停
-    - 模式1（对齐模式）：音符保持不变
+    - 模式1（对齐模式）：音符保持不变，通过左右箭头调整时间差
     - 按'c'键切换到模式2
-    - 模式2（验证模式）：视频和音符同步
+    - 模式2（验证模式）：视频和音符同步（时间差固定）
     - 左/右箭头：暂停并前进/后退一帧
     - 按'q'退出
     
     返回：时间偏移量(毫秒)
     """
     
-    video_frame_counter = 0  # 视频当前帧
-    notes_frame_counter = 0  # notes的虚拟帧计数器（独立于视频）
+    video_frame_counter = 0  # 视频当前帧计数
     last_video_frame_counter = -1  # 上一次的视频帧计数器
+    last_video_timestamp = 0.0  # 上一帧的视频真实时间戳
+    time_offset = 0.0  # notes与video的时间差(ms)
     mode = 1  # 1=对齐模式, 2=验证模式
     is_playing = False  # 播放状态
 
     cap = cv2.VideoCapture(video_path)
     total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
     
     if not time_notes:
         print("没有找到音符数据！")
         cap.release()
         return 0
+
+    # 预先读取所有帧的时间戳（支持VFR视频）
+    print("正在读取视频帧时间戳...")
+    frame_timestamps = []
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    i = 0
+    while i < total_video_frames and cap.grab():
+        # 获取当前（已抓取）帧的时间戳（毫秒）
+        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
+        frame_timestamps.append(timestamp)
+        i += 1
+        if (i) % 10 == 0 or i == total_video_frames:
+            print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
+    print("\r时间戳读取完成！            ")
+
+    # 重置视频到第一帧
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
     # 获取所有时间戳并排序
     sorted_times = sorted(time_notes.keys())    
@@ -260,31 +277,30 @@ def manual_align(video_path, txt_path, time_notes):
             is_playing = False
             continue
         
-        # 计算当前视频帧对应的时间(毫秒)
-        current_video_time = frame_to_time(video_frame_counter, fps)
+        # 从预先缓存的时间戳列表中获取当前帧的真实时间戳
+        current_video_timestamp = frame_timestamps[video_frame_counter]
         
-        # 计算notes虚拟帧对应的时间(毫秒)
-        current_notes_time_from_frame = frame_to_time(notes_frame_counter, fps)
+        # 计算notes虚拟时间 = 视频真实时间戳 + 时间差
+        notes_virtual_time = current_video_timestamp + time_offset
         
-        # 根据notes虚拟帧时间查找最接近的音符
-        current_notes = find_closest_notes(time_notes, sorted_times, current_notes_time_from_frame)
+        # 根据notes虚拟时间查找最接近的音符
+        current_notes = find_closest_notes(time_notes, sorted_times, notes_virtual_time)
         
         # 绘制音符
-        result_frame = draw_all_notes(raw_frame, current_notes, current_notes_time_from_frame)
+        result_frame = draw_all_notes(raw_frame, current_notes, notes_virtual_time)
         
         # 显示信息
         play_status = "[PLAYING]" if is_playing else "[PAUSED]"
         mode_text = f"{play_status} Mode 1: Alignment" if mode == 1 else f"{play_status} Mode 2: Sync"
         mode_color = (0, 255, 255) if mode == 1 else (0, 255, 0)
-        frame_diff = notes_frame_counter - video_frame_counter
         
         cv2.putText(result_frame, mode_text,
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, mode_color, 2)
-        cv2.putText(result_frame, f"Video: {video_frame_counter}/{total_video_frames} frame ({current_video_time:.2f}ms)",
+        cv2.putText(result_frame, f"Video: {video_frame_counter}/{total_video_frames} frame ({current_video_timestamp:.2f}ms)",
                     (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(result_frame, f"Notes: {notes_frame_counter} frame ({current_notes_time_from_frame:.2f}ms)",
+        cv2.putText(result_frame, f"Notes: {notes_virtual_time:.2f}ms",
                     (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(result_frame, f"Diff: {frame_diff} frames",
+        cv2.putText(result_frame, f"Time Offset: {time_offset:.2f}ms",
                     (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
         cv2.putText(result_frame, "Q:Quit | C:Mode",
                     (10, result_frame.shape[0] - 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
@@ -299,13 +315,8 @@ def manual_align(video_path, txt_path, time_notes):
         key = cv2.waitKey(1) & 0xFF
         
         if key == ord('q') or key == ord('Q'):  # 退出
-            # 计算帧数差
-            frame_diff = notes_frame_counter - video_frame_counter
-            time_diff_ms = frame_to_time(abs(frame_diff), fps)
-            
             print(f"对齐完成！")
-            print(f"Diff: {frame_diff} frames ({time_diff_ms:.2f} ms)")
-            time_offset = time_diff_ms if frame_diff >= 0 else -time_diff_ms
+            print(f"Time Offset: {time_offset:.2f}ms")
             break
             
         elif key == ord('c') or key == ord('C'):  # 切换模式
@@ -318,28 +329,42 @@ def manual_align(video_path, txt_path, time_notes):
         elif key == 0:  # 四个箭头键 (四个键都是0，不知道怎么区分)
             is_playing = False  # 箭头操作时暂停
             if mode == 1:
-                # 模式1：只后退视频帧，notes进度不变
-                video_frame_counter = max(video_frame_counter - 1, 0)
+                # 模式1：视频后退一帧，同时调整时间差以保持notes虚拟时间不变
+                new_video_frame_counter = max(video_frame_counter - 1, 0)
+                if new_video_frame_counter != video_frame_counter:
+                    # 从缓存中获取新帧的时间戳
+                    new_video_timestamp = frame_timestamps[new_video_frame_counter]
+                    # 调整时间差：让notes虚拟时间保持不变
+                    # notes_virtual_time = new_video_timestamp + new_time_offset
+                    # 由于notes_virtual_time不变，所以：
+                    time_offset += (current_video_timestamp - new_video_timestamp)
+                    video_frame_counter = new_video_frame_counter
             else:
-                # 模式2：视频和notes同时后退
+                # 模式2：视频后退一帧，时间差不变（notes会同步后退）
                 video_frame_counter = max(video_frame_counter - 1, 0)
-                notes_frame_counter = max(notes_frame_counter - 1, 0)
         
         # 如果正在播放，自动前进
         if is_playing:
             if mode == 1:
-                # 模式1：只前进视频帧，notes进度不变
-                video_frame_counter += 1
-                if video_frame_counter >= total_video_frames:
+                # 模式1：视频前进，同时调整时间差以保持notes虚拟时间不变
+                new_video_frame_counter = video_frame_counter + 1
+                if new_video_frame_counter >= total_video_frames:
                     video_frame_counter = total_video_frames - 1
                     is_playing = False
+                else:
+                    # 计算时间戳差值并累加到时间差
+                    timestamp_diff = current_video_timestamp - last_video_timestamp
+                    time_offset += timestamp_diff
+                    video_frame_counter = new_video_frame_counter
             else:
-                # 模式2：视频和notes同时前进
+                # 模式2：视频前进，时间差不变（notes会同步前进）
                 video_frame_counter += 1
-                notes_frame_counter += 1
                 if video_frame_counter >= total_video_frames:
                     video_frame_counter = total_video_frames - 1
                     is_playing = False
+        
+        # 更新上一帧的时间戳
+        last_video_timestamp = current_video_timestamp
     
     cap.release()
     cv2.destroyWindow(window_name)
@@ -372,9 +397,9 @@ def draw_tap_note(note, target_time):
     # OptionNotespeed = 850
     # DefaultMsec = 1000 / (850 / 60) * 4 = 282.35294
     # 说明音符走完全程要 282ms
-    # 在标准 1080p 下，全程是 474 像素
-    # 所以此时移动速度为 474 / 282 = 1.68 像素/毫秒
-    speed = 1.68
+    # 在标准 1080p 下，起点 120 终点 460 全程 340 像素
+    # 所以此时移动速度为 340 / 282 = 1.206 像素/毫秒
+    speed = 1.206
     time_diff = target_time - note.frameTime
     new_distance_to_o = note.local_posY + speed * time_diff
     # local_posY就是到屏幕中心的距离
