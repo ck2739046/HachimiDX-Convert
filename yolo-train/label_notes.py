@@ -447,7 +447,7 @@ def draw_tap_note(note, target_time):
 
     # 以 O (屏幕中心) 为中心，沿直线获得距离为 new_distance_to_o 的两个点
     a = (center_y - oy) / (center_x - ox)
-    dx = new_distance_to_o / (np.sqrt(1 + np.power(a, 2)))
+    dx = new_distance_to_o / np.sqrt(1 + np.power(a, 2))
     dy = a * dx
     p1x = ox + dx
     p1y = oy + dy
@@ -518,7 +518,7 @@ def draw_hold_note(note, target_time):
         new_distance_to_o = note.local_posY + speed * time_diff
         # 以 O (屏幕中心) 为中心，沿直线获得距离为 new_distance_to_o 的两个点
         a = (center_y - oy) / (center_x - ox)
-        dx = new_distance_to_o / (np.sqrt(1 + np.power(a, 2)))
+        dx = new_distance_to_o / np.sqrt(1 + np.power(a, 2))
         dy = a * dx
         p1x = ox + dx
         p1y = oy + dy
@@ -541,7 +541,7 @@ def draw_hold_note(note, target_time):
     if note.status.lower() == "move" and note.holdSize > 160:
         # 以 center xy 为中心，沿直线获得距离为 box_length - c 的两个点
         c = 60 + ex_extend if note.isEX else 60
-        dx = (box_length - c) / (np.sqrt(1 + np.power(a, 2)))
+        dx = (box_length - c) / np.sqrt(1 + np.power(a, 2))
         dy = a * dx
         p1x = center_x + dx
         p1y = center_y + dy
@@ -559,7 +559,7 @@ def draw_hold_note(note, target_time):
     # 根据中心点和边长计算出四个角点（带角度的）
     # 以 center xy 为中心，沿直线获得距离为 box_length 的两个点
     # 这两个点是 hold 的头尾两条边的中点
-    dx = box_length / ((1 + a**2)**0.5)
+    dx = box_length / np.sqrt(1 + np.power(a, 2))
     dy = a * dx
     mid1x = center_x - dx
     mid1y = center_y - dy
@@ -569,12 +569,12 @@ def draw_hold_note(note, target_time):
     # 现在根据头尾两条边的中点，计算出四个角点
     a_perpendicular = -1 / a
 
-    dx1 = box_width / ((1 + a_perpendicular**2)**0.5)
+    dx1 = box_width / np.sqrt(1 + np.power(a_perpendicular, 2))
     dy1 = a_perpendicular * dx1
     p1 = (mid1x - dx1, mid1y - dy1)
     p2 = (mid1x + dx1, mid1y + dy1)
 
-    dx2 = box_width / ((1 + a_perpendicular**2)**0.5)
+    dx2 = box_width / np.sqrt(1 + np.power(a_perpendicular, 2))
     dy2 = a_perpendicular * dx2
     p3 = (mid2x + dx2, mid2y + dy2)
     p4 = (mid2x - dx2, mid2y - dy2)
