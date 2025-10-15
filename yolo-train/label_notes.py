@@ -6,8 +6,9 @@ import numpy as np
 class Note:
     def __init__(self, frameTime=None, type=None, index=None, posX=None, posY=None, 
                  local_posX=None, local_posY=None, status=None, 
-                 appearMsec=None, isEX=None, touchDecor=None, tapScale=None, holdScale=None, 
-                 holdSize=None, starScale=None, userNoteSize=None):
+                 appearMsec=None, isEX=None, touchDecor=None, touchAlpha=None,
+                 tapScale=None, holdScale=None, holdSize=None,
+                 starScale=None, userNoteSize=None):
         
         self.frameTime = frameTime
         self.type = type
@@ -20,6 +21,7 @@ class Note:
         self.appearMsec = appearMsec
         self.isEX = isEX
         self.touchDecor = touchDecor
+        self.touchAlpha = touchAlpha
         self.tapScale = tapScale
         self.holdScale = holdScale
         self.holdSize = holdSize
@@ -192,10 +194,12 @@ def parse_note_line(line, frame_time):
         
         # 处理Touch/Touch-Hold类型的TouchDecor数据
         if 'touch' in type_name.lower():
-            if 'touchdecorposition' in extra_data:
+            if 'touchdecorposition' in extra_data and 'touchalpha' in extra_data2:
                 touch_decor = float(extra_data.split('touchdecorposition:')[1].strip())
                 note.touchDecor = touch_decor
-        
+                touch_alpha = float(extra_data2.split('touchalpha:')[1].strip())
+                note.touchAlpha = touch_alpha
+
         # 处理Hold类型的HoldScale和HoldSize数据
         elif 'hold' in type_name.lower():
             if 'holdscale' in extra_data and 'holdbodysize' in extra_data2:
@@ -932,7 +936,7 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
 if __name__ == "__main__":
 
     video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-15_18-04-41.txt"
+    txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-16_10-25-45.txt"
     output_dir = r"C:\Users\ck273\Desktop\训练视频\11753"
     mode = 0
 
