@@ -218,7 +218,7 @@ def manual_align(video_path, txt_path, time_notes):
     
     操作说明：
     - 空格：播放/暂停
-    - 模式1（对齐模式）：音符保持不变，通过左右箭头调整时间差
+    - 模式1（对齐模式）：音符保持不变
     - 按'c'键切换到模式2
     - 模式2（验证模式）：视频和音符同步（时间差固定）
     - 左/右箭头：暂停并前进/后退一帧
@@ -229,7 +229,6 @@ def manual_align(video_path, txt_path, time_notes):
     
     video_frame_counter = 0  # 视频当前帧计数
     last_video_frame_counter = -1  # 上一次的视频帧计数器
-    last_video_timestamp = 0.0  # 上一帧的视频真实时间戳
     time_offset = 0.0  # notes与video的时间差(ms)
     mode = 1  # 1=对齐模式, 2=验证模式
     is_playing = False  # 播放状态
@@ -300,7 +299,7 @@ def manual_align(video_path, txt_path, time_notes):
                     (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv2.putText(result_frame, f"Notes: {notes_virtual_time:.2f}ms",
                     (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(result_frame, f"Time Offset: {time_offset:.2f}ms",
+        cv2.putText(result_frame, f"Diff: {time_offset:.2f}ms",
                     (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
         cv2.putText(result_frame, "Q:Quit | C:Mode",
                     (10, result_frame.shape[0] - 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
@@ -352,9 +351,12 @@ def manual_align(video_path, txt_path, time_notes):
                     video_frame_counter = total_video_frames - 1
                     is_playing = False
                 else:
-                    # 计算时间戳差值并累加到时间差
-                    timestamp_diff = current_video_timestamp - last_video_timestamp
-                    time_offset += timestamp_diff
+                    # 获取下一帧的时间戳
+                    next_video_timestamp = frame_timestamps[new_video_frame_counter]
+                    # 调整时间差：让notes虚拟时间保持不变
+                    # notes_virtual_time = next_video_timestamp + new_time_offset
+                    # 由于notes_virtual_time不变，所以：
+                    time_offset += (current_video_timestamp - next_video_timestamp)
                     video_frame_counter = new_video_frame_counter
             else:
                 # 模式2：视频前进，时间差不变（notes会同步前进）
@@ -362,9 +364,6 @@ def manual_align(video_path, txt_path, time_notes):
                 if video_frame_counter >= total_video_frames:
                     video_frame_counter = total_video_frames - 1
                     is_playing = False
-        
-        # 更新上一帧的时间戳
-        last_video_timestamp = current_video_timestamp
     
     cap.release()
     cv2.destroyWindow(window_name)
@@ -813,7 +812,7 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
 
 if __name__ == "__main__":
 
-    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_standardized.mp4"
+    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
     txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-08-15_21-47-03.txt"
     output_dir = r"C:\Users\ck273\Desktop\训练视频\11753"
     mode = 0
