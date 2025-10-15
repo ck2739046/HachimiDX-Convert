@@ -6,8 +6,8 @@ import numpy as np
 class Note:
     def __init__(self, frameTime=None, type=None, index=None, posX=None, posY=None, 
                  local_posX=None, local_posY=None, status=None, 
-                 appearMsec=None, isEX=None, touchDecor=None, holdSize=None, 
-                 starScale=None, userNoteSize=None):
+                 appearMsec=None, isEX=None, touchDecor=None, tapScale=None, holdScale=None, 
+                 holdSize=None, starScale=None, userNoteSize=None):
         
         self.frameTime = frameTime
         self.type = type
@@ -20,6 +20,8 @@ class Note:
         self.appearMsec = appearMsec
         self.isEX = isEX
         self.touchDecor = touchDecor
+        self.tapScale = tapScale
+        self.holdScale = holdScale
         self.holdSize = holdSize
         self.starScale = starScale
         self.userNoteSize = userNoteSize
@@ -182,38 +184,50 @@ def parse_note_line(line, frame_time):
             isEX=isEX
         )
         
-        # 处理额外数据（如果存在第7部分）
-        if len(parts) >= 7:
-            extra_data = parts[6].strip()
-            
-            # 处理Touch类型的touchDecor数据
-            if 'touch' in type_name.lower():
-                if 'TouchDecorPosition:' in extra_data:
-                    touch_decor = float(extra_data.split('TouchDecorPosition:')[1].strip())
-                    note.touchDecor = touch_decor
-            
-            # 处理Hold类型的holdSize数据
-            elif 'hold' in type_name.lower():
-                if 'HoldBodySize:' in extra_data:
-                    hold_size = float(extra_data.split('HoldBodySize:')[1].strip())
-                    note.holdSize = hold_size
-            
-            # 处理Star类型的StarScale和UserNoteSize数据
-            elif 'star' in type_name.lower():
-                if 'StarScale:' in extra_data and 'UserNoteSize:' in extra_data:
-                    # 解析StarScale
-                    star_scale_part = extra_data.split('StarScale:')[1].split('|')[0].strip()
-                    star_scale_values = star_scale_part.split(',')
-                    star_scale = (float(star_scale_values[0]), float(star_scale_values[1]))
-                    note.starScale = star_scale
-                    
-                    # 解析UserNoteSize
-                    user_note_size = float(extra_data.split('UserNoteSize:')[1].strip())
-                    note.userNoteSize = user_note_size
+        # 处理额外数据
+        extra_data = parts[6].strip().lower() if len(parts) >= 7 else ""
+        extra_data2 = parts[7].strip().lower() if len(parts) >= 8 else ""
+
+        #print(f"Parsing note: {type_name}-{index} at {frame_time}ms with extra data: '{extra_data}' and '{extra_data2}'")
+        
+        # 处理Touch/Touch-Hold类型的TouchDecor数据
+        if 'touch' in type_name.lower():
+            if 'touchdecorposition' in extra_data:
+                touch_decor = float(extra_data.split('touchdecorposition:')[1].strip())
+                note.touchDecor = touch_decor
+        
+        # 处理Hold类型的HoldScale和HoldSize数据
+        elif 'hold' in type_name.lower():
+            if 'holdscale' in extra_data and 'holdbodysize' in extra_data2:
+                hold_scale_str = extra_data.split('holdscale:')[1].strip()
+                hold_scale1 = float(hold_scale_str.split(',')[0].strip())
+                hold_scale2 = float(hold_scale_str.split(',')[1].strip())
+                note.holdScale = (hold_scale1, hold_scale2)
+                hold_size = float(extra_data2.split('holdbodysize:')[1].strip())
+                note.holdSize = hold_size
+
+        # 处理Star类型的StarScale和UserNoteSize数据
+        elif 'star' in type_name.lower():
+            if 'starcale' in extra_data and 'usernotesize' in extra_data2:
+                star_scale_str = extra_data.split('starcale:')[1].strip()
+                star_scale1 = float(star_scale_str.split(',')[0].strip())
+                star_scale2 = float(star_scale_str.split(',')[1].strip())
+                note.starScale = (star_scale1, star_scale2)
+                user_note_size = float(extra_data2.split('usernotesize:')[1].strip())
+                note.userNoteSize = user_note_size
+
+        # 处理Tap类型的TapScale数据
+        elif 'tap' in type_name.lower() or 'break' in type_name.lower():
+            if 'tapscale' in extra_data:
+                tap_scale_str = extra_data.split('tapscale:')[1].strip()
+                tap_scale1 = float(tap_scale_str.split(',')[0].strip())
+                tap_scale2 = float(tap_scale_str.split(',')[1].strip())
+                note.tapScale = (tap_scale1, tap_scale2)
         
         return note
-        
-    except Exception:
+
+    except Exception as e:
+        print(f"Error in parse_note_line(): {e}")
         return None
 
 
@@ -660,7 +674,10 @@ def draw_all_notes(frame, notes, target_time):
             label = 'TOUCH'
 
         if note.isEX:
-            label += '-EX'
+            if label.endswith('-B'):
+                label += 'X'
+            else:
+                label += '-X'
 
         label += f' {note.index}'
             
@@ -675,8 +692,8 @@ def draw_all_notes(frame, notes, target_time):
             cv2.circle(frame, (center_x, center_y), 2, (0, 0, 255), 3)
 
             # 显示音符类型标签
-            cv2.putText(frame, label, (center_x - 35, center_y + 20), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
+            cv2.putText(frame, label, (center_x - 40, center_y + 20), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
     return frame
 
@@ -826,7 +843,7 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
 if __name__ == "__main__":
 
     video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-15_15-53-36.txt"
+    txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-15_18-04-41.txt"
     output_dir = r"C:\Users\ck273\Desktop\训练视频\11753"
     mode = 0
 

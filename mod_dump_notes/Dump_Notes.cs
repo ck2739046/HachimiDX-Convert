@@ -45,6 +45,8 @@ namespace default_namespace {
             // 尺寸相关属性
             public Vector3 TouchDecorPosition { get; set; }  // Touch装饰位置
             public Vector2 HoldBodySize { get; set; }           // Hold尺寸
+            public Vector3 HoldLocalScale { get; set; }         // Hold音符的localScale
+            public Vector3 TapLocalScale { get; set; }          // Tap音符的localScale (Scale阶段)
             
             // StarNote相关属性
             public Vector3 StarLocalScale { get; set; }         // StarNote的localScale
@@ -205,10 +207,12 @@ namespace default_namespace {
                 // 初始化尺寸数据
                 Vector3 touchDecorPosition = Vector3.zero;
                 Vector2 holdBodySize = Vector2.zero;
+                Vector3 holdLocalScale = Vector3.zero;
                 Vector3 starLocalScale = Vector3.zero;
+                Vector3 tapLocalScale = Vector3.zero;
                 float userNoteSize = 1f;
 
-                // 处理Touch音符尺寸
+                // 处理Touch/Touch-Hold音符尺寸
                 if (noteType.Contains("Touch"))
                 {
                     // 获取ColorsObject数组
@@ -216,16 +220,15 @@ namespace default_namespace {
                     var colors = colorsField.GetValue(noteBase) as SpriteRenderer[];
                     touchDecorPosition = colors[0].transform.localPosition;
                 }
-                
                 // 处理Hold音符尺寸
                 else if (noteType.Contains("Hold"))
-                {                    
+                {
                     var spriteRenderField = noteBase.GetType().GetField("SpriteRender", BindingFlags.NonPublic | BindingFlags.Instance);
                     var spriteRender = spriteRenderField.GetValue(noteBase) as SpriteRenderer;
                     holdBodySize = spriteRender.size;
+                    holdLocalScale = noteObj.transform.localScale;
                 }
-                
-                // 处理StarNote尺寸
+                // 处理Star音符尺寸
                 else if (noteType.Contains("Star"))
                 {
                     // 获取NoteObj的localScale
@@ -244,6 +247,12 @@ namespace default_namespace {
                         userNoteSize = 1f; // 默认值
                     }
                 }
+                // 处理Tap音符尺寸
+                else if (noteType.Contains("Tap") || noteType.Contains("Break"))
+                {
+                    // 获取NoteObj的localScale
+                    tapLocalScale = noteObj.transform.localScale;
+                }
 
                 // 获取基本信息
                 var noteInfo = new NoteInfo
@@ -258,9 +267,11 @@ namespace default_namespace {
                     AppearMsec = -1f,  // 默认值
                     IsExNote = noteBase.ExNote,  // 获取EX音符标志
 
-                    // touch/hold/star尺寸数据
+                    // touch/hold/tap/star尺寸数据
                     TouchDecorPosition = touchDecorPosition,
                     HoldBodySize = holdBodySize,
+                    HoldLocalScale = holdLocalScale,
+                    TapLocalScale = tapLocalScale,
                     StarLocalScale = starLocalScale,
                     UserNoteSize = userNoteSize
                 };
@@ -293,7 +304,7 @@ namespace default_namespace {
                     // 创建文件并写入头部信息
                     File.WriteAllText(_outputFilePath, $"Note Dump Started at {timestamp}\n");
                     File.AppendAllText(_outputFilePath, $"Music Info: {string.Join(" - ", _currentMusicInfo)}\n");
-                    File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | IsEX | (TouchDecor/HoldSize/StarScale+UserNoteSize)\n");
+                    File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | IsEX | (TouchDecor/HoldScale+HoldSize/TapScale/StarScale+UserNoteSize)\n");
                     File.AppendAllText(_outputFilePath, "=".PadRight(30, '=') + "\n");
 
                     _isFileCreated = true;
@@ -313,21 +324,28 @@ namespace default_namespace {
                                $"{note.Status} | {note.AppearMsec:F4} | " +
                                $"EX:{(note.IsExNote ? "Y" : "N")}";
 
-                    // touch尺寸信息
-                    if (note.NoteType.Contains("Touch"))
+                    var noteTypeLower = note.NoteType.ToLower();
+                    
+                    // Touch/Touch-Hold音符
+                    if (noteTypeLower.Contains("touch"))
                     {
                         var decorPosition = note.TouchDecorPosition;
                         line += $" | TouchDecorPosition: {decorPosition.y:F4}";
                     }
-                    // hold尺寸信息
-                    else if (note.NoteType.Contains("Hold"))
+                    // Hold音符
+                    else if (noteTypeLower.Contains("hold"))
                     {
-                        line += $" | HoldBodySize: {note.HoldBodySize.y:F4}";
+                        line += $" | HoldScale: {note.HoldLocalScale.x:F4},{note.HoldLocalScale.y:F4} | HoldBodySize: {note.HoldBodySize.y:F4}";
                     }
-                    // star尺寸信息
-                    else if (note.NoteType.Contains("Star"))
+                    // Star音符（Slide）
+                    else if (noteTypeLower.Contains("star"))
                     {
                         line += $" | StarScale: {note.StarLocalScale.x:F4},{note.StarLocalScale.y:F4} | UserNoteSize: {note.UserNoteSize:F4}";
+                    }
+                    // Tap音符
+                    else if (noteTypeLower.Contains("tap") || noteTypeLower.Contains("break"))
+                    {
+                        line += $" | TapScale: {note.TapLocalScale.x:F4},{note.TapLocalScale.y:F4}";
                     }
 
                     lines.Add(line);
