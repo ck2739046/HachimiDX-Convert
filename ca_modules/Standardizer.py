@@ -43,7 +43,7 @@ class Standardizer:
             
             # 2. 检测圆心和半径
             cap = cv2.VideoCapture(video_path)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 280)
             self.circle_center, self.circle_radius = self.detect_circle(cap, video_height, total_frames, video_mode)
             cap.release()
             
@@ -366,6 +366,7 @@ class Standardizer:
             print("1. X offset (pixels, can be positive or negative)")
             print("2. Y offset (pixels, can be positive or negative)")
             print("3. Radius scale factor (0.5-1.5, can be positive or negative)")
+            print("   Or type radius directly (pixels, must be over 100)")
             print("Example: 10, -5, 1.1")
             
             while True:
@@ -380,7 +381,7 @@ class Standardizer:
                     
                     x_offset = int(parts[0])
                     y_offset = int(parts[1])
-                    radius_scale = float(parts[2])
+                    radius = float(parts[2])
                     
                     # 验证参数
                     new_x = self.circle_center[0] + x_offset
@@ -391,17 +392,24 @@ class Standardizer:
                         print(f"Error: Adjusted center ({new_x}, {new_y}) is outside the video frame.")
                         print(f"Valid range: X: 0-{video_width-1}, Y: 0-{video_height-1}")
                         continue
-                    
-                    # 检查缩放系数
-                    if radius_scale < 0.5 or radius_scale > 1.5:
-                        print("Error: Radius scale factor must be between 0.5 and 1.5.")
-                        continue
-                    
-                    # 检查缩放后的半径
-                    new_radius = round(self.circle_radius * radius_scale)
-                    if new_radius > max(video_width, video_height):
-                        print(f"Error: Scaled radius {new_radius} is too large for the video.")
-                        continue
+
+                    # 检查半径参数
+                    if radius >= 100:
+                        # 用户直接输入了半径
+                        if round(radius) > max(video_width, video_height):
+                            print(f"Error: Radius is too large for the video.")
+                            continue
+                        new_radius = round(radius)
+                    else:
+                        # 检查缩放系数
+                        if radius < 0.5 or radius > 1.5:
+                            print("Error: Radius scale factor must be between 0.5 and 1.5.")
+                            continue
+                        # 检查缩放后的半径
+                        new_radius = round(self.circle_radius * radius)
+                        if new_radius > max(video_width, video_height):
+                            print(f"Error: Scaled radius {new_radius} is too large for the video.")
+                            continue
                     
                     # 所有检查通过，返回新的圆心和半径
                     print(f"Adjustment applied: New center ({new_x}, {new_y}), New radius {new_radius}")
@@ -566,15 +574,15 @@ if __name__ == "__main__":
     standardizer = Standardizer()
     
     # 示例参数
-    #video_path = r"C:\Users\ck273\Desktop\训练视频\11753.mp4"
-    #video_mode = "source"
-    #start_frame = 1080
-    #end_frame = 19920
+    video_path = r"C:\Users\ck273\Desktop\训练视频\11753_120.mp4"
+    video_mode = "source"
+    start_frame = 490
+    end_frame = 19370
 
-    video_path = r"C:\Users\ck273\Desktop\殿ッ！？ご乱心！？(BASIC_Lv.6).mp4"
-    video_mode = "camera shot"
-    start_frame = 150
-    end_frame = 4100
+    # video_path = r"C:\Users\ck273\Desktop\殿ッ！？ご乱心！？(BASIC_Lv.6).mp4"
+    # video_mode = "camera shot"
+    # start_frame = 150
+    # end_frame = 4100
     # "source" or "camera shot"
     
     try:

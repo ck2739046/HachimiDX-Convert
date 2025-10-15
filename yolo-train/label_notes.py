@@ -1,5 +1,6 @@
 import os
 import cv2
+import numpy as np
 
 
 class Note:
@@ -384,7 +385,7 @@ def draw_tap_note(note, target_time):
               这4个点构成一个可能带旋转角度的矩形
     """
 
-    if note.status.lower() != "move": return None
+    if note.status.lower() != "move": return None, None
 
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
@@ -396,16 +397,16 @@ def draw_tap_note(note, target_time):
     # OptionNotespeed = 850
     # DefaultMsec = 1000 / (850 / 60) * 4 = 282.35294
     # 说明音符走完全程要 282ms
-    # 在标准 1080p 下，起点 120 终点 460 全程 340 像素
-    # 所以此时移动速度为 340 / 282 = 1.206 像素/毫秒
-    speed = 1.206
+    # 在标准 1080p 下，起点 120 终点 480 全程 360 像素
+    # 所以此时移动速度为 360 / 282 像素/毫秒
+    speed = 360 / (1000 / 850 * 60 * 4)
     time_diff = target_time - note.frameTime
     new_distance_to_o = note.local_posY + speed * time_diff
     # local_posY就是到屏幕中心的距离
 
     # 以 O (屏幕中心) 为中心，沿直线获得距离为 new_distance_to_o 的两个点
     a = (center_y - oy) / (center_x - ox)
-    dx = new_distance_to_o / ((1 + a**2)**0.5)
+    dx = new_distance_to_o / (np.sqrt(1 + np.power(a, 2)))
     dy = a * dx
     p1x = ox + dx
     p1y = oy + dy
@@ -420,15 +421,15 @@ def draw_tap_note(note, target_time):
         new_center_x = p1x
         new_center_y = p1y
 
-    # 返回4个角点（左上、右上、右下、左下）
+    # 返回4个角点（左上、右上、右下、左下）和中心点
     points = [
         (new_center_x - size, new_center_y - size),  # 左上
         (new_center_x + size, new_center_y - size),  # 右上
         (new_center_x + size, new_center_y + size),  # 右下
         (new_center_x - size, new_center_y + size),  # 左下
     ]
-    
-    return points
+
+    return points, (round(new_center_x), round(new_center_y))
 
 
 def draw_hold_note(note, target_time):
@@ -443,7 +444,7 @@ def draw_hold_note(note, target_time):
               这4个点构成一个可能带旋转角度的矩形
     """
 
-    if note.status.lower() != "move": return None
+    if note.status.lower() != "move": return None, None
 
     box_width = 140 * 0.5 * 0.78
     box_length = box_width + (note.holdSize - 140) * 0.5 * 1.05
@@ -482,7 +483,7 @@ def draw_hold_note(note, target_time):
         (round(p2[0]), round(p2[1])),
         (round(p3[0]), round(p3[1])),
         (round(p4[0]), round(p4[1])),
-    ]
+    ], (center_x, center_y)
 
 
 
@@ -501,7 +502,7 @@ def draw_slide_note(note, target_time):
     # Slide音符可能需要考虑滑动方向和角度
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
-    size = 1080 * 0.042
+    size = 47
     
     points = [
         (center_x - size, center_y - size),
@@ -509,8 +510,8 @@ def draw_slide_note(note, target_time):
         (center_x + size, center_y + size),
         (center_x - size, center_y + size),
     ]
-    
-    return points
+
+    return points, (center_x, center_y)
 
 
 def draw_touch_note(note, target_time):
@@ -538,8 +539,8 @@ def draw_touch_note(note, target_time):
         (center_x + size, center_y + size),
         (center_x - size, center_y + size),
     ]
-    
-    return points
+
+    return points, (center_x, center_y)
 
 
 def draw_touch_hold_note(note, target_time):
@@ -565,8 +566,8 @@ def draw_touch_hold_note(note, target_time):
         (center_x + size, center_y + size),
         (center_x - size, center_y + size),
     ]
-    
-    return points
+
+    return points, (center_x, center_y)
 
 
 def draw_rotated_rect(frame, points, color, thickness=2):
@@ -582,7 +583,6 @@ def draw_rotated_rect(frame, points, color, thickness=2):
     返回：
         frame: 绘制后的图像帧
     """
-    import numpy as np
     
     # 转换为整数坐标
     pts = np.array(points, dtype=np.int32)
@@ -603,48 +603,49 @@ def draw_all_notes(frame, notes, target_time):
         
         # 根据音符类型调用对应的绘制函数
         points = None
+        center = None
         color = (255, 255, 255)  # 默认白色
         label = ""
         
         # Tap音符：绿色
         if note_type == 'tapnote':
-            points = draw_tap_note(note, target_time)
+            points, center = draw_tap_note(note, target_time)
             color = (0, 255, 0)
             label = 'TAP'
         elif note_type == 'breaknote':
-            points = draw_tap_note(note, target_time)
+            points, center = draw_tap_note(note, target_time)
             color = (0, 255, 0)
             label = 'TAP-B'
 
         # Hold音符：蓝色
         elif note_type == 'holdnote':
-            points = draw_hold_note(note, target_time)
+            points, center = draw_hold_note(note, target_time)
             color = (255, 0, 0)
             label = 'HOLD'
         elif note_type == 'breakholdnote':
-            points = draw_hold_note(note, target_time)
+            points, center = draw_hold_note(note, target_time)
             color = (255, 0, 0)
             label = 'HOLD-B'
         
         # Slide音符：黄色
         elif note_type == 'starnote':
-            points = draw_slide_note(note, target_time)
+            points, center = draw_slide_note(note, target_time)
             color = (0, 255, 255)
             label = 'SLIDE'
         elif note_type == 'breakstarnote':
-            points = draw_slide_note(note, target_time)
+            points, center = draw_slide_note(note, target_time)
             color = (0, 255, 255)
             label = 'SLIDE-B'
         
         # Touch-Hold音符：青色
         elif 'touchhold' in note_type:
-            points = draw_touch_hold_note(note, target_time)
+            points, center = draw_touch_hold_note(note, target_time)
             color = (255, 255, 0)
             label = 'TOUCH-HOLD'
         
         # Touch音符：紫色
         elif 'touch' in note_type:
-            points = draw_touch_note(note, target_time)
+            points, center = draw_touch_note(note, target_time)
             color = (255, 0, 255)
             label = 'TOUCH'
             
@@ -652,10 +653,12 @@ def draw_all_notes(frame, notes, target_time):
         if points:
             frame = draw_rotated_rect(frame, points, color, thickness=2)
             
-            # 计算中心点用于显示标签
-            center_x = int(sum(p[0] for p in points) / 4)
-            center_y = int(sum(p[1] for p in points) / 4)
-            
+            # 绘制中心点
+            center_x, center_y = center
+            center_x = int(round(center_x))
+            center_y = int(round(center_y))
+            cv2.circle(frame, (center_x, center_y), 2, (0, 0, 255), 3)
+
             # 显示音符类型标签
             cv2.putText(frame, label, (center_x - 25, center_y + 5), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
@@ -813,7 +816,7 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
 if __name__ == "__main__":
 
     video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-08-15_21-47-03.txt"
+    txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-15_14-30-10.txt"
     output_dir = r"C:\Users\ck273\Desktop\训练视频\11753"
     mode = 0
 
