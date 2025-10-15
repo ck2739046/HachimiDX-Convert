@@ -405,13 +405,30 @@ def draw_tap_note(note, target_time):
               这4个点构成一个可能带旋转角度的矩形
     """
 
-    if note.status.lower() != "move": return None, None
+    if note.status.lower() == "init": return None, None
 
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
     ox = 540
     oy = 540
 
+    if note.status.lower() == "scale":
+        index = note.tapScale[0]
+        if index < 0.5: return None, None # 忽略过小的音符
+        if note.isEX:
+            size = 1080 * 0.055 * index
+        else:
+            size = 1080 * 0.049 * index
+        # 不需要位置补偿，直接使用center计角点
+        return [
+            (center_x - size, center_y - size),  # 左上
+            (center_x + size, center_y - size),  # 右上
+            (center_x + size, center_y + size),  # 右下
+            (center_x - size, center_y + size),  # 左下
+        ], (center_x, center_y)
+
+
+    # 对于 move 状态的音符，需要根据时间差进行位置补偿
     if note.isEX:
         size = 1080 * 0.055
     else:
