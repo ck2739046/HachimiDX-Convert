@@ -485,18 +485,78 @@ def draw_hold_note(note, target_time):
               这4个点构成一个可能带旋转角度的矩形
     """
 
-    if note.status.lower() != "move": return None, None
+    if note.status.lower() == "init": return None, None, None
 
-    box_width = 140 * 0.5 * 0.78
-    box_length = box_width + (note.holdSize - 140) * 0.5 * 1.05
+    if note.status.lower() == "scale":
+        index = note.holdScale[0]
+        if index < 0.5: return None, None, None # 忽略过小的音符
+    else:
+        index = 1
+
+    ex_extend = 5 # 如果是 ex 音符，外扩 5 像素来包住保护套光晕
+    if not note.isEX:
+        box_width = 140 * 0.5 * 0.77 * index
+        box_length = (note.holdSize-20) * 0.5 * index
+    else:
+        box_width = (ex_extend + 140 * 0.5 * 0.77) * index
+        box_length = (ex_extend + (note.holdSize-20) * 0.5) * index
+
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
     ox = 540
     oy = 540
+    head_x, head_y = None, None
+
+
+    # 对于 move 状态的音符，需要根据时间差进行位置补偿
+    # 但是排除中点位于中间的情况，这时候头尾都占满轨道了不需要移动
+    if note.status.lower() == "move" and note.local_posY != 300:
+        # 假设速度 7.50
+        # 由于是中点，移动速度减半
+        speed = 360 / (1000 / 850 * 60 * 4) * 0.5
+        time_diff = target_time - note.frameTime
+        new_distance_to_o = note.local_posY + speed * time_diff
+        # 以 O (屏幕中心) 为中心，沿直线获得距离为 new_distance_to_o 的两个点
+        a = (center_y - oy) / (center_x - ox)
+        dx = new_distance_to_o / (np.sqrt(1 + np.power(a, 2)))
+        dy = a * dx
+        p1x = ox + dx
+        p1y = oy + dy
+        p2x = ox - dx
+        p2y = oy - dy
+        # 更接近 center 的点就是新的中心点
+        if abs(p1x - center_x) > abs(p2x - center_x):
+            center_x = p2x
+            center_y = p2y
+        else:
+            center_x = p1x
+            center_y = p1y
+
 
     # y = ax + b
     a = (center_y - oy) / (center_x - ox)
     
+    # 对于 move 阶段，根据中心点计算出头部追踪点
+    # 140 的时候 head 与中点重合了，所以要等 160 以后才显示
+    if note.status.lower() == "move" and note.holdSize > 160:
+        # 以 center xy 为中心，沿直线获得距离为 box_length - c 的两个点
+        c = 60 + ex_extend if note.isEX else 60
+        dx = (box_length - c) / (np.sqrt(1 + np.power(a, 2)))
+        dy = a * dx
+        p1x = center_x + dx
+        p1y = center_y + dy
+        p2x = center_x - dx
+        p2y = center_y - dy
+        # 更远离屏幕中心的点就是头部追踪点
+        if abs(p1x - ox) < abs(p2x - ox):
+            head_x = p2x
+            head_y = p2y
+        else:
+            head_x = p1x
+            head_y = p1y
+
+
+    # 根据中心点和边长计算出四个角点（带角度的）
     # 以 center xy 为中心，沿直线获得距离为 box_length 的两个点
     # 这两个点是 hold 的头尾两条边的中点
     dx = box_length / ((1 + a**2)**0.5)
@@ -524,7 +584,7 @@ def draw_hold_note(note, target_time):
         (round(p2[0]), round(p2[1])),
         (round(p3[0]), round(p3[1])),
         (round(p4[0]), round(p4[1])),
-    ], (center_x, center_y)
+    ], (center_x, center_y), (head_x, head_y)
 
 
 
@@ -645,6 +705,7 @@ def draw_all_notes(frame, notes, target_time):
         # 根据音符类型调用对应的绘制函数
         points = None
         center = None
+        head = None
         color = (255, 255, 255)  # 默认白色
         label = ""
         
@@ -660,11 +721,11 @@ def draw_all_notes(frame, notes, target_time):
 
         # Hold音符：蓝色
         elif note_type == 'holdnote':
-            points, center = draw_hold_note(note, target_time)
+            points, center, head = draw_hold_note(note, target_time)
             color = (255, 0, 0)
             label = 'HOLD'
         elif note_type == 'breakholdnote':
-            points, center = draw_hold_note(note, target_time)
+            points, center, head = draw_hold_note(note, target_time)
             color = (255, 0, 0)
             label = 'HOLD-B'
         
@@ -711,6 +772,17 @@ def draw_all_notes(frame, notes, target_time):
             # 显示音符类型标签
             cv2.putText(frame, label, (center_x - 40, center_y + 20), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            
+            # 如果是Hold音符，绘制头部追踪点
+            if head:
+                head_x, head_y = head
+                if head_x and head_y:
+                    head_x = int(round(head_x))
+                    head_y = int(round(head_y))
+                    cv2.circle(frame, (head_x, head_y), 2, (255, 0, 0), 3)
+            
+
+
 
     return frame
 
