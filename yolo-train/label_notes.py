@@ -194,10 +194,10 @@ def parse_note_line(line, frame_time):
         
         # 处理Touch/Touch-Hold类型的TouchDecor数据
         if 'touch' in type_name.lower():
-            if 'touchdecorposition' in extra_data and 'touchalpha' in extra_data2:
+            if 'touchdecorposition' in extra_data and 'alpha' in extra_data2:
                 touch_decor = float(extra_data.split('touchdecorposition:')[1].strip())
                 note.touchDecor = touch_decor
-                touch_alpha = float(extra_data2.split('touchalpha:')[1].strip())
+                touch_alpha = float(extra_data2.split('alpha:')[1].strip())
                 note.touchAlpha = touch_alpha
 
         # 处理Hold类型的HoldScale和HoldSize数据
@@ -400,13 +400,6 @@ def manual_align(video_path, txt_path, time_notes):
 def draw_tap_note(note, target_time):
     """
     绘制单个Tap音符
-    
-    输入：
-        note: Note对象
-        
-    返回：
-        list: 4个点的坐标 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
-              这4个点构成一个可能带旋转角度的矩形
     """
 
     if note.status.lower() == "init": return None, None
@@ -480,13 +473,6 @@ def draw_tap_note(note, target_time):
 def draw_hold_note(note, target_time):
     """
     绘制单个Hold音符
-    
-    输入：
-        note: Note对象，包含holdSize等属性
-        
-    返回：
-        list: 4个点的坐标 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
-              这4个点构成一个可能带旋转角度的矩形
     """
 
     if note.status.lower() == "init": return None, None, None
@@ -595,20 +581,13 @@ def draw_hold_note(note, target_time):
 def draw_slide_note(note, target_time):
     """
     绘制单个Slide音符
-    
-    输入：
-        note: Note对象
-        
-    返回：
-        list: 4个点的坐标 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
-              这4个点构成一个可能带旋转角度的矩形
     """
     # TODO: 实现具体逻辑
     # Slide音符可能需要考虑滑动方向和角度
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
     size = 47
-    
+
     points = [
         (center_x - size, center_y - size),
         (center_x + size, center_y - size),
@@ -622,42 +601,27 @@ def draw_slide_note(note, target_time):
 def draw_touch_note(note, target_time):
     """
     绘制单个Touch音符
-    
-    输入：
-        note: Note对象，包含touchDecor等属性
-        
-    返回：
-        list: 4个点的坐标 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
-              这4个点构成一个可能带旋转角度的矩形
     """
-    # TODO: 实现具体逻辑
-    # Touch音符可能需要考虑touchDecor位置
+
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
-    size = 1080 * 0.042
-    
-    touch_decor = note.touchDecor if note.touchDecor else 0.0
-    
-    points = [
-        (center_x - size, center_y - size),
-        (center_x + size, center_y - size),
-        (center_x + size, center_y + size),
-        (center_x - size, center_y + size),
-    ]
+    size = note.touchDecor + 54
 
-    return points, (center_x, center_y)
+    if note.touchAlpha < 0.4: return None, None # 忽略过于透明的音符
+
+    # touch 音符的公式有点复杂，就不补偿了
+    # 反正最后识别尺寸也是靠查找轮廓，不需要画框很精准
+    return [
+        (center_x - size, center_y - size),  # 左上
+        (center_x + size, center_y - size),  # 右上
+        (center_x + size, center_y + size),  # 右下
+        (center_x - size, center_y + size),  # 左下
+    ], (center_x, center_y)
 
 
 def draw_touch_hold_note(note, target_time):
     """
     绘制单个Touch-Hold音符
-    
-    输入：
-        note: Note对象，可能包含touchDecor和holdSize属性
-        
-    返回：
-        list: 4个点的坐标 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
-              这4个点构成一个可能带旋转角度的矩形
     """
     # TODO: 实现具体逻辑
     # Touch-Hold音符结合了Touch和Hold的特性
@@ -703,6 +667,9 @@ def draw_all_notes(frame, notes, target_time):
     绘制所有类型的音符
     使用独立的绘制函数为每种音符类型生成矩形框
     """
+
+    if not notes: return frame
+
     for note in notes:
         note_type = note.type.lower()
         
@@ -785,9 +752,6 @@ def draw_all_notes(frame, notes, target_time):
                     head_y = int(round(head_y))
                     cv2.circle(frame, (head_x, head_y), 2, (255, 0, 0), 3)
             
-
-
-
     return frame
 
 
