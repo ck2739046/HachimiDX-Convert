@@ -1307,6 +1307,100 @@ def verify_dataset(output_dir):
     print("\n验证完成！")
 
 
+def count_dataset_statistics(output_dir):
+    """
+    统计数据集类别分布
+    
+    遍历labels目录，统计每个类别总共有多少个数据，以及计算占所有类型的样本数量之和的百分比
+    
+    参数:
+        output_dir: 数据集根目录
+    """
+    
+    # 定义新文件结构的路径
+    detect_labels_dir = os.path.join(output_dir, 'labels_detect')
+    obb_labels_dir = os.path.join(output_dir, 'labels_obb')
+    
+    # 检查目录是否存在
+    if not os.path.exists(detect_labels_dir) and not os.path.exists(obb_labels_dir):
+        print("错误：未找到任何labels目录！")
+        return
+    
+    # 初始化统计字典
+    detect_stats = {}
+    obb_stats = {}
+    
+    # 统计detect数据集
+    if os.path.exists(detect_labels_dir):
+        print("正在统计detect数据集...")
+        detect_files = [f for f in os.listdir(detect_labels_dir) if f.endswith('.txt')]
+        total_detect_files = len(detect_files)
+        
+        for i, label_file in enumerate(detect_files):
+            label_path = os.path.join(detect_labels_dir, label_file)
+            with open(label_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) >= 5:
+                        class_id = int(parts[0])
+                        detect_stats[class_id] = detect_stats.get(class_id, 0) + 1
+            
+            # 显示进度
+            if (i + 1) % 50 == 0 or i + 1 == total_detect_files:
+                print(f"\rDetect进度: {i + 1}/{total_detect_files} 文件", end="", flush=True)
+
+    # 统计obb数据集
+    if os.path.exists(obb_labels_dir):
+        print("正在统计obb数据集...   ")
+        obb_files = [f for f in os.listdir(obb_labels_dir) if f.endswith('.txt')]
+        total_obb_files = len(obb_files)
+        
+        for i, label_file in enumerate(obb_files):
+            label_path = os.path.join(obb_labels_dir, label_file)
+            with open(label_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) >= 9:
+                        class_id = int(parts[0])
+                        obb_stats[class_id] = obb_stats.get(class_id, 0) + 1
+            
+            # 显示进度
+            if (i + 1) % 50 == 0 or i + 1 == total_obb_files:
+                print(f"\rOBB进度: {i + 1}/{total_obb_files} 文件", end="", flush=True)
+    
+    # 计算总数和百分比
+    detect_total = sum(detect_stats.values())
+    obb_total = sum(obb_stats.values())
+    
+    # 打印统计结果
+    print("\n数据集统计结果:       ")
+    
+    # Detect数据集统计
+    print("detect:")
+    if detect_stats:
+        for class_id in sorted(detect_stats.keys()):
+            count = detect_stats[class_id]
+            percentage = (count / detect_total * 100) if detect_total > 0 else 0
+            print(f"  class {class_id}: {count} ({percentage:.2f}%)")
+    else:
+        print("  无数据")
+    print(f"  总计: {detect_total}")
+    
+    print()
+    
+    # OBB数据集统计
+    print("obb:")
+    if obb_stats:
+        for class_id in sorted(obb_stats.keys()):
+            count = obb_stats[class_id]
+            percentage = (count / obb_total * 100) if obb_total > 0 else 0
+            print(f"  class {class_id}: {count} ({percentage:.2f}%)")
+    else:
+        print("  无数据")
+    print(f"  总计: {obb_total}")
+    
+    
+
 def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
     """
     主函数
@@ -1336,7 +1430,8 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
     print("1. 手动对齐")
     print("2. 导出数据集")
     print("3. 验证数据集")
-    choice = input("请输入选择 (1, 2 或 3): ").strip()
+    print("4. 统计数据集")
+    choice = input("请输入选择 (1, 2, 3 或 4): ").strip()
     
     if choice == '1':
         # 手动对齐模式
@@ -1365,6 +1460,11 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
         # 验证数据集模式
         print(f"\n验证数据集: {output_dir}")
         verify_dataset(output_dir)
+    
+    elif choice == '4':
+        # 统计数据集模式
+        print(f"\n统计数据集: {output_dir}")
+        count_dataset_statistics(output_dir)
     
     else:
         print("无效的选择！")
@@ -1424,3 +1524,6 @@ if __name__ == "__main__":
 
     # 执行对齐
     time_offset = main(video_path, txt_path, output_dir, align_diff, star_skin)
+
+    # 统计数据集
+    count_dataset_statistics(output_dir)
