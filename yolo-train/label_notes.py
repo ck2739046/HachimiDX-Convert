@@ -216,8 +216,8 @@ def parse_note_line(line, frame_time):
 
         # 处理Star类型的StarScale和UserNoteSize数据
         elif 'star' in type_name.lower():
-            if 'starcale' in extra_data and 'usernotesize' in extra_data2:
-                star_scale_str = extra_data.split('starcale:')[1].strip()
+            if 'starscale' in extra_data and 'usernotesize' in extra_data2:
+                star_scale_str = extra_data.split('starscale:')[1].strip()
                 star_scale1 = float(star_scale_str.split(',')[0].strip())
                 star_scale2 = float(star_scale_str.split(',')[1].strip())
                 note.starScale = (star_scale1, star_scale2)
@@ -591,22 +591,76 @@ def draw_hold_note(note, target_time):
 
 def draw_slide_note(note, target_time):
     """
-    绘制单个Slide音符
+    绘制单个Slide音符（星星头）
     """
-    # TODO: 实现具体逻辑
-    # Slide音符可能需要考虑滑动方向和角度
+
+    # 直接复制 tap 的代码
+    if note.status.lower() == "init": return None, None
+
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
-    size = 47
+    ox = 540
+    oy = 540
 
+    if note.status.lower() == "scale":
+        index = note.starScale[0]
+        if index < 0.5: return None, None # 忽略过小的音符
+        if note.isEX:
+            size = 1080 * 0.055 * index
+        else:
+            size = 1080 * 0.049 * index
+        # 不需要位置补偿，直接使用center计角点
+        return [
+            (center_x - size, center_y - size),  # 左上
+            (center_x + size, center_y - size),  # 右上
+            (center_x + size, center_y + size),  # 右下
+            (center_x - size, center_y + size),  # 左下
+        ], (center_x, center_y)
+
+
+    # 对于 move 状态的音符，需要根据时间差进行位置补偿
+    if note.isEX:
+        size = 1080 * 0.055
+    else:
+        size = 1080 * 0.049
+
+    # 假设速度 7.50
+    # OptionNotespeed = 850
+    # DefaultMsec = 1000 / (850 / 60) * 4 = 282.35294
+    # 说明音符走完全程要 282ms
+    # 在标准 1080p 下，起点 120 终点 480 全程 360 像素
+    # 所以此时移动速度为 360 / 282 像素/毫秒
+    speed = 360 / (1000 / 850 * 60 * 4)
+    time_diff = target_time - note.frameTime
+    new_distance_to_o = note.local_posY + speed * time_diff
+    # local_posY就是到屏幕中心的距离
+
+    # 以 O (屏幕中心) 为中心，沿直线获得距离为 new_distance_to_o 的两个点
+    a = (center_y - oy) / (center_x - ox)
+    dx = new_distance_to_o / np.sqrt(1 + np.power(a, 2))
+    dy = a * dx
+    p1x = ox + dx
+    p1y = oy + dy
+    p2x = ox - dx
+    p2y = oy - dy
+
+    # 更接近 center 的点就是新的中心点
+    if abs(p1x - center_x) > abs(p2x - center_x):
+        new_center_x = p2x
+        new_center_y = p2y
+    else:
+        new_center_x = p1x
+        new_center_y = p1y
+
+    # 返回4个角点（左上、右上、右下、左下）和中心点
     points = [
-        (center_x - size, center_y - size),
-        (center_x + size, center_y - size),
-        (center_x + size, center_y + size),
-        (center_x - size, center_y + size),
+        (new_center_x - size, new_center_y - size),  # 左上
+        (new_center_x + size, new_center_y - size),  # 右上
+        (new_center_x + size, new_center_y + size),  # 右下
+        (new_center_x - size, new_center_y + size),  # 左下
     ]
 
-    return points, (center_x, center_y)
+    return points, (round(new_center_x), round(new_center_y))
 
 
 def draw_touch_note(note, target_time):
