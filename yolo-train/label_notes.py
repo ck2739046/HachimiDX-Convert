@@ -77,7 +77,7 @@ def parse_txt(txt_path):
     return time_notes
 
 
-def find_closest_notes(time_notes, sorted_times, target_time):
+def find_closest_notes(time_notes, sorted_times, target_time, max_time_diff):
     """
     根据目标时间查找最接近的notes数据
     
@@ -116,6 +116,10 @@ def find_closest_notes(time_notes, sorted_times, target_time):
     # 计算目标时间与左右时间戳的距离
     left_diff = target_time - left_time
     right_diff = right_time - target_time
+
+    # 如果时间差距太大也要忽略
+    if left_diff > max_time_diff and right_diff > max_time_diff:
+        return []
     
     # 返回距离更近的时间戳的notes
     if left_diff <= right_diff:
@@ -280,6 +284,8 @@ def manual_align(video_path, txt_path, time_notes):
             print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
     print("\r时间戳读取完成！            ")
 
+    max_time_diff = (1000 / (cap.get(cv2.CAP_PROP_FPS))) - 0.1 # 最大时间差，1帧时间
+
     # 重置视频到第一帧
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
@@ -308,7 +314,7 @@ def manual_align(video_path, txt_path, time_notes):
         notes_virtual_time = current_video_timestamp + time_offset
         
         # 根据notes虚拟时间查找最接近的音符
-        current_notes = find_closest_notes(time_notes, sorted_times, notes_virtual_time)
+        current_notes = find_closest_notes(time_notes, sorted_times, notes_virtual_time, max_time_diff)
         
         # 绘制音符
         result_frame = draw_all_notes(raw_frame, current_notes, notes_virtual_time)
@@ -808,15 +814,6 @@ def main(video_path, txt_path, output_dir, mode):
     
     # 手动对齐
     time_offset = manual_align(video_path, txt_path, time_notes)
-    
-    # 保存对齐结果
-    if output_dir and os.path.exists(output_dir):
-        result_file = os.path.join(output_dir, "alignment_result.txt")
-        with open(result_file, 'w', encoding='utf-8') as f:
-            f.write(f"Video File: {video_path}\n")
-            f.write(f"Notes File: {txt_path}\n")
-            f.write(f"Time Offset: {time_offset}ms\n")
-        print(f"对齐结果已保存到: {result_file}")
     
     return time_offset
 
