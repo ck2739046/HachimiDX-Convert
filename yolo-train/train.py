@@ -57,12 +57,15 @@ def train(model_name=None):
         project=project_path,
         name=model_name,    # 使用指定的模型名称
         amp=True,      
-        cache=True,        
+        cache=False,        
         verbose=True,
         plots=False,
 
+        augment=True,
+        compile=True,
+
         optimizer='AdamW',
-        lr0=0.005,
+        lr0=0.001,
         weight_decay=0.0005,
 
         rect=True,          # 启用矩形训练以提高效率
