@@ -43,7 +43,7 @@ class Standardizer:
             
             # 2. 检测圆心和半径
             cap = cv2.VideoCapture(video_path)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 280)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
             self.circle_center, self.circle_radius = self.detect_circle(cap, video_height, total_frames, video_mode)
             cap.release()
             
@@ -574,10 +574,15 @@ if __name__ == "__main__":
     standardizer = Standardizer()
     
     # 示例参数
-    video_path = r"C:\Users\ck273\Desktop\训练视频\11753_120.mp4"
+    # video_path = r"C:\Users\ck273\Desktop\训练视频\11753_120.mp4"
+    # video_mode = "source"
+    # start_frame = 490
+    # end_frame = 19370
+
+    video_path = r"C:\Users\ck273\Desktop\训练视频\11394_120.mp4"
     video_mode = "source"
-    start_frame = 490
-    end_frame = 19370
+    start_frame = 280
+    end_frame = 17870
 
     # video_path = r"C:\Users\ck273\Desktop\殿ッ！？ご乱心！？(BASIC_Lv.6).mp4"
     # video_mode = "camera shot"
