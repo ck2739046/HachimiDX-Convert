@@ -1125,6 +1125,187 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
     cap.release()
 
 
+def verify_dataset(output_dir):
+    """
+    验证并可视化导出的数据集
+    
+    参数:
+        output_dir: 数据集根目录
+    """
+    
+    detect_images_dir = os.path.join(output_dir, 'detect', 'images')
+    detect_labels_dir = os.path.join(output_dir, 'detect', 'labels')
+    obb_images_dir = os.path.join(output_dir, 'obb', 'images')
+    obb_labels_dir = os.path.join(output_dir, 'obb', 'labels')
+    
+    # 检查目录是否存在
+    if not os.path.exists(detect_images_dir) and not os.path.exists(obb_images_dir):
+        print("错误：未找到数据集目录！")
+        return
+    
+    # 收集所有帧的信息
+    all_frames = {}  # {frame_key: {'detect_img': path, 'detect_label': path, 'obb_img': path, 'obb_label': path}}
+    
+    # 收集detect数据
+    if os.path.exists(detect_images_dir):
+        for img_file in os.listdir(detect_images_dir):
+            if img_file.endswith(('.jpg', '.png', '.jpeg')):
+                frame_key = os.path.splitext(img_file)[0]  # 去掉扩展名作为key
+                if frame_key not in all_frames:
+                    all_frames[frame_key] = {}
+                all_frames[frame_key]['detect_img'] = os.path.join(detect_images_dir, img_file)
+                
+                # 查找对应的label文件
+                label_file = frame_key + '.txt'
+                label_path = os.path.join(detect_labels_dir, label_file)
+                if os.path.exists(label_path):
+                    all_frames[frame_key]['detect_label'] = label_path
+    
+    # 收集obb数据
+    if os.path.exists(obb_images_dir):
+        for img_file in os.listdir(obb_images_dir):
+            if img_file.endswith(('.jpg', '.png', '.jpeg')):
+                frame_key = os.path.splitext(img_file)[0]
+                if frame_key not in all_frames:
+                    all_frames[frame_key] = {}
+                all_frames[frame_key]['obb_img'] = os.path.join(obb_images_dir, img_file)
+                
+                # 查找对应的label文件
+                label_file = frame_key + '.txt'
+                label_path = os.path.join(obb_labels_dir, label_file)
+                if os.path.exists(label_path):
+                    all_frames[frame_key]['obb_label'] = label_path
+    
+    if not all_frames:
+        print("错误：未找到任何图像文件！")
+        return
+    
+    # 按帧号排序
+    sorted_frame_keys = sorted(all_frames.keys(), key=lambda x: int(x.split('_')[-1]))
+    
+    print(f"\n找到 {len(sorted_frame_keys)} 帧数据")
+    print(f"按空格键播放/暂停，左右箭头键切换帧，Q键退出\n")
+    
+    current_frame_idx = 0
+    is_playing = False
+    window_name = 'Dataset Verification'
+    cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+    
+    while True:
+        frame_key = sorted_frame_keys[current_frame_idx]
+        frame_info = all_frames[frame_key]
+        
+        # 优先使用detect图像，如果没有则使用obb图像
+        img_path = frame_info.get('detect_img') or frame_info.get('obb_img')
+        
+        if not img_path or not os.path.exists(img_path):
+            print(f"警告：无法找到帧 {frame_key} 的图像")
+            current_frame_idx = (current_frame_idx + 1) % len(sorted_frame_keys)
+            continue
+        
+        # 读取图像
+        frame = cv2.imread(img_path)
+        if frame is None:
+            print(f"警告：无法读取图像 {img_path}")
+            current_frame_idx = (current_frame_idx + 1) % len(sorted_frame_keys)
+            continue
+        
+        frame_height, frame_width = frame.shape[:2]
+        
+        # 绘制detect标签（绿色框）
+        detect_count = 0
+        if 'detect_label' in frame_info and os.path.exists(frame_info['detect_label']):
+            with open(frame_info['detect_label'], 'r') as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) >= 5:
+                        class_id = int(parts[0])
+                        x_center_norm = float(parts[1])
+                        y_center_norm = float(parts[2])
+                        width_norm = float(parts[3])
+                        height_norm = float(parts[4])
+                        
+                        # 反归一化
+                        x_center = int(x_center_norm * frame_width)
+                        y_center = int(y_center_norm * frame_height)
+                        width = int(width_norm * frame_width)
+                        height = int(height_norm * frame_height)
+                        
+                        # 计算左上角和右下角
+                        x1 = int(x_center - width / 2)
+                        y1 = int(y_center - height / 2)
+                        x2 = int(x_center + width / 2)
+                        y2 = int(y_center + height / 2)
+                        
+                        # 绘制绿色矩形框
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        
+                        # 标注类别
+                        class_names = ['TAP', 'SLIDE', 'TOUCH']
+                        label = class_names[class_id] if class_id < len(class_names) else str(class_id)
+                        cv2.putText(frame, label, (x1, y1 - 5), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                        detect_count += 1
+        
+        # 绘制obb标签（红色框）
+        obb_count = 0
+        if 'obb_label' in frame_info and os.path.exists(frame_info['obb_label']):
+            with open(frame_info['obb_label'], 'r') as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) >= 9:
+                        class_id = int(parts[0])
+                        
+                        # 读取4个角点并反归一化
+                        points = []
+                        for i in range(4):
+                            x_norm = float(parts[1 + i*2])
+                            y_norm = float(parts[2 + i*2])
+                            x = int(x_norm * frame_width)
+                            y = int(y_norm * frame_height)
+                            points.append((x, y))
+                        
+                        # 绘制红色多边形
+                        pts = np.array(points, dtype=np.int32)
+                        cv2.polylines(frame, [pts], isClosed=True, color=(0, 0, 255), thickness=2)
+                        
+                        # 标注类别
+                        class_names = ['HOLD', 'TOUCH-HOLD']
+                        label = class_names[class_id] if class_id < len(class_names) else str(class_id)
+                        cv2.putText(frame, label, (points[0][0], points[0][1] - 5), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                        obb_count += 1
+        
+        # 显示信息
+        play_status = "[PLAYING]" if is_playing else "[PAUSED]"
+        cv2.putText(frame, f"{play_status} Frame: {current_frame_idx + 1}/{len(sorted_frame_keys)} ({frame_key})",
+                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        cv2.putText(frame, f"Detect: {detect_count} notes | OBB: {obb_count} notes",
+                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(frame, "Space: Play/Pause | Left/Right: Previous/Next | Q: Quit",
+                   (10, frame_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        
+        cv2.imshow(window_name, frame)
+        
+        # 等待按键
+        key = cv2.waitKey(30 if is_playing else 1) & 0xFF
+        
+        if key == ord('q') or key == ord('Q'):  # 退出
+            break
+        elif key == 32:  # 空格：播放/暂停
+            is_playing = not is_playing
+        elif key == 0:  # 箭头: 上一帧
+            is_playing = False
+            current_frame_idx = (current_frame_idx - 1) % len(sorted_frame_keys)
+        
+        # 如果正在播放，自动前进
+        if is_playing:
+            current_frame_idx = (current_frame_idx + 1) % len(sorted_frame_keys)
+    
+    cv2.destroyWindow(window_name)
+    print("\n验证完成！")
+
+
 def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
     """
     主函数
@@ -1153,7 +1334,8 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
     print("\n请选择操作模式:")
     print("1. 手动对齐")
     print("2. 导出数据集")
-    choice = input("请输入选择 (1 或 2): ").strip()
+    print("3. 验证数据集")
+    choice = input("请输入选择 (1, 2 或 3): ").strip()
     
     if choice == '1':
         # 手动对齐模式
@@ -1177,6 +1359,11 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
         
         # 导出数据集
         export_dataset(video_path, txt_path, output_dir, align_diff, video_name)
+    
+    elif choice == '3':
+        # 验证数据集模式
+        print(f"\n验证数据集: {output_dir}")
+        verify_dataset(output_dir)
     
     else:
         print("无效的选择！")
