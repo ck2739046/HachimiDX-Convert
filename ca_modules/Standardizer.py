@@ -577,12 +577,12 @@ if __name__ == "__main__":
     # 3440x1440 1180 1920 1000 -600
     
     # 示例参数
-    # video_path = r"C:\Users\ck273\Desktop\训练视频\11753_120.mp4"
+    # video_path = r"C:\Users\ck273\Desktop\train\11753_120.mp4"
     # video_mode = "source"
     # start_frame = 490
     # end_frame = 19370
 
-    video_path = r"C:\Users\ck273\Desktop\训练视频\11394_120.mkv"
+    video_path = r"C:\Users\ck273\Desktop\train\11394_120.mkv"
     video_mode = "source"
     start_frame = 2290
     end_frame = 19880

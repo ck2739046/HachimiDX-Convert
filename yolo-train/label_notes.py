@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+import shutil
 
 
 class Note:
@@ -885,6 +886,245 @@ def calculate_oct_position(circle_center_x, circle_center_y, note_x, note_y):
         return 0
 
 
+def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=None):
+    """
+    导出YOLO训练数据集
+    
+    参数:
+        video_path: 视频路径
+        txt_path: 音符数据txt路径
+        output_dir: 输出目录
+        time_offset: 时间偏移量(毫秒)
+        video_name: 视频名称（用于文件命名），如果为None则从video_path提取
+    """
+    
+    # 解析txt文件
+    time_notes = parse_txt(txt_path)
+    
+    if not time_notes:
+        print("错误：没有找到任何音符数据！")
+        return
+    
+    # 获取视频名称
+    if video_name is None:
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+    
+    # 创建输出目录结构
+    detect_dir = os.path.join(output_dir, 'detect')
+    obb_dir = os.path.join(output_dir, 'obb')
+    
+    detect_images_dir = os.path.join(detect_dir, 'images')
+    detect_labels_dir = os.path.join(detect_dir, 'labels')
+    obb_images_dir = os.path.join(obb_dir, 'images')
+    obb_labels_dir = os.path.join(obb_dir, 'labels')
+    
+    # 如果已存在则删除再创建
+    for d in (detect_images_dir, detect_labels_dir, obb_images_dir, obb_labels_dir):
+        if os.path.exists(d):
+            try:
+                if os.path.isfile(d):
+                    os.remove(d)
+                else:
+                    shutil.rmtree(d)
+            except Exception as e:
+                print(f"Warning: failed to remove {d}: {e}")
+        os.makedirs(d, exist_ok=True)
+    
+    # 打开视频
+    cap = cv2.VideoCapture(video_path)
+    total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # 预先读取所有帧的时间戳（支持VFR视频）
+    print("正在读取视频帧时间戳...")
+    frame_timestamps = []
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    i = 0
+    while i < total_video_frames and cap.grab():
+        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
+        frame_timestamps.append(timestamp)
+        i += 1
+        if i % 100 == 0 or i == total_video_frames:
+            print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
+    print("\r时间戳读取完成！            ")
+    
+    max_time_diff = (1000 / cap.get(cv2.CAP_PROP_FPS)) - 0.1
+    
+    # 重置视频到第一帧
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    
+    # 获取所有时间戳并排序
+    sorted_times = sorted(time_notes.keys())
+    
+    # 获取帧尺寸
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    detect_count = 0
+    obb_count = 0
+    
+    print(f"\n开始导出数据集...")
+    print(f"视频尺寸: {frame_width}x{frame_height}")
+    print(f"输出目录:")
+    print(f"  Detect images: {detect_images_dir}")
+    print(f"  Detect labels: {detect_labels_dir}")
+    print(f"  OBB images: {obb_images_dir}")
+    print(f"  OBB labels: {obb_labels_dir}")
+    
+    # 测试写入权限
+    test_file = os.path.join(detect_images_dir, "test.txt")
+    try:
+        with open(test_file, 'w') as f:
+            f.write("test")
+        os.remove(test_file)
+    except Exception as e:
+        print(f"错误: 目录写入测试失败: {e}")
+        return
+    
+    # 遍历所有帧
+    for frame_number in range(total_video_frames):
+        # 读取帧
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        ret, frame = cap.read()
+        
+        if not ret:
+            continue
+        
+        # 获取当前帧的时间戳
+        current_video_timestamp = frame_timestamps[frame_number]
+        
+        # 计算notes虚拟时间
+        notes_virtual_time = current_video_timestamp + time_offset
+        
+        # 查找最接近的音符
+        current_notes = find_closest_notes(time_notes, sorted_times, notes_virtual_time, max_time_diff)
+        
+        if not current_notes:
+            continue
+        
+        # 处理detect格式的音符
+        detect_labels = []
+        for note in current_notes:
+            note_type = note.type.lower()
+            class_id = -1
+            points = None
+            center = None
+            
+            # Tap音符 (class_id = 0)
+            if note_type in ['tapnote', 'breaknote']:
+                points, center = draw_tap_note(note, notes_virtual_time)
+                class_id = 0
+            
+            # Slide音符 (class_id = 1)
+            elif note_type in ['starnote', 'starnote-move', 'breakstarnote', 'breakstarnote-move']:
+                points, center = draw_slide_note(note, notes_virtual_time)
+                class_id = 1
+            
+            # Touch音符 (class_id = 2，不包括TouchHold)
+            elif 'touch' in note_type and 'touchhold' not in note_type:
+                points, center = draw_touch_note(note, notes_virtual_time)
+                class_id = 2
+            
+            # 如果成功获取了角点数据
+            if points is not None and center is not None and class_id >= 0:
+                # 从4个角点计算宽度和高度
+                x_coords = [p[0] for p in points]
+                y_coords = [p[1] for p in points]
+                
+                min_x = min(x_coords)
+                max_x = max(x_coords)
+                min_y = min(y_coords)
+                max_y = max(y_coords)
+                
+                width = max_x - min_x
+                height = max_y - min_y
+                
+                # 归一化
+                x_center_norm = center[0] / frame_width
+                y_center_norm = center[1] / frame_height
+                width_norm = width / frame_width
+                height_norm = height / frame_height
+                
+                # 添加到标签列表
+                detect_labels.append(f"{class_id} {x_center_norm} {y_center_norm} {width_norm} {height_norm}")
+        
+        # 如果有detect标签，保存图像和标签
+        if detect_labels:
+            image_filename = f"{video_name}_{frame_number}.jpg"
+            label_filename = f"{video_name}_{frame_number}.txt"
+            
+            image_path = os.path.join(detect_images_dir, image_filename)
+            success = cv2.imwrite(image_path, frame)
+            
+            if not success:
+                print(f"\n警告: 无法保存图像 {image_path}")
+                print(f"帧信息: shape={frame.shape if frame is not None else 'None'}")
+            
+            with open(os.path.join(detect_labels_dir, label_filename), 'w') as f:
+                f.write('\n'.join(detect_labels))
+            
+            detect_count += 1
+        
+        # 处理obb格式的音符
+        obb_labels = []
+        for note in current_notes:
+            note_type = note.type.lower()
+            class_id = -1
+            points = None
+            
+            # Hold音符 (class_id = 0)
+            if note_type in ['holdnote', 'breakholdnote']:
+                points, _, _ = draw_hold_note(note, notes_virtual_time)
+                class_id = 0
+            
+            # TouchHold音符 (class_id = 1)
+            elif 'touchhold' in note_type:
+                points, _ = draw_touch_hold_note(note, notes_virtual_time)
+                class_id = 1
+            
+            # 如果成功获取了角点数据
+            if points is not None and class_id >= 0:
+                # 归一化4个角点
+                normalized_points = []
+                for p in points:
+                    x_norm = p[0] / frame_width
+                    y_norm = p[1] / frame_height
+                    normalized_points.extend([x_norm, y_norm])
+                
+                # 添加到标签列表
+                label_str = f"{class_id}"
+                for coord in normalized_points:
+                    label_str += f" {coord}"
+                obb_labels.append(label_str)
+        
+        # 如果有obb标签，保存图像和标签
+        if obb_labels:
+            image_filename = f"{video_name}_{frame_number}.jpg"
+            label_filename = f"{video_name}_{frame_number}.txt"
+            
+            image_path = os.path.join(obb_images_dir, image_filename)
+            success = cv2.imwrite(image_path, frame)
+            
+            if not success:
+                print(f"\n警告: 无法保存图像 {image_path}")
+                print(f"帧信息: shape={frame.shape if frame is not None else 'None'}")
+            
+            with open(os.path.join(obb_labels_dir, label_filename), 'w') as f:
+                f.write('\n'.join(obb_labels))
+            
+            obb_count += 1
+        
+        # 显示进度
+        if (frame_number + 1) % 10 == 0 or frame_number == total_video_frames - 1:
+            print(f"\r处理进度: {frame_number + 1}/{total_video_frames} 帧 | Detect: {detect_count} 帧 | OBB: {obb_count} 帧", end="", flush=True)
+    
+    print(f"\n\n导出完成！")
+    print(f"Detect数据集: {detect_count} 帧")
+    print(f"OBB数据集: {obb_count} 帧")
+    print(f"输出目录: {output_dir}")
+    
+    cap.release()
+
+
 def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
     """
     主函数
@@ -909,10 +1149,38 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
         print("错误：没有找到任何音符数据！")
         return
     
-    # 手动对齐
-    time_offset = manual_align(video_path, txt_path, time_notes, align_diff)
+    # 询问用户选择操作模式
+    print("\n请选择操作模式:")
+    print("1. 手动对齐")
+    print("2. 导出数据集")
+    choice = input("请输入选择 (1 或 2): ").strip()
     
-    return time_offset
+    if choice == '1':
+        # 手动对齐模式
+        time_offset = manual_align(video_path, txt_path, time_notes, align_diff)
+        return time_offset
+    
+    elif choice == '2':
+        # 导出数据集模式
+        if align_diff == 0:
+            print("\n警告: 当前 align_diff = 0，可能未对齐！")
+            confirm = input("是否继续导出? (y/n): ").strip().lower()
+            if confirm != 'y':
+                print("已取消导出")
+                return
+        
+        print(f"\n使用时间偏移: {align_diff}ms")
+        print(f"输出目录: {output_dir}")
+        
+        # 从视频路径提取视频名称
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        
+        # 导出数据集
+        export_dataset(video_path, txt_path, output_dir, align_diff, video_name)
+    
+    else:
+        print("无效的选择！")
+        return None
 
 
 
@@ -921,14 +1189,14 @@ if __name__ == "__main__":
     align_diff = 0
 
     video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-16_14-59-08.txt"
-    output_dir = r"C:\Users\ck273\Desktop\训练视频\11753"
+    txt_path= r"C:\Users\ck273\Desktop\train\11753_2025-10-16_14-59-08.txt"
+    output_dir = r"C:\Users\ck273\Desktop\train\11753"
     align_diff = -291.666667
     star_skin = 0
 
     # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11394_120_standardized.mp4"
-    # txt_path= r"C:\Users\ck273\Desktop\训练视频\11394_2025-10-16_14-03-19.txt"
-    # output_dir = r"C:\Users\ck273\Desktop\训练视频\11394"
+    # txt_path= r"C:\Users\ck273\Desktop\train\11394_2025-10-16_14-03-19.txt"
+    # output_dir = r"C:\Users\ck273\Desktop\train\11394"
     # align_diff = -175.0
     # star_skin = 1
 
