@@ -575,23 +575,44 @@ if __name__ == "__main__":
 
     # 1590 779 476
     # 3440x1440 1180 1920 1000 -600
+
+    # "source" or "camera shot"
     
-    # 示例参数
+
     # video_path = r"C:\Users\ck273\Desktop\train\11753_120.mp4"
     # video_mode = "source"
     # start_frame = 490
     # end_frame = 19370
 
-    video_path = r"C:\Users\ck273\Desktop\train\11394_120.mkv"
+    video_path = r"C:\Users\ck273\Desktop\train\11311_120.mkv"
     video_mode = "source"
-    start_frame = 2290
-    end_frame = 19880
+    start_frame = 910
+    end_frame = 17060
+
+    video_path = r"C:\Users\ck273\Desktop\train\11814_120.mkv"
+    video_mode = "source"
+    start_frame = 1090
+    end_frame = 17100
+
+    video_path = r"C:\Users\ck273\Desktop\train\11741_120.mkv"
+    video_mode = "source"
+    start_frame = 930
+    end_frame = 18850
+
+    video_path = r"C:\Users\ck273\Desktop\train\11818_120.mkv"
+    video_mode = "source"
+    start_frame = 830
+    end_frame = 20050
+
+    video_path = r"C:\Users\ck273\Desktop\train\11820_120.mkv"
+    video_mode = "source"
+    start_frame = 610
+    end_frame = 31820
 
     # video_path = r"C:\Users\ck273\Desktop\殿ッ！？ご乱心！？(BASIC_Lv.6).mp4"
     # video_mode = "camera shot"
     # start_frame = 150
     # end_frame = 4100
-    # "source" or "camera shot"
     
     try:
         result_path = standardizer.standardize_video(video_path, start_frame, end_frame, video_mode)
