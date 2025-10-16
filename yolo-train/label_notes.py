@@ -915,81 +915,6 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
     return time_offset
 
 
-def process_video_with_notes(video_path, txt_path, time_offset, output_path=None):
-    """
-    处理视频，将notes数据叠加到视频帧上
-    
-    参数:
-        video_path: 输入视频路径
-        txt_path: notes数据文件路径
-        time_offset: 时间偏移量(毫秒)
-        output_path: 输出视频路径(可选)
-        
-    返回:
-        无
-    """
-    # 解析notes数据
-    time_notes = parse_txt(txt_path)
-    if not time_notes:
-        return
-    
-    # 打开视频
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        return
-    
-    # 获取视频属性
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    
-    # 设置输出视频
-    if output_path:
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-    else:
-        out = None
-    
-    # 创建窗口
-    window_name = 'Video with Notes'
-    cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
-    
-    # 处理每一帧
-    for frame_num in range(total_frames):
-        # 读取帧
-        ret, frame = cap.read()
-        if not ret:
-            break
-        
-        # 计算当前帧的时间
-        current_time = frame_to_time(frame_num, fps)
-        
-        # 查找最接近的notes
-        target_time = current_time + time_offset
-        current_notes = find_closest_notes(time_notes, target_time)
-        
-        # 绘制notes
-        result_frame = draw_all_notes(frame, current_notes, target_time)
-        
-        # 显示帧
-        cv2.imshow(window_name, result_frame)
-        
-        # 写入输出视频
-        if out:
-            out.write(result_frame)
-        
-        # 检查按键
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q') or key == ord('Q'):
-            break
-    
-    # 释放资源
-    cap.release()
-    if out:
-        out.release()
-    cv2.destroyWindow(window_name)
-
 
 if __name__ == "__main__":
 
@@ -1009,7 +934,3 @@ if __name__ == "__main__":
 
     # 执行对齐
     time_offset = main(video_path, txt_path, output_dir, align_diff, star_skin)
-    
-    # 如果需要对齐后的视频处理，可以取消注释下面的代码
-    # output_video = os.path.join(output_dir, "output_with_notes.mp4")
-    # process_video_with_notes(video_path, txt_path, time_offset, output_video)
