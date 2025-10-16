@@ -634,20 +634,25 @@ def draw_touch_hold_note(note, target_time):
     """
     绘制单个Touch-Hold音符
     """
-    # TODO: 实现具体逻辑
-    # Touch-Hold音符结合了Touch和Hold的特性
+
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
-    size = 1080 * 0.042
-    
-    points = [
-        (center_x - size, center_y - size),
-        (center_x + size, center_y - size),
-        (center_x + size, center_y + size),
-        (center_x - size, center_y + size),
-    ]
 
-    return points, (center_x, center_y)
+    if note.touchAlpha < 0.4: return None, None # 忽略过于透明的音符
+
+    if note.touchDecor > 0.01:
+        size = note.touchDecor + 100 # 缩放阶段
+    else:
+        size = note.touchDecor + 120 # 转圈阶段
+
+    # 反正最后识别尺寸也是靠识别彩虹框，不需要画框很精准
+    # 返回菱形四个点
+    return [
+        (center_x, center_y - size),  # 上
+        (center_x - size, center_y),  # 左
+        (center_x, center_y + size),  # 下
+        (center_x + size, center_y),  # 右
+    ], (center_x, center_y)
 
 
 def draw_rotated_rect(frame, points, color, thickness=2):
