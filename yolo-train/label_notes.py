@@ -1376,6 +1376,8 @@ if __name__ == "__main__":
 
     align_diff = 0
     # star_skin 0 圆头星星，1 尖头星星
+    # detect: 0 Tap, 1 Slide, 2 Touch
+    # obb: 0 Hold, 1 TouchHold
 
     # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
     # txt_path= r"C:\Users\ck273\Desktop\train\11753_2025-10-16_14-59-08.txt"
@@ -1389,11 +1391,11 @@ if __name__ == "__main__":
     # align_diff = -175.0
     # star_skin = 1
 
-    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11311_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\train\11311_2025-10-16_19-00-53.txt"
-    output_dir = r"C:\Users\ck273\Desktop\train\11311"
-    align_diff = -141.666667
-    star_skin = 0
+    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11311_120_standardized.mp4"
+    # txt_path= r"C:\Users\ck273\Desktop\train\11311_2025-10-16_19-00-53.txt"
+    # output_dir = r"C:\Users\ck273\Desktop\train\11311"
+    # align_diff = -141.666667
+    # star_skin = 0
 
     # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11741_120_standardized.mp4"
     # txt_path= r"C:\Users\ck273\Desktop\train\11741_2025-10-16_18-56-29.txt"
@@ -1413,11 +1415,11 @@ if __name__ == "__main__":
     # align_diff = 66.666667
     # star_skin = 1
 
-    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11820_120_standardized.mp4"
-    # txt_path= r"C:\Users\ck273\Desktop\train\11820_2025-10-16_19-03-33.txt"
-    # output_dir = r"C:\Users\ck273\Desktop\train\11820"
-    # align_diff = -100.0
-    # star_skin = 1
+    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11820_120_standardized.mp4"
+    txt_path= r"C:\Users\ck273\Desktop\train\11820_2025-10-16_19-03-33.txt"
+    output_dir = r"C:\Users\ck273\Desktop\train\11820"
+    align_diff = -100.0
+    star_skin = 1
    
 
     # 执行对齐
