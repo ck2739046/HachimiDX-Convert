@@ -29,7 +29,7 @@ class Note:
     
     
 
-
+star_skin = 0 # 0 圆头星星，1 尖头星星
 
 
 
@@ -613,10 +613,26 @@ def draw_slide_note(note, target_time):
     ox = 540
     oy = 540
 
-    if note.status.lower() == "scale" or "move" in note.type.lower():
+
+    if "move" in note.type.lower():
+        if note.starAlpha < 0.75: return None, None # 忽略过于透明的音符
+
+        index = 0.88 if star_skin == 0 else 1   # 0 圆头星星，1 尖头星星
+        size = 1080 * 0.055 * note.starScale[0] * index
+
+        # 不需要位置补偿，直接使用center计角点
+        return [
+            (center_x - size, center_y - size),  # 左上
+            (center_x + size, center_y - size),  # 右上
+            (center_x + size, center_y + size),  # 右下
+            (center_x - size, center_y + size),  # 左下
+        ], (center_x, center_y)
+
+
+    if note.status.lower() == "scale":
         index = note.starScale[0]
         if index < 0.5: return None, None # 忽略过小的音符
-        if note.starAlpha and note.starAlpha < 0.75: return None, None # 忽略过于透明的音符
+        
         if note.isEX:
             size = 1080 * 0.055 * index
         else:
@@ -869,10 +885,14 @@ def calculate_oct_position(circle_center_x, circle_center_y, note_x, note_y):
         return 0
 
 
-def main(video_path, txt_path, output_dir, align_diff=0):
+def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
     """
     主函数
     """
+
+    global star_skin
+    star_skin = star_skinn
+
     # check file exist
     if not os.path.exists(video_path):
         print(f"Video file not found: {video_path}")
@@ -975,18 +995,20 @@ if __name__ == "__main__":
 
     align_diff = 0
 
-    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
-    # txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-16_10-25-45.txt"
-    # output_dir = r"C:\Users\ck273\Desktop\训练视频\11753"
-    # align_diff = -291.666667
+    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
+    txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-16_14-59-08.txt"
+    output_dir = r"C:\Users\ck273\Desktop\训练视频\11753"
+    align_diff = -291.666667
+    star_skin = 0
 
-    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11394_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\训练视频\11394_2025-10-16_14-03-19.txt"
-    output_dir = r"C:\Users\ck273\Desktop\训练视频\11394"
-    align_diff = -175.0
+    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11394_120_standardized.mp4"
+    # txt_path= r"C:\Users\ck273\Desktop\训练视频\11394_2025-10-16_14-03-19.txt"
+    # output_dir = r"C:\Users\ck273\Desktop\训练视频\11394"
+    # align_diff = -175.0
+    # star_skin = 1
 
     # 执行对齐
-    time_offset = main(video_path, txt_path, output_dir, align_diff)
+    time_offset = main(video_path, txt_path, output_dir, align_diff, star_skin)
     
     # 如果需要对齐后的视频处理，可以取消注释下面的代码
     # output_video = os.path.join(output_dir, "output_with_notes.mp4")
