@@ -1000,120 +1000,119 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
         # 查找最接近的音符
         current_notes = find_closest_notes(time_notes, sorted_times, notes_virtual_time, max_time_diff)
         
-        if not current_notes:
-            continue
-        
         # 处理detect格式的音符
         detect_labels = []
-        for note in current_notes:
-            note_type = note.type.lower()
-            class_id = -1
-            points = None
-            center = None
-            
-            # Tap音符 (class_id = 0)
-            if note_type in ['tapnote', 'breaknote']:
-                points, center = draw_tap_note(note, notes_virtual_time)
-                class_id = 0
-            
-            # Slide音符 (class_id = 1)
-            elif note_type in ['starnote', 'starnote-move', 'breakstarnote', 'breakstarnote-move']:
-                points, center = draw_slide_note(note, notes_virtual_time)
-                class_id = 1
-            
-            # Touch音符 (class_id = 2，不包括TouchHold)
-            elif 'touch' in note_type and 'touchhold' not in note_type:
-                points, center = draw_touch_note(note, notes_virtual_time)
-                class_id = 2
-            
-            # 如果成功获取了角点数据
-            if points is not None and center is not None and class_id >= 0:
-                # 从4个角点计算宽度和高度
-                x_coords = [p[0] for p in points]
-                y_coords = [p[1] for p in points]
+        if current_notes:
+            for note in current_notes:
+                note_type = note.type.lower()
+                class_id = -1
+                points = None
+                center = None
                 
-                min_x = min(x_coords)
-                max_x = max(x_coords)
-                min_y = min(y_coords)
-                max_y = max(y_coords)
+                # Tap音符 (class_id = 0)
+                if note_type in ['tapnote', 'breaknote']:
+                    points, center = draw_tap_note(note, notes_virtual_time)
+                    class_id = 0
                 
-                width = max_x - min_x
-                height = max_y - min_y
+                # Slide音符 (class_id = 1)
+                elif note_type in ['starnote', 'starnote-move', 'breakstarnote', 'breakstarnote-move']:
+                    points, center = draw_slide_note(note, notes_virtual_time)
+                    class_id = 1
                 
-                # 归一化
-                x_center_norm = center[0] / frame_width
-                y_center_norm = center[1] / frame_height
-                width_norm = width / frame_width
-                height_norm = height / frame_height
+                # Touch音符 (class_id = 2，不包括TouchHold)
+                elif 'touch' in note_type and 'touchhold' not in note_type:
+                    points, center = draw_touch_note(note, notes_virtual_time)
+                    class_id = 2
                 
-                # 添加到标签列表
-                detect_labels.append(f"{class_id} {x_center_norm} {y_center_norm} {width_norm} {height_norm}")
+                # 如果成功获取了角点数据
+                if points is not None and center is not None and class_id >= 0:
+                    # 从4个角点计算宽度和高度
+                    x_coords = [p[0] for p in points]
+                    y_coords = [p[1] for p in points]
+                    
+                    min_x = min(x_coords)
+                    max_x = max(x_coords)
+                    min_y = min(y_coords)
+                    max_y = max(y_coords)
+                    
+                    width = max_x - min_x
+                    height = max_y - min_y
+                    
+                    # 归一化
+                    x_center_norm = center[0] / frame_width
+                    y_center_norm = center[1] / frame_height
+                    width_norm = width / frame_width
+                    height_norm = height / frame_height
+                    
+                    # 添加到标签列表
+                    detect_labels.append(f"{class_id} {x_center_norm} {y_center_norm} {width_norm} {height_norm}")
         
-        # 如果有detect标签，保存图像和标签
-        if detect_labels:
-            image_filename = f"{video_name}_{frame_number}.jpg"
-            label_filename = f"{video_name}_{frame_number}.txt"
-            
-            image_path = os.path.join(detect_images_dir, image_filename)
-            success = cv2.imwrite(image_path, frame)
-            
-            if not success:
-                print(f"\n警告: 无法保存图像 {image_path}")
-                print(f"帧信息: shape={frame.shape if frame is not None else 'None'}")
-            
-            with open(os.path.join(detect_labels_dir, label_filename), 'w') as f:
+        # 保存detect图像和标签（即使标签为空也保存）
+        image_filename = f"{video_name}_{frame_number}.jpg"
+        label_filename = f"{video_name}_{frame_number}.txt"
+        
+        image_path = os.path.join(detect_images_dir, image_filename)
+        success = cv2.imwrite(image_path, frame)
+        
+        if not success:
+            print(f"\n警告: 无法保存图像 {image_path}")
+            print(f"帧信息: shape={frame.shape if frame is not None else 'None'}")
+        
+        # 保存detect标签文件（空标签也保存）
+        with open(os.path.join(detect_labels_dir, label_filename), 'w') as f:
+            if detect_labels:
                 f.write('\n'.join(detect_labels))
-            
-            detect_count += 1
+                detect_count += 1
         
         # 处理obb格式的音符
         obb_labels = []
-        for note in current_notes:
-            note_type = note.type.lower()
-            class_id = -1
-            points = None
-            
-            # Hold音符 (class_id = 0)
-            if note_type in ['holdnote', 'breakholdnote']:
-                points, _, _ = draw_hold_note(note, notes_virtual_time)
-                class_id = 0
-            
-            # TouchHold音符 (class_id = 1)
-            elif 'touchhold' in note_type:
-                points, _ = draw_touch_hold_note(note, notes_virtual_time)
-                class_id = 1
-            
-            # 如果成功获取了角点数据
-            if points is not None and class_id >= 0:
-                # 归一化4个角点
-                normalized_points = []
-                for p in points:
-                    x_norm = p[0] / frame_width
-                    y_norm = p[1] / frame_height
-                    normalized_points.extend([x_norm, y_norm])
+        if current_notes:
+            for note in current_notes:
+                note_type = note.type.lower()
+                class_id = -1
+                points = None
                 
-                # 添加到标签列表
-                label_str = f"{class_id}"
-                for coord in normalized_points:
-                    label_str += f" {coord}"
-                obb_labels.append(label_str)
+                # Hold音符 (class_id = 0)
+                if note_type in ['holdnote', 'breakholdnote']:
+                    points, _, _ = draw_hold_note(note, notes_virtual_time)
+                    class_id = 0
+                
+                # TouchHold音符 (class_id = 1)
+                elif 'touchhold' in note_type:
+                    points, _ = draw_touch_hold_note(note, notes_virtual_time)
+                    class_id = 1
+                
+                # 如果成功获取了角点数据
+                if points is not None and class_id >= 0:
+                    # 归一化4个角点
+                    normalized_points = []
+                    for p in points:
+                        x_norm = p[0] / frame_width
+                        y_norm = p[1] / frame_height
+                        normalized_points.extend([x_norm, y_norm])
+                    
+                    # 添加到标签列表
+                    label_str = f"{class_id}"
+                    for coord in normalized_points:
+                        label_str += f" {coord}"
+                    obb_labels.append(label_str)
         
-        # 如果有obb标签，保存图像和标签
-        if obb_labels:
-            image_filename = f"{video_name}_{frame_number}.jpg"
-            label_filename = f"{video_name}_{frame_number}.txt"
-            
-            image_path = os.path.join(obb_images_dir, image_filename)
-            success = cv2.imwrite(image_path, frame)
-            
-            if not success:
-                print(f"\n警告: 无法保存图像 {image_path}")
-                print(f"帧信息: shape={frame.shape if frame is not None else 'None'}")
-            
-            with open(os.path.join(obb_labels_dir, label_filename), 'w') as f:
+        # 保存obb图像和标签（即使标签为空也保存）
+        image_filename = f"{video_name}_{frame_number}.jpg"
+        label_filename = f"{video_name}_{frame_number}.txt"
+        
+        image_path = os.path.join(obb_images_dir, image_filename)
+        success = cv2.imwrite(image_path, frame)
+        
+        if not success:
+            print(f"\n警告: 无法保存图像 {image_path}")
+            print(f"帧信息: shape={frame.shape if frame is not None else 'None'}")
+        
+        # 保存obb标签文件（空标签也保存）
+        with open(os.path.join(obb_labels_dir, label_filename), 'w') as f:
+            if obb_labels:
                 f.write('\n'.join(obb_labels))
-            
-            obb_count += 1
+                obb_count += 1
         
         # 显示进度
         if (frame_number + 1) % 10 == 0 or frame_number == total_video_frames - 1:
