@@ -25,7 +25,7 @@ class CustomDetectionTrainer(DetectionTrainer):
 def train(model_name=None):
 
     # 检查数据集配置
-    data_config = os.path.join(os.path.dirname(__file__), 'datasets', 'data.yaml')
+    data_config = os.path.join(os.path.dirname(__file__), 'dataset_detect', 'data.yaml')
     if not os.path.exists(data_config):
         print(f"错误: 未找到数据集配置文件 {data_config}")
         return
@@ -40,8 +40,8 @@ def train(model_name=None):
         model_name = 'note_detect_v1'
 
     # 参数
-    workers_num = 16
-    batch_num = 8
+    workers_num = 8
+    batch_num = 4
     
     # 开始训练（使用自定义的FocalLoss训练器）
     print("开始训练（使用FocalLoss处理数据集不平衡）...")
@@ -49,9 +49,9 @@ def train(model_name=None):
         trainer=CustomDetectionTrainer,  # 使用自定义训练器
         data=data_config,
         epochs=100,     
-        imgsz=1080,        
+        imgsz=960,        
         batch=batch_num,        
-        patience=20,           
+        patience=10,           
         workers=workers_num,    
         device=0,        
         project=project_path,

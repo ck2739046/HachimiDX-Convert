@@ -1,7 +1,10 @@
 *.mp4
-datasets/valid/
-datasets/train/
-datasets/backup/
+dataset_detect/valid/
+dataset_detect/train/
+dataset_detect/backup/
+dataset_obb/valid/
+dataset_obb/train/
+dataset_obb/backup/
 runs/detect/
 yolo11*.pt
 input/
