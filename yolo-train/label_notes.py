@@ -892,6 +892,12 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
     """
     导出YOLO训练数据集
     
+    输出文件结构:
+        output_dir/
+        ├── images/          # 所有图像文件 (detect和obb共用)
+        ├── labels_detect/   # detect格式标签 (bbox: class_id x_center y_center width height)
+        └── labels_obb/      # obb格式标签 (oriented bbox: class_id x1 y1 x2 y2 x3 y3 x4 y4)
+    
     参数:
         video_path: 视频路径
         txt_path: 音符数据txt路径
@@ -911,17 +917,13 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
     if video_name is None:
         video_name = os.path.splitext(os.path.basename(video_path))[0]
     
-    # 创建输出目录结构
-    detect_dir = os.path.join(output_dir, 'detect')
-    obb_dir = os.path.join(output_dir, 'obb')
-    
-    detect_images_dir = os.path.join(detect_dir, 'images')
-    detect_labels_dir = os.path.join(detect_dir, 'labels')
-    obb_images_dir = os.path.join(obb_dir, 'images')
-    obb_labels_dir = os.path.join(obb_dir, 'labels')
+    # 创建输出目录结构：三个并列文件夹
+    images_dir = os.path.join(output_dir, 'images')
+    detect_labels_dir = os.path.join(output_dir, 'labels_detect')
+    obb_labels_dir = os.path.join(output_dir, 'labels_obb')
     
     # 如果已存在则删除再创建
-    for d in (detect_images_dir, detect_labels_dir, obb_images_dir, obb_labels_dir):
+    for d in (images_dir, detect_labels_dir, obb_labels_dir):
         if os.path.exists(d):
             try:
                 if os.path.isfile(d):
@@ -967,13 +969,12 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
     print(f"\n开始导出数据集...")
     print(f"视频尺寸: {frame_width}x{frame_height}")
     print(f"输出目录:")
-    print(f"  Detect images: {detect_images_dir}")
+    print(f"  Images: {images_dir}")
     print(f"  Detect labels: {detect_labels_dir}")
-    print(f"  OBB images: {obb_images_dir}")
     print(f"  OBB labels: {obb_labels_dir}")
     
     # 测试写入权限
-    test_file = os.path.join(detect_images_dir, "test.txt")
+    test_file = os.path.join(images_dir, "test.txt")
     try:
         with open(test_file, 'w') as f:
             f.write("test")
@@ -1047,11 +1048,12 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
                     # 添加到标签列表
                     detect_labels.append(f"{class_id} {x_center_norm} {y_center_norm} {width_norm} {height_norm}")
         
-        # 保存detect图像和标签（即使标签为空也保存）
+        # 保存图像和标签（即使标签为空也保存）
         image_filename = f"{video_name}_{frame_number}.jpg"
         label_filename = f"{video_name}_{frame_number}.txt"
         
-        image_path = os.path.join(detect_images_dir, image_filename)
+        # 保存图像（只保存一次，detect和obb共用）
+        image_path = os.path.join(images_dir, image_filename)
         success = cv2.imwrite(image_path, frame)
         
         if not success:
@@ -1097,16 +1099,8 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
                         label_str += f" {coord}"
                     obb_labels.append(label_str)
         
-        # 保存obb图像和标签（即使标签为空也保存）
-        image_filename = f"{video_name}_{frame_number}.jpg"
+        # 保存obb标签文件（即使标签为空也保存，图像已在上面保存过了）
         label_filename = f"{video_name}_{frame_number}.txt"
-        
-        image_path = os.path.join(obb_images_dir, image_filename)
-        success = cv2.imwrite(image_path, frame)
-        
-        if not success:
-            print(f"\n警告: 无法保存图像 {image_path}")
-            print(f"帧信息: shape={frame.shape if frame is not None else 'None'}")
         
         # 保存obb标签文件（空标签也保存）
         with open(os.path.join(obb_labels_dir, label_filename), 'w') as f:
@@ -1130,52 +1124,58 @@ def verify_dataset(output_dir):
     """
     验证并可视化导出的数据集
     
+    文件结构要求:
+        output_dir/
+        ├── images/          # 所有图像文件
+        ├── labels_detect/   # detect格式标签
+        └── labels_obb/      # obb格式标签
+    
     参数:
         output_dir: 数据集根目录
     """
     
-    detect_images_dir = os.path.join(output_dir, 'detect', 'images')
-    detect_labels_dir = os.path.join(output_dir, 'detect', 'labels')
-    obb_images_dir = os.path.join(output_dir, 'obb', 'images')
-    obb_labels_dir = os.path.join(output_dir, 'obb', 'labels')
+    # 定义新文件结构的路径
+    images_dir = os.path.join(output_dir, 'images')
+    detect_labels_dir = os.path.join(output_dir, 'labels_detect')
+    obb_labels_dir = os.path.join(output_dir, 'labels_obb')
     
-    # 检查目录是否存在
-    if not os.path.exists(detect_images_dir) and not os.path.exists(obb_images_dir):
-        print("错误：未找到数据集目录！")
+    # 严格检查新文件结构
+    if not os.path.exists(images_dir):
+        print(f"错误：未找到 images 目录！")
+        print(f"期望路径: {images_dir}")
+        print("请确保使用新的数据集文件结构。")
         return
     
+    if not os.path.exists(detect_labels_dir):
+        print(f"警告：未找到 labels_detect 目录！")
+        print(f"期望路径: {detect_labels_dir}")
+    
+    if not os.path.exists(obb_labels_dir):
+        print(f"警告：未找到 labels_obb 目录！")
+        print(f"期望路径: {obb_labels_dir}")
+    
     # 收集所有帧的信息
-    all_frames = {}  # {frame_key: {'detect_img': path, 'detect_label': path, 'obb_img': path, 'obb_label': path}}
+    all_frames = {}  # {frame_key: {'img': path, 'detect_label': path, 'obb_label': path}}
     
-    # 收集detect数据
-    if os.path.exists(detect_images_dir):
-        for img_file in os.listdir(detect_images_dir):
-            if img_file.endswith(('.jpg', '.png', '.jpeg')):
-                frame_key = os.path.splitext(img_file)[0]  # 去掉扩展名作为key
-                if frame_key not in all_frames:
-                    all_frames[frame_key] = {}
-                all_frames[frame_key]['detect_img'] = os.path.join(detect_images_dir, img_file)
-                
-                # 查找对应的label文件
-                label_file = frame_key + '.txt'
-                label_path = os.path.join(detect_labels_dir, label_file)
-                if os.path.exists(label_path):
-                    all_frames[frame_key]['detect_label'] = label_path
-    
-    # 收集obb数据
-    if os.path.exists(obb_images_dir):
-        for img_file in os.listdir(obb_images_dir):
-            if img_file.endswith(('.jpg', '.png', '.jpeg')):
-                frame_key = os.path.splitext(img_file)[0]
-                if frame_key not in all_frames:
-                    all_frames[frame_key] = {}
-                all_frames[frame_key]['obb_img'] = os.path.join(obb_images_dir, img_file)
-                
-                # 查找对应的label文件
-                label_file = frame_key + '.txt'
-                label_path = os.path.join(obb_labels_dir, label_file)
-                if os.path.exists(label_path):
-                    all_frames[frame_key]['obb_label'] = label_path
+    # 从images文件夹收集所有图像
+    for img_file in os.listdir(images_dir):
+        if img_file.endswith(('.jpg', '.png', '.jpeg')):
+            frame_key = os.path.splitext(img_file)[0]
+            label_file = frame_key + '.txt'
+            
+            all_frames[frame_key] = {
+                'img': os.path.join(images_dir, img_file)
+            }
+            
+            # 查找对应的detect标签文件
+            detect_label_path = os.path.join(detect_labels_dir, label_file)
+            if os.path.exists(detect_label_path):
+                all_frames[frame_key]['detect_label'] = detect_label_path
+            
+            # 查找对应的obb标签文件
+            obb_label_path = os.path.join(obb_labels_dir, label_file)
+            if os.path.exists(obb_label_path):
+                all_frames[frame_key]['obb_label'] = obb_label_path
     
     if not all_frames:
         print("错误：未找到任何图像文件！")
@@ -1196,8 +1196,8 @@ def verify_dataset(output_dir):
         frame_key = sorted_frame_keys[current_frame_idx]
         frame_info = all_frames[frame_key]
         
-        # 优先使用detect图像，如果没有则使用obb图像
-        img_path = frame_info.get('detect_img') or frame_info.get('obb_img')
+        # 获取图像路径
+        img_path = frame_info.get('img')
         
         if not img_path or not os.path.exists(img_path):
             print(f"警告：无法找到帧 {frame_key} 的图像")
