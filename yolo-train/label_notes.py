@@ -1375,6 +1375,7 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
 if __name__ == "__main__":
 
     align_diff = 0
+    # star_skin 0 圆头星星，1 尖头星星
 
     # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
     # txt_path= r"C:\Users\ck273\Desktop\train\11753_2025-10-16_14-59-08.txt"
@@ -1382,11 +1383,42 @@ if __name__ == "__main__":
     # align_diff = -291.666667
     # star_skin = 0
 
-    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11394_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\train\11394_2025-10-16_14-03-19.txt"
-    output_dir = r"C:\Users\ck273\Desktop\train\11394"
-    align_diff = -175.0
-    star_skin = 1
+    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11394_120_standardized.mp4"
+    # txt_path= r"C:\Users\ck273\Desktop\train\11394_2025-10-16_14-03-19.txt"
+    # output_dir = r"C:\Users\ck273\Desktop\train\11394"
+    # align_diff = -175.0
+    # star_skin = 1
+
+    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11311_120_standardized.mp4"
+    txt_path= r"C:\Users\ck273\Desktop\train\11311_2025-10-16_19-00-53.txt"
+    output_dir = r"C:\Users\ck273\Desktop\train\11311"
+    align_diff = -141.666667
+    star_skin = 0
+
+    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11741_120_standardized.mp4"
+    # txt_path= r"C:\Users\ck273\Desktop\train\11741_2025-10-16_18-56-29.txt"
+    # output_dir = r"C:\Users\ck273\Desktop\train\11741"
+    # align_diff = -133.333333
+    # star_skin = 1
+
+    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11814_120_standardized.mp4"
+    # txt_path= r"C:\Users\ck273\Desktop\train\11814_2025-10-16_19-17-01.txt"
+    # output_dir = r"C:\Users\ck273\Desktop\train\11814"
+    # align_diff = -216.666667
+    # star_skin = 0
+
+    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11818_120_standardized.mp4"
+    # txt_path= r"C:\Users\ck273\Desktop\train\11818_2025-10-16_19-08-17.txt"
+    # output_dir = r"C:\Users\ck273\Desktop\train\11818"
+    # align_diff = 66.666667
+    # star_skin = 1
+
+    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11820_120_standardized.mp4"
+    # txt_path= r"C:\Users\ck273\Desktop\train\11820_2025-10-16_19-03-33.txt"
+    # output_dir = r"C:\Users\ck273\Desktop\train\11820"
+    # align_diff = -100.0
+    # star_skin = 1
+   
 
     # 执行对齐
     time_offset = main(video_path, txt_path, output_dir, align_diff, star_skin)

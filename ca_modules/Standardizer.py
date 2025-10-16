@@ -584,25 +584,30 @@ if __name__ == "__main__":
     # start_frame = 490
     # end_frame = 19370
 
-    video_path = r"C:\Users\ck273\Desktop\train\11311_120.mkv"
-    video_mode = "source"
-    start_frame = 910
-    end_frame = 17060
+    # video_path = r"C:\Users\ck273\Desktop\train\11394_120.mkv"
+    # video_mode = "source"
+    # start_frame = 2290
+    # end_frame = 19880
 
-    video_path = r"C:\Users\ck273\Desktop\train\11814_120.mkv"
-    video_mode = "source"
-    start_frame = 1090
-    end_frame = 17100
+    # video_path = r"C:\Users\ck273\Desktop\train\11311_120.mkv"
+    # video_mode = "source"
+    # start_frame = 910
+    # end_frame = 17060
 
-    video_path = r"C:\Users\ck273\Desktop\train\11741_120.mkv"
-    video_mode = "source"
-    start_frame = 930
-    end_frame = 18850
+    # video_path = r"C:\Users\ck273\Desktop\train\11814_120.mkv"
+    # video_mode = "source"
+    # start_frame = 1090
+    # end_frame = 17100
 
-    video_path = r"C:\Users\ck273\Desktop\train\11818_120.mkv"
-    video_mode = "source"
-    start_frame = 830
-    end_frame = 20050
+    # video_path = r"C:\Users\ck273\Desktop\train\11741_120.mkv"
+    # video_mode = "source"
+    # start_frame = 930
+    # end_frame = 18850
+
+    # video_path = r"C:\Users\ck273\Desktop\train\11818_120.mkv"
+    # video_mode = "source"
+    # start_frame = 830
+    # end_frame = 20050
 
     video_path = r"C:\Users\ck273\Desktop\train\11820_120.mkv"
     video_mode = "source"
