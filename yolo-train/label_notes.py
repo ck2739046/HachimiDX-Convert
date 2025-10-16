@@ -841,8 +841,10 @@ def draw_all_notes(frame, notes, target_time):
             cv2.circle(frame, (center_x, center_y), 2, (0, 0, 255), 3)
 
             # 显示音符类型标签
-            cv2.putText(frame, label, (center_x - 40, center_y + 20), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            org_x = int(round(points[0][0]))
+            org_y = int(round(points[0][1])) - 5
+            cv2.putText(frame, label, (org_x, org_y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             
             # 如果是Hold音符，绘制头部追踪点
             if head:
