@@ -22,6 +22,7 @@ namespace default_namespace {
     public class Dump_notes : MelonMod
     {
         private static FieldInfo _activeNoteListField;
+        private static FieldInfo _activeSlideListField;
         private static bool _fieldsInitialized = false;
         private static string _outputFilePath = "";
         private static bool _isFileCreated = false;
@@ -52,6 +53,10 @@ namespace default_namespace {
             // StarNote相关属性
             public Vector3 StarLocalScale { get; set; }         // StarNote的localScale
             public float UserNoteSize { get; set; }             // 用户设置的音符大小
+            public bool IsSlideRootStar { get; set; }           // 是否为SlideRoot中的第二段星星
+            public float StarAlpha { get; set; }                // 星星透明度（第二段）
+            public float StarLaunchMsec { get; set; }           // 星星发射时间（第二段）
+            public float StarArriveMsec { get; set; }           // 星星到达时间（第二段）
         }
 
         public override void OnInitializeMelon()
@@ -68,6 +73,7 @@ namespace default_namespace {
 
             var gameCtrlType = typeof(GameCtrl);
             _activeNoteListField = gameCtrlType.GetField("_activeNoteList", BindingFlags.NonPublic | BindingFlags.Instance);
+            _activeSlideListField = gameCtrlType.GetField("_activeSlideList", BindingFlags.NonPublic | BindingFlags.Instance);
 
             _fieldsInitialized = true;
         }
@@ -162,7 +168,7 @@ namespace default_namespace {
             // 获取当前游戏时间
             var currentTime = NotesManager.GetCurrentMsec();
 
-            // 获取活跃音符列表
+            // 获取活跃音符列表（第一段星星等）
             if (_activeNoteListField != null)
             {
                 var activeNoteList = (List<NoteBase>)_activeNoteListField.GetValue(gameCtrl);
@@ -177,6 +183,31 @@ namespace default_namespace {
                             var noteInfo = GetNoteInfo(note, typeName);
                             if (noteInfo != null)
                                 allNotes.Add(noteInfo);
+                        }
+                    }
+                }
+            }
+
+            // 获取活跃Slide列表（第二段星星）
+            if (_activeSlideListField != null)
+            {
+                var activeSlideList = _activeSlideListField.GetValue(gameCtrl);
+                if (activeSlideList != null)
+                {
+                    // activeSlideList 是 List<SlideRoot>
+                    var slideRootType = activeSlideList.GetType();
+                    var countProp = slideRootType.GetProperty("Count");
+                    var itemProp = slideRootType.GetProperty("Item");
+                    
+                    int count = (int)countProp.GetValue(activeSlideList);
+                    for (int i = 0; i < count; i++)
+                    {
+                        var slideRoot = itemProp.GetValue(activeSlideList, new object[] { i });
+                        if (slideRoot != null)
+                        {
+                            var slideNoteInfo = GetSlideRootStarInfo(slideRoot, currentTime);
+                            if (slideNoteInfo != null)
+                                allNotes.Add(slideNoteInfo);
                         }
                     }
                 }
@@ -294,6 +325,90 @@ namespace default_namespace {
             }
         }
 
+        private static NoteInfo GetSlideRootStarInfo(object slideRoot, float currentTime)
+        {
+            try
+            {
+                var slideRootType = slideRoot.GetType();
+                
+                // 获取_baseStarNote字段
+                var baseStarNoteField = slideRootType.GetField("_baseStarNote", BindingFlags.NonPublic | BindingFlags.Instance);
+                var baseStarNote = baseStarNoteField?.GetValue(slideRoot) as GameObject;
+                
+                if (baseStarNote == null || !baseStarNote.activeSelf)
+                    return null;
+
+                // 获取BaseSpriteRender
+                var baseSpriteRenderField = slideRootType.GetField("BaseSpriteRender", BindingFlags.NonPublic | BindingFlags.Instance);
+                var baseSpriteRender = baseSpriteRenderField?.GetValue(slideRoot) as SpriteRenderer;
+
+                // 获取时间信息
+                var appearMsecField = slideRootType.GetField("AppearMsec", BindingFlags.NonPublic | BindingFlags.Instance);
+                var starLaunchMsecField = slideRootType.GetField("StarLaunchMsec", BindingFlags.NonPublic | BindingFlags.Instance);
+                var starArriveMsecField = slideRootType.GetField("StarArriveMsec", BindingFlags.NonPublic | BindingFlags.Instance);
+                var noteIndexField = slideRootType.GetField("NoteIndex", BindingFlags.NonPublic | BindingFlags.Instance);
+                var endFlagField = slideRootType.GetField("EndFlag", BindingFlags.NonPublic | BindingFlags.Instance);
+                var breakFlagField = slideRootType.GetField("BreakFlag", BindingFlags.NonPublic | BindingFlags.Instance);
+
+                float appearMsec = (float)(appearMsecField?.GetValue(slideRoot) ?? 0f);
+                float starLaunchMsec = (float)(starLaunchMsecField?.GetValue(slideRoot) ?? 0f);
+                float starArriveMsec = (float)(starArriveMsecField?.GetValue(slideRoot) ?? 0f);
+                int noteIndex = (int)(noteIndexField?.GetValue(slideRoot) ?? -1);
+                bool endFlag = (bool)(endFlagField?.GetValue(slideRoot) ?? false);
+                bool breakFlag = (bool)(breakFlagField?.GetValue(slideRoot) ?? false);
+
+                // 判断是否在第二段（StarLaunch之后）
+                if (currentTime < starLaunchMsec)
+                    return null;
+
+                // 获取位置和尺寸
+                var position = baseStarNote.transform.position;
+                var localPosition = baseStarNote.transform.localPosition;
+                var localScale = baseStarNote.transform.localScale;
+                
+                // 获取透明度
+                float alpha = baseSpriteRender?.color.a ?? 0f;
+
+                // 确定状态
+                string status = "Move";
+                if (currentTime < starLaunchMsec)
+                    status = "Init";
+                else if (currentTime >= starArriveMsec)
+                    status = "End";
+
+                // 确定类型名称（添加-Move后缀）
+                string typeName = breakFlag ? "BreakStarNote-Move" : "StarNote-Move";
+
+                var noteInfo = new NoteInfo
+                {
+                    NoteType = typeName,
+                    NoteIndex = noteIndex,
+                    Position = position,
+                    LocalPosition = localPosition,
+                    Status = status,
+                    IsActive = baseStarNote.activeSelf,
+                    IsEnd = endFlag,
+                    AppearMsec = appearMsec,
+                    IsExNote = breakFlag, // Break就是EX
+
+                    // 第二段星星特有数据
+                    IsSlideRootStar = true,
+                    StarLocalScale = localScale,
+                    StarAlpha = alpha,
+                    StarLaunchMsec = starLaunchMsec,
+                    StarArriveMsec = starArriveMsec,
+                    UserNoteSize = 1f // SlideRoot的星星尺寸已经包含在localScale中
+                };
+
+                return noteInfo;
+            }
+            catch (Exception e)
+            {
+                MelonLogger.Warning($"Failed to get slide root star info: {e.Message}");
+                return null;
+            }
+        }
+
         private static void PrintNoteFrame(float currentTime, List<NoteInfo> notes)
         {
             try
@@ -309,7 +424,9 @@ namespace default_namespace {
                     // 创建文件并写入头部信息
                     File.WriteAllText(_outputFilePath, $"Note Dump Started at {timestamp}\n");
                     File.AppendAllText(_outputFilePath, $"Music Info: {string.Join(" - ", _currentMusicInfo)}\n");
-                    File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | IsEX | (TouchDecor+Alpha/HoldScale+HoldSize/TapScale/StarScale+UserNoteSize)\n");
+                    File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | IsEX | (Details...)\n");
+                    File.AppendAllText(_outputFilePath, "  Touch: TouchDecor+Alpha | Hold: HoldScale+HoldSize | Tap/Break: TapScale\n");
+                    File.AppendAllText(_outputFilePath, "  Star(1st): StarScale+UserNoteSize | Star-Move(2nd): StarScale+Alpha+LaunchMsec+ArriveMsec\n");
                     File.AppendAllText(_outputFilePath, "=".PadRight(30, '=') + "\n");
 
                     _isFileCreated = true;
@@ -342,7 +459,14 @@ namespace default_namespace {
                     {
                         line += $" | HoldScale: {note.HoldLocalScale.x:F4},{note.HoldLocalScale.y:F4} | HoldBodySize: {note.HoldBodySize.y:F4}";
                     }
-                    // Star音符（Slide）
+                    // Star音符-Move（第二段）
+                    else if (noteTypeLower.Contains("star") && note.IsSlideRootStar)
+                    {
+                        line += $" | StarScale: {note.StarLocalScale.x:F4},{note.StarLocalScale.y:F4}";
+                        line += $" | Alpha: {note.StarAlpha:F4}";
+                        line += $" | LaunchMsec: {note.StarLaunchMsec:F4} | ArriveMsec: {note.StarArriveMsec:F4}";
+                    }
+                    // Star音符（第一段）
                     else if (noteTypeLower.Contains("star"))
                     {
                         line += $" | StarScale: {note.StarLocalScale.x:F4},{note.StarLocalScale.y:F4} | UserNoteSize: {note.UserNoteSize:F4}";

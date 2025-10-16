@@ -7,8 +7,7 @@ class Note:
     def __init__(self, frameTime=None, type=None, index=None, posX=None, posY=None, 
                  local_posX=None, local_posY=None, status=None, 
                  appearMsec=None, isEX=None, touchDecor=None, touchAlpha=None,
-                 tapScale=None, holdScale=None, holdSize=None,
-                 starScale=None, userNoteSize=None):
+                 tapScale=None, holdScale=None, holdSize=None, starScale=None):
         
         self.frameTime = frameTime
         self.type = type
@@ -26,7 +25,6 @@ class Note:
         self.holdScale = holdScale
         self.holdSize = holdSize
         self.starScale = starScale
-        self.userNoteSize = userNoteSize
     
     
 
@@ -53,7 +51,13 @@ def parse_txt(txt_path):
         line = line.strip()
         
         # 跳过空行和头部信息
-        if not line or line.startswith('Note Dump') or line.startswith('Music Info') or line.startswith('Format') or line.startswith('='):
+        if (not line or
+            line.startswith('Note Dump') or
+            line.startswith('Music Info') or
+            line.startswith('Format') or
+            line.startswith('=') or
+            line.startswith('Touch:') or
+            line.startswith('Star(1st):')):
             continue
         
         # 检查是否是Time行
@@ -154,8 +158,13 @@ def parse_note_line(line, frame_time):
         
         # 解析type和index
         type_index = parts[0].strip()
-        type_name, index = type_index.split('-')
-        index = int(index)
+        if "-Move" in type_index:
+            type_name, move, index = type_index.split('-')
+            type_name = f"{type_name}-Move"
+            index = int(index)
+        else:
+            type_name, index = type_index.split('-')
+            index = int(index)
         
         # 解析位置信息
         pos_parts = parts[1].split(', ')
@@ -214,15 +223,13 @@ def parse_note_line(line, frame_time):
                 hold_size = float(extra_data2.split('holdbodysize:')[1].strip())
                 note.holdSize = hold_size
 
-        # 处理Star类型的StarScale和UserNoteSize数据
+        # 处理Star类型的StarScale数据
         elif 'star' in type_name.lower():
-            if 'starscale' in extra_data and 'usernotesize' in extra_data2:
+            if 'starscale' in extra_data:
                 star_scale_str = extra_data.split('starscale:')[1].strip()
                 star_scale1 = float(star_scale_str.split(',')[0].strip())
                 star_scale2 = float(star_scale_str.split(',')[1].strip())
                 note.starScale = (star_scale1, star_scale2)
-                user_note_size = float(extra_data2.split('usernotesize:')[1].strip())
-                note.userNoteSize = user_note_size
 
         # 处理Tap类型的TapScale数据
         elif 'tap' in type_name.lower() or 'break' in type_name.lower():
@@ -235,7 +242,7 @@ def parse_note_line(line, frame_time):
         return note
 
     except Exception as e:
-        print(f"Error in parse_note_line(): {e}")
+        print(f"Error in parse_note_line(): {e}: {line}")
         return None
 
 
@@ -602,13 +609,14 @@ def draw_slide_note(note, target_time):
     ox = 540
     oy = 540
 
-    if note.status.lower() == "scale":
+    if note.status.lower() == "scale" or "move" in note.type.lower():
         index = note.starScale[0]
         if index < 0.5: return None, None # 忽略过小的音符
         if note.isEX:
             size = 1080 * 0.055 * index
         else:
             size = 1080 * 0.049 * index
+
         # 不需要位置补偿，直接使用center计角点
         return [
             (center_x - size, center_y - size),  # 左上
@@ -771,11 +779,11 @@ def draw_all_notes(frame, notes, target_time):
             label = 'HOLD-B'
         
         # Slide音符：黄色
-        elif note_type == 'starnote':
+        elif note_type == 'starnote' or note_type == 'starnote-move':
             points, center = draw_slide_note(note, target_time)
             color = (0, 255, 255)
             label = 'SLIDE'
-        elif note_type == 'breakstarnote':
+        elif note_type == 'breakstarnote' or note_type == 'breakstarnote-move':
             points, center = draw_slide_note(note, target_time)
             color = (0, 255, 255)
             label = 'SLIDE-B'
@@ -968,7 +976,7 @@ if __name__ == "__main__":
     # align_diff = -291.666667
 
     video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11394_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\训练视频\11394_2025-10-16_12-03-45.txt"
+    txt_path= r"C:\Users\ck273\Desktop\训练视频\11394_2025-10-16_13-18-58.txt"
     output_dir = r"C:\Users\ck273\Desktop\训练视频\11394"
     align_diff = -166.66667
 
