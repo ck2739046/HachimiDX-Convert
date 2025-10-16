@@ -572,6 +572,9 @@ class Standardizer:
 if __name__ == "__main__":
     # 测试代码
     standardizer = Standardizer()
+
+    # 1590 779 476
+    # 3440x1440 1180 1920 1000 -600
     
     # 示例参数
     # video_path = r"C:\Users\ck273\Desktop\训练视频\11753_120.mp4"
@@ -579,10 +582,10 @@ if __name__ == "__main__":
     # start_frame = 490
     # end_frame = 19370
 
-    video_path = r"C:\Users\ck273\Desktop\训练视频\11394_120.mp4"
+    video_path = r"C:\Users\ck273\Desktop\训练视频\11394_120.mkv"
     video_mode = "source"
-    start_frame = 280
-    end_frame = 17870
+    start_frame = 2290
+    end_frame = 19880
 
     # video_path = r"C:\Users\ck273\Desktop\殿ッ！？ご乱心！？(BASIC_Lv.6).mp4"
     # video_mode = "camera shot"

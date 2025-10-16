@@ -357,8 +357,8 @@ namespace default_namespace {
                 bool endFlag = (bool)(endFlagField?.GetValue(slideRoot) ?? false);
                 bool breakFlag = (bool)(breakFlagField?.GetValue(slideRoot) ?? false);
 
-                // 判断是否在第二段（StarLaunch之后）
-                if (currentTime < starLaunchMsec)
+                // 判断是否在第二段的可见范围内（从AppearMsec开始，包括缩放淡入阶段）
+                if (currentTime < appearMsec)
                     return null;
 
                 // 获取位置和尺寸
@@ -369,12 +369,16 @@ namespace default_namespace {
                 // 获取透明度
                 float alpha = baseSpriteRender?.color.a ?? 0f;
 
-                // 确定状态
-                string status = "Move";
-                if (currentTime < starLaunchMsec)
-                    status = "Init";
-                else if (currentTime >= starArriveMsec)
-                    status = "End";
+                // 确定状态（根据时间判断所处阶段）
+                string status;
+                if (currentTime < appearMsec)
+                    status = "Init";  // AppearMsec之前（实际上已被过滤，不会到达这里）
+                else if (currentTime < starLaunchMsec)
+                    status = "Scale"; // AppearMsec → StarLaunchMsec：缩放+淡入阶段
+                else if (currentTime < starArriveMsec)
+                    status = "Move";  // StarLaunchMsec → StarArriveMsec：沿轨迹移动阶段
+                else
+                    status = "End";   // StarArriveMsec之后：已到达终点
 
                 // 确定类型名称（添加-Move后缀）
                 string typeName = breakFlag ? "BreakStarNote-Move" : "StarNote-Move";

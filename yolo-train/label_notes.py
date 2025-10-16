@@ -7,7 +7,7 @@ class Note:
     def __init__(self, frameTime=None, type=None, index=None, posX=None, posY=None, 
                  local_posX=None, local_posY=None, status=None, 
                  appearMsec=None, isEX=None, touchDecor=None, touchAlpha=None,
-                 tapScale=None, holdScale=None, holdSize=None, starScale=None):
+                 tapScale=None, holdScale=None, holdSize=None, starScale=None, starAlpha=None):
         
         self.frameTime = frameTime
         self.type = type
@@ -25,6 +25,7 @@ class Note:
         self.holdScale = holdScale
         self.holdSize = holdSize
         self.starScale = starScale
+        self.starAlpha = starAlpha
     
     
 
@@ -230,6 +231,9 @@ def parse_note_line(line, frame_time):
                 star_scale1 = float(star_scale_str.split(',')[0].strip())
                 star_scale2 = float(star_scale_str.split(',')[1].strip())
                 note.starScale = (star_scale1, star_scale2)
+            if 'alpha' in extra_data2:
+                star_alpha = float(extra_data2.split('alpha:')[1].strip())
+                note.starAlpha = star_alpha
 
         # 处理Tap类型的TapScale数据
         elif 'tap' in type_name.lower() or 'break' in type_name.lower():
@@ -612,10 +616,11 @@ def draw_slide_note(note, target_time):
     if note.status.lower() == "scale" or "move" in note.type.lower():
         index = note.starScale[0]
         if index < 0.5: return None, None # 忽略过小的音符
+        if note.starAlpha and note.starAlpha < 0.75: return None, None # 忽略过于透明的音符
         if note.isEX:
             size = 1080 * 0.055 * index
         else:
-            size = 1080 * 0.049 * index
+            size = 1080 * 0.05 * index
 
         # 不需要位置补偿，直接使用center计角点
         return [
@@ -976,9 +981,9 @@ if __name__ == "__main__":
     # align_diff = -291.666667
 
     video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11394_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\训练视频\11394_2025-10-16_13-18-58.txt"
+    txt_path= r"C:\Users\ck273\Desktop\训练视频\11394_2025-10-16_14-03-19.txt"
     output_dir = r"C:\Users\ck273\Desktop\训练视频\11394"
-    align_diff = -166.66667
+    align_diff = -175.0
 
     # 执行对齐
     time_offset = main(video_path, txt_path, output_dir, align_diff)
