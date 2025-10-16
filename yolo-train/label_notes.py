@@ -241,7 +241,7 @@ def parse_note_line(line, frame_time):
 
 
 
-def manual_align(video_path, txt_path, time_notes):
+def manual_align(video_path, txt_path, time_notes, align_diff=0):
     """
     手动对齐视频帧和时间戳音符数据
     
@@ -258,9 +258,14 @@ def manual_align(video_path, txt_path, time_notes):
     
     video_frame_counter = 0  # 视频当前帧计数
     last_video_frame_counter = -1  # 上一次的视频帧计数器
-    time_offset = 0.0  # notes与video的时间差(ms)
-    mode = 1  # 1=对齐模式, 2=验证模式
     is_playing = False  # 播放状态
+
+    if align_diff == 0:
+        time_offset = 0.0  # notes与video的时间差(ms)
+        mode = 1  # 1=对齐模式, 2=验证模式
+    else:
+        time_offset = align_diff
+        mode = 2
 
     cap = cv2.VideoCapture(video_path)
     total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -792,7 +797,7 @@ def calculate_oct_position(circle_center_x, circle_center_y, note_x, note_y):
         return 0
 
 
-def main(video_path, txt_path, output_dir):
+def main(video_path, txt_path, output_dir, align_diff=0):
     """
     主函数
     """
@@ -813,7 +818,7 @@ def main(video_path, txt_path, output_dir):
         return
     
     # 手动对齐
-    time_offset = manual_align(video_path, txt_path, time_notes)
+    time_offset = manual_align(video_path, txt_path, time_notes, align_diff)
     
     return time_offset
 
@@ -896,17 +901,20 @@ def process_video_with_notes(video_path, txt_path, time_offset, output_path=None
 
 if __name__ == "__main__":
 
+    align_diff = 0
+
     # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
     # txt_path= r"C:\Users\ck273\Desktop\训练视频\11753_2025-10-16_10-25-45.txt"
     # output_dir = r"C:\Users\ck273\Desktop\训练视频\11753"
+    # align_diff = -291.666667
 
     video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11394_120_standardized.mp4"
     txt_path= r"C:\Users\ck273\Desktop\训练视频\11394_2025-10-16_12-03-45.txt"
-
     output_dir = r"C:\Users\ck273\Desktop\训练视频\11394"
+    align_diff = -166.66667
 
     # 执行对齐
-    time_offset = main(video_path, txt_path, output_dir)
+    time_offset = main(video_path, txt_path, output_dir, align_diff)
     
     # 如果需要对齐后的视频处理，可以取消注释下面的代码
     # output_video = os.path.join(output_dir, "output_with_notes.mp4")
