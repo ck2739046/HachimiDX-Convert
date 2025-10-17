@@ -1,47 +1,40 @@
 from ultralytics import YOLO
 from ultralytics.models.yolo.detect import DetectionTrainer
-from ultralytics.utils.loss import FocalLoss
+from ultralytics.utils.loss import VarifocalLoss
 import os
 #import random_dataset
 
 
 class CustomDetectionTrainer(DetectionTrainer):
-    """自定义检测训练器，使用FocalLoss处理数据集不平衡问题"""
+    """自定义检测训练器，使用VarifocalLoss处理数据集不平衡问题"""
     def get_model(self, cfg, weights):
         model = super().get_model(cfg, weights)
-        # 使用FocalLoss替换默认损失函数
-        # gamma: 调节难易样本的权重，越大越关注难样本
-        # alpha: 调节正负样本的权重，用于处理类别不平衡
-        # alpha 可以为 float 或者 list
-        # 在 list时，需要为每个类别指定权重。
-        # 此处例子：tap占80%, slide占15%，touch占5%
-        # 权重 = 1/80%, 1/15%, 1/5% = [1.25, 6.67, 20]
-        # 归一化 (三者之和为1) -> 1.25/(1.25+6.67+20), 6.67/(1.25+6.67+20), 20/(1.25+6.67+20)
-        # 约等于 [0.05, 0.25, 0.7]
-        model.model[-1].loss_fn = FocalLoss(gamma=2.0, alpha=[0.05, 0.25, 0.7])
+        # 使用VarifocalLoss替换默认损失函数
+        # gamma: 调节难易样本的权重，越大越关注难样本（默认2.0）
+        # alpha: 平衡因子，用于处理类别不平衡（默认0.75）
+        model.model[-1].loss_fn = VarifocalLoss(gamma=2.0, alpha=0.75)
         return model
 
 
 def train(model_name=None):
 
     # 检查数据集配置
-    data_config = os.path.join(os.path.dirname(__file__), 'dataset_detect', 'data.yaml')
+    data_config = os.path.join('/root/autodl-tmp', 'dataset', 'data.yaml')
     if not os.path.exists(data_config):
         print(f"错误: 未找到数据集配置文件 {data_config}")
         return
     
     # 加载预训练模型
-    yolo_path = os.path.join(os.path.dirname(__file__), 'yolo11m.pt')
-    model = YOLO(yolo_path)
+    model = YOLO('yolo11l.pt')
 
-    project_path = os.path.join(os.path.dirname(__file__), 'runs', 'train')
+    project_path = os.path.join(os.path.dirname(__file__), 'result')
 
     if model_name is None:
         model_name = 'note_detect_v1'
 
     # 参数
-    workers_num = 8
-    batch_num = 4
+    workers_num = 24
+    batch_num = 29
     
     # 开始训练（使用自定义的FocalLoss训练器）
     print("开始训练（使用FocalLoss处理数据集不平衡）...")
@@ -51,7 +44,7 @@ def train(model_name=None):
         epochs=100,     
         imgsz=960,        
         batch=batch_num,        
-        patience=10,           
+        patience=5,           
         workers=workers_num,    
         device=0,        
         project=project_path,
@@ -60,7 +53,7 @@ def train(model_name=None):
         cache=False,        
         verbose=True,
         plots=False,
-
+        
         augment=True,
         compile=True,
 
