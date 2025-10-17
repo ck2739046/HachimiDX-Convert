@@ -1399,7 +1399,259 @@ def count_dataset_statistics(output_dir):
         print("  无数据")
     print(f"  总计: {obb_total}")
     
+    print("=" * 50)
+
+
+def export_classification_dataset(video_path, txt_path, time_offset, break_cls_dir, ex_cls_dir, dataset_split='train', video_name=None):
+    """
+    导出YOLO分类训练数据集
     
+    导出两个分类数据集:
+    1. Break分类: 判断是否为Break音符 (yes/no)
+    2. EX分类: 判断是否为EX音符 (yes/no)
+    
+    仅包含: Tap, Slide, Hold 三类音符，排除 Touch 和 Touch-Hold
+    
+    参数:
+        video_path: 视频路径
+        txt_path: 音符数据txt路径
+        time_offset: 时间偏移量(毫秒)
+        break_cls_dir: Break分类数据集输出目录
+        ex_cls_dir: EX分类数据集输出目录
+        dataset_split: 数据集划分 ('train' 或 'valid')
+        video_name: 视频名称（用于文件命名），如果为None则从video_path提取
+    """
+    
+    # 解析txt文件
+    time_notes = parse_txt(txt_path)
+    
+    if not time_notes:
+        print("错误：没有找到任何音符数据！")
+        return
+    
+    # 获取视频名称
+    if video_name is None:
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+    
+    # 创建输出目录结构 (根据dataset_split决定是train还是valid)
+    # Break分类: train/yes, train/no 或 valid/yes, valid/no
+    break_yes = os.path.join(break_cls_dir, dataset_split, 'yes')
+    break_no = os.path.join(break_cls_dir, dataset_split, 'no')
+    
+    # EX分类: train/yes, train/no 或 valid/yes, valid/no
+    ex_yes = os.path.join(ex_cls_dir, dataset_split, 'yes')
+    ex_no = os.path.join(ex_cls_dir, dataset_split, 'no')
+    
+    # 创建所有目录
+    for d in [break_yes, break_no, ex_yes, ex_no]:
+        os.makedirs(d, exist_ok=True)
+    
+    # 打开视频
+    cap = cv2.VideoCapture(video_path)
+    total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # 预先读取所有帧的时间戳（支持VFR视频）
+    print("正在读取视频帧时间戳...")
+    frame_timestamps = []
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    i = 0
+    while i < total_video_frames and cap.grab():
+        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
+        frame_timestamps.append(timestamp)
+        i += 1
+        if i % 100 == 0 or i == total_video_frames:
+            print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
+    print("\r时间戳读取完成！            ")
+    
+    max_time_diff = (1000 / cap.get(cv2.CAP_PROP_FPS)) - 0.1
+    
+    # 重置视频到第一帧
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    
+    # 获取所有时间戳并排序
+    sorted_times = sorted(time_notes.keys())
+    
+    # 获取帧尺寸
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    break_count = {'yes': 0, 'no': 0}
+    ex_count = {'yes': 0, 'no': 0}
+    note_counter = 0
+    
+    print(f"\n开始导出分类数据集 ({dataset_split})...")
+    print(f"视频尺寸: {frame_width}x{frame_height}")
+    print(f"Break分类输出: {break_cls_dir}")
+    print(f"EX分类输出: {ex_cls_dir}")
+    
+    # 遍历所有帧
+    for frame_number in range(total_video_frames):
+        # 读取帧
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        ret, frame = cap.read()
+        
+        if not ret:
+            continue
+        
+        # 获取当前帧的时间戳
+        current_video_timestamp = frame_timestamps[frame_number]
+        
+        # 计算notes虚拟时间
+        notes_virtual_time = current_video_timestamp + time_offset
+        
+        # 查找最接近的音符
+        current_notes = find_closest_notes(time_notes, sorted_times, notes_virtual_time, max_time_diff)
+        
+        if not current_notes:
+            continue
+        
+        # 处理每个音符
+        for note in current_notes:
+            note_type = note.type.lower()
+            points = None
+            center = None
+            head = None
+            
+            # 仅处理 Tap, Slide, Hold 三类音符
+            # 排除 Touch 和 Touch-Hold
+            if note_type in ['tapnote', 'breaknote']:
+                points, center = draw_tap_note(note, notes_virtual_time)
+            elif note_type in ['starnote', 'starnote-move', 'breakstarnote', 'breakstarnote-move']:
+                points, center = draw_slide_note(note, notes_virtual_time)
+            elif note_type in ['holdnote', 'breakholdnote']:
+                points, center, head = draw_hold_note(note, notes_virtual_time)
+            else:
+                # 跳过 Touch 和 Touch-Hold
+                continue
+            
+            if points is None or center is None:
+                continue
+            
+            # 裁剪并保存音符图像
+            cropped_img = crop_and_rotate_note(frame, points)
+            
+            if cropped_img is None or cropped_img.size == 0:
+                continue
+            
+            # 确定是否为Break音符
+            is_break = 'break' in note_type
+            break_label = 'yes' if is_break else 'no'
+            
+            # 确定是否为EX音符
+            # Special case: starnote-move 一律视为 false (non-EX)
+            if note_type in ['starnote-move', 'breakstarnote-move']:
+                is_ex = False
+            else:
+                is_ex = note.isEX
+            ex_label = 'yes' if is_ex else 'no'
+            
+            # 保存到Break分类数据集
+            break_save_dir = break_yes if is_break else break_no
+            break_filename = f"{video_name}_f{frame_number}_n{note_counter}_break_{break_label}.jpg"
+            break_save_path = os.path.join(break_save_dir, break_filename)
+            cv2.imwrite(break_save_path, cropped_img)
+            break_count[break_label] += 1
+            
+            # 保存到EX分类数据集
+            ex_save_dir = ex_yes if is_ex else ex_no
+            ex_filename = f"{video_name}_f{frame_number}_n{note_counter}_ex_{ex_label}.jpg"
+            ex_save_path = os.path.join(ex_save_dir, ex_filename)
+            cv2.imwrite(ex_save_path, cropped_img)
+            ex_count[ex_label] += 1
+            
+            note_counter += 1
+        
+        # 显示进度
+        if (frame_number + 1) % 10 == 0 or frame_number == total_video_frames - 1:
+            print(f"\r处理进度: {frame_number + 1}/{total_video_frames} 帧 | 音符数: {note_counter} | Break(yes/no): {break_count['yes']}/{break_count['no']} | EX(yes/no): {ex_count['yes']}/{ex_count['no']}", end="", flush=True)
+    
+    print(f"\n\n导出完成！")
+    print(f"总音符数: {note_counter}")
+    print(f"Break分类 - Yes: {break_count['yes']}, No: {break_count['no']}")
+    print(f"EX分类 - Yes: {ex_count['yes']}, No: {ex_count['no']}")
+    
+    cap.release()
+    
+    return note_counter, break_count, ex_count
+
+
+def crop_and_rotate_note(frame, points):
+    """
+    根据四个角点裁剪音符图像
+    对于旋转的矩形（如Hold和Touch-Hold），先旋转图像使其水平，然后裁剪
+    
+    参数:
+        frame: 原始图像帧
+        points: 4个角点的坐标列表 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
+        
+    返回:
+        cropped_img: 裁剪后的音符图像
+    """
+    
+    if not points or len(points) != 4:
+        return None
+    
+    # 转换为numpy数组
+    pts = np.array(points, dtype=np.float32)
+    
+    # 计算边界框
+    x_coords = [p[0] for p in points]
+    y_coords = [p[1] for p in points]
+    
+    min_x = max(0, int(min(x_coords)))
+    max_x = min(frame.shape[1], int(max(x_coords)))
+    min_y = max(0, int(min(y_coords)))
+    max_y = min(frame.shape[0], int(max(y_coords)))
+    
+    # 检查是否需要旋转（判断是否为旋转的矩形）
+    # 计算两条边的长度
+    width1 = np.linalg.norm(pts[1] - pts[0])
+    width2 = np.linalg.norm(pts[3] - pts[2])
+    height1 = np.linalg.norm(pts[2] - pts[1])
+    height2 = np.linalg.norm(pts[3] - pts[0])
+    
+    # 取平均宽度和高度
+    width = int((width1 + width2) / 2)
+    height = int((height1 + height2) / 2)
+    
+    # 检查是否为旋转矩形（角点不是水平/垂直对齐）
+    is_rotated = False
+    for i in range(4):
+        for j in range(i + 1, 4):
+            dx = abs(pts[i][0] - pts[j][0])
+            dy = abs(pts[i][1] - pts[j][1])
+            # 如果有边既不水平也不垂直，则认为是旋转的
+            if dx > 5 and dy > 5:
+                is_rotated = True
+                break
+        if is_rotated:
+            break
+    
+    if is_rotated and width > 0 and height > 0:
+        # 对于旋转的矩形，使用透视变换
+        # 定义目标矩形的四个角点（水平矩形）
+        dst_pts = np.array([
+            [0, 0],
+            [width - 1, 0],
+            [width - 1, height - 1],
+            [0, height - 1]
+        ], dtype=np.float32)
+        
+        # 计算透视变换矩阵
+        M = cv2.getPerspectiveTransform(pts, dst_pts)
+        
+        # 应用透视变换
+        cropped = cv2.warpPerspective(frame, M, (width, height))
+        
+        return cropped
+    else:
+        # 对于非旋转的矩形，直接裁剪
+        if max_x > min_x and max_y > min_y:
+            cropped = frame[min_y:max_y, min_x:max_x]
+            return cropped
+        else:
+            return None
+
 
 def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
     """
@@ -1431,12 +1683,13 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
     print("2. 导出数据集")
     print("3. 验证数据集")
     print("4. 统计数据集")
-    choice = input("请输入选择 (1, 2, 3 或 4): ").strip()
+    print("5. 导出分类数据集")
+    choice = input("请输入选择 (1, 2, 3, 4 或 5): ").strip()
     
     if choice == '1':
         # 手动对齐模式
         time_offset = manual_align(video_path, txt_path, time_notes, align_diff)
-        return time_offset
+        return
     
     elif choice == '2':
         # 导出数据集模式
@@ -1466,9 +1719,214 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
         print(f"\n统计数据集: {output_dir}")
         count_dataset_statistics(output_dir)
     
+    elif choice == '5':
+        # 导出分类数据集模式 - 批量处理所有配置的视频
+        print("\n准备批量导出分类数据集...")
+        print("将处理以下视频:")
+        print("  Valid集: 11820, 11814")
+        print("  Train集: 11818, 11753, 11741, 11311")
+        print("  仅包含: Tap, Slide, Hold (排除 Touch 和 Touch-Hold)")
+        
+        confirm = input("\n是否继续? (y/n): ").strip().lower()
+        if confirm != 'y':
+            print("已取消导出")
+            return
+        
+        # 直接调用批量导出函数
+        export_all_classification_datasets()
+    
     else:
         print("无效的选择！")
         return None
+
+
+
+
+
+def export_all_classification_datasets():
+    """
+    批量导出分类数据集
+    
+    硬编码配置:
+    - Valid集: 11820, 11814
+    - Train集: 11818, 11753, 11741, 11311
+    - 仅包含: Tap, Slide, Hold (排除 Touch 和 Touch-Hold)
+    """
+    
+    global star_skin
+    
+    # 定义视频配置
+    # Valid集视频
+    valid_videos = [
+        {
+            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11820_120_standardized.mp4",
+            'txt_path': r"C:\Users\ck273\Desktop\train\11820_2025-10-16_19-03-33.txt",
+            'align_diff': -100.0,
+            'star_skin': 1
+        },
+        {
+            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11814_120_standardized.mp4",
+            'txt_path': r"C:\Users\ck273\Desktop\train\11814_2025-10-16_19-17-01.txt",
+            'align_diff': -216.666667,
+            'star_skin': 0
+        }
+    ]
+    
+    # Train集视频
+    train_videos = [
+        {
+            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11818_120_standardized.mp4",
+            'txt_path': r"C:\Users\ck273\Desktop\train\11818_2025-10-16_19-08-17.txt",
+            'align_diff': 66.666667,
+            'star_skin': 1
+        },
+        {
+            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4",
+            'txt_path': r"C:\Users\ck273\Desktop\train\11753_2025-10-16_14-59-08.txt",
+            'align_diff': -291.666667,
+            'star_skin': 0
+        },
+        {
+            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11741_120_standardized.mp4",
+            'txt_path': r"C:\Users\ck273\Desktop\train\11741_2025-10-16_18-56-29.txt",
+            'align_diff': -133.333333,
+            'star_skin': 1
+        },
+        {
+            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11311_120_standardized.mp4",
+            'txt_path': r"C:\Users\ck273\Desktop\train\11311_2025-10-16_19-00-53.txt",
+            'align_diff': -141.666667,
+            'star_skin': 0
+        }
+    ]
+    
+    # 分类数据集输出目录
+    break_cls_dir = r"D:\git\mai-chart-analyze\yolo-train\dataset_break_cls"
+    ex_cls_dir = r"D:\git\mai-chart-analyze\yolo-train\dataset_ex_cls"
+    
+    print("=" * 70)
+    print("批量导出分类数据集")
+    print("=" * 70)
+    print(f"Break分类输出: {break_cls_dir}")
+    print(f"EX分类输出: {ex_cls_dir}")
+    print(f"仅包含音符类型: Tap, Slide, Hold")
+    print(f"Valid集视频数: {len(valid_videos)}")
+    print(f"Train集视频数: {len(train_videos)}")
+    print("=" * 70)
+    
+    # 处理Valid集视频
+    print(f"\n\n{'='*70}")
+    print("开始处理 Valid 集")
+    print(f"{'='*70}")
+    
+    for idx, config in enumerate(valid_videos, 1):
+        star_skin = config['star_skin']
+        
+        video_path = config['video_path']
+        txt_path = config['txt_path']
+        align_diff = config['align_diff']
+        
+        # 检查文件是否存在
+        if not os.path.exists(video_path):
+            print(f"\n错误: 视频文件不存在: {video_path}")
+            continue
+        
+        if not os.path.exists(txt_path):
+            print(f"\n错误: 文本文件不存在: {txt_path}")
+            continue
+        
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        
+        print(f"\n\n{'='*70}")
+        print(f"[Valid] 处理视频 {idx}/{len(valid_videos)}: {video_name}")
+        print(f"时间偏移: {align_diff}ms")
+        print(f"星星皮肤: {'圆头' if star_skin == 0 else '尖头'}")
+        print(f"{'='*70}")
+        
+        # 导出到valid集
+        export_classification_dataset(video_path, txt_path, align_diff, break_cls_dir, ex_cls_dir, 
+                                     dataset_split='valid', video_name=video_name)
+    
+    # 处理Train集视频
+    print(f"\n\n{'='*70}")
+    print("开始处理 Train 集")
+    print(f"{'='*70}")
+    
+    for idx, config in enumerate(train_videos, 1):
+        star_skin = config['star_skin']
+        
+        video_path = config['video_path']
+        txt_path = config['txt_path']
+        align_diff = config['align_diff']
+        
+        # 检查文件是否存在
+        if not os.path.exists(video_path):
+            print(f"\n错误: 视频文件不存在: {video_path}")
+            continue
+        
+        if not os.path.exists(txt_path):
+            print(f"\n错误: 文本文件不存在: {txt_path}")
+            continue
+        
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        
+        print(f"\n\n{'='*70}")
+        print(f"[Train] 处理视频 {idx}/{len(train_videos)}: {video_name}")
+        print(f"时间偏移: {align_diff}ms")
+        print(f"星星皮肤: {'圆头' if star_skin == 0 else '尖头'}")
+        print(f"{'='*70}")
+        
+        # 导出到train集
+        export_classification_dataset(video_path, txt_path, align_diff, break_cls_dir, ex_cls_dir,
+                                     dataset_split='train', video_name=video_name)
+    
+    print(f"\n\n{'='*70}")
+    print("所有视频处理完成！")
+    print(f"{'='*70}")
+    
+    # 统计最终数据集
+    print("\n最终数据集统计:")
+    print("\nBreak分类数据集:")
+    count_classification_samples(break_cls_dir)
+    print("\nEX分类数据集:")
+    count_classification_samples(ex_cls_dir)
+
+
+def count_classification_samples(cls_dir):
+    """
+    统计分类数据集的样本数量
+    """
+    
+    if not os.path.exists(cls_dir):
+        print(f"目录不存在: {cls_dir}")
+        return
+    
+    # 统计train和valid数据
+    for split in ['train', 'valid']:
+        split_dir = os.path.join(cls_dir, split)
+        if not os.path.exists(split_dir):
+            continue
+        
+        print(f"\n  {split}:")
+        counts = {}
+        total = 0
+        
+        for class_name in ['yes', 'no']:
+            class_dir = os.path.join(split_dir, class_name)
+            if os.path.exists(class_dir):
+                count = len([f for f in os.listdir(class_dir) if f.endswith(('.jpg', '.png', '.jpeg'))])
+                counts[class_name] = count
+                total += count
+            else:
+                counts[class_name] = 0
+        
+        # 打印结果和百分比
+        for class_name in ['yes', 'no']:
+            count = counts[class_name]
+            percentage = (count / total * 100) if total > 0 else 0
+            print(f"    {class_name}: {count} ({percentage:.2f}%)")
+        
+        print(f"    总计: {total}")
 
 
 
@@ -1523,7 +1981,4 @@ if __name__ == "__main__":
    
 
     # 执行对齐
-    time_offset = main(video_path, txt_path, output_dir, align_diff, star_skin)
-
-    # 统计数据集
-    count_dataset_statistics(output_dir)
+    main(video_path, txt_path, output_dir, align_diff, star_skin)
