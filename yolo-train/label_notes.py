@@ -1086,9 +1086,12 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
                 
                 # 如果成功获取了角点数据
                 if points is not None and class_id >= 0:
+                    # 重新排序四个点：点1（最上方），点2（最右边），点3（最下方），点4（最左边）
+                    reordered_points = reorder_obb_points(points)
+                    
                     # 归一化4个角点
                     normalized_points = []
-                    for p in points:
+                    for p in reordered_points:
                         x_norm = p[0] / frame_width
                         y_norm = p[1] / frame_height
                         normalized_points.extend([x_norm, y_norm])
@@ -1651,6 +1654,36 @@ def crop_and_rotate_note(frame, points):
             return cropped
         else:
             return None
+
+
+def reorder_obb_points(points):
+    """
+    重新排序OBB的四个点：
+    点1是最上方的点，点2是最右边的点，点3是最下面的点，点4是最左边的点
+    
+    参数:
+        points: 4个点的坐标列表 [(x1,y1), (x2,y2), (x3,y3), (x4,y4)]
+        
+    返回:
+        重新排序后的4个点列表
+    """
+    if len(points) != 4:
+        return points
+    
+    # 找到最上方的点（y坐标最小）
+    top_point = min(points, key=lambda p: p[1])
+    
+    # 找到最下方的点（y坐标最大）
+    bottom_point = max(points, key=lambda p: p[1])
+    
+    # 找到最右边的点（x坐标最大）
+    right_point = max(points, key=lambda p: p[0])
+    
+    # 找到最左边的点（x坐标最小）
+    left_point = min(points, key=lambda p: p[0])
+    
+    # 返回重新排序的点：点1（最上方），点2（最右边），点3（最下方），点4（最左边）
+    return [top_point, right_point, bottom_point, left_point]
 
 
 def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
