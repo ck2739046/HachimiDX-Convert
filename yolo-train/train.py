@@ -12,7 +12,7 @@ class CustomDetectionTrainer(DetectionTrainer):
         # 使用VarifocalLoss替换默认损失函数
         # gamma: 调节难易样本的权重，越大越关注难样本（默认2.0）
         # alpha: 平衡因子，用于处理类别不平衡（默认0.75）
-        model.model[-1].loss_fn = VarifocalLoss(gamma=2.0, alpha=0.75)
+        model.model[-1].loss_fn = VarifocalLoss(gamma=2.2, alpha=0.75)
         return model
 
 
@@ -30,7 +30,7 @@ def train(model_name=None):
     project_path = os.path.join(os.path.dirname(__file__), 'result')
 
     if model_name is None:
-        model_name = 'note_detect_v1'
+        model_name = 'note_unknown'
 
     # 参数
     workers_num = 24
@@ -62,7 +62,7 @@ def train(model_name=None):
         weight_decay=0.0005,
 
         rect=True,          # 启用矩形训练以提高效率
-        mosaic=0.6,         # 启用马赛克增强
+        mosaic=0.4,         # 启用马赛克增强
 
         hsv_h=0.02,         # HSV色调增强，适应不同光照
         hsv_s=0.2,          # HSV饱和度增强
@@ -81,7 +81,7 @@ def main():
     #random_dataset.move_samples_to_valid_advanced(0.2)
     
     # 开始训练
-    results = train('note_detection1080_v4')
+    results = train('note_detect_v1')
     
     # 打印训练结果
     if results:

@@ -78,9 +78,6 @@ def train(model_name=None, dataset_name=None):
         plots=False,
         save_period=1,
 
-        augment=True,
-        compile=False,  # 本地电脑好像没法编译优化
-
         optimizer='AdamW',
         lr0=0.001,
         weight_decay=0.0005
@@ -94,11 +91,10 @@ def train(model_name=None, dataset_name=None):
 
 def main():
 
-    model_name = 'break-cls'
-    dataset_name = 'dataset_break_cls'
+    model_name = 'ex-cls'
+    dataset_name = 'dataset_ex_cls'
 
     train(model_name, dataset_name)
-
 
 if __name__ == "__main__":
     main()

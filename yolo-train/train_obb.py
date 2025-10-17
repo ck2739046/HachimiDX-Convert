@@ -37,7 +37,7 @@ def train(model_name=None):
 
     # 参数
     workers_num = 24
-    batch_num = 29
+    batch_num = 28
     
     # 开始训练（使用自定义的 VarifocalLoss 训练器）
     print("开始训练（使用 VarifocalLoss 处理数据集不平衡）...")
