@@ -64,9 +64,6 @@ def train(model_name=None):
         lr0=0.001,
         weight_decay=0.0005,
 
-        rect=True,          # 启用矩形训练以提高效率
-        mosaic=0.6,         # 启用马赛克增强
-
         hsv_h=0.02,         # HSV色调增强，适应不同光照
         hsv_s=0.2,          # HSV饱和度增强
         hsv_v=0.2           # HSV亮度增强

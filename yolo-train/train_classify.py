@@ -64,7 +64,7 @@ def train(model_name=None, dataset_name=None):
     results = model.train(
         trainer=CustomClassificationTrainer,  # 始终使用自定义训练器
         data=dataset_path,
-        epochs=100,
+        epochs=20,
         imgsz=224,
         batch=batch_num,
         patience=10,
@@ -76,6 +76,7 @@ def train(model_name=None, dataset_name=None):
         cache=False,
         verbose=True,
         plots=False,
+        save_period=1,
 
         augment=True,
         compile=False,  # 本地电脑好像没法编译优化
