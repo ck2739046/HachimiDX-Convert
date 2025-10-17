@@ -1,5 +1,22 @@
 from ultralytics import YOLO
+from ultralytics.models.yolo.classify import ClassificationTrainer
+from ultralytics.utils.loss import FocalLoss
 import os
+
+
+class CustomClassificationTrainer(ClassificationTrainer):
+    """自定义分类训练器，使用 Focal Loss 处理类别不平衡"""
+    
+    def get_model(self, cfg=None, weights=None, verbose=True):
+        """获取模型并设置自定义损失函数"""
+        model = super().get_model(cfg, weights, verbose)
+        # 使用 Focal Loss 替换默认损失函数
+        # gamma: 聚焦参数，通常设置为 2.0
+        # alpha: 类别平衡参数，通常设置为 0.25
+        if hasattr(model, 'criterion'):
+            model.criterion = FocalLoss(gamma=2.5, alpha=0.25)
+        return model
+
 
 def train(model_name=None, dataset_name=None):
 
@@ -22,12 +39,12 @@ def train(model_name=None, dataset_name=None):
             return
 
     # 加载模型
-    yolo_path = os.path.join(os.path.dirname(__file__), 'yolo11n-cls.pt')
+    yolo_path = os.path.join(os.path.dirname(__file__), 'yolo11s-cls.pt')
     if os.path.exists(yolo_path):
         model = YOLO(yolo_path)
     else:
         print(f"错误: 未找到本地模型文件 {yolo_path}")
-        model = YOLO('yolo11n-cls.pt')
+        model = YOLO('yolo11s-cls.pt')
     
     # 设置项目路径
     project_path = os.path.join(os.path.dirname(__file__), 'runs', 'classify')
@@ -37,27 +54,35 @@ def train(model_name=None, dataset_name=None):
         return
     
     # 训练参数
-    workers_num = 16
-    batch_num = 16
+    workers_num = 10
+    batch_num = 64
+    
+    print("使用 Focal Loss (gamma=2.0, alpha=0.25)")
     
     # 开始训练
     print("开始训练...")
     results = model.train(
+        trainer=CustomClassificationTrainer,  # 始终使用自定义训练器
         data=dataset_path,
         epochs=100,
         imgsz=224,
         batch=batch_num,
-        lr0=0.01,
         patience=10,
-        save_period=50,
         workers=workers_num,
         device=0,
         project=project_path,
         name=model_name,
         amp=True,
-        cache=True,
+        cache=False,
         verbose=True,
-        plots=False
+        plots=False,
+
+        augment=True,
+        compile=False,  # 本地电脑好像没法编译优化
+
+        optimizer='AdamW',
+        lr0=0.001,
+        weight_decay=0.0005
     )
     
     print("训练完成！")
@@ -68,8 +93,8 @@ def train(model_name=None, dataset_name=None):
 
 def main():
 
-    model_name = 'touch_scale_classify_each'
-    dataset_name = 'dataset-classify-touch-each'
+    model_name = 'break-cls'
+    dataset_name = 'dataset_break_cls'
 
     train(model_name, dataset_name)
 
