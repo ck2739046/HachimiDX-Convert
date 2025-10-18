@@ -279,18 +279,21 @@ class Standardizer:
             # 绘制圆心
             cv2.circle(frame, self.circle_center, 2, (0, 0, 255), thickness)
             
-            # 裁剪和缩放帧
-            if screen_r >= video_size / 2:
-                screen_r = round(video_size / 2 - 8)
-
+            # 裁剪帧
             x1 = self.circle_center[0] - screen_r
             x2 = self.circle_center[0] + screen_r
             y1 = self.circle_center[1] - screen_r
             y2 = self.circle_center[1] + screen_r
-            
-            frame = frame[y1:y2, x1:x2]
-            
-            # 保持比例缩放到长900或宽900
+            # 确保不越界
+            if x1 < 0: x1 = 0
+            if y1 < 0: y1 = 0
+            if x2 > video_width: x2 = video_width
+            if y2 > video_height: y2 = video_height
+            # 定义裁剪区域
+            if x1 != 0 or y1 != 0 or x2 != video_width or y2 != video_height:
+                frame = frame[y1:y2, x1:x2]
+
+            # 保持比例缩放帧到长900或宽900
             if video_height > video_width:
                 new_h = 900
                 new_w = int(video_width * 900 / video_height)
