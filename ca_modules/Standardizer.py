@@ -16,8 +16,8 @@ class Standardizer:
         
         Args:
             video_path: 视频文件的完整路径
-            start_frame: 开始的帧数
-            end_frame: 结束的帧数
+            start_frame: 开始的帧数 (-1表示从头开始)
+            end_frame: 结束的帧数 (-1表示到尾结束)
             video_mode: 视频模式(str)
             target_res: 视频分辨率(int)，默认1080
 
@@ -39,6 +39,8 @@ class Standardizer:
             cap.release()
             
             # 验证帧数参数
+            if start_frame == -1: start_frame = 0
+            if end_frame == -1: end_frame = total_frames
             if start_frame < 0 or end_frame > total_frames or start_frame >= end_frame:
                 raise Exception(f"Invalid frame range: [{start_frame}, {end_frame}], expect 0~{total_frames}")
             
@@ -136,8 +138,7 @@ class Standardizer:
                 if valid_circles:
                     valid_circles.sort(key=lambda x: x[2], reverse=True)
                     x, y, radius = valid_circles[0]
-                    judge_line_r = round(radius * (480/540))
-                    circles_detected.append((round(x), round(y), judge_line_r))
+                    circles_detected.append((round(x), round(y), round(radius)))
                     circles += 1
                     if circles == target: break
                     
@@ -151,6 +152,10 @@ class Standardizer:
             most_common = max(set(circles_detected), key=circles_detected.count)
             circle_center = (most_common[0], most_common[1])
             circle_radius = most_common[2]
+
+            # 微调
+            circle_center = (circle_center[0]+1, circle_center[1]) # x轴左移1像素
+            circle_radius -= int(video_size / 800)  # 半径减掉一点以避免边缘误差
             
             return circle_center, circle_radius
             
@@ -262,22 +267,9 @@ class Standardizer:
             处理后的帧
         """
         try:
-            screen_r = round(self.circle_radius / (480/540))
+            screen_r = self.circle_radius
             font_size = 0.7
             video_size = min(video_width, video_height)
-            if video_size < 600:
-                thickness = 1
-            elif video_size < 800:
-                thickness = 2
-            elif video_size < 1200:
-                thickness = 3
-            else:
-                thickness = 4
-            
-            # 绘制圆形
-            cv2.circle(frame, self.circle_center, self.circle_radius, (0, 255, 0), thickness)
-            # 绘制圆心
-            cv2.circle(frame, self.circle_center, 2, (0, 0, 255), thickness)
             
             # 裁剪帧
             x1 = self.circle_center[0] - screen_r
@@ -293,16 +285,13 @@ class Standardizer:
             if x1 != 0 or y1 != 0 or x2 != video_width or y2 != video_height:
                 frame = frame[y1:y2, x1:x2]
 
-            # 保持比例缩放帧到长900或宽900
-            if video_height > video_width:
-                new_h = 900
-                new_w = int(video_width * 900 / video_height)
-            else:
-                new_w = 900
-                new_h = int(video_height * 900 / video_width)
-            
-            frame = cv2.resize(frame, (new_w, new_h))
-            
+            # 缩放到 900x900
+            new_frame_size = 900
+            frame = cv2.resize(frame, (new_frame_size, new_frame_size))
+
+            # 绘制圆心
+            cv2.circle(frame, (450, 450), 4, (0, 0, 255), 2)
+
             # 左上角提示 - 3行
             instructions = [
                 "Press SPACE to pause/play",
@@ -327,7 +316,7 @@ class Standardizer:
                 cv2.putText(
                     frame,
                     "PAUSED",
-                    (10, new_h - 60),
+                    (10, new_frame_size - 60),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     font_size,
                     (0, 255, 255),
@@ -335,11 +324,11 @@ class Standardizer:
                 )
             
             # 第2行：圆形坐标和半径
-            circle_info = f"Center: ({self.circle_center[0]}, {self.circle_center[1]}), Radius: {self.circle_radius}"
+            circle_info = f"Center: ({self.circle_center[0]}, {self.circle_center[1]}), Radius: {screen_r}"
             cv2.putText(
                 frame,
                 circle_info,
-                (10, new_h - 30),
+                (10, new_frame_size - 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 font_size,
                 (255, 255, 255),
@@ -398,20 +387,21 @@ class Standardizer:
                     # 检查半径参数
                     if radius >= 100:
                         # 用户直接输入了半径
-                        if round(radius) > max(video_width, video_height):
-                            print(f"Error: Radius is too large for the video.")
-                            continue
                         new_radius = round(radius)
                     else:
                         # 检查缩放系数
                         if radius < 0.5 or radius > 1.5:
                             print("Error: Radius scale factor must be between 0.5 and 1.5.")
                             continue
-                        # 检查缩放后的半径
                         new_radius = round(self.circle_radius * radius)
-                        if new_radius > max(video_width, video_height):
-                            print(f"Error: Scaled radius {new_radius} is too large for the video.")
-                            continue
+
+                    # 检查新的半径    
+                    if new_radius > max(video_width, video_height):
+                        print(f"Error: New radius {new_radius} is too large for the video.")
+                        continue
+                    if new_radius < 100:
+                        print(f"Error: New radius {new_radius} is too small (minimum 100).")
+                        continue
                     
                     # 所有检查通过，返回新的圆心和半径
                     print(f"Adjustment applied: New center ({new_x}, {new_y}), New radius {new_radius}")
@@ -461,12 +451,12 @@ class Standardizer:
             # 定义crop参数
             tolerance = video_size / 360 # 一半的容差
             # 计算最后裁剪出的视频的尺寸
-            crop_size = round(circle_radius / (480/540) * 2)
+            crop_size = round(circle_radius * 2)
             if abs(crop_size - target_res) < tolerance*2: crop_size = target_res # 接近目标分辨率则直接设为目标分辨率
             crop_size = min(crop_size, video_size) # 确保不越界
             # 计算裁剪区域左上角坐标
-            crop_x = round(circle_center[0] - circle_radius / (480/540))
-            crop_y = round(circle_center[1] - circle_radius / (480/540))
+            crop_x = round(circle_center[0] - circle_radius)
+            crop_y = round(circle_center[1] - circle_radius)
             # 避免坐标越界
             if crop_x < 0:
                 crop_x = 0
@@ -506,8 +496,9 @@ class Standardizer:
                         if abs(output_total_frames - (end_frame-start_frame)) < 40:
                             print(f"Standardized video already exists")
                             return output_path  # 输出文件已存在，直接返回
-                    raise Exception('standardized video exists but invalid, will re-generate')
+                    raise Exception(f'standardized video exists but invalid, will re-generate')
                 except Exception as e:
+                    print(f"{e}")
                     os.remove(output_path)  # 删除损坏的文件
             
             print(f"Standardizing video...")
@@ -539,7 +530,7 @@ class Standardizer:
                 cmd.extend(['-vf', crop_cmd])
             elif need_resize:
                 cmd.extend(['-vf', resize_cmd])
-            
+
             # 音频编解码器
             cmd.extend(['-c:a', 'aac'])  # 使用AAC重新编码
             cmd.extend(['-b:a', '192k'])  # 统一码率192k
@@ -551,6 +542,11 @@ class Standardizer:
             cmd.append(output_path)
             
             # 执行ffmpeg命令
+            print(f"trim {start_frame}-{end_frame}")
+            if need_crop:
+                print(f"crop source video to {crop_size}x{crop_size} from ({crop_x},{crop_y})")
+            if need_resize:
+                print(f"resize to {target_res}x{target_res}")
             print(f"Using FFmpeg command: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=False, text=True, encoding='utf-8')
             
@@ -603,16 +599,21 @@ if __name__ == "__main__":
     # start_frame = 830
     # end_frame = 20050
 
-    video_path = r"C:\Users\ck273\Desktop\train\11820_120.mkv"
-    video_mode = "source"
-    start_frame = 610
-    end_frame = 31820
+    # video_path = r"C:\Users\ck273\Desktop\train\11820_120.mkv"
+    # video_mode = "source"
+    # start_frame = 610
+    # end_frame = 31820
 
     # video_path = r"C:\Users\ck273\Desktop\殿ッ！？ご乱心！？(BASIC_Lv.6).mp4"
     # video_mode = "camera shot"
     # start_frame = 150
     # end_frame = 4100
-    
+
+    video_path = r"C:\Users\ck273\Desktop\風又ねリ\はじまりの未来_MASTER.mp4"
+    video_mode = "source"
+    start_frame = 740
+    end_frame = 16600
+
     try:
         result_path = standardizer.standardize_video(video_path, start_frame, end_frame, video_mode, target_res=2160)
         print(f"Standardized video saved to: {result_path}")
