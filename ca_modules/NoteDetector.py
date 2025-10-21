@@ -468,16 +468,12 @@ class NoteDetector:
             
             cap.release()
             
-            # 保存追踪结果到文件
-            self._save_track_results(final_tracks, output_dir)
-            
             elapsed_time = time.time() - start_time
             average_fps = total_frames / elapsed_time if elapsed_time > 0 else 0
             print(f"追踪完成，平均FPS: {average_fps:.2f}")
             
-            # 返回track_id到class_id的映射，用于后续处理
-            track_info = {track_id: data['class_id'] for track_id, data in final_tracks.items() if data['class_id'] is not None}
-            return track_info
+            # 返回final_tracks用于后续分类处理
+            return final_tracks
             
         except Exception as e:
             raise Exception(f"追踪模块错误: {e}")
@@ -541,6 +537,243 @@ class NoteDetector:
                         tracks[current_track_id]['path'].append(point)
         
         return tracks
+
+    def classification_module(self, input_path, tracks, output_dir, cls_ex_model_path, cls_break_model_path):
+        """分类模块：对tap, hold, slide音符进行细分类"""
+        print("开始分类模块...")
+        
+        try:
+            # 加载分类模型
+            cls_ex_model = YOLO(cls_ex_model_path)
+            cls_break_model = YOLO(cls_break_model_path)
+            if torch.cuda.is_available():
+                cls_ex_model.to('cuda')
+                cls_break_model.to('cuda')
+                print(f"使用GPU: {torch.cuda.get_device_name(0)}")
+            
+            # 获取视频信息
+            cap = cv2.VideoCapture(input_path)
+            
+            # 处理每个轨迹
+            start_time = time.time()
+            last_start_time = start_time
+            last_processed_tracks = 0
+            processed_tracks = 0
+            total_tracks = len(tracks)
+            
+            for track_id, track_data in tracks.items():
+                if track_data['class_id'] is None or len(track_data['path']) == 0:
+                    continue
+                    
+                main_class_id = self.get_main_class_id(track_data['class_id'])
+                
+                # 只对tap, hold, slide进行分类 (main_class_id: 0, 1, 3)
+                if main_class_id not in [0, 1, 3]:  # 0=tap, 1=slide, 3=hold
+                    continue
+                    
+                # 选择25%, 50%, 75%三个采样点
+                path_length = len(track_data['path'])
+                sample_indices = [
+                    int(path_length * 0.25),
+                    int(path_length * 0.50),
+                    int(path_length * 0.75)
+                ]
+                
+                sample_classifications = []
+                
+                for sample_idx in sample_indices:
+                    if sample_idx >= path_length:
+                        continue
+                        
+                    point = track_data['path'][sample_idx]
+                    frame_number = point['frame']
+                    
+                    # 读取对应帧
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+                    ret, frame = cap.read()
+                    if not ret:
+                        continue
+                    
+                    # 提取图像区域
+                    cropped_image = self._extract_note_image(frame, point, track_data['class_id'])
+                    if cropped_image is None:
+                        continue
+                    
+                    # 分类
+                    is_ex, is_break = self._classify_note(cropped_image, cls_ex_model, cls_break_model)
+                    
+                    # 确定具体的class_id
+                    specific_class_id = self.get_sub_class_id(main_class_id, is_ex, is_break)
+                    sample_classifications.append(specific_class_id)
+                
+                # 确定最终的class_id
+                if len(sample_classifications) >= 2:
+                    # 选择多数
+                    counts = {}
+                    for class_id in sample_classifications:
+                        counts[class_id] = counts.get(class_id, 0) + 1
+                    
+                    max_count = max(counts.values())
+                    most_common = [k for k, v in counts.items() if v == max_count]
+                    
+                    if len(most_common) == 1:
+                        # 有明确的多数
+                        final_class_id = most_common[0]
+                    else:
+                        # 没有明确的多数，使用原本的大类class_id
+                        final_class_id = track_data['class_id']
+                        print(f"警告: 轨迹 {track_id} 的三个采样点分类结果不一致，使用原本的大类class_id: {final_class_id}")
+                else:
+                    # 采样点不足，使用原本的大类class_id
+                    final_class_id = track_data['class_id']
+                    print(f"警告: 轨迹 {track_id} 的有效采样点不足，使用原本的大类class_id: {final_class_id}")
+                
+                # 更新轨迹的class_id
+                tracks[track_id]['class_id'] = final_class_id
+                
+                processed_tracks += 1
+                
+                # 显示进度
+                if processed_tracks % 30 == 0:
+                    progress = (processed_tracks / total_tracks) * 100
+                    end_time = time.time()
+                    elapsed_time = end_time - last_start_time
+                    elapsed_tracks = processed_tracks - last_processed_tracks
+                    last_start_time = end_time # 重置时间给下一轮
+                    last_processed_tracks = processed_tracks # 重置轨迹数给下一轮
+                    tracks_per_sec = elapsed_tracks / elapsed_time if elapsed_time > 0 else 0
+                    print(f"分类进度: {processed_tracks}/{total_tracks} ({progress:.1f}%) {tracks_per_sec:.1f}tracks/s", end="\r", flush=True)
+            
+            cap.release()
+
+            # 保存追踪分类结果到文件
+            self._save_track_results(tracks, output_dir)
+            
+            elapsed_time = time.time() - start_time
+            average_tracks_per_sec = processed_tracks / elapsed_time if elapsed_time > 0 else 0
+            
+            print(f"分类完成，平均处理速度: {average_tracks_per_sec:.2f}tracks/s")
+
+            return tracks
+            
+        except Exception as e:
+            raise Exception(f"分类模块错误: {e}")
+    
+    def _extract_note_image(self, frame, point, class_id):
+        """提取音符图像区域"""
+        try:
+            if self.is_obb(class_id):
+                # 对于OBB，需要旋转到水平
+                return self._extract_obb_image(frame, point)
+            else:
+                # 对于普通矩形框，直接裁剪
+                x1, y1, x2, y2 = int(point['x1']), int(point['y1']), int(point['x2']), int(point['y2'])
+                
+                # 确保坐标在图像范围内
+                x1 = max(0, x1)
+                y1 = max(0, y1)
+                x2 = min(frame.shape[1], x2)
+                y2 = min(frame.shape[0], y2)
+                
+                if x1 >= x2 or y1 >= y2:
+                    return None
+                    
+                cropped = frame[y1:y2, x1:x2]
+                return cropped
+                
+        except Exception as e:
+            print(f"提取图像错误: {e}")
+            return None
+    
+    def _extract_obb_image(self, frame, point):
+        """提取OBB图像区域并旋转到水平"""
+        try:
+            # 获取四个点坐标
+            points = np.array([
+                [point['x1'], point['y1']],
+                [point['x2'], point['y2']],
+                [point['x3'], point['y3']],
+                [point['x4'], point['y4']]
+            ], dtype=np.float32)
+            
+            # 计算旋转角度
+            dx = point['x2'] - point['x1']
+            dy = point['y2'] - point['y1']
+            angle = np.arctan2(dy, dx) * 180 / np.pi
+            
+            # 计算旋转中心
+            center_x = np.mean(points[:, 0])
+            center_y = np.mean(points[:, 1])
+            
+            # 获取旋转矩阵
+            rotation_matrix = cv2.getRotationMatrix2D((center_x, center_y), angle, 1.0)
+            
+            # 旋转整个图像
+            rotated_frame = cv2.warpAffine(frame, rotation_matrix, (frame.shape[1], frame.shape[0]))
+            
+            # 旋转四个点
+            rotated_points = cv2.transform(points.reshape(1, -1, 2), rotation_matrix).reshape(-1, 2)
+            
+            # 计算旋转后的边界框
+            x_coords = rotated_points[:, 0]
+            y_coords = rotated_points[:, 1]
+            x1, y1 = int(np.min(x_coords)), int(np.min(y_coords))
+            x2, y2 = int(np.max(x_coords)), int(np.max(y_coords))
+            
+            # 确保坐标在图像范围内
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(rotated_frame.shape[1], x2)
+            y2 = min(rotated_frame.shape[0], y2)
+            
+            if x1 >= x2 or y1 >= y2:
+                return None
+                
+            cropped = rotated_frame[y1:y2, x1:x2]
+            return cropped
+            
+        except Exception as e:
+            print(f"提取OBB图像错误: {e}")
+            return None
+    
+    def _classify_note(self, image, cls_ex_model, cls_break_model):
+        """对音符图像进行分类"""
+        try:
+            # 分类是否为EX
+            ex_results = cls_ex_model.predict(
+                source=image,
+                conf=0.5,
+                verbose=False,
+                device='cuda' if torch.cuda.is_available() else 'cpu'
+            )
+            
+            # 分类是否为Break
+            break_results = cls_break_model.predict(
+                source=image,
+                conf=0.5,
+                verbose=False,
+                device='cuda' if torch.cuda.is_available() else 'cpu'
+            )
+            
+            # 解析分类结果
+            is_ex = False
+            is_break = False
+            
+            if len(ex_results) > 0 and ex_results[0].probs is not None:
+                ex_probs = ex_results[0].probs.data.cpu().numpy()
+                if len(ex_probs) >= 2:  # 第一个是"no"，第二个是"yes"
+                    is_ex = ex_probs[1] > ex_probs[0]
+            
+            if len(break_results) > 0 and break_results[0].probs is not None:
+                break_probs = break_results[0].probs.data.cpu().numpy()
+                if len(break_probs) >= 2:  # 第一个是"no"，第二个是"yes"
+                    is_break = break_probs[1] > break_probs[0]
+            
+            return is_ex, is_break
+            
+        except Exception as e:
+            print(f"分类错误: {e}")
+            return False, False
 
     def export_video_module(self, input_path, output_dir):
         """导出视频模块：绘制轨迹线并导出视频"""
@@ -762,7 +995,7 @@ class NoteDetector:
         except Exception as e:
             raise Exception(f"视频导出模块错误: {e}")
 
-    def main(self, video_path, detect_model_path, obb_model_path, output_dir, detect=True):
+    def main(self, video_path, detect_model_path, obb_model_path, output_dir, cls_ex_model_path, cls_break_model_path, detect=True):
         """主函数：协调各个模块的执行"""
         try:
             # 检查输入文件是否存在
@@ -792,8 +1025,11 @@ class NoteDetector:
             
             # 追踪模块
             track_results = self.track_module(video_path, output_dir)
+            # 分类模块
+            classified_tracks = self.classification_module(video_path, track_results, output_dir, cls_ex_model_path, cls_break_model_path)
             # 从内存中删除追踪结果以节省空间
             del track_results
+            del classified_tracks
             
             # 导出视频模块
             final_output_path = self.export_video_module(video_path, output_dir)
@@ -811,6 +1047,8 @@ if __name__ == "__main__":
     video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\DEICIDE_standardized.mp4"
     detect_model_path = r"C:\Users\ck273\Desktop\detect_varifocalloss.pt"
     obb_model_path = r"C:\Users\ck273\Desktop\obb.pt"
+    cls_ex_model_path = r"C:\Users\ck273\Desktop\cls-ex.pt"
+    cls_break_model_path = r"C:\Users\ck273\Desktop\cls-break.pt"
     output_dir = r"D:\git\mai-chart-analyze\yolo-train\runs\detect"
     detect = False  # 是否执行检测模块
     
@@ -820,5 +1058,7 @@ if __name__ == "__main__":
         detect_model_path, 
         obb_model_path, 
         output_dir,
+        cls_ex_model_path,
+        cls_break_model_path,
         detect=detect
     )
