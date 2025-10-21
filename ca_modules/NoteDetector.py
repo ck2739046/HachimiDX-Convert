@@ -20,7 +20,84 @@ LOGGER.setLevel(logging.ERROR) # 只显示错误信息，忽略 Warning
 
 class NoteDetector:
     def __init__(self):
-        pass
+        # 大类的id范围
+        # tap 0-4, slide 5-9, touch 10-14, hold 15-19, touch-hold 20+
+        self.main_class_id = [0, 5, 10, 15, 20]
+        # 定义具体id对应的名称
+        self.class_label = {
+            0: 'Tap',
+            1: 'Tap-B',
+            2: 'Tap-X',
+            3: 'Tap-BX',
+
+            5: 'Slide',
+            6: 'Slide-B',
+            7: 'Slide-X',
+            8: 'Slide-BX',
+
+            10: 'Touch',
+
+            15: 'Hold',
+            16: 'Hold-B',
+            17: 'Hold-X',
+            18: 'Hold-BX',
+
+            20: 'Touch-hold'
+        }
+
+    def get_main_class_id(self, id):
+        # 映射class_id到大类
+        if id >= self.main_class_id[-1]:
+            return 4  # touch-hold
+        elif id >= self.main_class_id[-2]:
+            return 3  # hold
+        elif id >= self.main_class_id[-3]:
+            return 2  # touch
+        elif id >= self.main_class_id[-4]:
+            return 1  # slide
+        else:
+            return 0  # tap
+        
+    def is_obb(self, id):
+        if self.get_main_class_id(id) in [3, 4]:  # hold, touch-hold
+            return True
+        else:
+            return False
+        
+    def get_sub_class_id(self, id, isEx, isBreak):
+        # Tap
+        if id == 0:
+            if isEx and isBreak:
+                return 3  # Tap-BX
+            elif isEx:
+                return 2  # Tap-X
+            elif isBreak:
+                return 1  # Tap-B
+            else:
+                return 0  # Tap
+        # Slide    
+        elif id == 1:
+            if isEx and isBreak:
+                return 8  # Slide-BX
+            elif isEx:
+                return 7  # Slide-X
+            elif isBreak:
+                return 6  # Slide-B
+            else:
+                return 5  # Slide
+        # Hold    
+        elif id == 3:
+            if isEx and isBreak:
+                return 18  # Hold-BX
+            elif isEx:
+                return 17  # Hold-X
+            elif isBreak:
+                return 16  # Hold-B
+            else:
+                return 15  # Hold
+        else:
+            return id  # Touch and Touch-hold 没有子分类
+        
 
 
     def detect_module(self, input_path, detect_model_path, obb_model_path, output_dir):
@@ -108,23 +185,16 @@ class NoteDetector:
         """合并YOLO和OBB检测结果"""
         frame_detections = []
         
-        # 处理YOLO检测结果 (class_id: 0,1,2 -> 0,5,10)
+        # 处理YOLO检测结果
         if len(detect_results) > 0 and detect_results[0].boxes is not None:
             all_boxes = detect_results[0].boxes.data.cpu().numpy()
             
             for box in all_boxes:
                 x1, y1, x2, y2, conf, class_id = box[:6]
                 class_id = int(class_id)
-                
-                # 映射class_id: tap=0, slide=5, touch=10
-                if class_id == 0:  # tap
-                    mapped_class_id = 0
-                elif class_id == 1:  # slide
-                    mapped_class_id = 5
-                elif class_id == 2:  # touch
-                    mapped_class_id = 10
-                else:
-                    continue
+
+                # 0 = Tap = 0, 1 = Slide = 5 , 2 = Touch = 10
+                mapped_class_id = self.main_class_id[class_id]
                 
                 # 对于普通检测框，使用边界框的四个角点
                 x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
@@ -139,7 +209,7 @@ class NoteDetector:
                 }
                 frame_detections.append(detection)
         
-        # 处理OBB检测结果 (class_id: 0,1 -> 15,20)
+        # 处理OBB检测结果
         if len(obb_results) > 0 and obb_results[0].obb is not None:
             obb_data = obb_results[0].obb
             xyxyxyxy = obb_data.xyxyxyxy.cpu().numpy()
@@ -150,13 +220,8 @@ class NoteDetector:
                 points = xyxyxyxy[i]
                 class_id = int(cls[i])
                 
-                # 映射class_id: hold=15, touch-hold=20
-                if class_id == 0:  # hold
-                    mapped_class_id = 15
-                elif class_id == 1:  # touch-hold
-                    mapped_class_id = 20
-                else:
-                    continue
+                # 3 = Hold = 15, 4 = Touch-Hold = 20
+                mapped_class_id = self.main_class_id[class_id+3]
                 
                 # 对于OBB，使用原始四个点坐标
                 x1, y1 = float(points[0][0]), float(points[0][1])
@@ -243,13 +308,12 @@ class NoteDetector:
             # 获取视频信息
             cap = cv2.VideoCapture(input_path)
             video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = round(cap.get(cv2.CAP_PROP_FPS))
             total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             
-            # 初始化跟踪器 (每个class_id一个tracker)
+            # 初始化跟踪器 (每个大类一个tracker)
             trackers = []
-            thresholds = [0.8, 0.9, 0.8, 0.8, 0.8]  # tap(0), slide(5), touch(10), hold(15), touch_hold(20)
+            thresholds = [0.8, 0.9, 0.8, 0.8, 0.8]  # tap, slide, touch, hold, touch_hold
             
             for thresh in thresholds:
                 tracker_args = SimpleNamespace(
@@ -296,23 +360,10 @@ class NoteDetector:
                 
                 for detection in current_detections:
                     class_id = detection['class_id']
-                    
-                    # 映射class_id到tracker索引
-                    if class_id == 0:  # tap
-                        tracker_idx = 0
-                    elif class_id == 5:  # slide
-                        tracker_idx = 1
-                    elif class_id == 10:  # touch
-                        tracker_idx = 2
-                    elif class_id == 15:  # hold
-                        tracker_idx = 3
-                    elif class_id == 20:  # touch-hold
-                        tracker_idx = 4
-                    else:
-                        continue
+                    tracker_idx = self.get_main_class_id(class_id)
                     
                     # 对于hold和touch-hold，将OBB转换为外接矩形
-                    if class_id in [15, 20]:
+                    if self.is_obb(class_id):
                         x_coords = [detection['x1'], detection['x2'], detection['x3'], detection['x4']]
                         y_coords = [detection['y1'], detection['y2'], detection['y3'], detection['y4']]
                         x1 = min(x_coords)
@@ -349,20 +400,6 @@ class NoteDetector:
                             x1, y1, x2, y2, track_id, conf, class_id = track[:7]
                             x1, y1, x2, y2, track_id, class_id = round(x1), round(y1), round(x2), round(y2), round(track_id), round(class_id)
                             
-                            # 根据tracker索引映射回正确的class_id
-                            if tracker_idx == 0:  # tap
-                                mapped_class_id = 0
-                            elif tracker_idx == 1:  # slide
-                                mapped_class_id = 5
-                            elif tracker_idx == 2:  # touch
-                                mapped_class_id = 10
-                            elif tracker_idx == 3:  # hold
-                                mapped_class_id = 15
-                            elif tracker_idx == 4:  # touch-hold
-                                mapped_class_id = 20
-                            else:
-                                continue
-                            
                             # 记录当前帧中存在的轨迹ID
                             current_track_ids.add(track_id)
                             
@@ -374,9 +411,9 @@ class NoteDetector:
                             track_center_y = (y1 + y2) / 2
                             # 找到中心点相距最小的音符
                             for detection in current_detections:
-                                if detection['class_id'] == mapped_class_id:
+                                if self.get_main_class_id(detection['class_id']) == tracker_idx:
                                     # 计算中心点：OBB 使用四点平均，其他类型使用矩形中心
-                                    if mapped_class_id in [15, 20]:
+                                    if self.is_obb(detection['class_id']):
                                         detection_center_x = (detection['x1'] + detection['x2'] + detection['x3'] + detection['x4']) / 4
                                         detection_center_y = (detection['y1'] + detection['y2'] + detection['y3'] + detection['y4']) / 4
                                     else:
@@ -391,8 +428,8 @@ class NoteDetector:
                             
                             # 如果找到匹配的检测结果，且距离在合理范围内
                             if original_detection and min_distance < video_width / 10:  # 最大允许距离
-                                # 添加到最终轨迹数据
-                                final_tracks[track_id]['class_id'] = mapped_class_id
+                                # 添加到最终轨迹数据，使用原始检测结果的class_id
+                                final_tracks[track_id]['class_id'] = original_detection['class_id']
                                 final_tracks[track_id]['path'].append({
                                     'frame': frame_number,
                                     'x1': original_detection['x1'],
@@ -590,7 +627,7 @@ class NoteDetector:
                     current_track_ids.add(track_id)
                     
                     # 根据class_id绘制不同类型的音符
-                    if class_id in [15, 20]:  # hold, touch-hold: 绘制OBB
+                    if self.is_obb(class_id):
                         points = np.array([
                             [track['x1'], track['y1']],
                             [track['x2'], track['y2']],
@@ -598,17 +635,16 @@ class NoteDetector:
                             [track['x4'], track['y4']]
                         ], dtype=np.int32)
                         cv2.polylines(frame, [points], True, color, 2)
-                    else:  # tap, slide, touch: 绘制矩形
+                    else:
                         x1, y1, x2, y2 = int(track['x1']), int(track['y1']), int(track['x2']), int(track['y2'])
                         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                     
                     # 绘制标签
-                    class_names = {0: 'tap', 5: 'slide', 10: 'touch', 15: 'hold', 20: 'touch-hold'}
-                    class_name = class_names.get(class_id, 'unknown')
+                    class_name = self.class_label.get(class_id, f'unknown-{class_id}')
                     label = f'{class_name} ID:{track_id}'
                     label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
                     
-                    if class_id in [15, 20]:
+                    if self.is_obb(class_id):
                         # 找到OBB四个点中最上方的点作为标签位置；若y相同则选择x最小
                         points = [
                             (int(track['x1']), int(track['y1'])),
@@ -628,7 +664,7 @@ class NoteDetector:
                     
                     # 更新轨迹历史
                     # 计算中心点：OBB 使用四点平均，其他类型使用矩形中心
-                    if class_id in [15, 20]:
+                    if self.is_obb(class_id):
                         center_x = int(round((track['x1'] + track['x2'] + track['x3'] + track['x4']) / 4.0))
                         center_y = int(round((track['y1'] + track['y2'] + track['y3'] + track['y4']) / 4.0))
                     else:
