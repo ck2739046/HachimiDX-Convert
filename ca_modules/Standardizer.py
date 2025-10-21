@@ -609,13 +609,13 @@ if __name__ == "__main__":
     # start_frame = 150
     # end_frame = 4100
 
-    video_path = r"C:\Users\ck273\Desktop\風又ねリ\はじまりの未来_MASTER.mp4"
+    video_path = r"C:\Users\ck273\Desktop\風又ねリ\DEICIDE.mp4"
     video_mode = "source"
-    start_frame = 740
-    end_frame = 16600
+    start_frame = 370
+    end_frame = 8910
 
     try:
-        result_path = standardizer.standardize_video(video_path, start_frame, end_frame, video_mode, target_res=2160)
+        result_path = standardizer.standardize_video(video_path, start_frame, end_frame, video_mode, target_res=1080)
         print(f"Standardized video saved to: {result_path}")
     except Exception as e:
         print(f"Error: {e}")
