@@ -22,84 +22,15 @@ class NoteDetector:
     def __init__(self):
         pass
 
-    def obb_to_rect(self, obb_points):
-        # obb_points: [x1, y1, x2, y2, x3, y3, x4, y4]
-        x_coords = obb_points[0::2]  # 所有x坐标
-        y_coords = obb_points[1::2]  # 所有y坐标
-        # 计算最小外接矩形
-        x1 = min(x_coords)
-        y1 = min(y_coords)
-        x2 = max(x_coords)
-        y2 = max(y_coords)
-        return x1, y1, x2, y2
 
-
-    def predict(self, input_path, detect_model_path, obb_model_path, output_dir):
-
-        # 为不同ID生成不同颜色
-        def get_color_for_id(track_id):
-            color_pool = [
-                (0, 255, 255), (255, 0, 255), (255, 255, 0),
-                #(128, 0, 0), (0, 128, 0), (0, 0, 128),
-                (128, 255, 255), (255, 128, 255), (255, 255, 128),
-                #(0, 128, 128), (128, 0, 128), (128, 128, 0),
-                (255, 0, 0), (0, 255, 0), (0, 0, 255),
-                (255, 128, 128), (128, 255, 128), (128, 128, 255),
-                (128, 128, 128)
-            ]
-            # 使用track_id对颜色池长度取模来选择颜色
-            color_index = track_id % len(color_pool)
-            return color_pool[color_index]
-
-
+    def detect_module(self, input_path, detect_model_path, obb_model_path, output_dir):
+        """检测模块：逐帧识别音符"""
+        print("开始检测模块...")
+        
         try:
-            # 处理视频
-            input_path = os.path.abspath(input_path)
-            input_path = os.path.normpath(input_path)
-            video_name = os.path.basename(input_path).rsplit('.', 1)[0]
-            print(f"Predict: {video_name}")
-            print(f'Predict initialize...', end='\r', flush=True)
             # 获取视频信息
             cap = cv2.VideoCapture(input_path)
-            video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = round(cap.get(cv2.CAP_PROP_FPS))
             total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            # 输出视频设置：在 output_dir 下创建以 video_name 命名的子文件夹，作为新的 output_dir
-            os.makedirs(output_dir, exist_ok=True)
-            output_dir = os.path.join(output_dir, video_name)
-            os.makedirs(output_dir, exist_ok=True)
-            output_path = os.path.join(output_dir, f'{video_name}_tracked.mp4')
-            if os.path.exists(output_path):
-                os.remove(output_path)  # 如果输出文件已存在，删除它
-            # 设置视频编码器
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, fps, (video_width, video_height))
-
-
-            # 初始化跟踪器
-            trackers = []
-            # trackers: tap, slide, touch, hold, touch_hold
-            thresholds = [0.8, 0.95, 0.8, 0.8, 0.8]
-            for thresh in thresholds:
-                tracker_args = SimpleNamespace(
-                    # 没有注释的全是默认参数
-                    tracker_type='botsort',
-                    track_high_thresh=0.25,
-                    track_low_thresh=0.1,
-                    new_track_thresh=0.25,
-                    track_buffer=10,
-                    match_thresh=thresh,   # 自定义阈值
-                    fuse_score=True,
-                    # min_box_area=10,
-                    gmc_method='none',     # 无需全局运动补偿
-                    proximity_thresh=0.5,
-                    appearance_thresh=0.8,
-                    with_reid=False,
-                    model="auto"
-                )
-                trackers.append(BOTSORT(args=tracker_args, frame_rate=fps))
-
             
             # 加载模型
             detect_model = YOLO(detect_model_path)
@@ -107,38 +38,28 @@ class NoteDetector:
             if torch.cuda.is_available():
                 detect_model.to('cuda')
                 obb_model.to('cuda')
-                #print(f"使用GPU: {torch.cuda.get_device_name(0)}")
-
+                print(f"使用GPU: {torch.cuda.get_device_name(0)}")
             
-            # 设置必要变量
-            fps_counter = 0
-            start_time = time.time()
-            start_time_fixed = start_time
+            # 存储检测结果
+            all_detections = []
+            
+            # 逐帧处理
             frame_count = 0
-            fps_rate = 0
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0) # 重置到开始
-            # 存储轨迹信息
-            track_history = defaultdict(list)
-            # 存储每个轨迹最后出现的帧数
-            track_last_seen = defaultdict(int)
-            # 存储隐藏的轨迹（超过5帧未出现但还在30帧恢复期内）
-            hidden_tracks = defaultdict(lambda: {'history': [], 'last_seen': 0})
-            # 存储轨迹状态：'active', 'hidden', 'expired'
-            track_status = defaultdict(lambda: 'active')
-            # 存储最终返回的轨迹数据
-            final_tracks = defaultdict(lambda: {'class_id': None, 'path': []})
-
-            # 主循环
+            start_time = time.time()
+            last_start_time = start_time
+            last_frame_number = 0
+            
             while True:
                 ret, frame = cap.read()
-                if not ret: break # end of video
-
+                if not ret:
+                    break
+                
                 # 使用两个模型预测当前帧
                 detect_results = detect_model.predict(
                     source=frame,
                     conf=0.6,
                     iou=0.7,
-                    verbose=False, # 关闭详细输出
+                    verbose=False,
                     device='cuda' if torch.cuda.is_available() else 'cpu',
                     max_det=50
                 )
@@ -147,223 +68,597 @@ class NoteDetector:
                     source=frame,
                     conf=0.6,
                     iou=0.7,
-                    verbose=False, # 关闭详细输出
+                    verbose=False,
                     device='cuda' if torch.cuda.is_available() else 'cpu',
                     max_det=50
                 )
+                
+                # 合并检测结果
+                frame_detections = self._merge_detections(detect_results, obb_results, frame_count)
+                all_detections.extend(frame_detections)
+                
+                # 显示进度
+                if frame_count % 30 == 0:
+                    progress = (frame_count / total_frames) * 100
+                    end_time = time.time()
+                    elapsed_time = end_time - last_start_time
+                    elapsed_frame = frame_count - last_frame_number
+                    last_start_time = end_time # 重置时间给下一轮
+                    last_frame_number = frame_count # 重置帧数给下一轮
+                    fps_rate = elapsed_frame / elapsed_time if elapsed_time > 0 else 0
+                    print(f"检测进度: {frame_count}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps", end="\r", flush=True)
+                
+                frame_count += 1
+            
+            cap.release()
+            
+            # 保存检测结果到文件
+            self._save_detect_results(all_detections, output_dir)
+            
+            elapsed_time = time.time() - start_time
+            average_fps = frame_count / elapsed_time if elapsed_time > 0 else 0
+            print(f"检测完成，平均FPS: {average_fps:.2f}")
+            
+            return all_detections
+            
+        except Exception as e:
+            raise Exception(f"检测模块错误: {e}")
+    
+    def _merge_detections(self, detect_results, obb_results, frame_number):
+        """合并YOLO和OBB检测结果"""
+        frame_detections = []
+        
+        # 处理YOLO检测结果 (class_id: 0,1,2 -> 0,5,10)
+        if len(detect_results) > 0 and detect_results[0].boxes is not None:
+            all_boxes = detect_results[0].boxes.data.cpu().numpy()
+            
+            for box in all_boxes:
+                x1, y1, x2, y2, conf, class_id = box[:6]
+                class_id = int(class_id)
+                
+                # 映射class_id: tap=0, slide=5, touch=10
+                if class_id == 0:  # tap
+                    mapped_class_id = 0
+                elif class_id == 1:  # slide
+                    mapped_class_id = 5
+                elif class_id == 2:  # touch
+                    mapped_class_id = 10
+                else:
+                    continue
+                
+                # 对于普通检测框，使用边界框的四个角点
+                x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
+                detection = {
+                    'frame': frame_number,
+                    'class_id': mapped_class_id,
+                    'x1': x1, 'y1': y1,
+                    'x2': x2, 'y2': y2,
+                    'x3': x1, 'y3': y2,
+                    'x4': x2, 'y4': y1,
+                    'confidence': float(conf)
+                }
+                frame_detections.append(detection)
+        
+        # 处理OBB检测结果 (class_id: 0,1 -> 15,20)
+        if len(obb_results) > 0 and obb_results[0].obb is not None:
+            obb_data = obb_results[0].obb
+            xyxyxyxy = obb_data.xyxyxyxy.cpu().numpy()
+            cls = obb_data.cls.cpu().numpy()
+            conf = obb_data.conf.cpu().numpy()
+            
+            for i in range(len(xyxyxyxy)):
+                points = xyxyxyxy[i]
+                class_id = int(cls[i])
+                
+                # 映射class_id: hold=15, touch-hold=20
+                if class_id == 0:  # hold
+                    mapped_class_id = 15
+                elif class_id == 1:  # touch-hold
+                    mapped_class_id = 20
+                else:
+                    continue
+                
+                # 对于OBB，使用原始四个点坐标
+                x1, y1 = float(points[0][0]), float(points[0][1])
+                x2, y2 = float(points[1][0]), float(points[1][1])
+                x3, y3 = float(points[2][0]), float(points[2][1])
+                x4, y4 = float(points[3][0]), float(points[3][1])
+                
+                detection = {
+                    'frame': frame_number,
+                    'class_id': mapped_class_id,
+                    'x1': x1, 'y1': y1,
+                    'x2': x2, 'y2': y2,
+                    'x3': x3, 'y3': y3,
+                    'x4': x4, 'y4': y4,
+                    'confidence': float(conf[i])
+                }
+                frame_detections.append(detection)
+        
+        return frame_detections
+    
+    def _save_detect_results(self, detections, output_dir):
+        """保存检测结果到txt文件"""
+        detect_result_path = os.path.join(output_dir, "detect_result.txt")
+        
+        with open(detect_result_path, 'w', encoding='utf-8') as f:
+            current_frame = -1
+            for detection in detections:
+                if detection['frame'] != current_frame:
+                    if current_frame != -1:
+                        f.write('\n')  # 帧之间空行分隔
+                    f.write(f"frame: {detection['frame']}\n")
+                    current_frame = detection['frame']
+                
+                # 写入音符数据
+                f.write(f"{detection['class_id']}, {detection['x1']:.2f}, {detection['y1']:.2f}, "
+                       f"{detection['x2']:.2f}, {detection['y2']:.2f}, {detection['x3']:.2f}, {detection['y3']:.2f}, "
+                       f"{detection['x4']:.2f}, {detection['y4']:.2f}, {detection['confidence']:.4f}\n")
+        
+        print(f"检测结果已保存到: {detect_result_path}")
+    
+    def _load_detect_results(self, output_dir):
+        """从txt文件加载检测结果"""
+        detect_result_path = os.path.join(output_dir, "detect_result.txt")
+        detections = []
+        
+        with open(detect_result_path, 'r', encoding='utf-8') as f:
+            current_frame = -1
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                if line.startswith('frame:'):
+                    current_frame = int(line.split(':')[1].strip())
+                else:
+                    # 解析音符数据
+                    parts = line.split(',')
+                    if len(parts) == 10:
+                        detection = {
+                            'frame': current_frame,
+                            'class_id': int(parts[0].strip()),
+                            'x1': float(parts[1].strip()),
+                            'y1': float(parts[2].strip()),
+                            'x2': float(parts[3].strip()),
+                            'y2': float(parts[4].strip()),
+                            'x3': float(parts[5].strip()),
+                            'y3': float(parts[6].strip()),
+                            'x4': float(parts[7].strip()),
+                            'y4': float(parts[8].strip()),
+                            'confidence': float(parts[9].strip())
+                        }
+                        detections.append(detection)
+        
+        return detections
 
-                # 直接使用原始检测结果
+    def track_module(self, input_path, output_dir):
+        """追踪模块：追踪音符轨迹"""
+        print("开始追踪模块...")
+        
+        try:
+            # 加载检测结果
+            detect_results = self._load_detect_results(output_dir)
+            
+            # 获取视频信息
+            cap = cv2.VideoCapture(input_path)
+            video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = round(cap.get(cv2.CAP_PROP_FPS))
+            total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            
+            # 初始化跟踪器 (每个class_id一个tracker)
+            trackers = []
+            thresholds = [0.8, 0.9, 0.8, 0.8, 0.8]  # tap(0), slide(5), touch(10), hold(15), touch_hold(20)
+            
+            for thresh in thresholds:
+                tracker_args = SimpleNamespace(
+                    tracker_type='botsort',
+                    track_high_thresh=0.25,
+                    track_low_thresh=0.1,
+                    new_track_thresh=0.25,
+                    track_buffer=10,
+                    match_thresh=thresh,
+                    fuse_score=True,
+                    gmc_method='none',
+                    proximity_thresh=0.5,
+                    appearance_thresh=0.8,
+                    with_reid=False,
+                    model="auto"
+                )
+                trackers.append(BOTSORT(args=tracker_args, frame_rate=fps))
+            
+            # 存储追踪结果
+            track_history = defaultdict(list)
+            track_last_seen = defaultdict(int)
+            hidden_tracks = defaultdict(lambda: {'history': [], 'last_seen': 0})
+            track_status = defaultdict(lambda: 'active')
+            final_tracks = defaultdict(lambda: {'class_id': None, 'path': []})
+            
+            # 按帧号分组检测结果
+            frame_detections = defaultdict(list)
+            for detection in detect_results:
+                frame_detections[detection['frame']].append(detection)
+            
+            # 逐帧处理
+            start_time = time.time()
+            
+            for frame_number in range(total_frames):
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # 获取当前帧的检测结果
+                current_detections = frame_detections.get(frame_number, [])
+                
+                # 按class_id分组检测结果
+                candidates = {0: np.empty((0, 6)), 1: np.empty((0, 6)), 2: np.empty((0, 6)), 3: np.empty((0, 6)), 4: np.empty((0, 6))}
+                
+                for detection in current_detections:
+                    class_id = detection['class_id']
+                    
+                    # 映射class_id到tracker索引
+                    if class_id == 0:  # tap
+                        tracker_idx = 0
+                    elif class_id == 5:  # slide
+                        tracker_idx = 1
+                    elif class_id == 10:  # touch
+                        tracker_idx = 2
+                    elif class_id == 15:  # hold
+                        tracker_idx = 3
+                    elif class_id == 20:  # touch-hold
+                        tracker_idx = 4
+                    else:
+                        continue
+                    
+                    # 对于hold和touch-hold，将OBB转换为外接矩形
+                    if class_id in [15, 20]:
+                        x_coords = [detection['x1'], detection['x2'], detection['x3'], detection['x4']]
+                        y_coords = [detection['y1'], detection['y2'], detection['y3'], detection['y4']]
+                        x1 = min(x_coords)
+                        y1 = min(y_coords)
+                        x2 = max(x_coords)
+                        y2 = max(y_coords)
+                    else:
+                        x1, y1, x2, y2 = detection['x1'], detection['y1'], detection['x2'], detection['y2']
+                    
+                    # 添加到候选框，使用tracker索引作为class_id传递给tracker
+                    box_data = np.array([[x1, y1, x2, y2, detection['confidence'], tracker_idx]])
+                    candidates[tracker_idx] = np.vstack([candidates[tracker_idx], box_data]) if candidates[tracker_idx].size > 0 else box_data
+                
+                # 执行追踪
                 track_results = []
                 orig_shape = frame.shape[:2]
                 
-                # 初始化候选框字典
-                candidates = {0: np.empty((0, 6)), 1: np.empty((0, 6)), 2: np.empty((0, 6)), 3: np.empty((0, 6)), 4: np.empty((0, 6))}
-                
-                # 处理detect模型结果
-                if len(detect_results) > 0 and detect_results[0].boxes is not None:
-                    all_boxes = detect_results[0].boxes.data.cpu().numpy()
-                    
-                    # 分离出各个class_id的检测框
-                    tap_mask = all_boxes[:, 5] == 0
-                    candidates[0] = (all_boxes[tap_mask])
-                    slide_mask = all_boxes[:, 5] == 1
-                    candidates[1] = (all_boxes[slide_mask])
-                    touch_mask = all_boxes[:, 5] == 2
-                    candidates[2] = (all_boxes[touch_mask])
-                
-                # 处理obb模型结果
-                if len(obb_results) > 0 and obb_results[0].obb is not None:
-                    # 获取OBB结果
-                    obb_data = obb_results[0].obb
-                    
-                    # 获取多边形格式的OBB (xyxyxyxy)
-                    xyxyxyxy = obb_data.xyxyxyxy.cpu().numpy()
-                    # 获取类别
-                    cls = obb_data.cls.cpu().numpy()
-                    # 获取置信度
-                    conf = obb_data.conf.cpu().numpy()
-                    
-                    # 分离出各个class_id的检测框并转换为矩形
-                    touch_obb_mask = cls == 0
-                    touch_hold_obb_mask = cls == 1
-                    
-                    # 转换touch OBB为矩形
-                    if np.any(touch_obb_mask):
-                        touch_obb_boxes = []
-                        for i in range(len(xyxyxyxy)):
-                            if touch_obb_mask[i]:
-                                obb_points = xyxyxyxy[i].flatten()  # 展平为8个点
-                                x1, y1, x2, y2 = self.obb_to_rect(obb_points)
-                                touch_obb_boxes.append([x1, y1, x2, y2, conf[i], 2])  # class_id 2 = touch
-                        candidates[2] = np.vstack([candidates[2], np.array(touch_obb_boxes)]) if len(touch_obb_boxes) > 0 else candidates[2]
-                    
-                    # 转换touch-hold OBB为矩形
-                    if np.any(touch_hold_obb_mask):
-                        touch_hold_obb_boxes = []
-                        for i in range(len(xyxyxyxy)):
-                            if touch_hold_obb_mask[i]:
-                                obb_points = xyxyxyxy[i].flatten()  # 展平为8个点
-                                x1, y1, x2, y2 = self.obb_to_rect(obb_points)
-                                touch_hold_obb_boxes.append([x1, y1, x2, y2, conf[i], 4])  # class_id 4 = touch_hold
-                        candidates[4] = np.array(touch_hold_obb_boxes) if len(touch_hold_obb_boxes) > 0 else candidates[4]
-                
-                # 将过滤后的结果重新封装为Boxes对象，再交给对应的追踪器处理
                 for i in range(len(trackers)):
-                    boxes = Boxes(candidates[i], orig_shape)
-                    track_result = trackers[i].update(boxes, frame)
-                    track_results.append(track_result)
-                    
-
-                    # 不再保存跟踪结果
-
+                    if candidates[i].size > 0:
+                        boxes = Boxes(candidates[i], orig_shape)
+                        track_result = trackers[i].update(boxes, frame)
+                        track_results.append(track_result)
+                    else:
+                        track_results.append([])
                 
-                # 处理跟踪结果
-                current_track_ids = set()  # 当前帧中存在的轨迹ID
+                # 处理追踪结果
+                current_track_ids = set()
                 
-                # 首先绘制原始检测结果
-                # 绘制detect模型结果
-                if len(detect_results) > 0 and detect_results[0].boxes is not None:
-                    all_boxes = detect_results[0].boxes.data.cpu().numpy()
-                    for box in all_boxes:
-                        x1, y1, x2, y2, conf, class_id = box[:6]
-                        x1, y1, x2, y2, class_id = round(x1), round(y1), round(x2), round(y2), round(class_id)
-                        
-                        # 获取颜色（使用class_id作为临时ID）
-                        color = get_color_for_id(class_id)
-                        # 绘制边界框
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                        # 绘制标签
-                        class_name = ['tap', 'slide', 'touch', 'hold', 'touch_hold'][class_id]
-                        label = f'{class_name} {conf:.2f}'
-                        label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
-                        cv2.rectangle(frame, (x1, y1 - label_size[1] - 10), 
-                                    (x1 + label_size[0], y1), color, -1)
-                        cv2.putText(frame, label, (x1, y1 - 5), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-                
-                # 绘制obb模型结果
-                if len(obb_results) > 0 and obb_results[0].obb is not None:
-                    # 获取OBB结果
-                    obb_data = obb_results[0].obb
-                    
-                    # 获取多边形格式的OBB (xyxyxyxy)
-                    xyxyxyxy = obb_data.xyxyxyxy.cpu().numpy()
-                    # 获取类别
-                    cls = obb_data.cls.cpu().numpy()
-                    # 获取置信度
-                    conf = obb_data.conf.cpu().numpy()
-                    
-                    for i in range(len(xyxyxyxy)):
-                        # OBB格式: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-                        points = xyxyxyxy[i]
-                        class_id = int(cls[i])
-                        confidence = conf[i]
-                        
-                        # 获取颜色（使用class_id + 3作为临时ID，避免与detect模型冲突）
-                        color = get_color_for_id(class_id + 3)
-                        # 绘制OBB边界框
-                        cv2.polylines(frame, [points.astype(np.int32)], True, color, 2)
-                        # 绘制标签
-                        class_name = ['touch', 'touch_hold'][class_id]
-                        label = f'{class_name} {confidence:.2f}'
-                        label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
-                        # 计算标签位置（使用第一个点）
-                        label_x = int(points[0][0])
-                        label_y = int(points[0][1])
-                        cv2.rectangle(frame, (label_x, label_y - label_size[1] - 10), 
-                                    (label_x + label_size[0], label_y), color, -1)
-                        cv2.putText(frame, label, (label_x, label_y - 5), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-                
-                # 然后处理跟踪结果（仅用于轨迹线）
-                for track_result in track_results:
+                for tracker_idx, track_result in enumerate(track_results):
                     if track_result is not None and len(track_result) > 0:
                         for track in track_result:
-                            # 获取轨迹信息
-                            if len(track) < 7: continue
+                            if len(track) < 7:
+                                continue
                             x1, y1, x2, y2, track_id, conf, class_id = track[:7]
                             x1, y1, x2, y2, track_id, class_id = round(x1), round(y1), round(x2), round(y2), round(track_id), round(class_id)
-                            # 计算中心点
-                            center_x = (x1 + x2) // 2
-                            center_y = (y1 + y2) // 2
+                            
+                            # 根据tracker索引映射回正确的class_id
+                            if tracker_idx == 0:  # tap
+                                mapped_class_id = 0
+                            elif tracker_idx == 1:  # slide
+                                mapped_class_id = 5
+                            elif tracker_idx == 2:  # touch
+                                mapped_class_id = 10
+                            elif tracker_idx == 3:  # hold
+                                mapped_class_id = 15
+                            elif tracker_idx == 4:  # touch-hold
+                                mapped_class_id = 20
+                            else:
+                                continue
                             
                             # 记录当前帧中存在的轨迹ID
                             current_track_ids.add(track_id)
-  
-                            # 添加到最终轨迹数据
-                            final_tracks[track_id]['class_id'] = class_id
-                            final_tracks[track_id]['path'].append({
-                                'frame': frame_count,
-                                'x1': x1,
-                                'y1': y1,
-                                'x2': x2,
-                                'y2': y2,
-                                'confidence': conf
-                            })
-
-                            # 检查是否是从隐藏状态恢复的轨迹
+                            
+                            # 找到对应的原始检测结果作为OBB坐标
+                            original_detection = None
+                            min_distance = float('inf')
+                            # 获取当前追踪框的中心点
+                            track_center_x = (x1 + x2) / 2
+                            track_center_y = (y1 + y2) / 2
+                            # 找到中心点相距最小的音符
+                            for detection in current_detections:
+                                if detection['class_id'] == mapped_class_id:
+                                    # 计算中心点：OBB 使用四点平均，其他类型使用矩形中心
+                                    if mapped_class_id in [15, 20]:
+                                        detection_center_x = (detection['x1'] + detection['x2'] + detection['x3'] + detection['x4']) / 4
+                                        detection_center_y = (detection['y1'] + detection['y2'] + detection['y3'] + detection['y4']) / 4
+                                    else:
+                                        detection_center_x = (detection['x1'] + detection['x2']) / 2
+                                        detection_center_y = (detection['y1'] + detection['y2']) / 2
+                                    # 计算中心点距离
+                                    distance = np.sqrt((track_center_x - detection_center_x)**2 + (track_center_y - detection_center_y)**2)
+                                    # 选择距离最近的检测结果
+                                    if distance < min_distance:
+                                        min_distance = distance
+                                        original_detection = detection
+                            
+                            # 如果找到匹配的检测结果，且距离在合理范围内
+                            if original_detection and min_distance < video_width / 10:  # 最大允许距离
+                                # 添加到最终轨迹数据
+                                final_tracks[track_id]['class_id'] = mapped_class_id
+                                final_tracks[track_id]['path'].append({
+                                    'frame': frame_number,
+                                    'x1': original_detection['x1'],
+                                    'y1': original_detection['y1'],
+                                    'x2': original_detection['x2'],
+                                    'y2': original_detection['y2'],
+                                    'x3': original_detection['x3'],
+                                    'y3': original_detection['y3'],
+                                    'x4': original_detection['x4'],
+                                    'y4': original_detection['y4']
+                                })
+                            
+                            # 更新轨迹状态
                             if track_status[track_id] == 'hidden':
-                                # 恢复轨迹：将隐藏的历史记录恢复到活跃轨迹
                                 track_history[track_id] = hidden_tracks[track_id]['history'].copy()
                                 track_status[track_id] = 'active'
                                 del hidden_tracks[track_id]
-                            # 更新轨迹最后出现的帧数
-                            track_last_seen[track_id] = frame_count
+                            
+                            track_last_seen[track_id] = frame_number
                             track_status[track_id] = 'active'
+                            
                             # 存储轨迹点
+                            center_x = (x1 + x2) // 2
+                            center_y = (y1 + y2) // 2
                             track_history[track_id].append((center_x, center_y))
-                            # 限制轨迹长度，避免内存过多
+                            
                             if len(track_history[track_id]) > 512:
-                                track_history[track_id].pop(0)
+                                track_history[track_id].pop(0) # 限制历史长度，节约内存
                 
+                # 显示进度
+                if frame_number % 30 == 0:
+                    progress = (frame_number / total_frames) * 100
+                    elapsed_time = time.time() - start_time
+                    fps_rate = frame_number / elapsed_time if elapsed_time > 0 else 0
+                    print(f"追踪进度: {frame_number}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps", end="\r", flush=True)
+            
+            cap.release()
+            
+            # 保存追踪结果到文件
+            self._save_track_results(final_tracks, output_dir)
+            
+            elapsed_time = time.time() - start_time
+            average_fps = total_frames / elapsed_time if elapsed_time > 0 else 0
+            print(f"追踪完成，平均FPS: {average_fps:.2f}")
+            
+            # 返回track_id到class_id的映射，用于后续处理
+            track_info = {track_id: data['class_id'] for track_id, data in final_tracks.items() if data['class_id'] is not None}
+            return track_info
+            
+        except Exception as e:
+            raise Exception(f"追踪模块错误: {e}")
+    
+    def _save_track_results(self, tracks, output_dir):
+        """保存追踪结果到txt文件"""
+        track_result_path = os.path.join(output_dir, "track_result.txt")
+        
+        with open(track_result_path, 'w', encoding='utf-8') as f:
+            for track_id, track_data in tracks.items():
+                if track_data['class_id'] is not None and len(track_data['path']) > 0:
+                    # 写入轨迹头
+                    f.write(f"track_id: {track_id}, class_id: {track_data['class_id']}\n")
+                    
+                    # 写入轨迹路径
+                    for point in track_data['path']:
+                        f.write(f"{point['frame']}, {point['x1']:.2f}, {point['y1']:.2f}, "
+                               f"{point['x2']:.2f}, {point['y2']:.2f}, {point['x3']:.2f}, {point['y3']:.2f}, "
+                               f"{point['x4']:.2f}, {point['y4']:.2f}\n")
+                    
+                    f.write('\n')  # 轨迹之间空行分隔
+        
+        print(f"追踪结果已保存到: {track_result_path}")
+    
+    def _load_track_results(self, output_dir):
+        """从txt文件加载追踪结果"""
+        track_result_path = os.path.join(output_dir, "track_result.txt")
+        tracks = defaultdict(lambda: {'class_id': None, 'path': []})
+        
+        with open(track_result_path, 'r', encoding='utf-8') as f:
+            current_track_id = -1
+            current_class_id = -1
+            
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                if line.startswith('track_id:'):
+                    # 解析轨迹头
+                    parts = line.split(',')
+                    if len(parts) == 2:
+                        current_track_id = int(parts[0].split(':')[1].strip())
+                        current_class_id = int(parts[1].split(':')[1].strip())
+                        tracks[current_track_id]['class_id'] = current_class_id
+                else:
+                    # 解析轨迹点数据
+                    parts = line.split(',')
+                    if len(parts) == 9:
+                        point = {
+                            'frame': int(parts[0].strip()),
+                            'x1': float(parts[1].strip()),
+                            'y1': float(parts[2].strip()),
+                            'x2': float(parts[3].strip()),
+                            'y2': float(parts[4].strip()),
+                            'x3': float(parts[5].strip()),
+                            'y3': float(parts[6].strip()),
+                            'x4': float(parts[7].strip()),
+                            'y4': float(parts[8].strip())
+                        }
+                        tracks[current_track_id]['path'].append(point)
+        
+        return tracks
 
-                # 处理轨迹状态管理
-                tracks_to_hide = []
-                tracks_to_expire = []
+    def export_video_module(self, input_path, output_dir):
+        """导出视频模块：绘制轨迹线并导出视频"""
+        print("开始导出视频模块...")
+        
+        try:
+            # 加载追踪结果
+            track_results = self._load_track_results(output_dir)
+            
+            # 获取视频信息
+            cap = cv2.VideoCapture(input_path)
+            video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = round(cap.get(cv2.CAP_PROP_FPS))
+            total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            
+            # 输出视频设置
+            video_name = os.path.basename(input_path).rsplit('.', 1)[0]
+            output_path = os.path.join(output_dir, f'{video_name}_tracked.mp4')
+            if os.path.exists(output_path):
+                os.remove(output_path)
+            
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(output_path, fourcc, fps, (video_width, video_height))
+            
+            # 为不同ID生成不同颜色
+            def get_color_for_id(track_id):
+                color_pool = [
+                    (0, 255, 255), (255, 0, 255), (255, 255, 0),
+                    (128, 255, 255), (255, 128, 255), (255, 255, 128),
+                    (255, 0, 0), (0, 255, 0), (0, 0, 255),
+                    (255, 128, 128), (128, 255, 128), (128, 128, 255),
+                    (128, 128, 128)
+                ]
+                # 使用track_id对颜色池长度取模来选择颜色
+                color_index = track_id % len(color_pool)
+                return color_pool[color_index]
+            
+            # 按帧号组织轨迹点
+            frame_tracks = defaultdict(list)
+            for track_id, track_data in track_results.items():
+                if track_data['class_id'] is not None:
+                    for point in track_data['path']:
+                        frame_tracks[point['frame']].append({
+                            'track_id': track_id,
+                            'class_id': track_data['class_id'],
+                            'x1': point['x1'],
+                            'y1': point['y1'],
+                            'x2': point['x2'],
+                            'y2': point['y2'],
+                            'x3': point['x3'],
+                            'y3': point['y3'],
+                            'x4': point['x4'],
+                            'y4': point['y4']
+                        })
+            
+            # 存储轨迹历史用于绘制轨迹线
+            track_history = defaultdict(list)
+            track_last_seen = defaultdict(int)  # 记录轨迹最后出现的帧号
+            
+            # 逐帧处理
+            start_time = time.time()
+            last_start_time = start_time
+            last_frame_number = 0
+            
+            for frame_number in range(total_frames):
+                ret, frame = cap.read()
+                if not ret:
+                    break
                 
-                # 检查活跃轨迹
+                # 获取当前帧的轨迹点
+                current_tracks = frame_tracks.get(frame_number, [])
+                
+                # 更新当前帧中存在的轨迹
+                current_track_ids = set()
+                
+                # 绘制当前帧的音符
+                for track in current_tracks:
+                    track_id = track['track_id']
+                    class_id = track['class_id']
+                    color = get_color_for_id(track_id)
+                    
+                    # 记录当前帧中存在的轨迹
+                    current_track_ids.add(track_id)
+                    
+                    # 根据class_id绘制不同类型的音符
+                    if class_id in [15, 20]:  # hold, touch-hold: 绘制OBB
+                        points = np.array([
+                            [track['x1'], track['y1']],
+                            [track['x2'], track['y2']],
+                            [track['x3'], track['y3']],
+                            [track['x4'], track['y4']]
+                        ], dtype=np.int32)
+                        cv2.polylines(frame, [points], True, color, 2)
+                    else:  # tap, slide, touch: 绘制矩形
+                        x1, y1, x2, y2 = int(track['x1']), int(track['y1']), int(track['x2']), int(track['y2'])
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                    
+                    # 绘制标签
+                    class_names = {0: 'tap', 5: 'slide', 10: 'touch', 15: 'hold', 20: 'touch-hold'}
+                    class_name = class_names.get(class_id, 'unknown')
+                    label = f'{class_name} ID:{track_id}'
+                    label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                    
+                    if class_id in [15, 20]:
+                        # 找到OBB四个点中最上方的点作为标签位置；若y相同则选择x最小
+                        points = [
+                            (int(track['x1']), int(track['y1'])),
+                            (int(track['x2']), int(track['y2'])),
+                            (int(track['x3']), int(track['y3'])),
+                            (int(track['x4']), int(track['y4']))
+                        ]
+                        label_x, label_y = min(points, key=lambda p: (p[1], p[0])) # 先选y最小，再选x最小
+                    else:
+                        label_x = x1
+                        label_y = y1
+                    
+                    cv2.rectangle(frame, (label_x, label_y - label_size[1] - 10), 
+                                (label_x + label_size[0], label_y), color, -1)
+                    cv2.putText(frame, label, (label_x, label_y - 5), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                    
+                    # 更新轨迹历史
+                    # 计算中心点：OBB 使用四点平均，其他类型使用矩形中心
+                    if class_id in [15, 20]:
+                        center_x = int(round((track['x1'] + track['x2'] + track['x3'] + track['x4']) / 4.0))
+                        center_y = int(round((track['y1'] + track['y2'] + track['y3'] + track['y4']) / 4.0))
+                    else:
+                        center_x = int(round((track['x1'] + track['x2']) / 2.0))
+                        center_y = int(round((track['y1'] + track['y2']) / 2.0))
+
+                    track_history[track_id].append((center_x, center_y))
+                    track_last_seen[track_id] = frame_number
+                    
+                    if len(track_history[track_id]) > 512:
+                        track_history[track_id].pop(0)
+                
+                # 清理过期的轨迹（超过30帧未出现）
+                tracks_to_remove = []
                 for track_id in list(track_history.keys()):
                     if track_id not in current_track_ids:
-                        frames_since_last_seen = frame_count - track_last_seen.get(track_id, frame_count)
-                        
-                        # 超过5帧未出现，隐藏轨迹
-                        if frames_since_last_seen > 5 and track_status[track_id] == 'active':
-                            tracks_to_hide.append(track_id)
+                        frames_since_last_seen = frame_number - track_last_seen.get(track_id, frame_number)
+                        if frames_since_last_seen > 30:  # 超过30帧未出现，清理轨迹
+                            tracks_to_remove.append(track_id)
                 
-                # 检查隐藏轨迹
-                for track_id in list(hidden_tracks.keys()):
-                    if track_id not in current_track_ids:
-                        frames_since_last_seen = frame_count - hidden_tracks[track_id]['last_seen']
-                        
-                        # 超过30帧未出现，永久删除
-                        if frames_since_last_seen > 30:
-                            tracks_to_expire.append(track_id)
-                
-                # 隐藏轨迹
-                for track_id in tracks_to_hide:
+                for track_id in tracks_to_remove:
                     if track_id in track_history:
-                        # 将轨迹移动到隐藏状态
-                        hidden_tracks[track_id]['history'] = track_history[track_id].copy()
-                        hidden_tracks[track_id]['last_seen'] = track_last_seen[track_id]
-                        track_status[track_id] = 'hidden'
-    
-                        # 从活跃轨迹中删除
                         del track_history[track_id]
-
-                # 永久删除过期轨迹
-                for track_id in tracks_to_expire:
-                    if track_id in hidden_tracks:
-                        del hidden_tracks[track_id]
                     if track_id in track_last_seen:
                         del track_last_seen[track_id]
-                    if track_id in track_status:
-                        del track_status[track_id]
                 
-                # 绘制所有活跃轨迹的轨迹线
+                # 绘制轨迹线
                 for track_id, points in track_history.items():
-                    if len(points) > 1 and track_status[track_id] == 'active':
+                    if len(points) > 1:
                         color = get_color_for_id(track_id)
-                        # 绘制轨迹线
                         for i in range(1, len(points)):
                             cv2.line(frame, points[i-1], points[i], color, 3)
                         
@@ -373,78 +668,102 @@ class NoteDetector:
                 
                 # 写入输出视频
                 out.write(frame)
-
+                
                 # 显示进度
-                if fps_counter >= 30:  # 每30帧更新一次fps
-                    # 计算fps
-                    current_time = time.time()
-                    fps_rate = fps_counter / (current_time - start_time)
-                    start_time = current_time
-                    fps_counter = 0
-                    progress = (frame_count / total_frames) * 100 
-                    print(f"progress: {frame_count}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps", end="\r", flush=True)
-
-                frame_count += 1
-                fps_counter += 1
-
-            end_time = time.time()
-            average_fps_rate = frame_count / (end_time - start_time_fixed)
-            print(f"predict done, average FPS: {average_fps_rate:.2f}            ")
-            cap.release()
-            out.release() 
+                if frame_number % 30 == 0:
+                    progress = (frame_number / total_frames) * 100
+                    end_time = time.time()
+                    elapsed_time = end_time - last_start_time
+                    elapsed_frame = frame_number - last_frame_number
+                    last_start_time = end_time # 重置时间给下一轮
+                    last_frame_number = frame_number # 重置帧数给下一轮
+                    fps_rate = elapsed_frame / elapsed_time if elapsed_time > 0 else 0
+                    print(f"导出进度: {frame_number}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps", end="\r", flush=True)
             
-
-            # 使用ffmpeg添加音频到跟踪视频
+            cap.release()
+            out.release()
+            
+            # 使用ffmpeg添加音频
             final_output_path = output_path.replace('.mp4', '_with_audio.mp4')
             if os.path.exists(final_output_path):
                 os.remove(final_output_path)
             # 构建ffmpeg命令来合并视频和音频
             audio_cmd = [
                 'ffmpeg', '-y',
-                '-i', output_path,  # 无声的跟踪视频
+                '-i', output_path, # 无声的跟踪视频
                 '-i', input_path,  # 原始视频（有音频）
-                '-c:v', 'copy',  # 复制视频流
-                '-c:a', 'copy',  # 复制音频流
-                '-map', '0:v:0',  # 使用第一个输入的视频流
-                '-map', '1:a:0',  # 使用第二个输入的音频流
-                '-shortest',  # 以最短的流为准
+                '-c:v', 'copy',    # 复制视频流
+                '-c:a', 'copy',    # 复制音频流
+                '-map', '0:v:0',   # 使用第一个输入的视频流
+                '-map', '1:a:0',   # 使用第二个输入的音频流
+                '-shortest',       # 以最短的流为准
                 final_output_path
             ]
             
             try:
                 result = subprocess.run(audio_cmd, capture_output=True, text=True, encoding='utf-8')
                 if result.returncode == 0:
-                    # 成功添加音频，删除无声视频
                     os.remove(output_path)
                 else:
                     raise Exception(result.stderr)
             except Exception as e:
                 print(f"Warning: Error adding audio - {e}")
-                # 发生错误时，重命名无声视频为最终输出
                 os.rename(output_path, final_output_path)
-
+            
             # 复制原始视频到输出目录
             original_video_path = os.path.join(output_dir, f'{video_name}.mp4')
             if os.path.exists(original_video_path):
                 os.remove(original_video_path)
             shutil.copy(input_path, original_video_path)
-
-            # 返回最终视频路径
+            
+            elapsed_time = time.time() - start_time
+            average_fps = total_frames / elapsed_time if elapsed_time > 0 else 0
+            print(f"视频导出完成，平均FPS: {average_fps:.2f}               ")
+            print(f"视频文件已保存到：{final_output_path}")
+            
             return final_output_path
-
+            
         except Exception as e:
-            raise Exception(f"Error in predict: {e}")
-        
+            raise Exception(f"视频导出模块错误: {e}")
 
-
-
-
-
-
-    def main(self, video_path, detect_model_path, obb_model_path, output_dir):
+    def main(self, video_path, detect_model_path, obb_model_path, output_dir, detect=True):
+        """主函数：协调各个模块的执行"""
         try:
-            final_output_path = self.predict(video_path, detect_model_path, obb_model_path, output_dir)
+            # 检查输入文件是否存在
+            if not os.path.exists(video_path):
+                raise FileNotFoundError(f"视频文件不存在: {video_path}")
+            
+            # 检查输出目录
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # 获取视频名称
+            video_name = os.path.basename(video_path).rsplit('.', 1)[0]
+            output_dir = os.path.join(output_dir, video_name)
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # 检测模块
+            if detect:
+                detect_results = self.detect_module(video_path, detect_model_path, obb_model_path, output_dir)
+                # 从内存中删除检测结果以节省空间
+                del detect_results
+            else:
+                # 检查是否存在检测结果文件
+                detect_result_path = os.path.join(output_dir, "detect_result.txt")
+                if not os.path.exists(detect_result_path):
+                    raise FileNotFoundError(f"检测结果文件不存在: {detect_result_path}")
+                print("跳过检测模块，使用已有检测结果...")
+                detect_results = self._load_detect_results(output_dir)
+            
+            # 追踪模块
+            track_results = self.track_module(video_path, output_dir)
+            # 从内存中删除追踪结果以节省空间
+            del track_results
+            
+            # 导出视频模块
+            final_output_path = self.export_video_module(video_path, output_dir)
+            
             return final_output_path
+            
         except KeyboardInterrupt:
             print("\n中断")
         except Exception as e:
@@ -452,14 +771,18 @@ class NoteDetector:
             print(traceback.format_exc())
 
 
-
 if __name__ == "__main__":
-
     video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\DEICIDE_standardized.mp4"
     detect_model_path = r"C:\Users\ck273\Desktop\detect_varifocalloss.pt"
     obb_model_path = r"C:\Users\ck273\Desktop\obb.pt"
     output_dir = r"D:\git\mai-chart-analyze\yolo-train\runs\detect"
+    detect = False  # 是否执行检测模块
     
     detector = NoteDetector()
-    final_output_path = detector.main(video_path, detect_model_path, obb_model_path, output_dir)
-    print(f"处理完成，输出文件：{final_output_path}")
+    final_output_path = detector.main(
+        video_path, 
+        detect_model_path, 
+        obb_model_path, 
+        output_dir,
+        detect=detect
+    )
