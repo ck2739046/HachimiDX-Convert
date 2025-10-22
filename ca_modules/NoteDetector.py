@@ -347,7 +347,7 @@ class NoteDetector:
             # 初始化跟踪器 (每个大类一个tracker)
             trackers = []
             thresholds = [0.8, 0.9, 0.8, 0.8, 0.8]  # tap, slide, touch, hold, touch_hold
-            if fps>=120: track_buffer = 10
+            if fps>=119: track_buffer = 10
             else: track_buffer = 5
             
             for thresh in thresholds:
