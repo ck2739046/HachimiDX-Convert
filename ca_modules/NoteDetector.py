@@ -1072,12 +1072,13 @@ class NoteDetector:
                     if len(track_history[track_id]) > 512:
                         track_history[track_id].pop(0)
                 
-                # 清理过期的轨迹（超过30帧未出现）
+                # 清理过期的轨迹（超过0.5秒未出现）
                 tracks_to_remove = []
+                timeout = fps // 2
                 for track_id in list(track_history.keys()):
                     if track_id not in current_track_ids:
                         frames_since_last_seen = frame_number - track_last_seen.get(track_id, frame_number)
-                        if frames_since_last_seen > 30:  # 超过30帧未出现，清理轨迹
+                        if frames_since_last_seen > timeout:  # 超过0.5秒未出现，清理轨迹
                             tracks_to_remove.append(track_id)
                 
                 for track_id in tracks_to_remove:
@@ -1209,7 +1210,7 @@ class NoteDetector:
 
 
 if __name__ == "__main__":
-    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\Customized Justice EXPERT_standardized.mp4"
+    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\Dazzle hop ADVANCED_standardized.mp4"
     detect_model_path = r"C:\Users\ck273\Desktop\detect_varifocalloss.pt"
     obb_model_path = r"C:\Users\ck273\Desktop\obb.pt"
     cls_ex_model_path = r"C:\Users\ck273\Desktop\cls-ex.pt"
