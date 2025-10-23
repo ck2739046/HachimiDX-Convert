@@ -688,7 +688,7 @@ class NoteAnalyzer:
         计算多个数据点对的 DefaultMsec 然后取平均值
         '''
 
-        def reverse_function(y, tolerance=0.01):
+        def reverse_function(y, tolerance=0.001):
             # 二分查找求解 y = 3.5x⁴ - 3.75x³ + 1.45x² - 0.05x + 0.0005 的反函数
             low, high = 0.0, 1.0
             
@@ -733,8 +733,8 @@ class NoteAnalyzer:
                 for j in range(i + 1, len(big_slope_points)):
                     time1, progress1 = big_slope_points[i]
                     time2, progress2 = big_slope_points[j]
-                    if abs(progress1 - progress2) < 0.2:
-                        continue # 忽略相近的 progress 减少误差 (20%) 
+                    if abs(progress1 - progress2) < 0.15:
+                        continue # 忽略相近的 progress 减少误差 (15%) 
                     default_msec_estimate = abs(time1 - time2) / abs(progress1 - progress2)
                     DefaultMsecs.append(default_msec_estimate)
 
@@ -802,16 +802,16 @@ class NoteAnalyzer:
 
 
     @log_error
-    def analyze_touch_reach_time(self, touch_data, fps):
+    def analyze_touch_reach_time(self, touch_data):
 
         touch_info = {}
-        for (track_id, position), path in touch_data.items():
+        for (track_id, class_id, position), path in touch_data.items():
             # 平均所有轨迹的到达时间
             times = []
             for point in path:
                 frame_num = point['frame']
                 dist = point['dist']
-                reach_end_Msec = self.predict_touch_reach_end_time(dist, frame_num, fps)
+                reach_end_Msec = self.predict_touch_reach_end_time(dist, frame_num)
                 if reach_end_Msec != 0:
                     times.append(reach_end_Msec)
                     
@@ -823,7 +823,7 @@ class NoteAnalyzer:
 
 
     @log_error
-    def predict_touch_reach_end_time(self, dist, cur_frame, fps):
+    def predict_touch_reach_end_time(self, dist, cur_frame):
         '''
         正向：
         根据 time_progress = (current_time - move_start_time) / DefaultMsec 获得 time_progress
@@ -837,7 +837,7 @@ class NoteAnalyzer:
         反推 move_start_time = current_time - time_progress * DefaultMsec
         '''
 
-        def reverse_function(y, tolerance=0.000001):
+        def reverse_function(y, tolerance=0.001):
             # 二分查找求解 y = 3.5x⁴ - 3.75x³ + 1.45x² - 0.05x + 0.0005 的反函数
             low, high = 0.0, 1.0
             
@@ -855,15 +855,14 @@ class NoteAnalyzer:
 
 
         # 反推 location_progress
-        cur_dist = dist - 17.5 if dist >= 17.5 else 0
-        total_dist = 34
-        location_progress = 1 - cur_dist / total_dist
+        total_dist = self.touch_travel_dist
+        location_progress = 1 - dist / total_dist
         if location_progress < 0.15 or location_progress > 0.85:
             return 0
         # 反推 time_progress
         time_progress = reverse_function(location_progress)
         # 反推 move_start_time
-        cur_time = cur_frame / fps * 1000  # 转换为毫秒
+        cur_time = cur_frame / self.fps * 1000  # 转换为毫秒
         move_start_time = cur_time - time_progress * self.touch_DefaultMsec
         reach_end_time = move_start_time + self.touch_DefaultMsec
 
@@ -1348,7 +1347,7 @@ class NoteAnalyzer:
             touch_data = self.preprocess_touch_data()
             if touch_data:
                 self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data)
-            #     touch_info = self.analyze_touch_reach_time(touch_data, fps)
+                touch_info = self.analyze_touch_reach_time(touch_data)
 
             # # hold
             # hold_data = self.preprocess_hold_data(final_tracks, track_results_all, predict_results_all, circle_info)
