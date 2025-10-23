@@ -212,25 +212,26 @@ class NoteAnalyzer:
 
 
     @log_error
-    def analyze_tap_reach_time(self, tap_data, circle_info, fps):
+    def analyze_tap_reach_time(self, tap_data):
 
         tap_info = {}
-        for (track_id, direction), path in tap_data.items():
+        for (track_id, class_id, direction), path in tap_data.items():
             # 平均所有轨迹的到达时间
             times = []
             for point in path:
                 frame_num = point['frame']
                 dist = point['dist']
-                reach_end_Msec = self.predict_note_reach_end_time(dist, frame_num, circle_info[2], fps)
+                reach_end_Msec = self.predict_note_reach_end_time(dist, frame_num)
                 times.append(reach_end_Msec)
             mean = np.mean(times)
-            tap_info[(track_id, direction)] = mean
+            tap_info[(track_id, class_id, direction)] = mean
 
         return tap_info
 
 
+
     @log_error
-    def predict_note_reach_end_time(self, cur_dist, cur_frame, circle_radius, fps):
+    def predict_note_reach_end_time(self, cur_dist, cur_frame):
         '''
         正向:
         [dist_offset] = -1/120 * 总距离 * (OptionNotespeed/150f -1)
@@ -251,18 +252,18 @@ class NoteAnalyzer:
         -> reach_end_Msec = leave_start_Msec + DefaultMsec
         '''
 
-        cur_time = cur_frame / fps * 1000 # 转换为毫秒
-        total_dist = circle_radius * 0.75
+        cur_time = cur_frame / self.fps * 1000 # 转换为毫秒
+        total_dist = self.note_travel_dist
         dist_offset = -1/120 * total_dist * (self.note_OptionNotespeed / 150 - 1)
         #time_offset = (self.note_OptionNotespeed / 150 - 1) * (-0.5 / (self.note_OptionNotespeed / 150 - 1)) * 1.6 * 1000 / 60
-        start_pos = circle_radius * 0.25
+        start_pos = self.judgeline_start
 
         travelled_dist = cur_dist - start_pos - dist_offset
         time_progress = travelled_dist / total_dist
         leave_start_Msec = cur_time - time_progress * self.note_DefaultMsec # + time_offset
-        reached_end_Msec = leave_start_Msec + self.note_DefaultMsec
+        reach_end_Msec = leave_start_Msec + self.note_DefaultMsec
 
-        return reached_end_Msec
+        return reach_end_Msec
 
 
 
@@ -1410,7 +1411,7 @@ class NoteAnalyzer:
             tap_data = self.preprocess_tap_data()
             if tap_data:
                 self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data)
-                #tap_info = self.analyze_tap_reach_time(tap_data)
+                tap_info = self.analyze_tap_reach_time(tap_data)
 
             # # touch
             # touch_info = {}
