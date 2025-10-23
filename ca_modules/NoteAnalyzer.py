@@ -200,8 +200,7 @@ class NoteAnalyzer:
         max = np.max(note_speeds)
         median = np.median(note_speeds)
         std_dev = np.std(note_speeds)
-        std_dev_percent = std_dev / mean * 100
-        print(f"speed of {length} tap notes: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev_percent:.3f}%")
+        print(f"speed of {length} tap notes: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
         note_DefaultMsec, note_OptionNotespeed = self.get_note_DefaultMsec(median)
         return note_DefaultMsec, note_OptionNotespeed
@@ -222,6 +221,16 @@ class NoteAnalyzer:
                 times.append(reach_end_Msec)
             mean = np.mean(times)
             tap_info[(track_id, class_id, direction)] = mean
+
+            
+            # min = np.min(times)
+            # max = np.max(times)
+            # median = np.median(times)
+            # std_dev = np.std(times)
+            # if max - min > 4:
+            #     print(f"Tap ID {track_id} Direction {direction}:")
+            #     print(f"  Mean {mean:.3f}, Min {min:.3f}, Max {max:.3f}, Median {median:.3f}, Std Dev {std_dev:.3f}")
+
 
         return tap_info
 
@@ -742,8 +751,7 @@ class NoteAnalyzer:
         max = np.max(DefaultMsecs)
         median = np.median(DefaultMsecs)
         std_dev = np.std(DefaultMsecs)
-        std_dev_percent = std_dev / median * 100
-        print(f"touch DefaultMsec {length}: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev_percent:.3f}%")
+        print(f"touch DefaultMsec {length}: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
         touch_DefaultMsec, touch_OptionNotespeed = self.get_touch_DefaultMsec(median)
         return touch_DefaultMsec, touch_OptionNotespeed
@@ -810,6 +818,14 @@ class NoteAnalyzer:
                     
             mean = np.mean(times)
             touch_info[(track_id, position)] = mean
+
+            # print(f"Touch ID {track_id} Position {position}:")
+            # min = np.min(times)
+            # max = np.max(times)
+            # median = np.median(times)
+            # std_dev = np.std(times)
+            # print(f"  Mean {mean:.3f}, Min {min:.3f}, Max {max:.3f}, Median {median:.3f}, Std Dev {std_dev:.3f}")
+
 
         return touch_info
     
@@ -1131,15 +1147,13 @@ class NoteAnalyzer:
             # max1 = np.max(head_times)
             # median1 = np.median(head_times)
             # std_dev1 = np.std(head_times)
-            # std_dev_percent1 = std_dev1 / mean_head * 100
-            # print(f"  head - Mean {mean_head:.3f}, Min {min1:.3f}, Max {max1:.3f}, Median {median1:.3f}, Std Dev {std_dev_percent1:.3f}%")
+            # print(f"  head - Mean {mean_head:.3f}, Min {min1:.3f}, Max {max1:.3f}, Median {median1:.3f}, Std Dev {std_dev1:.3f}")
 
             # min2 = np.min(tail_times)
             # max2 = np.max(tail_times)
             # median2 = np.median(tail_times)
             # std_dev2 = np.std(tail_times)
-            # std_dev_percent2 = std_dev2 / mean_tail * 100
-            # print(f"  tail - Mean {mean_tail:.3f}, Min {min2:.3f}, Max {max2:.3f}, Median {median2:.3f}, Std Dev {std_dev_percent2:.3f}%")
+            # print(f"  tail - Mean {mean_tail:.3f}, Min {min2:.3f}, Max {max2:.3f}, Median {median2:.3f}, Std Dev {std_dev2:.3f}")
 
         return hold_info
 
@@ -1330,14 +1344,18 @@ class NoteAnalyzer:
             hold_data = self.preprocess_hold_data()
             if hold_data:
                 hold_info = self.analyze_hold_reach_time(hold_data)
-            
+
+            # touch-hold
+            # touch_hold_info = {}
+            # touch_hold_data = self.preprocess_touch_hold_data()
+            # if touch_hold_data:
+            #     touch_hold_info = self.analyze_touch_hold_reach_time(touch_hold_data)
+
             # # analyze all notes info
             # self.analyze_all_notes_info(video_name, bpm, tap_info, touch_info, hold_info)
 
-
-
         except Exception as e:
-            raise Exception(f"Error in NoteAnalyzer: {e}")
+            raise Exception(f"Error in NoteAnalyzer.main: {e}")
         
 
 
