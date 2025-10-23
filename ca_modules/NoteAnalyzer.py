@@ -996,6 +996,7 @@ class NoteAnalyzer:
 
     @log_error
     def calculate_hold_head_tail(self, x1, y1, x2, y2, position):
+        return
     
 
 
@@ -1275,5 +1276,10 @@ if __name__ == "__main__":
 
     bpm = 0
 
-    analyzer = NoteAnalyzer()
-    analyzer.main(folder_path, bpm)
+    try:
+        analyzer = NoteAnalyzer()
+        analyzer.main(folder_path, bpm)
+    except Exception as e:
+        print(f"Error: {e}")
+        print(f"Error trace: {error_trace}")
+        traceback.print_exc()
