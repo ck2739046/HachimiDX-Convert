@@ -41,6 +41,7 @@ class NoteAnalyzer:
         self.judgeline_start = 0
         self.judgeline_end = 0
         self.note_travel_dist = 0
+        self.touch_travel_dist = 0
         self.bpm = 0
         self.touch_areas = {}
         self.track_data = ()
@@ -205,9 +206,9 @@ class NoteAnalyzer:
         median = np.median(note_speeds)
         std_dev = np.std(note_speeds)
         std_dev_percent = std_dev / mean * 100
-        print(f"speed of {length} tap notes: [Mean {mean:.3f}], Min {min:.3f}, Max {max:.3f}, Median {median:.3f}, Std Dev {std_dev_percent:.3f}%")
+        print(f"speed of {length} tap notes: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev_percent:.3f}%")
 
-        note_DefaultMsec, note_OptionNotespeed = self.get_note_DefaultMsec(mean)
+        note_DefaultMsec, note_OptionNotespeed = self.get_note_DefaultMsec(median)
         return note_DefaultMsec, note_OptionNotespeed
     
 
@@ -381,8 +382,8 @@ class NoteAnalyzer:
         收集所有touch音符的数据
         过滤轨迹过短的音符
         计算音符方位
-        计算音符到圆心的距离
-        过滤前后两端的数据点 (前6帧/后2帧-60fps下)
+        计算音符的三角到中心的距离
+        过滤刚离开起点的和马上要到终点的音符数据 (10%-90%距离)
 
         返回格式:
         dict{
@@ -405,8 +406,11 @@ class NoteAnalyzer:
         touch_data = {}
         counter = 0
 
-        start_idx = self.fps / 10  # 前6帧
-        end_idx = self.fps / 30    # 后2帧
+        end_tolerance = self.touch_travel_dist * 0.1
+        start_tolerance = self.touch_travel_dist * 0.1
+        valid_dist_end = 0 + end_tolerance
+        valid_dist_start = self.touch_travel_dist - start_tolerance
+        outer_size = 54 * self.video_size / 1080 # 1080p下，外部尺寸为54
 
         # read track data
         for track_id, track_data in self.track_data.items():
@@ -420,9 +424,8 @@ class NoteAnalyzer:
 
             # read track path
             valid_track_path = []
-            for i in range(len(track_path)):
+            for track_box in track_path:
 
-                track_box = track_path[i]
                 frame_num = track_box['frame']
                 x1 = track_box['x1']
                 y1 = track_box['y1']
@@ -431,17 +434,19 @@ class NoteAnalyzer:
                 cx = (x1 + x2) / 2
                 cy = (y1 + y2) / 2
 
-                # 计算距离圆心的距离
-                dist_to_center = np.sqrt(((cx - self.screen_cx)**2 + (cy - self.screen_cy)**2))
+                # 计算三角到中心的距离
+                # 根据label_notes可知，touch音符的整体尺寸=(dist+54)x2，1080p下
+                avg_touch_size = ((x2 - x1) + (y2 - y1)) / 2
+                dist = avg_touch_size / 2 - outer_size
                 # 计算方位
                 position = self.calculate_all_position(cx, cy)
                 # 过滤前后两端的数据
-                if i < start_idx:
+                if dist > valid_dist_start:
                     continue # 掐头
-                elif i > len(track_path) - end_idx:
+                elif dist < valid_dist_end:
                     continue # 去尾
                 # 添加轨迹点
-                valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist_to_center))
+                valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist))
 
 
             # 检查轨迹存在
@@ -460,14 +465,14 @@ class NoteAnalyzer:
                 continue
             # 添加到touch_data
             path = []
-            for frame_num, x1, y1, x2, y2, position, dist_to_center in valid_track_path:
+            for frame_num, x1, y1, x2, y2, position, dist in valid_track_path:
                 path.append({
                     'frame': frame_num,
                     'x1': x1,
                     'y1': y1,
                     'x2': x2,
                     'y2': y2,
-                    'dist': dist_to_center
+                    'dist': dist
                 })
             touch_data[(track_id, class_id, positions[0])] = path
 
@@ -656,7 +661,7 @@ class NoteAnalyzer:
 
 
     @log_error
-    def estimate_touch_DefaultMsec(self, touch_data, circle_info, fps):
+    def estimate_touch_DefaultMsec(self, touch_data):
         '''
         正向：
         根据 time_progress = (current_time - move_start_time) / DefaultMsec 获得 time_progress
@@ -671,7 +676,7 @@ class NoteAnalyzer:
 
         方案:
         已知 current_dist, current_time, 求解 DefaultMsec, move_start_time
-        通过dump游戏得知total_Dist = 34 (对于标准1920x1080屏幕)
+        通过dump游戏得知total_Dist = 34 (对于标准1080p)
         DispAdjustFlame: 0 (时间微调参数没有影响, 可以忽略)
         DefaultCorlsPos Values: [(0.0, 34.0, -1.0), (0.0, -34.0, -1.0), (34.0, 0.0, 0.0), (-34.0, 0.0, 0.0)]
 
@@ -683,7 +688,7 @@ class NoteAnalyzer:
         计算多个数据点对的 DefaultMsec 然后取平均值
         '''
 
-        def reverse_function(y, tolerance=0.000001):
+        def reverse_function(y, tolerance=0.01):
             # 二分查找求解 y = 3.5x⁴ - 3.75x³ + 1.45x² - 0.05x + 0.0005 的反函数
             low, high = 0.0, 1.0
             
@@ -701,27 +706,24 @@ class NoteAnalyzer:
 
 
         DefaultMsecs = []
-        dist_min = 17.5
-        #dist_max = 51.5
-        total_dist = 34
-        for (track_id, position), path in touch_data.items():
+
+        for (track_id, class_id, position), path in touch_data.items():
 
             # 过滤掉斜率较小的轨迹点
             big_slope_points = []
             for point in path:
-                # 反推 location_progress
-                dist = point['dist']
-                cur_dist = dist - dist_min if dist >= dist_min else 0
-                location_progress = 1 - cur_dist / total_dist
+                # 反推 location_progress (保留15%-85%的点)
+                cur_dist = point['dist']
+                location_progress = 1 - cur_dist / self.touch_travel_dist
                 if location_progress < 0.15 or location_progress > 0.85:
                     continue
                 # 反推 time_progress
                 time_progress = reverse_function(location_progress)
                 # 加入列表
-                cur_time = point['frame'] / fps * 1000 # 转换为毫秒
+                cur_time = point['frame'] / self.fps * 1000 # 帧数转换为毫秒
                 big_slope_points.append((cur_time, time_progress))
 
-            if len(big_slope_points) < 4:
+            if len(big_slope_points) < 6:
                 print(f"estimate_touch_DefaultMsec: [track_id {track_id}] not enough big slope points, length: {len(big_slope_points)}")
                 continue
 
@@ -732,7 +734,7 @@ class NoteAnalyzer:
                     time1, progress1 = big_slope_points[i]
                     time2, progress2 = big_slope_points[j]
                     if abs(progress1 - progress2) < 0.2:
-                        continue # 忽略相近的 progress 减少误差 (2%) 
+                        continue # 忽略相近的 progress 减少误差 (20%) 
                     default_msec_estimate = abs(time1 - time2) / abs(progress1 - progress2)
                     DefaultMsecs.append(default_msec_estimate)
 
@@ -1327,6 +1329,7 @@ class NoteAnalyzer:
             self.judgeline_start = self.video_size * 120 / 1080
             self.judgeline_end = self.video_size * 480 / 1080
             self.note_travel_dist = self.judgeline_end - self.judgeline_start
+            self.touch_travel_dist = 34 * self.video_size / 1080 # 1080p下，touch移动距离为34像素
             self.bpm = bpm
             self.touch_areas = self.get_touch_areas()
             self.noteDetector = NoteDetector.NoteDetector()
@@ -1343,8 +1346,8 @@ class NoteAnalyzer:
             # # touch
             touch_info = {}
             touch_data = self.preprocess_touch_data()
-            # if touch_data:
-            #     self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
+            if touch_data:
+                self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data)
             #     touch_info = self.analyze_touch_reach_time(touch_data, fps)
 
             # # hold
