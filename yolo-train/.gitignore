@@ -1,7 +1,12 @@
 *.mp4
-datasets/valid/
-datasets/train/
-datasets/backup/
+dataset_detect/valid/
+dataset_detect/train/
+dataset_obb/valid/
+dataset_obb/train/
+dataset_ex_cls/train/
+dataset_ex_cls/val/
+dataset_break_cls/train/
+dataset_break_cls/val/
 runs/detect/
 yolo11*.pt
 input/
@@ -11,3 +16,7 @@ __pycache__/
 *.zip
 sdez*/
 *.jsonl
+train/
+dataset_detect.7z
+runs/classify/
+*.cache

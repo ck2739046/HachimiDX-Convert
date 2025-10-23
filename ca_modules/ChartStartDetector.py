@@ -163,6 +163,8 @@ class ChartStartDetector:
             if state.get("debug", True):
                 # crop and resize
                 screen_r = round(state["circle_radius"] / 0.88)
+                if screen_r >= state["video_height"] / 2:
+                    screen_r = round(state["video_height"] / 2 - 10)
                 x1 = circle_center[0] - screen_r
                 x2 = circle_center[0] + screen_r
                 y1 = circle_center[1] - screen_r

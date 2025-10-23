@@ -13,7 +13,7 @@ if exist "bin\Release\net472\Dump_Notes.dll" (
 
 REM 复制dll到游戏
 if exist "Dump_Notes.dll" (
-    copy "Dump_Notes.dll" "C:\maimai\155\Package\Mods"
+    copy "Dump_Notes.dll" "C:\maimai\160\Package\Mods"
     exit
 ) else (
     echo.

@@ -43,7 +43,7 @@ class JudgeLineDetector:
             raise Exception(f"Error in JudgeLineDetector: {e}")
 
 
-    def detect_circle(self, cap, state, target=15) -> list:
+    def detect_circle(self, cap, state, target=15, mode='source') -> list:
         """采样15个帧, 检测判定线圆形，返回圆心和半径
         arg: cap, state(video_height, total_frames), target(可选,默认15)
         ret: circle_center(x, y), circle_radius, chart_start
@@ -64,9 +64,22 @@ class JudgeLineDetector:
                 if not ret: break # end of video
                 print(f"Judge Line Detector...Detect_circle...{frame_counter}/{total_frames}", end="\r")
 
-                # 转换为灰度图，二值化突出屏幕部分 (大于180的全白)
+                # 预处理
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+
+                # 如果是录屏，直接固定阈值二值化
+                if mode == 'source':
+                    _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+                # 如果是拍摄，使用Canny边缘检测
+                elif mode == 'camera shot':
+                    # 自适应Canny边缘检测
+                    median = np.median(gray)
+                    lower = int(max(0, 0.66 * median))
+                    upper = int(min(255, 1.33 * median))
+                    binary = cv2.Canny(gray, lower, upper)
+                    # 形态学闭操作，连接断裂边缘
+                    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+                    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
 
                 # 寻找轮廓
                 contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -107,6 +120,7 @@ class JudgeLineDetector:
             most_common = max(set(circles_detected), key=circles_detected.count)
             circle_center = (most_common[0], most_common[1])
             circle_radius = most_common[2]
+            circle_radius = round(circle_radius * 1.01)
 
             return circle_center, circle_radius, frame_counter
 
@@ -302,10 +316,14 @@ class JudgeLineDetector:
                 )
 
             # crop and resize frame
+            if screen_r >= state["video_height"] / 2:
+                screen_r = round(state["video_height"] / 2 - 10)
+    
             x1 = self.circle_center[0] - screen_r
             x2 = self.circle_center[0] + screen_r
             y1 = self.circle_center[1] - screen_r
             y2 = self.circle_center[1] + screen_r
+
             frame = frame[y1:y2, x1:x2]
             frame = cv2.resize(frame, (1000, 1000))
 
