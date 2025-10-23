@@ -505,7 +505,7 @@ class NoteDetector:
             
             elapsed_time = time.time() - start_time
             average_fps = total_frames / elapsed_time if elapsed_time > 0 else 0
-            print(f"追踪完成，平均FPS: {average_fps:.2f}")
+            print(f"追踪完成，平均FPS: {average_fps:.2f}                    ")
             
             # 返回final_tracks用于后续分类处理
             return final_tracks
@@ -1209,7 +1209,7 @@ class NoteDetector:
 
 
 if __name__ == "__main__":
-    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\DEICIDE_standardized.mp4"
+    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\Customized Justice EXPERT_standardized.mp4"
     detect_model_path = r"C:\Users\ck273\Desktop\detect_varifocalloss.pt"
     obb_model_path = r"C:\Users\ck273\Desktop\obb.pt"
     cls_ex_model_path = r"C:\Users\ck273\Desktop\cls-ex.pt"

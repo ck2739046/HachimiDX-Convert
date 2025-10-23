@@ -1,3 +1,4 @@
+from collections import defaultdict
 import json
 import os
 import cv2
@@ -5,9 +6,9 @@ import numpy as np
 import math
 import functools
 import traceback
-from ultralytics import YOLO
 import time
 from math import dist, gcd
+import NoteDetector
 
 error_trace = []
 
@@ -25,28 +26,42 @@ def log_error(func):
 
 class NoteAnalyzer:
     def __init__(self):
+
+        # 速度常数
         self.note_DefaultMsec = 0
         self.note_OptionNotespeed = 0
         self.touch_DefaultMsec = 0
         self.touch_OptionNotespeed = 0
-        self.cap = None
-        self.touch_type_classify_model = None
-        self.touch_scale_classify_regular_model = None
-        self.touch_scale_classify_each_model = None
-        self.touch_areas = None
+
+        # 常用变量
+        self.video_size = 0
+        self.fps = 0
+        self.screen_cx = 0
+        self.screen_cy = 0
+        self.judgeline_start = 0
+        self.judgeline_end = 0
+        self.note_travel_dist = 0
+        self.bpm = 0
+        self.touch_areas = {}
+        self.track_data = ()
+        self.noteDetector = None
+        self.video_path = ""
 
 
 
     # debug
     @log_error
-    def preprocess_tap_data(self, final_tracks, track_results_all, predict_results_all, circle_info):
+    def preprocess_tap_data(self):
         '''
-        坐标使用predict_results_all的数据
-        过滤scale阶段的数据, 只保留move阶段的数据
+        收集所有tap音符的数据
+        过滤轨迹过短的音符
+        计算音符方向
+        计算音符到圆心的距离
+        过滤刚离开起点的和马上要到终点的音符数据 (10%-90%距离)
 
         返回格式:
         dict{
-            key: (track_id, position),
+            key: (track_id, class_id, position),
             value: note path list
             [
                 {
@@ -55,8 +70,6 @@ class NoteAnalyzer:
                     'y1': y1,
                     'x2': x2,
                     'y2': y2,
-                    'center_x': center_x,
-                    'center_y': center_y,
                     'dist': dist_to_center
                 },
                 ...
@@ -64,122 +77,80 @@ class NoteAnalyzer:
         }
         '''
 
-        circle_center_x, circle_center_y, circle_radius = circle_info
         tap_data = {}
         counter = 0
 
-        close_tolerance = circle_radius * 0.05
-        start_tolerance = circle_radius * 0.02
-        dist_start = circle_radius * 0.25
-        dist_end = circle_radius
+        end_tolerance = self.note_travel_dist * 0.1
+        start_tolerance = self.note_travel_dist * 0.1
+        valid_judgeline_start = self.judgeline_start + start_tolerance
+        valid_judgeline_end = self.judgeline_end - end_tolerance
 
         # read final_tracks
-        for track_id, track_data in final_tracks.items():
+        for track_id, track_data in self.track_data.items():
+
             if 'path' not in track_data: continue
             track_path = track_data['path']
-            if len(track_path) < 5: continue
+            if 'class_id' not in track_data: continue
             class_id = round(track_data['class_id'])
-            if class_id != 2: continue # tap
+            if self.noteDetector.get_main_class_id(class_id) != 0:
+                continue # 0 = tap，忽视非tap音符
 
-            predict_track_path = []
 
+            # read track path
+            valid_track_path = []
             for track_box in track_path:
-                track_frame_num = round(track_box['frame'])
-                track_conf = float(track_box['conf'])
-                track_x1 = round(track_box['x1'])
-                track_y1 = round(track_box['y1'])
-                track_x2 = round(track_box['x2'])
-                track_y2 = round(track_box['y2'])
-                track_center_x = (track_x1 + track_x2) / 2
-                track_center_y = (track_y1 + track_y2) / 2
 
-                match_found = []
+                frame_num = track_box['frame']
+                x1 = track_box['x1']
+                y1 = track_box['y1']
+                x2 = track_box['x2']
+                y2 = track_box['y2']
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
 
-                # 从predict_results_all中获取对应的音符
-                predict_results_list = predict_results_all[track_frame_num]
-                for predict_result in predict_results_list:
-
-                    # 判断 conf
-                    predict_conf = float(predict_result['confidence'])
-                    if track_conf != predict_conf: continue
-                    # 判断 class_id
-                    predict_class_id = round(predict_result['class'])
-                    if predict_class_id != class_id: continue
-                    # 判断 中心距离
-                    box = predict_result['box']
-                    predict_x1 = round(box['x1'])
-                    predict_y1 = round(box['y1'])
-                    predict_x2 = round(box['x2'])
-                    predict_y2 = round(box['y2'])
-                    predict_center_x = (predict_x1 + predict_x2) / 2
-                    predict_center_y = (predict_y1 + predict_y2) / 2
-                    if abs(track_center_x - predict_center_x) > close_tolerance or \
-                        abs(track_center_y - predict_center_y) > close_tolerance: continue 
-                    # 计算距离圆心的距离
-                    dist_to_center = np.sqrt(((predict_center_x - circle_center_x)**2 + (predict_center_y - circle_center_y)**2))                   
-                    # 计算方向(1-8)
-                    position = self.calculate_oct_position(circle_center_x, circle_center_y, predict_center_x, predict_center_y)
-                    # 添加到匹配列表
-                    match_found.append((track_frame_num,
-                                        predict_x1,
-                                        predict_y1,
-                                        predict_x2,
-                                        predict_y2,
-                                        predict_center_x,
-                                        predict_center_y,
-                                        position,
-                                        dist_to_center))
-
-
-                if not match_found:
-                    print(f"preprocess_tap_data: no match found for track_id {track_id} at frame {track_frame_num}")
-                    continue
-                elif len(match_found) > 1:
-                    print(f"preprocess_tap_data: multiple matches found for track_id {track_id} at frame {track_frame_num}")
-                    match_found.sort(key=lambda x: x[-1]) # 按距离排序
-
-                # 过滤 scale 阶段的数据
-                dist_to_center = match_found[0][-1]
-                if abs(dist_to_center - dist_start) < start_tolerance:
+                # 计算距离圆心的距离
+                dist_to_center = np.sqrt(((cx - self.screen_cx)**2 + (cy - self.screen_cy)**2))
+                # 计算方向(1-8)
+                position = self.calculate_oct_position(self.screen_cx, self.screen_cy, cx, cy)
+                # 过滤10%-90%距离的数据
+                if dist_to_center < valid_judgeline_start:
                     continue # 掐头
-                elif dist_to_center > dist_end:
+                elif dist_to_center > valid_judgeline_end:
                     continue # 去尾
+                # 添加轨迹点
+                valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist_to_center))
 
-                predict_track_path.append(match_found[0])
 
-            
-            if not predict_track_path:
-                print(f"preprocess_tap_data: predict_track_path not found for track_id {track_id}")
+            # 检查轨迹存在
+            if not valid_track_path:
+                print(f"preprocess_tap_data: no valid_track_path for track_id {track_id}")
                 continue
-            predict_track_path.sort(key=lambda x: x[0]) # 按frame排序
+            valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
             # 检验长度
-            if len(predict_track_path) < 5:
-                print(f"preprocess_tap_data: predict_track_path too short for track_id {track_id}, length: {len(predict_track_path)}")
+            if len(valid_track_path) < 6:
+                print(f"preprocess_tap_data: valid_track_path too short for track_id {track_id}, length: {len(valid_track_path)}")
                 continue
-            # 检验方位
-            positions = [x[7] for x in predict_track_path]
+            # 检验方位一致
+            positions = [x[5] for x in valid_track_path]
             if len(set(positions)) != 1:
                 print(f"preprocess_tap_data: positions not consistent for track_id {track_id}")
                 continue
             # 添加到tap_data
             path = []
-            for frame_num, x1, y1, x2, y2, center_x, center_y, position, dist_to_center in predict_track_path:
+            for frame_num, x1, y1, x2, y2, position, dist_to_center in valid_track_path:
                 path.append({
                     'frame': frame_num,
                     'x1': x1,
                     'y1': y1,
                     'x2': x2,
                     'y2': y2,
-                    'center_x': center_x,
-                    'center_y': center_y,
                     'dist': dist_to_center
                 })
-            tap_data[(track_id, positions[0])] = path
+            tap_data[(track_id, class_id, positions[0])] = path
 
             counter += 1
-            print(f"preprocessing tap data...{counter}", end='\r')
 
-            #self.draw_path_on_frame(track_id, path[0]['frame']+3, path, circle_info)
+            # self.draw_path_on_frame(track_id, path[0]['frame']+3, path)
 
         if not tap_data:
             print("preprocess_tap_data: no tap data")
@@ -317,32 +288,36 @@ class NoteAnalyzer:
 
 
     @log_error
-    def draw_path_on_frame(self, track_id, frame_num, path, circle_info):
-          
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-        ret, frame = self.cap.read()
+    def draw_path_on_frame(self, track_id, frame_num, path):
+
+        cap = cv2.VideoCapture(self.video_path)  
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+        ret, frame = cap.read()
         if not ret:
             print(f"draw_path_on_frame: failed to read frame {frame_num}")
+            cap.release()
             return
         
-        circle_center_x, circle_center_y, circle_radius = circle_info
         cv2.putText(frame, f"track_id: {track_id}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        cv2.circle(frame, (round(circle_center_x), round(circle_center_y)), round(circle_radius*0.25), (0, 255, 0), 2)
+        # 绘制两个圈
+        cv2.circle(frame, (round(self.screen_cx), round(self.screen_cy)), round(self.judgeline_end), (0, 255, 0), 2)
+        cv2.circle(frame, (round(self.screen_cx), round(self.screen_cy)), round(self.judgeline_start), (255, 0, 0), 2)
 
         for point in path:
             frame_num = point['frame']
-            center_x = point['center_x']
-            center_y = point['center_y']
-            cv2.circle(frame, (round(center_x), round(center_y)), 3, (0, 0, 255), -1)
+            cx = (point['x1'] + point['x2']) // 2
+            cy = (point['y1'] + point['y2']) // 2
+            cv2.circle(frame, (round(cx), round(cy)), 3, (0, 0, 255), -1)
 
         # Resize and show frame
-        resized_frame = cv2.resize(frame, None, fx=0.8, fy=0.8, interpolation=cv2.INTER_AREA)
+        resized_frame = cv2.resize(frame, (900, 900), interpolation=cv2.INTER_AREA)
         window_name = f'Tap ID: {track_id}'
         cv2.namedWindow(window_name)
         cv2.moveWindow(window_name, 500, 80)
         cv2.imshow(window_name, resized_frame)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+        cap.release()
 
 
 
@@ -350,25 +325,25 @@ class NoteAnalyzer:
     def calculate_oct_position(self, circle_center_x, circle_center_y, note_x, note_y):
         x_diff = note_x - circle_center_x
         y_diff = note_y - circle_center_y
-        if x_diff > 0 and y_diff < 0:
+        if x_diff >= 0 and y_diff <= 0:
             # 1, 2
             if abs(x_diff) < abs(y_diff):
                 return 1
             else:
                 return 2
-        elif x_diff > 0 and y_diff > 0:
+        elif x_diff >= 0 and y_diff >= 0:
             # 3, 4
             if abs(x_diff) > abs(y_diff):
                 return 3
             else:
                 return 4
-        elif x_diff < 0 and y_diff > 0:
+        elif x_diff <= 0 and y_diff >= 0:
             # 5, 6
             if abs(x_diff) < abs(y_diff):
                 return 5
             else:
                 return 6
-        elif x_diff < 0 and y_diff < 0:
+        elif x_diff <= 0 and y_diff <= 0:
             # 7, 8
             if abs(x_diff) > abs(y_diff):
                 return 7
@@ -1381,208 +1356,105 @@ class NoteAnalyzer:
 
 
 
+
+        
+
     # debug
-    def process(self, state: dict):
+    def main(self, main_folder: str, bpm: float):
         try:
-            video_name = state['video_name']
-            print(f"NoteAnalyzer: {video_name}")
-            print("NoteAnalyzer Initialize...", end = '\r')
-
-            circle_center_x = 540
-            circle_center_y = 540
-            circle_radius = 478
-            circle_info = (circle_center_x, circle_center_y, circle_radius)
-            detect_video_path = state['detect_video_path']
-            output_dir = os.path.dirname(detect_video_path)
-            debug = state['debug']
-            fps = state['video_fps']
-            bpm = state['bpm']
-            std_video = state['std_video_path']
-            self.touch_areas = state['touch_areas']
-            self.cap = cv2.VideoCapture(std_video)
-
-            touch_type_classify_model_path = r"D:\git\mai-chart-analyze\yolo-train\runs\classify\touch_type_classify\weights\best.pt"
-            if not os.path.exists(touch_type_classify_model_path):
-                raise FileNotFoundError(f"Touch type classify model not found: {touch_type_classify_model_path}")
-            self.touch_type_classify_model = YOLO(touch_type_classify_model_path)
-
-            touch_scale_classify_regular_model_path = r"D:\git\mai-chart-analyze\yolo-train\runs\classify\touch_scale_classify_regular\weights\best.pt"
-            if not os.path.exists(touch_scale_classify_regular_model_path):
-                raise FileNotFoundError(f"Touch scale classify regular model not found: {touch_scale_classify_regular_model_path}")
-            self.touch_scale_classify_regular_model = YOLO(touch_scale_classify_regular_model_path)
-
-            touch_scale_classify_each_model_path = r"D:\git\mai-chart-analyze\yolo-train\runs\classify\touch_scale_classify_each\weights\best.pt"
-            if not os.path.exists(touch_scale_classify_each_model_path):
-                raise FileNotFoundError(f"Touch scale classify each model not found: {touch_scale_classify_each_model_path}")
-            self.touch_scale_classify_each_model = YOLO(touch_scale_classify_each_model_path)
-
+            # 在文件夹查找视频文件
+            video_path = None
+            for root, _, files in os.walk(main_folder):
+                for fn in files:
+                    if fn.lower().endswith('standardized.mp4'):
+                        self.video_path = os.path.join(root, fn)
+                        break
+            if not self.video_path:
+                raise Exception(f"No standardized.mp4 file found under {main_folder}")
             
-            # Load detection data
-            final_tracks, track_results_all, predict_results_all, metadata = self.load_detection_data(output_dir, video_name)
+            # 获取视频信息
+            cap = cv2.VideoCapture(self.video_path)
+            self.video_size = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.fps = round(cap.get(cv2.CAP_PROP_FPS))
+            #total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            cap.release()
+
+            # 定义一些常数
+            self.screen_cx = self.video_size // 2
+            self.screen_cy = self.screen_cx
+            # 1080p下，音符从120出现480结束
+            self.judgeline_start = self.video_size * 120 / 1080
+            self.judgeline_end = self.video_size * 480 / 1080
+            self.note_travel_dist = self.judgeline_end - self.judgeline_start
+            self.bpm = bpm
+            self.touch_areas = self.get_touch_areas()
+            self.noteDetector = NoteDetector.NoteDetector()
+            self.track_data = self.noteDetector._load_track_results(main_folder)
+
 
             # tap
             tap_info = {}
-            tap_data = self.preprocess_tap_data(final_tracks, track_results_all, predict_results_all, circle_info)
-            if tap_data:
-                self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
-                tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps)
+            tap_data = self.preprocess_tap_data()
+            # if tap_data:
+            #     self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data, circle_info, fps)
+            #     tap_info = self.analyze_tap_reach_time(tap_data, circle_info, fps)
 
-            # touch
-            touch_info = {}
-            touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
-            if touch_data:
-                self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
-                touch_info = self.analyze_touch_reach_time(touch_data, fps)
+            # # touch
+            # touch_info = {}
+            # touch_data = self.preprocess_touch_data(final_tracks, track_results_all, predict_results_all, circle_info)
+            # if touch_data:
+            #     self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data, circle_info, fps)
+            #     touch_info = self.analyze_touch_reach_time(touch_data, fps)
 
-            # hold
-            hold_data = self.preprocess_hold_data(final_tracks, track_results_all, predict_results_all, circle_info)
-            if hold_data:
-                hold_info = self.analyze_hold_reach_time(hold_data, circle_info, fps)
+            # # hold
+            # hold_data = self.preprocess_hold_data(final_tracks, track_results_all, predict_results_all, circle_info)
+            # if hold_data:
+            #     hold_info = self.analyze_hold_reach_time(hold_data, circle_info, fps)
             
-            # analyze all notes info
-            self.analyze_all_notes_info(video_name, bpm, tap_info, touch_info, hold_info)
+            # # analyze all notes info
+            # self.analyze_all_notes_info(video_name, bpm, tap_info, touch_info, hold_info)
 
 
 
         except Exception as e:
             raise Exception(f"Error in NoteAnalyzer: {e}")
-        finally:
-            if self.cap is not None:
-                self.cap.release()
         
 
 
+    def get_touch_areas(self) -> dict:
+        # 1080p的触摸区域中心坐标
+        std_touch_areas = {
+            # A
+            'A1': (693, 171), 'A2': (909, 388), 'A3': (908, 693), 'A4': (692, 910),
+            'A5': (387, 909), 'A6': (170, 694), 'A7': (170, 388), 'A8': (386, 170),
+            # B
+            'B1': (624, 336), 'B2': (745, 456), 'B3': (744, 626), 'B4': (624, 745),
+            'B5': (455, 745), 'B6': (335, 626), 'B7': (335, 456), 'B8': (454, 336),
+            # C
+            'C1': (540, 540),
+            # D
+            'D1': (540, 117), 'D2': (840, 241), 'D3': (963, 542), 'D4': (839, 840),
+            'D5': (540, 964), 'D6': (241, 840), 'D7': (116, 540), 'D8': (239, 241),
+            # E
+            'E1': (540, 229), 'E2': (760, 320), 'E3': (852, 540), 'E4': (760, 761),
+            'E5': (539, 853), 'E6': (319, 760), 'E7': (228, 540), 'E8': (319, 321),
+        }
+        new_touch_areas = {}
+        for area_label, (x, y) in std_touch_areas.items():
+            scaled_x = round((x - 540) * self.video_size / 1080 + self.screen_cx)
+            scaled_y = round((y - 540) * self.video_size / 1080 + self.screen_cy)
+            new_touch_areas[area_label] = (scaled_x, scaled_y)
+        return new_touch_areas
 
-
-    def load_detection_data(self, output_dir, video_name):
-        try:
-            # 加载final_tracks
-            final_tracks_path = os.path.join(output_dir, f'{video_name}_final_tracks.json')
-            with open(final_tracks_path, 'r', encoding='utf-8') as f:
-                final_tracks = json.load(f)
-
-            # 加载track_results_all from JSONL
-            track_results_path = os.path.join(output_dir, f'{video_name}_track_results.jsonl')
-            track_results_all = {}
-            
-            if os.path.exists(track_results_path):
-                with open(track_results_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            frame_data = json.loads(line)
-                            frame_num = frame_data['frame']
-                            track_results_all[frame_num] = frame_data['results']
-            
-            # 加载predict_results_all from JSONL
-            predict_results_path = os.path.join(output_dir, f'{video_name}_predict_results.jsonl')
-            predict_results_all = {}
-            
-            if os.path.exists(predict_results_path):
-                with open(predict_results_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            frame_data = json.loads(line)
-                            frame_num = frame_data['frame']
-                            predict_results_all[frame_num] = frame_data['results']
-
-            # 加载元数据
-            metadata_path = os.path.join(output_dir, f'{video_name}_metadata.json')
-            metadata = None
-            if os.path.exists(metadata_path):
-                with open(metadata_path, 'r', encoding='utf-8') as f:
-                    metadata = json.load(f)
-            
-            return final_tracks, track_results_all, predict_results_all, metadata
-            
-        except Exception as e:
-            raise Exception(f"Error in load_detection_data: {e}")
 
 
 
 if __name__ == "__main__":
 
+    folder_name = "Customized Justice EXPERT_standardized"
+    folder_path = rf"D:\git\mai-chart-analyze\yolo-train\runs\detect\{folder_name}"
+
+    bpm = 0
+
     analyzer = NoteAnalyzer()
-
-
-    touch_areas = {
-        'C1': {'center': ((539, 541))},
-        'B1': {'center': ((624, 336))},
-        'B2': {'center': ((745, 456))},
-        'B3': {'center': ((744, 626))},
-        'B4': {'center': ((624, 745))},
-        'B5': {'center': ((455, 745))},
-        'B6': {'center': ((335, 626))},
-        'B7': {'center': ((335, 456))},
-        'B8': {'center': ((454, 336))},
-        'E1': {'center': ((540, 229))},
-        'E2': {'center': ((760, 320))},
-        'E3': {'center': ((852, 540))},
-        'E4': {'center': ((760, 761))},
-        'E5': {'center': ((539, 853))},
-        'E6': {'center': ((319, 760))},
-        'E7': {'center': ((228, 540))},
-        'E8': {'center': ((319, 321))},
-        'A1': {'center': ((693, 171))},
-        'A2': {'center': ((909, 388))},
-        'A3': {'center': ((908, 693))},
-        'A4': {'center': ((692, 910))},
-        'A5': {'center': ((387, 909))},
-        'A6': {'center': ((170, 694))},
-        'A7': {'center': ((170, 388))},
-        'A8': {'center': ((386, 170))},
-        'D1': {'center': ((540, 117))},
-        'D2': {'center': ((840, 241))},
-        'D3': {'center': ((963, 542))},
-        'D4': {'center': ((839, 840))},
-        'D5': {'center': ((540, 964))},
-        'D6': {'center': ((241, 840))},
-        'D7': {'center': ((116, 540))},
-        'D8': {'center': ((239, 241))}
-    }
-
-    
-    id = '6.25'
-    state1 = {
-        'video_name': f'test_{id}',
-        'detect_video_path': rf"D:\git\mai-chart-analyze\yolo-train\runs\detect\test_{id}\test_{id}_tracked.mp4",
-        'std_video_path': rf"D:\git\mai-chart-analyze\yolo-train\runs\detect\test_{id}\test_{id}_standardlized.mp4",
-        'debug': True,
-        'video_fps': 60,
-        'bpm': 170, # test
-        'touch_areas': touch_areas,
-    }
-    
-
-    state2 = {
-        'video_name': '踊',
-        'detect_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\踊\踊_tracked.mp4",
-        'std_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\踊\踊_standardlized.mp4",
-        'debug': True,
-        'video_fps': 60,
-        'bpm': 128, # 踊
-        'touch_areas': touch_areas,
-    }
-
-    state3 = {
-        'video_name': '[maimai谱面确认] 天蓋 MASTER-p01-116',
-        'detect_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\[maimai谱面确认] 天蓋 MASTER-p01-116\[maimai谱面确认] 天蓋 MASTER-p01-116_tracked.mp4",
-        'std_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\[maimai谱面确认] 天蓋 MASTER-p01-116\[maimai谱面确认] 天蓋 MASTER-p01-116_standardlized.mp4",
-        'debug': True,
-        'video_fps': 60,
-        'bpm': 178, # 天蓋
-        'touch_areas': touch_areas,
-    }
-
-    state4 = {
-        'video_name': 'Hurtling Boys EXPERT',
-        'detect_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\Hurtling Boys EXPERT\Hurtling Boys EXPERT_tracked.mp4",
-        'std_video_path': r"D:\git\mai-chart-analyze\yolo-train\runs\detect\Hurtling Boys EXPERT\Hurtling Boys EXPERT_standardlized.mp4",
-        'debug': True,
-        'video_fps': 60,
-        'bpm': 195,
-        'touch_areas': touch_areas,
-    }
-
-    analyzer.process(state4)
+    analyzer.main(folder_path, bpm)

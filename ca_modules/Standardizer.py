@@ -609,10 +609,10 @@ if __name__ == "__main__":
     # start_frame = 150
     # end_frame = 4100
 
-    video_path = r"C:\Users\ck273\Desktop\風又ねリ\DEICIDE.mp4"
+    video_path = r"C:\Users\ck273\Desktop\風又ねリ\Customized Justice EXPERT.mp4"
     video_mode = "source"
-    start_frame = 370
-    end_frame = 8910
+    start_frame = 690
+    end_frame = 17170
 
     try:
         result_path = standardizer.standardize_video(video_path, start_frame, end_frame, video_mode, target_res=1080)
