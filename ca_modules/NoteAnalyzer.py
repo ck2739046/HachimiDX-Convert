@@ -879,250 +879,123 @@ class NoteAnalyzer:
 
     # debug
     @log_error
-    def preprocess_hold_data(self, final_tracks, track_results_all, predict_results_all, circle_info):
+    def preprocess_hold_data(self):
         '''
-        坐标使用predict_results_all的数据
-        过滤scale阶段的数据, 只保留move阶段的数据
+        收集所有hold音符的数据
+        过滤轨迹过短的音符
+        计算音符方向
+        分离头尾
+        分别计算头尾到圆心的距离
+        过滤刚离开起点的和马上要到终点的音符数据 (10%-90%距离)
 
         返回格式:
         dict{
-            key: (track_id, position),
-            value: two note path list (前半/后半)
+            key: (track_id, class_id, position),
+            value: note path list
             [
                 {
                     'frame': frame_num,
-                    'x1': x1,
-                    'y1': y1,
-                    'x2': x2,
-                    'y2': y2,
-                    'center_x': center_x,
-                    'center_y': center_y,
-                    'dist': dist_to_center
+                    'x-head': x1,
+                    'y-head': y1,
+                    'x-tail': x2,
+                    'y-tail': y2,
+                    'dist-head': dist_head,
+                    'dist-tail': dist_tail
                 },
                 ...
-            ],
-            ...
+            ]
         }
         '''
 
-        def split_dist(frame_num, x1, y1, x2, y2, tan_22_5, long, short, circle_info, position):
-
-            circle_center_x, circle_center_y, circle_radius = circle_info
-            cx = (x1 + x2) / 2
-            cy = (y1 + y2) / 2
-            height = abs(y2 - y1)
-            width = abs(x2 - x1)
-
-            # 正方形
-            if abs(width - height) < circle_radius * 0.02:
-                dist_to_center = np.sqrt(((cx - circle_center_x) ** 2 + (cy - circle_center_y) ** 2))
-                return dist_to_center, dist_to_center
-
-            if width > height:
-                # 横向长方形 (2/3/6/7)
-                x_offset = abs(cx - x1) - short
-                y_offset = abs(cy - y1) - long
-                x_offset_baseY = y_offset / tan_22_5
-                y_offset_baseX = x_offset * tan_22_5
-                final_x_offset = (x_offset + x_offset_baseY) / 2
-                final_y_offset = (y_offset + y_offset_baseX) / 2
-            else:
-                # 纵向长方形 (1/4/5/8)
-                x_offset = abs(cx - x1) - long
-                y_offset = abs(cy - y1) - short
-                x_offset_baseY = y_offset * tan_22_5
-                y_offset_baseX = x_offset / tan_22_5
-                final_x_offset = (x_offset + x_offset_baseY) / 2
-                final_y_offset = (y_offset + y_offset_baseX) / 2
-
-            if position == 1 or position == 2:
-                tail_x = cx - final_x_offset
-                tail_y = cy + final_y_offset
-                head_x = cx + final_x_offset
-                head_y = cy - final_y_offset
-            elif position == 3 or position == 4:
-                tail_x = cx - final_x_offset
-                tail_y = cy - final_y_offset
-                head_x = cx + final_x_offset
-                head_y = cy + final_y_offset
-            elif position == 5 or position == 6:
-                tail_x = cx + final_x_offset
-                tail_y = cy - final_y_offset
-                head_x = cx - final_x_offset
-                head_y = cy + final_y_offset
-            elif position == 7 or position == 8:
-                tail_x = cx + final_x_offset
-                tail_y = cy + final_y_offset
-                head_x = cx - final_x_offset
-                head_y = cy - final_y_offset
-
-            # # 读取帧
-            # self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-            # ret, frame = self.cap.read()
-            # # 绘制点
-            # cv2.circle(frame, (round(cx), round(cy)), 2, (255, 0, 0), 2)
-            # cv2.circle(frame, (round(tail_x), round(tail_y)), 2, (0, 255, 0), 2)
-            # cv2.circle(frame, (round(head_x), round(head_y)), 2, (0, 0, 255), 2)
-            # # 显示窗口
-            # window_name = f'ID{track_id}-{frame_num}'
-            # cv2.namedWindow(window_name)
-            # cv2.moveWindow(window_name, 500, 50)
-            # time.sleep(0.005)
-            # cv2.imshow(window_name, frame)
-            # cv2.waitKey(0)
-            # cv2.destroyAllWindows()
-
-            dist_head = np.sqrt(((head_x - circle_center_x) ** 2 + (head_y - circle_center_y) ** 2))
-            dist_tail = np.sqrt(((tail_x - circle_center_x) ** 2 + (tail_y - circle_center_y) ** 2))
-            return dist_head, dist_tail
-        
-
-
-        circle_center_x, circle_center_y, circle_radius = circle_info
         hold_data = {}
         counter = 0
 
-        close_tolerance = circle_radius * 0.05
-        start_tolerance = circle_radius * 0.02
-        mid_tolerance = circle_radius * 0.015
-        dist_start = circle_radius * 0.25
-        dist_end = circle_radius
-        dist_mid = circle_radius * (0.25 + 0.75/2)
-        radian = math.radians(47.02034)
-        base_dist = circle_radius * 0.18
-        short = round(math.cos(radian) * base_dist)
-        long = round(math.sin(radian) * base_dist)
-        radian_22_5 = math.radians(22.5)
-        tan_22_5 = math.tan(radian_22_5)
+        end_tolerance = self.note_travel_dist * 0.1
+        start_tolerance = self.note_travel_dist * 0.1
+        valid_judgeline_start = self.judgeline_start + start_tolerance
+        valid_judgeline_end = self.judgeline_end - end_tolerance
 
-        # read final_tracks
-        for track_id, track_data in final_tracks.items():
+        # read track data
+        for track_id, track_data in self.track_data.items():
+
             if 'path' not in track_data: continue
             track_path = track_data['path']
-            if len(track_path) < 5: continue
+            if len(track_path) < 10: continue
+            if 'class_id' not in track_data: continue
             class_id = round(track_data['class_id'])
-            if class_id != 0: continue # hold
+            if self.noteDetector.get_main_class_id(class_id) != 3:
+                continue # 3 = hold，忽视非hold音符
 
-            predict_track_path = []
 
+            # read track path
+            valid_track_path = []
             for track_box in track_path:
-                track_frame_num = round(track_box['frame'])
-                track_conf = float(track_box['conf'])
-                track_x1 = round(track_box['x1'])
-                track_y1 = round(track_box['y1'])
-                track_x2 = round(track_box['x2'])
-                track_y2 = round(track_box['y2'])
-                track_center_x = (track_x1 + track_x2) / 2
-                track_center_y = (track_y1 + track_y2) / 2
 
-                match_found = []
+                frame_num = track_box['frame']
+                x1 = track_box['x1']
+                y1 = track_box['y1']
+                x2 = track_box['x2']
+                y2 = track_box['y2']
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
 
-                # 从predict_results_all中获取对应的音符
-                predict_results_list = predict_results_all[track_frame_num]
-                for predict_result in predict_results_list:
-
-                    # 判断 conf
-                    predict_conf = float(predict_result['confidence'])
-                    if track_conf != predict_conf: continue
-                    # 判断 class_id
-                    predict_class_id = round(predict_result['class'])
-                    if predict_class_id != class_id: continue
-                    # 判断 中心距离
-                    box = predict_result['box']
-                    predict_x1 = round(box['x1'])
-                    predict_y1 = round(box['y1'])
-                    predict_x2 = round(box['x2'])
-                    predict_y2 = round(box['y2'])
-                    predict_center_x = (predict_x1 + predict_x2) / 2
-                    predict_center_y = (predict_y1 + predict_y2) / 2
-                    if abs(track_center_x - predict_center_x) > close_tolerance or \
-                        abs(track_center_y - predict_center_y) > close_tolerance: continue 
-                    # 计算距离圆心的距离
-                    dist_to_center = np.sqrt(((predict_center_x - circle_center_x)**2 + (predict_center_y - circle_center_y)**2))                   
-                    # 计算方向(1-8)
-                    position = self.calculate_oct_position(circle_center_x, circle_center_y, predict_center_x, predict_center_y)
-                    # 添加到匹配列表
-                    match_found.append((track_frame_num,
-                                        predict_x1,
-                                        predict_y1,
-                                        predict_x2,
-                                        predict_y2,
-                                        predict_center_x,
-                                        predict_center_y,
-                                        position,
-                                        dist_to_center))
-
-
-                if not match_found:
-                    print(f"preprocess_hold_data: no match found for track_id {track_id} at frame {track_frame_num}")
-                    continue
-                elif len(match_found) > 1:
-                    print(f"preprocess_hold_data: multiple matches found for track_id {track_id} at frame {track_frame_num}")
-                    match_found.sort(key=lambda x: x[-1]) # 按距离排序
-
-                # 过滤 scale 阶段的数据
-                dist_to_center = match_found[0][-1]
-                if abs(dist_to_center - dist_start) < start_tolerance:
+                # 计算距离圆心的距离
+                dist_to_center = np.sqrt(((cx - self.screen_cx)**2 + (cy - self.screen_cy)**2))
+                # 计算方向(1-8)
+                position = self.calculate_oct_position(self.screen_cx, self.screen_cy, cx, cy)
+                # 过滤10%-90%距离的数据
+                if dist_to_center < valid_judgeline_start:
                     continue # 掐头
-                elif dist_to_center > dist_end:
+                elif dist_to_center > valid_judgeline_end:
                     continue # 去尾
+                # 计算头和尾的坐标
+                x_head, y_head, x_tail, y_tail, dist_head, dist_tail = self.calculate_hold_head_tail(x1, y1, x2, y2, position)
+                # 添加轨迹点
+                valid_track_path.append((frame_num, x_head, y_head, x_tail, y_tail, position, dist_head, dist_tail))
 
-                # 过滤 mid 阶段的数据
-                if abs(dist_to_center - dist_mid) < mid_tolerance:
-                    continue
 
-                predict_track_path.append(match_found[0])
-
-            
-            if not predict_track_path:
-                print(f"preprocess_hold_data: predict_track_path not found for track_id {track_id}")
+            # 检查轨迹存在
+            if not valid_track_path:
+                print(f"preprocess_hold_data: no valid_track_path for track_id {track_id}")
                 continue
-            predict_track_path.sort(key=lambda x: x[0]) # 按frame排序
+            valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
             # 检验长度
-            if len(predict_track_path) < 5:
-                print(f"preprocess_hold_data: predict_track_path too short for track_id {track_id}, length: {len(predict_track_path)}")
+            if len(valid_track_path) < 6:
+                print(f"preprocess_hold_data: valid_track_path too short for track_id {track_id}, length: {len(valid_track_path)}")
                 continue
-            # 检验方位
-            positions = [x[7] for x in predict_track_path]
+            # 检验方位一致
+            positions = [x[5] for x in valid_track_path]
             if len(set(positions)) != 1:
                 print(f"preprocess_hold_data: positions not consistent for track_id {track_id}")
                 continue
             # 添加到hold_data
-            path1 = [] # 前半
-            path2 = [] # 后半
-            for frame_num, x1, y1, x2, y2, center_x, center_y, position, dist_to_center in predict_track_path:
-
-                path = path1 if dist_to_center < dist_mid else path2
-                dist_head, dist_tail = split_dist(frame_num, x1, y1, x2, y2, tan_22_5, long, short, circle_info, position)
-                dist = dist_head if dist_to_center < dist_mid else dist_tail
-
+            path = []
+            for frame_num, x_head, y_head, x_tail, y_tail, position, dist_head, dist_tail in valid_track_path:
                 path.append({
                     'frame': frame_num,
-                    'x1': x1,
-                    'y1': y1,
-                    'x2': x2,
-                    'y2': y2,
-                    'center_x': center_x,
-                    'center_y': center_y,
-                    'dist': dist
+                    'x-head': x_head,
+                    'y-head': y_head,
+                    'x-tail': x_tail,
+                    'y-tail': y_tail,
+                    'dist-head': dist_head,
+                    'dist-tail': dist_tail
                 })
-            
-            if len(path1) < 5 or len(path2) < 5:
-                print(f"preprocess_hold_data: path1 or path2 too short for track_id {track_id}, length: {len(path1)}, {len(path2)}")
-                continue
-
-            hold_data[(track_id, f'{positions[0]}h')] = (path1, path2)
+            hold_data[(track_id, class_id, positions[0])] = path
 
             counter += 1
-            print(f"preprocessing hold data...{counter}", end='\r')
 
-            #self.draw_path_on_frame(track_id, path[0]['frame']+3, path, circle_info)
+            # self.draw_path_on_frame(track_id, path[0]['frame']+3, path)
 
         if not hold_data:
             print("preprocess_hold_data: no hold data")
             return {}
 
         return hold_data
+    
+
+
+    @log_error
+    def calculate_hold_head_tail(self, x1, y1, x2, y2, position):
     
 
 
@@ -1303,6 +1176,7 @@ class NoteAnalyzer:
         
 
     # debug
+    @log_error
     def main(self, main_folder: str, bpm: float):
         try:
             # 在文件夹查找视频文件
@@ -1342,15 +1216,16 @@ class NoteAnalyzer:
                 self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data)
                 tap_info = self.analyze_tap_reach_time(tap_data)
 
-            # # touch
+            # touch
             touch_info = {}
             touch_data = self.preprocess_touch_data()
             if touch_data:
                 self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data)
                 touch_info = self.analyze_touch_reach_time(touch_data)
 
-            # # hold
-            # hold_data = self.preprocess_hold_data(final_tracks, track_results_all, predict_results_all, circle_info)
+            # hold
+            hold_info = {}
+            hold_data = self.preprocess_hold_data()
             # if hold_data:
             #     hold_info = self.analyze_hold_reach_time(hold_data, circle_info, fps)
             
@@ -1364,6 +1239,7 @@ class NoteAnalyzer:
         
 
 
+    @log_error
     def get_touch_areas(self) -> dict:
         # 1080p的触摸区域中心坐标
         std_touch_areas = {
