@@ -347,8 +347,6 @@ class NoteDetector:
             # 初始化跟踪器 (每个大类一个tracker)
             trackers = []
             thresholds = [0.8, 0.9, 0.8, 0.8, 0.8]  # tap, slide, touch, hold, touch_hold
-            if fps>=119: track_buffer = 10
-            else: track_buffer = 5
             
             for thresh in thresholds:
                 tracker_args = SimpleNamespace(
@@ -356,7 +354,7 @@ class NoteDetector:
                     track_high_thresh=0.25,
                     track_low_thresh=0.1,
                     new_track_thresh=0.25,
-                    track_buffer=track_buffer,
+                    track_buffer=2,           # real buffer = fps / 30 * track_buffer
                     match_thresh=thresh,
                     fuse_score=True,
                     gmc_method='none',
@@ -419,10 +417,12 @@ class NoteDetector:
                 for i in range(len(trackers)):
                     if candidates[i].size > 0:
                         boxes = Boxes(candidates[i], orig_shape)
-                        track_result = trackers[i].update(boxes, frame)
-                        track_results.append(track_result)
                     else:
-                        track_results.append([])
+                        # 即使没有检测结果，也要调用tracker.update()，让tracker知道时间流逝
+                        boxes = Boxes(np.empty((0, 6)), orig_shape)
+                        
+                    track_result = trackers[i].update(boxes, frame)
+                    track_results.append(track_result)
                 
                 # 处理追踪结果
                 current_track_ids = set()
@@ -1210,13 +1210,13 @@ class NoteDetector:
 
 
 if __name__ == "__main__":
-    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\Dazzle hop ADVANCED_standardized.mp4"
+    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\Customized Justice EXPERT_standardized.mp4"
     detect_model_path = r"C:\Users\ck273\Desktop\detect_varifocalloss.pt"
     obb_model_path = r"C:\Users\ck273\Desktop\obb.pt"
     cls_ex_model_path = r"C:\Users\ck273\Desktop\cls-ex.pt"
     cls_break_model_path = r"C:\Users\ck273\Desktop\cls-break.pt"
     output_dir = r"D:\git\mai-chart-analyze\yolo-train\runs\detect"
-    detect = True  # 是否执行检测模块
+    detect = False  # 是否执行检测模块
     
     detector = NoteDetector()
     final_output_path = detector.main(
