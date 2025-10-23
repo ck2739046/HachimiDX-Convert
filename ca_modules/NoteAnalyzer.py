@@ -879,7 +879,7 @@ class NoteAnalyzer:
         计算音符方向
         分离头尾
         分别计算头尾到圆心的距离
-        过滤刚离开起点的和马上要到终点的音符数据 (10%-90%距离)
+        过滤刚离开起点的和马上要到终点的音符数据 (5%-95%距离)
 
         返回格式:
         dict{
@@ -902,8 +902,8 @@ class NoteAnalyzer:
 
         hold_data = {}
 
-        end_tolerance = self.note_travel_dist * 0.1
-        start_tolerance = self.note_travel_dist * 0.1
+        end_tolerance = self.note_travel_dist * 0.05
+        start_tolerance = self.note_travel_dist * 0.05
         valid_judgeline_start = self.judgeline_start + start_tolerance
         valid_judgeline_end = self.judgeline_end - end_tolerance
 
@@ -1096,44 +1096,50 @@ class NoteAnalyzer:
 
   
     @log_error
-    def analyze_hold_reach_time(self, hold_data, circle_info, fps):
+    def analyze_hold_reach_time(self, hold_data):
 
         hold_info = {}
-        for (track_id, direction), (path1, path2) in hold_data.items():
-            # 计算前半段的到达时间
-            times = []
-            for point in path1:
+
+        end_tolerance = self.note_travel_dist * 0.1
+        start_tolerance = self.note_travel_dist * 0.1
+        valid_judgeline_start = self.judgeline_start + start_tolerance
+        valid_judgeline_end = self.judgeline_end - end_tolerance
+
+        for (track_id, class_id, direction), path in hold_data.items():
+
+            head_times = []
+            tail_times = []
+            # 平均所有轨迹的到达时间
+            for point in path:
                 frame_num = point['frame']
-                dist = point['dist']
-                reach_end_Msec = self.predict_note_reach_end_time(dist, frame_num, circle_info[2], fps)
-                times.append(reach_end_Msec)
-            mean1 = np.mean(times)
+                dist_head = point['dist-head']
+                dist_tail = point['dist-tail']
+                # 过滤 head 和 tail (10%-90%)
+                if valid_judgeline_start <= dist_head <= valid_judgeline_end:
+                    reach_end_Msec_head = self.predict_note_reach_end_time(dist_head, frame_num)
+                    head_times.append(reach_end_Msec_head)
+                if valid_judgeline_start <= dist_tail <= valid_judgeline_end:
+                    reach_end_Msec_tail = self.predict_note_reach_end_time(dist_tail, frame_num)
+                    tail_times.append(reach_end_Msec_tail)
+            # 计算平均时间
+            mean_head = np.mean(head_times)
+            mean_tail = np.mean(tail_times)
+            hold_info[(track_id, class_id, direction)] = (mean_head, mean_tail)
 
-            # min1 = np.min(times)
-            # max1 = np.max(times)
-            # median1 = np.median(times)
-            # std_dev1 = np.std(times)
-            # std_dev_percent1 = std_dev1 / mean1 * 100
-            # print(f"hold track_id {track_id}, direction {direction}\n  Mean {mean1:.3f}, Min {min1:.3f}, Max {max1:.3f}, Median {median1:.3f}, Std Dev {std_dev_percent1:.3f}%")
+            # print(f"Hold ID {track_id} Direction {direction}:")
+            # min1 = np.min(head_times)
+            # max1 = np.max(head_times)
+            # median1 = np.median(head_times)
+            # std_dev1 = np.std(head_times)
+            # std_dev_percent1 = std_dev1 / mean_head * 100
+            # print(f"  head - Mean {mean_head:.3f}, Min {min1:.3f}, Max {max1:.3f}, Median {median1:.3f}, Std Dev {std_dev_percent1:.3f}%")
 
-            # 计算后半段的到达时间
-            times = []
-            for point in path2:
-                frame_num = point['frame']
-                dist = point['dist']
-                reach_end_Msec = self.predict_note_reach_end_time(dist, frame_num, circle_info[2], fps)
-                times.append(reach_end_Msec)
-            mean2 = np.mean(times)
-
-            # min2 = np.min(times)
-            # max2 = np.max(times)
-            # median2 = np.median(times)
-            # std_dev2 = np.std(times)
-            # std_dev_percent2 = std_dev2 / mean2 * 100
-            # print(f"  Mean {mean2:.3f}, Min {min2:.3f}, Max {max2:.3f}, Median {median2:.3f}, Std Dev {std_dev_percent2:.3f}%")
-
-            hold_info[(track_id, direction)] = (mean1, mean2)
-
+            # min2 = np.min(tail_times)
+            # max2 = np.max(tail_times)
+            # median2 = np.median(tail_times)
+            # std_dev2 = np.std(tail_times)
+            # std_dev_percent2 = std_dev2 / mean_tail * 100
+            # print(f"  tail - Mean {mean_tail:.3f}, Min {min2:.3f}, Max {max2:.3f}, Median {median2:.3f}, Std Dev {std_dev_percent2:.3f}%")
 
         return hold_info
 
@@ -1322,8 +1328,8 @@ class NoteAnalyzer:
             # hold
             hold_info = {}
             hold_data = self.preprocess_hold_data()
-            # if hold_data:
-            #     hold_info = self.analyze_hold_reach_time(hold_data, circle_info, fps)
+            if hold_data:
+                hold_info = self.analyze_hold_reach_time(hold_data)
             
             # # analyze all notes info
             # self.analyze_all_notes_info(video_name, bpm, tap_info, touch_info, hold_info)
