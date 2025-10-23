@@ -1,5 +1,4 @@
 from collections import defaultdict
-import json
 import os
 import cv2
 import numpy as np
@@ -79,7 +78,6 @@ class NoteAnalyzer:
         '''
 
         tap_data = {}
-        counter = 0
 
         end_tolerance = self.note_travel_dist * 0.1
         start_tolerance = self.note_travel_dist * 0.1
@@ -149,9 +147,6 @@ class NoteAnalyzer:
                     'dist': dist_to_center
                 })
             tap_data[(track_id, class_id, positions[0])] = path
-
-            counter += 1
-
             # self.draw_path_on_frame(track_id, path[0]['frame']+3, path)
 
         if not tap_data:
@@ -404,7 +399,6 @@ class NoteAnalyzer:
         '''
 
         touch_data = {}
-        counter = 0
 
         end_tolerance = self.touch_travel_dist * 0.1
         start_tolerance = self.touch_travel_dist * 0.1
@@ -476,7 +470,6 @@ class NoteAnalyzer:
                 })
             touch_data[(track_id, class_id, positions[0])] = path
 
-            counter += 1
 
         if not touch_data:
             print("preprocess_touch_data: no touch data")
@@ -908,7 +901,6 @@ class NoteAnalyzer:
         '''
 
         hold_data = {}
-        counter = 0
 
         end_tolerance = self.note_travel_dist * 0.1
         start_tolerance = self.note_travel_dist * 0.1
@@ -936,8 +928,12 @@ class NoteAnalyzer:
                 y1 = track_box['y1']
                 x2 = track_box['x2']
                 y2 = track_box['y2']
-                cx = (x1 + x2) / 2
-                cy = (y1 + y2) / 2
+                x3 = track_box['x3']
+                y3 = track_box['y3']
+                x4 = track_box['x4']
+                y4 = track_box['y4']
+                cx = (x1 + x2 + x3 + x4) / 4
+                cy = (y1 + y2 + y3 + y4) / 4
 
                 # 计算距离圆心的距离
                 dist_to_center = np.sqrt(((cx - self.screen_cx)**2 + (cy - self.screen_cy)**2))
@@ -949,7 +945,7 @@ class NoteAnalyzer:
                 elif dist_to_center > valid_judgeline_end:
                     continue # 去尾
                 # 计算头和尾的坐标
-                x_head, y_head, x_tail, y_tail, dist_head, dist_tail = self.calculate_hold_head_tail(x1, y1, x2, y2, position)
+                x_head, y_head, x_tail, y_tail, dist_head, dist_tail = self.calculate_hold_head_tail(x1, y1, x2, y2, x3, y3, x4, y4, position, class_id)
                 # 添加轨迹点
                 valid_track_path.append((frame_num, x_head, y_head, x_tail, y_tail, position, dist_head, dist_tail))
 
@@ -982,10 +978,6 @@ class NoteAnalyzer:
                 })
             hold_data[(track_id, class_id, positions[0])] = path
 
-            counter += 1
-
-            # self.draw_path_on_frame(track_id, path[0]['frame']+3, path)
-
         if not hold_data:
             print("preprocess_hold_data: no hold data")
             return {}
@@ -995,11 +987,114 @@ class NoteAnalyzer:
 
 
     @log_error
-    def calculate_hold_head_tail(self, x1, y1, x2, y2, position):
-        return
-    
+    def calculate_hold_head_tail(self, x1, y1, x2, y2, x3, y3, x4, y4, position, class_id):
+        '''
+        获取hold框与轨道线的两个交点，视为hold的两个端点
+        然后两个端点往回缩一点就是head和tail的位置
+        '''
+
+        # 直线经过中心点 (screen_cx, screen_cy)
+        # 输入直线的y轴下方与x轴正半轴的夹角 (0°-180°)
+        def get_line(angle):
+            # 计算斜率 a = tan(angle)
+            a = math.tan(math.radians(angle)) # 角度转换为弧度
+            # 将屏幕中心点代入 y=ax+b 求解 b
+            b = self.screen_cy - a * self.screen_cx
+            return (a, b)
 
 
+        # 计算矩形与直线的交点，应该是会有两个
+        def calculate_line_rectangle_intersections(a, b, x1, y1, x2, y2, x3, y3, x4, y4):        
+            # 四条边
+            edges = [(x1, y1, x2, y2), (x2, y2, x3, y3), (x3, y3, x4, y4), (x4, y4, x1, y1)]
+            intersections = []
+            for x_start, y_start, x_end, y_end in edges:
+                # 特殊处理竖直边，防止除零错误
+                if abs(x_end - x_start) < 1e-1:
+                    x_intersect = x_start
+                    y_intersect = a * x_intersect + b   
+                # 普通情况
+                else:
+                    # 计算边的斜率和截距
+                    edge_a = (y_end - y_start) / (x_end - x_start)
+                    edge_b = y_start - edge_a * x_start
+                    # 计算交点
+                    if abs(a - edge_a) < 1e-1: continue # 跳过平行边，防止除零错误
+                    x_intersect = (edge_b - b) / (a - edge_a)
+                    y_intersect = a * x_intersect + b
+                # 检查交点是否在边的x范围内
+                if ((min(x_start, x_end) <= x_intersect <= max(x_start, x_end)) and
+                    (min(y_start, y_end) <= y_intersect <= max(y_start, y_end))):
+                    intersections.append((x_intersect, y_intersect))
+            return intersections
+        
+
+        # 根据到中心点的距离，在轨迹线上计算新的点
+        def get_point_by_dist_to_center(a, b, x, y, dist):
+            # 沿轨迹线获得距离为 dist 的两个点
+            dx = dist / np.sqrt(1 + np.power(a, 2))
+            dy = a * dx
+            p1x = self.screen_cx + dx
+            p1y = self.screen_cy + dy
+            p2x = self.screen_cx - dx
+            p2y = self.screen_cy - dy
+            # 更接近原始点的就是新的点
+            if abs(p1x - x) > abs(p2x - x):
+                return p2x, p2y
+            else:
+                return p1x, p1y
+
+
+        # 根据方向确定轨道直线
+        if position == 1 or position == 5:
+            a, b = get_line(112.5)
+        elif position == 2 or position == 6:
+            a, b = get_line(157.5)
+        elif position == 3 or position == 7:
+            a, b = get_line(22.5)
+        elif position == 4 or position == 8:
+            a, b = get_line(67.5)
+
+        # 计算hold框的四条边与轨道直线的交点
+        intersections = calculate_line_rectangle_intersections(a, b, x1, y1, x2, y2, x3, y3, x4, y4)
+        
+        if len(intersections) != 2:
+            print(f"expect 2 intersections, but got {len(intersections)}, skip")
+            return None, None, None, None, None, None
+            
+        # 根据距离圆心的远近区分head和tail
+        dist1 = math.sqrt((intersections[0][0] - self.screen_cx)**2 + (intersections[0][1] - self.screen_cy)**2)
+        dist2 = math.sqrt((intersections[1][0] - self.screen_cx)**2 + (intersections[1][1] - self.screen_cy)**2)
+        # 更远的是 head, 更近的是 tail
+        head_x, head_y = intersections[0] if dist1 > dist2 else intersections[1]
+        tail_x, tail_y = intersections[1] if dist1 > dist2 else intersections[0]
+        dist_head = dist1 if dist1 > dist2 else dist2
+        dist_tail = dist2 if dist1 > dist2 else dist1
+
+        # 根据 label_notes 定义，整个hold的一半宽度为 70x0.77 (ex再+5)
+        # 那么正六边形的端点到中心的距离约为 70x0.77 x 2/√3
+        width = 70 * 0.77 if class_id not in [17,18] else 75 * 0.77 + 5
+        offset = width * 2 / math.sqrt(3)
+        # 往回缩一点
+        new_dist_head = dist_head - offset
+        new_dist_tail = dist_tail + offset
+        # 防止越过起点和终点
+        if new_dist_head > self.judgeline_end:
+            new_dist_head = self.judgeline_end
+        if new_dist_head < self.judgeline_start:
+            new_dist_head = self.judgeline_start
+        if new_dist_tail > self.judgeline_end:
+            new_dist_tail = self.judgeline_end
+        if new_dist_tail < self.judgeline_start:
+            new_dist_tail = self.judgeline_start
+        # 计算新的head和tail坐标
+        new_head_x, new_head_y = get_point_by_dist_to_center(a, b, head_x, head_y, new_dist_head)
+        new_tail_x, new_tail_y = get_point_by_dist_to_center(a, b, tail_x, tail_y, new_dist_tail)
+
+        return new_head_x, new_head_y, new_tail_x, new_tail_y, new_dist_head, new_dist_tail
+
+
+  
     @log_error
     def analyze_hold_reach_time(self, hold_data, circle_info, fps):
 
