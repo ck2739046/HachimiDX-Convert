@@ -1222,7 +1222,7 @@ class NoteAnalyzer:
             valid_track_path = []
             for track_box in track_path:
 
-                print(f"preprocess_touch_hold_data: processing track_id {track_id}, frame {counter}/{len(track_path)}   ", end='\r', flush=True)
+                print(f"preprocess_touch_hold_data: processing track_id {track_id}, frame_{counter}/{len(track_path)}   ", end='\r', flush=True)
                 counter += 1
 
                 frame_num = track_box['frame']
@@ -1293,6 +1293,7 @@ class NoteAnalyzer:
             touch_hold_data = {}
         
         cap.release()
+        print(f"{' '*70}", end='\r', flush=True) # 清除行
         return touch_hold_data
     
 
@@ -1849,7 +1850,7 @@ class NoteAnalyzer:
 
 if __name__ == "__main__":
 
-    folder_name = "Customized Justice EXPERT_standardized"
+    folder_name = "Deicide_standardized"
     folder_path = rf"D:\git\mai-chart-analyze\yolo-train\runs\detect\{folder_name}"
 
     bpm = 0
