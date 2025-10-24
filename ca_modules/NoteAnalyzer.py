@@ -813,7 +813,7 @@ class NoteAnalyzer:
             for point in path:
                 frame_num = point['frame']
                 dist = point['dist']
-                reach_end_Msec = self.predict_touch_reach_end_time(dist, frame_num)
+                reach_end_Msec = self.predict_touch_reach_end_time(dist, frame_num, total_dist=self.touch_travel_dist)
                 if reach_end_Msec != 0:
                     times.append(reach_end_Msec)
                     
@@ -833,7 +833,7 @@ class NoteAnalyzer:
 
 
     @log_error
-    def predict_touch_reach_end_time(self, dist, cur_frame):
+    def predict_touch_reach_end_time(self, dist, cur_frame, total_dist):
         '''
         正向：
         根据 time_progress = (current_time - move_start_time) / DefaultMsec 获得 time_progress
@@ -865,7 +865,6 @@ class NoteAnalyzer:
 
 
         # 反推 location_progress
-        total_dist = self.touch_travel_dist
         location_progress = 1 - dist / total_dist
         if location_progress < 0.15 or location_progress > 0.85:
             return 0
@@ -1533,7 +1532,89 @@ class NoteAnalyzer:
                     roi[y, x] = [0, 0, 0]
 
         return roi
+    
 
+
+    @log_error
+    def analyze_touch_hold_reach_time(self, touch_hold_data):
+
+        touch_hold_info = {}
+        
+        for (track_id, class_id, position), path in touch_hold_data.items():
+
+            dist_times = []
+            percent_data = []
+            for point in path:
+                frame_num = point['frame']
+                dist = point['dist']
+                percent = point['percent']
+                # 将 percent 数据单独处理
+                if percent != -1:
+                    cur_time = point['frame'] / self.fps * 1000 # 帧数转换为毫秒
+                    percent_data.append((cur_time, percent))
+                # 将 dist 数据视为 touch note 处理
+                if dist != -1:
+                    reach_end_Msec = self.predict_touch_reach_end_time(dist, frame_num, total_dist=self.touch_hold_travel_dist)
+                    if reach_end_Msec != 0:
+                        dist_times.append(reach_end_Msec)
+
+            percent_times, percent_speeds = self.predict_touch_hold_percent_reach_end_time(percent_data)
+
+            # 计算平均值
+            mean_dist = np.mean(dist_times)
+            mean_percent = np.mean(percent_times)
+            touch_hold_info[(track_id, position)] = mean_dist, mean_percent
+
+            print(f"Touch Hold ID {track_id} Position {position}:")
+
+            mean = np.mean(percent_speeds)
+            min = np.min(percent_speeds)
+            max = np.max(percent_speeds)
+            median = np.median(percent_speeds)
+            std_dev = np.std(percent_speeds)
+            print(f"  speed Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
+
+            min_dist = np.min(dist_times)
+            max_dist = np.max(dist_times)
+            median_dist = np.median(dist_times)
+            std_dev_dist = np.std(dist_times)
+            print(f"  dist Mean {mean_dist:.3f}, Min {min_dist:.3f}, Max {max_dist:.3f}, Median {median_dist:.3f}, Std Dev {std_dev_dist:.3f}")
+
+            min_percent = np.min(percent_times)
+            max_percent = np.max(percent_times)
+            median_percent = np.median(percent_times)
+            std_dev_percent = np.std(percent_times)
+            print(f"  percent Mean {mean_percent:.3f}, Min {min_percent:.3f}, Max {max_percent:.3f}, Median {median_percent:.3f}, Std Dev {std_dev_percent:.3f}")
+
+        return touch_hold_info
+    
+
+
+    @log_error
+    def predict_touch_hold_percent_reach_end_time(self, percent_data):
+
+        # 点配对并计算 speed
+        speeds = []
+        percent_data.sort(key=lambda x: x[1]) # 按 percent 排序
+        for i in range(len(percent_data)):
+            for j in range(i + 1, len(percent_data)):
+                time1, progress1 = percent_data[i]
+                time2, progress2 = percent_data[j]
+                if abs(progress1 - progress2) < 0.05:
+                    continue # 忽略相近的 progress 减少误差 (5%) 
+                speed = abs(time1 - time2) / abs(progress1 - progress2)
+                speeds.append(speed)
+
+        final_speed = np.median(speeds)
+
+        # 预测到达时间
+        reach_end_times = []
+        for time, progress in percent_data:
+            remaining_progress = 1 - progress
+            reach_end_time = time + remaining_progress * final_speed
+            reach_end_times.append(reach_end_time)
+
+        return reach_end_times, speeds
 
 
 
@@ -1727,8 +1808,8 @@ class NoteAnalyzer:
             # touch-hold
             touch_hold_info = {}
             touch_hold_data = self.preprocess_touch_hold_data()
-            # if touch_hold_data:
-            #     touch_hold_info = self.analyze_touch_hold_reach_time(touch_hold_data)
+            if touch_hold_data:
+                touch_hold_info = self.analyze_touch_hold_reach_time(touch_hold_data)
 
             # # analyze all notes info
             # self.analyze_all_notes_info(video_name, bpm, tap_info, touch_info, hold_info)
