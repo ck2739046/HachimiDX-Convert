@@ -1173,7 +1173,7 @@ class NoteAnalyzer:
         过滤轨迹过短的音符
         计算音符方位
         计算音符的三角到中心的距离 (精确)
-        过滤刚离开起点的和马上要到终点的音符数据 (10%-90%距离)
+        过滤前后两端的数据 (距离10%-75%, 百分比3%-47%)
 
         返回格式:
         dict{
@@ -1196,10 +1196,14 @@ class NoteAnalyzer:
 
         touch_hold_data = {}
 
-        end_tolerance = self.touch_hold_travel_dist * 0.1
-        start_tolerance = self.touch_hold_travel_dist * 0.1
-        valid_dist_end = 0 + end_tolerance
-        valid_dist_start = self.touch_hold_travel_dist - start_tolerance
+        dist_end_tolerance = self.touch_hold_travel_dist * 0.25
+        dist_start_tolerance = self.touch_hold_travel_dist * 0.1
+        valid_dist_end = 0 + dist_end_tolerance
+        valid_dist_start = self.touch_hold_travel_dist - dist_start_tolerance
+        percent_end_tolerance = 0.03
+        percent_start_tolerance = 0.03
+        valid_percent_end = 0.5 - percent_end_tolerance
+        valid_percent_start = 0 + percent_start_tolerance
         cap = cv2.VideoCapture(self.video_path)
 
         # read track data
@@ -1212,9 +1216,15 @@ class NoteAnalyzer:
             if self.noteDetector.get_main_class_id(class_id) != 4:
                 continue # 4 = touch_hold，忽视非touch_hold音符
 
+            counter = 0
+            precent_counter = 0
+
             # read track path
             valid_track_path = []
             for track_box in track_path:
+
+                print(f"preprocess_touch_hold_data: processing track_id {track_id}, frame {counter}/{len(track_path)}   ", end='\r', flush=True)
+                counter += 1
 
                 frame_num = track_box['frame']
                 x1 = track_box['x1']
@@ -1229,15 +1239,23 @@ class NoteAnalyzer:
                 cy = (y1 + y2 + y3 + y4) / 4
 
                 # 计算三角到中心的距离
-                self.get_touch_hold_dist_to_center(x1, y1, x2, y2, x3, y3, x4, y4, cx, cy, frame_num, cap)
-                continue
-                # 计算方位
-                position = self.calculate_all_position(cx, cy)
+                if precent_counter >= 5: break # 节省时间，hold阶段后半都不用计算了
+                dist, percent_of_hold = self.get_touch_hold_data(cx, cy, frame_num, cap)
                 # 过滤前后两端的数据
                 if dist > valid_dist_start:
-                    continue # 掐头
+                    dist = -1 # 掐头
                 elif dist < valid_dist_end:
-                    continue # 去尾
+                    dist = -1 # 去尾
+                if percent_of_hold < valid_percent_start:
+                    percent_of_hold = -1 # 掐头
+                elif percent_of_hold > valid_percent_end:
+                    percent_of_hold = -1 # 去尾
+                    precent_counter += 1
+                #  两个值都无效才跳过
+                if dist == -1 and percent_of_hold == -1:
+                    continue
+                # 计算方位
+                position = self.calculate_all_position(cx, cy)
                 # 添加轨迹点
                 valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist, percent_of_hold))
 
@@ -1281,44 +1299,106 @@ class NoteAnalyzer:
 
 
     @log_error
-    def get_touch_hold_dist_to_center(self, x1, y1, x2, y2, x3, y3, x4, y4, cx, cy, frame_num, cap):
+    def get_touch_hold_data(self, cx, cy, frame_num, cap):
 
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-        ret, frame = cap.read()
-        if not ret:
-            print(f"get_touch_hold_dist_to_center: failed to read frame {frame_num}")
-            return -1
+        try:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            ret, frame = cap.read()
+            if not ret:
+                print(f"get_touch_hold_data: failed to read frame {frame_num}")
+                return -1, -1
 
-        # 根据label-notes定义，touch_hold的整体尺寸是 (30+100) x 2/√3 (1080p下)
-        # 保险起见变成 200x200
-        roi_radius = 100 * self.video_size / 1080
+            # 根据label-notes定义，touch_hold的整体尺寸是 (30+100) x 2/√3 (1080p下)
+            # 保险起见变成 200x200
+            roi_radius = 100 * self.video_size / 1080
 
-        # 提取ROI区域
-        x_start = round(max(cx - roi_radius, 0))
-        y_start = round(max(cy - roi_radius, 0))
-        x_end = round(min(cx + roi_radius, self.video_size - 1))
-        y_end = round(min(cy + roi_radius, self.video_size - 1))
-        roi = frame[y_start:y_end, x_start:x_end]
-        # 处理roi
-        transformed_roi = self.diamond_polar_transform(roi)
-        stretched_roi = self.stretch_transformed_image(transformed_roi)
-        final_roi = self.apply_hsv_threshold(stretched_roi)
+            # 提取ROI区域
+            x_start = round(max(cx - roi_radius, 0))
+            y_start = round(max(cy - roi_radius, 0))
+            x_end = round(min(cx + roi_radius, self.video_size - 1))
+            y_end = round(min(cy + roi_radius, self.video_size - 1))
+            roi = frame[y_start:y_end, x_start:x_end]
+            # 处理roi
+            transformed_roi = self.diamond_polar_transform(roi)
+            stretched_roi = self.stretch_transformed_image(transformed_roi)
+            final_roi = self.apply_hsv_threshold(stretched_roi)
+            h, w = final_roi.shape[:2]
+            # 计算 final_roi 上方 15% - 50% 区域中黑色像素的比例
+            roi_top = final_roi[int(h * 0.15):int(h * 0.5), :, :]
+            black_mask = cv2.inRange(roi_top, (0, 0, 0), (10, 10, 10))
+            black_pixel_count = cv2.countNonZero(black_mask)
+            total_pixel_count = roi_top.shape[0] * roi_top.shape[1]
+            black_pixel_ratio = black_pixel_count / total_pixel_count if total_pixel_count > 0 else 0
+            # 计算dist和percent
+            dist = -1
+            percent_of_hold = -1
 
-        # 显示变换结果
-        cv2.imshow('Diamond Polar Transform', final_roi)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        
+            # 视为scale阶段,计算dist
+            if black_pixel_ratio > 0.25:
+                # 动态阈值
+                grey_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                _, binary_roi = cv2.threshold(grey_roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                # 轮廓识别
+                distances = []
+                contours, _ = cv2.findContours(binary_roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if not contours: return -1, -1
+                for contour in contours:
+                    # 尺寸合适
+                    _, radius = cv2.minEnclosingCircle(contour)          
+                    if radius < roi_radius * 0.4 or radius > roi_radius * 0.5:
+                        continue
+                    # 轮廓是三角形
+                    epsilon = 0.04 * cv2.arcLength(contour, True)     # 逼近精度，值越小，越接近原始轮廓。
+                    approx = cv2.approxPolyDP(contour, epsilon, True) # 近似多边形
+                    if len(approx) != 3: continue
+                    #cv2.drawContours(roi, [approx], -1, (0, 255, 0), 2)
+                    # 计算三角形每个顶点到中心的距离
+                    roi_center = np.array([roi_radius, roi_radius])
+                    tri_distances = []
+                    for point in approx:
+                        point_coords = point[0] # 获取点的坐标
+                        tri_distance = np.linalg.norm(point_coords - roi_center)
+                        tri_distances.append(tri_distance)
+                    # 校验三点距离关系
+                    tri_distances.sort()
+                    if ((tri_distances[2] - tri_distances[1]) < roi_radius * 0.05 and # 等边三角形
+                        (tri_distances[1] - tri_distances[0]) > roi_radius * 0.4):    # 朝向中心
+                        distances.append(tri_distances[0]) # 取最短距离
+                # 平均距离
+                if distances:
+                    dist = np.mean(distances)
+                    dist -= roi_radius * 0.1 # 微调
 
+                # # 显示窗口
+                # print(f"frame {frame_num}: dist {dist:.2f}")
+                # cv2.imshow(f'frame {frame_num}', roi)
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
 
-        # # 在窗口中绘制所有轮廓以进行调试
-        # debug_contour_img = roi.copy()
-        # for contour in contours:
-        #     cv2.drawContours(debug_contour_img, [contour], -1, (0, 255, 0), 2)
+            # 视为hold阶段,计算percent_of_hold
+            else:
+                # 逐列扫描final_roi的左边一半，关注每一列最下面的30%像素
+                # 如果这一列最下面的30%像素中，黑色像素占比小于70%，计数器+1
+                counter = 0
+                for col in range(w // 2):
+                    # 获取当前列最下面30%的像素
+                    bottom_pixels = final_roi[int(h * 0.7):, col]
+                    # 计算黑色像素的数量
+                    black_pixels = 0
+                    for pixel in bottom_pixels:
+                        if (pixel[0] < 10 and pixel[1] < 10 and pixel[2] < 10):
+                            black_pixels += 1
+                    # 如果黑色像素占比小于70%，计数器+1
+                    if black_pixels < h * 0.3 * 0.7:
+                        counter += 1
+                # 计算百分比
+                percent_of_hold = counter / (w // 2 - 1) / 2 # 除以2是因为只扫描了一半宽度
 
-        # cv2.imshow('Contours', debug_contour_img)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
+            return dist, percent_of_hold
+
+        except Exception as e:
+            print(f"get_touch_hold_data - frame {frame_num}: exception {e}")
+            return -1, -1
 
 
 
