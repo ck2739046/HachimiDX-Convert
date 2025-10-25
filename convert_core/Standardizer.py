@@ -10,7 +10,7 @@ class Standardizer:
         self.circle_radius = None
         self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'temp')
         
-    def standardize_video(self, video_path: str, start_frame: int, end_frame: int, video_mode: str, target_res=1080) -> str:
+    def standardize_video(self, video_path: str, start_frame: int, end_frame: int, video_mode: str, target_res=1080, skip_detect_circle=False) -> str:
         """
         标准化视频的主要函数
         
@@ -45,16 +45,19 @@ class Standardizer:
                 raise Exception(f"Invalid frame range: [{start_frame}, {end_frame}], expect 0~{total_frames}")
             
             # 2. 检测圆心和半径
-            cap = cv2.VideoCapture(video_path)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            self.circle_center, self.circle_radius = self.detect_circle(cap, video_width, video_height, total_frames, video_mode)
-            cap.release()
-            # print(f"Detected circle - Center: {self.circle_center}, Radius: {self.circle_radius}")
-            
-            # 3. 显示预览窗口
-            self.display_preview(video_path, video_width, video_height, start_frame, end_frame)
-            
-            # 4. 标准化视频
+            if not skip_detect_circle:
+                cap = cv2.VideoCapture(video_path)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                self.circle_center, self.circle_radius = self.detect_circle(cap, video_width, video_height, total_frames, video_mode)
+                cap.release()
+                # print(f"Detected circle - Center: {self.circle_center}, Radius: {self.circle_radius}")
+                self.display_preview(video_path, video_width, video_height, start_frame, end_frame)
+            else:
+                # 默认已经全屏并且在屏幕中心
+                self.circle_center = (video_width // 2, video_height // 2)
+                self.circle_radius = min(video_width, video_height) // 2
+
+            # 3. 标准化视频
             standardized_path = self.process_video_standardization(
                 video_path, start_frame, end_frame, fps, video_width, video_height, target_res,
                 self.circle_center, self.circle_radius
