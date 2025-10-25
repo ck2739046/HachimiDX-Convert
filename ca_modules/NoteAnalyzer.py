@@ -42,7 +42,6 @@ class NoteAnalyzer:
         self.note_travel_dist = 0
         self.touch_travel_dist = 0
         self.touch_hold_travel_dist = 0
-        self.bpm = 0
         self.touch_areas = {}
         self.track_data = ()
         self.noteDetector = None
@@ -828,7 +827,7 @@ class NoteAnalyzer:
                     times.append(reach_end_Msec)
                     
             mean = np.mean(times)
-            touch_info[(track_id, position)] = mean
+            touch_info[(track_id, class_id, position)] = mean
 
             # print(f"Touch ID {track_id} Position {position}:")
             # min = np.min(times)
@@ -1574,7 +1573,7 @@ class NoteAnalyzer:
             # 计算平均值
             mean_dist = np.mean(dist_times)
             mean_percent = np.mean(percent_times)
-            touch_hold_info[(track_id, position)] = mean_dist, mean_percent
+            touch_hold_info[(track_id, class_id, position)] = mean_dist, mean_percent
 
             # print(f"Touch Hold ID {track_id} Position {position}:")
 
@@ -1770,7 +1769,7 @@ class NoteAnalyzer:
 
     # debug
     @log_error
-    def analyze_all_notes_info(self, video_name, bpm, tap_info, touch_info, hold_info):
+    def analyze_all_notes_info(self, bpm, chart_lv, base_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
 
         def get_fraction(diff_beat, base_denominator):
             #numerator分子, denominator分母
@@ -1795,20 +1794,30 @@ class NoteAnalyzer:
             return numerator, denominator, one
 
 
-        txt_path = rf"C:\Users\ck273\Desktop\{video_name}.txt"
+        # 准备输出txt文件
+        output_dir = os.path.dirname(self.video_path)
+        txt_path = os.path.join(output_dir, 'maidata.txt')
         if os.path.exists(txt_path):
             os.remove(txt_path)
+        # 写入文件头
+        video_name = os.path.splitext(os.path.basename(self.video_path))[0].replace('_standardized', '')
         f = open(txt_path, 'w', encoding='utf-8')
         f.write(f'&title={video_name}\n')
-        f.write('&artist=ck273\n')
+        f.write('&artist=default\n')
         f.write('&first=0\n')
-        f.write('&des_4=ck273\n')
-        f.write('&lv_4=10\n')
-        f.write(f'&inote_4=({bpm})' + '{1},,')
+        f.write(f'&des_{chart_lv}=10\n')
+        f.write(f'&lv_{chart_lv}=10\n')
+        f.write(f'&inote_{chart_lv}=({bpm})' + '{1},')
+        # 打印基础信息
+        level_label = ['zero', 'easy', 'basic', 'advanced', 'expert', 'master', 'remaster', 'special']
+        print(f"\n{video_name} - {level_label[chart_lv]}")
+        one_beat_Msec = 60 / bpm * 1000 * 4
+        base_resolution = one_beat_Msec / base_denominator
+        print(f"bpm: {bpm}, one beat: {one_beat_Msec:.3f} ms, base resolution: {base_resolution:.3f} ms")
 
 
         # 合并所有info
-        all_notes_info = {**tap_info, **touch_info, **hold_info}
+        all_notes_info = {**tap_info, **slide_info, **touch_info, **hold_info, **touch_hold_info}
         # 按时间排序
         sorted_notes = sorted(all_notes_info.items(), key=lambda item: item[1][0] if isinstance(item[1], tuple) else item[1])
 
@@ -1819,16 +1828,35 @@ class NoteAnalyzer:
         last_denominator = 0
         time_deviations = []
 
-        base_denominator = 16  # 基准分母
+        for (track_id, class_id, position), time in sorted_notes:
 
-        for (track_id, position), time in sorted_notes:
+            # 根据class_id设置position后缀
+            position_suffix = {
+                1: 'b',    # break-tap
+                2: 'x',    # ex-tap
+                3: 'bx',   # break-ex-tap
+
+                5: '$',    # slide
+                6: 'b$',   # break-slide
+                7: 'x$',   # ex-slide
+                8: 'bx$',  # break-ex-slide
+
+                15: 'h',   # hold
+                16: 'bh',  # break-hold
+                17: 'xh',  # ex-hold
+                18: 'bxh', # break-ex-hold
+
+                20: 'h',   # touch-hold
+            }
+            position = f"{position}{position_suffix.get(class_id, '')}"
+            
 
             # 处理 length 信息
             if isinstance(time, tuple):
                 length = time[1] - time[0]
                 time = time[0]
                 
-                length_beat = length / (60 / bpm * 1000 * 4)
+                length_beat = length / one_beat_Msec
                 numerator, denominator, one = get_fraction(length_beat, base_denominator)
                 if numerator != 0:
                     if one == 0:
@@ -1844,14 +1872,14 @@ class NoteAnalyzer:
                 continue
             
             diff_Msec = time - last_time
-            diff_beat = diff_Msec / (60 / bpm * 1000 * 4)
+            diff_beat = diff_Msec / one_beat_Msec
             numerator, denominator, one = get_fraction(diff_beat, base_denominator)
 
             # update last_time
             base_numerator = round(diff_beat * base_denominator)
             base_numerator_counter += base_numerator
             passed_beat = base_numerator_counter / base_denominator
-            passed_beat_Msec = passed_beat * (60 / bpm * 1000 * 4)
+            passed_beat_Msec = passed_beat * one_beat_Msec
             last_time = passed_beat_Msec + init_time
 
             # 统计误差
@@ -1904,7 +1932,7 @@ class NoteAnalyzer:
 
     # debug
     @log_error
-    def main(self, main_folder: str, bpm: float):
+    def main(self, main_folder: str, bpm: float, chart_lv: int, base_denominator: int):
         try:
             # 在文件夹查找视频文件
             for root, _, files in os.walk(main_folder):
@@ -1929,9 +1957,8 @@ class NoteAnalyzer:
             self.judgeline_start = self.video_size * 120 / 1080
             self.judgeline_end = self.video_size * 480 / 1080
             self.note_travel_dist = self.judgeline_end - self.judgeline_start
-            self.touch_travel_dist = 34 * self.video_size / 1080 # 1080p下，touch移动距离为34像素
-            self.touch_hold_travel_dist = 30 * self.video_size / 1080 # 1080p下，touch_hold移动距离为30像素
-            self.bpm = bpm
+            self.touch_travel_dist = 34 * self.video_size / 1080        # 1080p下，touch移动距离为34像素
+            self.touch_hold_travel_dist = 30 * self.video_size / 1080   # 1080p下，touch_hold移动距离为30像素
             self.touch_areas = self.get_touch_areas()
             self.noteDetector = NoteDetector.NoteDetector()
             self.track_data = self.noteDetector._load_track_results(main_folder)
@@ -1970,8 +1997,8 @@ class NoteAnalyzer:
             if slide_data:
                 slide_info = self.analyze_tap_reach_time(slide_data)
 
-            # # analyze all notes info
-            # self.analyze_all_notes_info(video_name, bpm, tap_info, touch_info, hold_info)
+            # analyze all notes info
+            self.analyze_all_notes_info(bpm, chart_lv, base_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
 
         except Exception as e:
             raise Exception(f"Error in NoteAnalyzer.main: {e}")
@@ -2008,14 +2035,16 @@ class NoteAnalyzer:
 
 if __name__ == "__main__":
 
-    folder_name = "Deicide_standardized"
+    folder_name = "Customized Justice EXPERT_standardized"
     folder_path = rf"D:\git\mai-chart-analyze\yolo-train\runs\detect\{folder_name}"
 
-    bpm = 0
+    bpm = 292
+    chart_lv = 5
+    base_denominator = 32
 
     try:
         analyzer = NoteAnalyzer()
-        analyzer.main(folder_path, bpm)
+        analyzer.main(folder_path, bpm, chart_lv, base_denominator)
     except Exception as e:
         print(f"Error: {e}")
         print(f"Error trace: {error_trace}")
