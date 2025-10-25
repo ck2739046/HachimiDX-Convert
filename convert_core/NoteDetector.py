@@ -1172,6 +1172,8 @@ class NoteDetector:
             
             # 获取视频名称
             video_name = os.path.basename(video_path).rsplit('.', 1)[0]
+            if video_name.endswith('_standardized'):
+                video_name = video_name[:-14]
             output_dir = os.path.join(output_dir, video_name)
             os.makedirs(output_dir, exist_ok=True)
             
