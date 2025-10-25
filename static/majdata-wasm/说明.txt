@@ -1,4 +1,0 @@
-复制自maichartmanager v1.2.2的源代码
-MaiChartManager-1.2.2-source\MaiChartManager\Front\src\assets\majdata-wasm
-
-https://github.com/MewoLab/MaiChartManager/releases/tag/v1.2.2
