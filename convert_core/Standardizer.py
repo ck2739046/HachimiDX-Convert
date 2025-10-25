@@ -8,7 +8,7 @@ class Standardizer:
     def __init__(self):
         self.circle_center = None  # (x, y)
         self.circle_radius = None
-        self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train', 'temp')
+        self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'temp')
         
     def standardize_video(self, video_path: str, start_frame: int, end_frame: int, video_mode: str, target_res=1080) -> str:
         """
@@ -563,59 +563,54 @@ if __name__ == "__main__":
     # 测试代码
     standardizer = Standardizer()
 
-    # 1590 779 476
+    # cx 1590 cy 779 r 476
     # 3440x1440 1180 1920 1000 -600
 
-    # "source" or "camera shot"
-    
-
-    # video_path = r"C:\Users\ck273\Desktop\train\11753_120.mp4"
+    # video_path = r"11753_120.mp4"
     # video_mode = "source"
     # start_frame = 490
     # end_frame = 19370
 
-    # video_path = r"C:\Users\ck273\Desktop\train\11394_120.mkv"
+    # video_path = r"11394_120.mkv"
     # video_mode = "source"
     # start_frame = 2290
     # end_frame = 19880
 
-    # video_path = r"C:\Users\ck273\Desktop\train\11311_120.mkv"
+    # video_path = r"11311_120.mkv"
     # video_mode = "source"
     # start_frame = 910
     # end_frame = 17060
 
-    # video_path = r"C:\Users\ck273\Desktop\train\11814_120.mkv"
+    # video_path = r"11814_120.mkv"
     # video_mode = "source"
     # start_frame = 1090
     # end_frame = 17100
 
-    # video_path = r"C:\Users\ck273\Desktop\train\11741_120.mkv"
+    # video_path = r"11741_120.mkv"
     # video_mode = "source"
     # start_frame = 930
     # end_frame = 18850
 
-    # video_path = r"C:\Users\ck273\Desktop\train\11818_120.mkv"
+    # video_path = r"11818_120.mkv"
     # video_mode = "source"
     # start_frame = 830
     # end_frame = 20050
 
-    # video_path = r"C:\Users\ck273\Desktop\train\11820_120.mkv"
+    # video_path = r"11820_120.mkv"
     # video_mode = "source"
     # start_frame = 610
     # end_frame = 31820
 
-    # video_path = r"C:\Users\ck273\Desktop\殿ッ！？ご乱心！？(BASIC_Lv.6).mp4"
-    # video_mode = "camera shot"
-    # start_frame = 150
-    # end_frame = 4100
-
-    video_path = r"C:\Users\ck273\Desktop\風又ねリ\Customized Justice EXPERT.mp4"
+    # video_mode = "source" or "camera shot"
+    
+    video_path = r"C:\Users\ck273\Desktop\風又ねリ\廃墟にいますキャンペーン.mp4"
     video_mode = "source"
-    start_frame = 690
-    end_frame = 17170
+    start_frame = 670
+    end_frame = 17000
+    target_res = 2160
 
     try:
-        result_path = standardizer.standardize_video(video_path, start_frame, end_frame, video_mode, target_res=1080)
+        result_path = standardizer.standardize_video(video_path, start_frame, end_frame, video_mode, target_res)
         print(f"Standardized video saved to: {result_path}")
     except Exception as e:
         print(f"Error: {e}")
