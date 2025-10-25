@@ -1772,18 +1772,26 @@ class NoteAnalyzer:
     def analyze_all_notes_info(self, bpm, chart_lv, base_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
 
         def get_fraction(diff_beat, base_denominator):
+            # 返回格式：分子，分母，整数
+            # 0.75 -> 3/4     -> 3, 4, 0
+            # 1.75 -> 7/4     -> 7, 4, 0
+            # 2.0  -> 2/1     -> 2, 1, 0
+            # 2.5  -> 2 + 1/2 -> 1, 2, 2   对于>2的分数，分离出整数部分
+
+
+
             #numerator分子, denominator分母
             one = 0
             base_numerator = round(diff_beat * base_denominator)
             if base_numerator == 0:
-                return 0, 1, 0
+                return 0, 1, 0 # 异常情况
             # 先处理整倍数
             if base_numerator // base_denominator >= 1 and base_numerator % base_denominator == 0:
                 return base_numerator // base_denominator, 1, 0
             # 处理分数
             if base_numerator > base_denominator:
                 one = base_numerator // base_denominator
-                if one > 1:
+                if one > 1: # 仅对2以上的分离出整数部分
                     base_numerator = base_numerator % base_denominator
                 else:
                     one = 0
@@ -1858,10 +1866,14 @@ class NoteAnalyzer:
                 
                 length_beat = length / one_beat_Msec
                 numerator, denominator, one = get_fraction(length_beat, base_denominator)
-                if numerator != 0:
-                    if one == 0:
-                        numerator = numerator + one * denominator
-                    position = f'{position}[{denominator}:{numerator}]'
+                # 将整数部分加入分子
+                if one > 0:
+                    numerator = numerator + one * denominator
+                # 异常情况默认变为1/1
+                if numerator == 0 and denominator == 1 and one == 0:
+                    numerator = 1
+                    denominator = 1
+                position = f'{position}[{denominator}:{numerator}]'
 
 
             if last_time == 0:
@@ -2039,7 +2051,7 @@ if __name__ == "__main__":
     folder_path = rf"D:\git\mai-chart-analyze\yolo-train\runs\detect\{folder_name}"
 
     bpm = 292
-    chart_lv = 5
+    chart_lv = 4
     base_denominator = 32
 
     try:
