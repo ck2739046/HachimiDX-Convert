@@ -171,7 +171,7 @@ class NoteDetector:
                     last_start_time = end_time # 重置时间给下一轮
                     last_frame_number = frame_count # 重置帧数给下一轮
                     fps_rate = elapsed_frame / elapsed_time if elapsed_time > 0 else 0
-                    print(f"检测进度: {frame_count}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps", end="\r", flush=True)
+                    print(f"检测进度: {frame_count}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps  ", end="\r", flush=True)
                 
                 frame_count += 1
             
@@ -1160,7 +1160,7 @@ class NoteDetector:
 
 
 
-    def main(self, video_path, detect_model_path, obb_model_path, output_dir, cls_ex_model_path, cls_break_model_path, detect=True):
+    def main(self, video_path, output_dir, detect_model_path, obb_model_path, cls_ex_model_path, cls_break_model_path, detect=True):
         """主函数：协调各个模块的执行"""
         try:
             # 检查输入文件是否存在
@@ -1197,9 +1197,9 @@ class NoteDetector:
             del classified_tracks
             
             # 导出视频模块
-            final_output_path = self.export_video_module(video_path, output_dir)
-            
-            return final_output_path
+            final_output_video_path = self.export_video_module(video_path, output_dir)
+
+            return os.path.abspath(output_dir)
             
         except KeyboardInterrupt:
             print("\n中断")
@@ -1219,11 +1219,11 @@ if __name__ == "__main__":
     detect = False  # 是否执行检测模块
     
     detector = NoteDetector()
-    final_output_path = detector.main(
-        video_path, 
-        detect_model_path, 
-        obb_model_path, 
+    final_output_dir_path = detector.main(
+        video_path,
         output_dir,
+        detect_model_path,
+        obb_model_path,
         cls_ex_model_path,
         cls_break_model_path,
         detect=detect
