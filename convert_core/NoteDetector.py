@@ -952,14 +952,20 @@ class NoteDetector:
             fps = round(cap.get(cv2.CAP_PROP_FPS))
             total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             
+            # 计算黑色分隔符宽度
+            black_separator_width = max(1, int(video_width / 60))
+            
+            # 新视频宽度：左原始帧 + 黑色分隔符 + 右跟踪帧
+            new_video_width = video_width * 2 + black_separator_width
+            
             # 输出视频设置
             video_name = os.path.basename(input_path).rsplit('.', 1)[0]
-            output_path = os.path.join(output_dir, f'{video_name}_tracked.mp4')
+            output_path = os.path.join(output_dir, f'{video_name}_tracked_temp.mp4')
             if os.path.exists(output_path):
                 os.remove(output_path)
             
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, fps, (video_width, video_height))
+            out = cv2.VideoWriter(output_path, fourcc, fps, (new_video_width, video_height))
             
             # 为不同ID生成不同颜色
             def get_color_for_id(track_id):
@@ -1006,13 +1012,16 @@ class NoteDetector:
                 if not ret:
                     break
                 
+                # 创建原始帧的副本用于右侧跟踪显示
+                tracked_frame = frame.copy()
+                
                 # 获取当前帧的轨迹点
                 current_tracks = frame_tracks.get(frame_number, [])
                 
                 # 更新当前帧中存在的轨迹
                 current_track_ids = set()
                 
-                # 绘制当前帧的音符
+                # 在右侧跟踪帧上绘制当前帧的音符
                 for track in current_tracks:
                     track_id = track['track_id']
                     class_id = track['class_id']
@@ -1029,10 +1038,10 @@ class NoteDetector:
                             [track['x3'], track['y3']],
                             [track['x4'], track['y4']]
                         ], dtype=np.int32)
-                        cv2.polylines(frame, [points], True, color, 2)
+                        cv2.polylines(tracked_frame, [points], True, color, 2)
                     else:
                         x1, y1, x2, y2 = int(track['x1']), int(track['y1']), int(track['x2']), int(track['y2'])
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        cv2.rectangle(tracked_frame, (x1, y1), (x2, y2), color, 2)
                     
                     # 绘制标签
                     class_name = self.class_label.get(class_id, f'unknown-{class_id}')
@@ -1052,9 +1061,9 @@ class NoteDetector:
                         label_x = x1
                         label_y = y1
                     
-                    cv2.rectangle(frame, (label_x, label_y - label_size[1] - 10), 
+                    cv2.rectangle(tracked_frame, (label_x, label_y - label_size[1] - 10), 
                                 (label_x + label_size[0], label_y), color, -1)
-                    cv2.putText(frame, label, (label_x, label_y - 5), 
+                    cv2.putText(tracked_frame, label, (label_x, label_y - 5), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                     
                     # 更新轨迹历史
@@ -1087,19 +1096,31 @@ class NoteDetector:
                     if track_id in track_last_seen:
                         del track_last_seen[track_id]
                 
-                # 绘制轨迹线
+                # 在右侧跟踪帧上绘制轨迹线
                 for track_id, points in track_history.items():
                     if len(points) > 1:
                         color = get_color_for_id(track_id)
                         for i in range(1, len(points)):
-                            cv2.line(frame, points[i-1], points[i], color, 3)
+                            cv2.line(tracked_frame, points[i-1], points[i], color, 3)
                         
                         # 在轨迹起点绘制小圆点
                         if points:
-                            cv2.circle(frame, points[0], 3, color, -1)
+                            cv2.circle(tracked_frame, points[0], 3, color, -1)
+                
+                # 创建三部分组合帧：左原始 + 中黑色分隔 + 右跟踪
+                combined_frame = np.zeros((video_height, new_video_width, 3), dtype=np.uint8)
+                
+                # 左侧：原始帧
+                combined_frame[0:video_height, 0:video_width] = frame
+                
+                # 中间：黑色分隔符
+                combined_frame[0:video_height, video_width:video_width + black_separator_width] = 0
+                
+                # 右侧：跟踪帧
+                combined_frame[0:video_height, video_width + black_separator_width:new_video_width] = tracked_frame
                 
                 # 写入输出视频
-                out.write(frame)
+                out.write(combined_frame)
                 
                 # 显示进度
                 if frame_number % 30 == 0:
@@ -1116,7 +1137,7 @@ class NoteDetector:
             out.release()
             
             # 使用ffmpeg添加音频
-            final_output_path = output_path.replace('.mp4', '_with_audio.mp4')
+            final_output_path = output_path.replace('_temp.mp4', '.mp4')
             if os.path.exists(final_output_path):
                 os.remove(final_output_path)
             # 构建ffmpeg命令来合并视频和音频
