@@ -96,10 +96,11 @@
                 unityInstance.SendMessage(
                     "HandleJSMessages", 
                     "ReceiveMessage",
-                    `jsnmsl\n` +
-                    `http://localhost:5273` +
-                    `/MajdataView/src/${data.song}/${data.track}` +
-                    `\n1\nlv${data.level - 1}`
+                    `http://localhost:5273/MajdataView/src/${data.song}/maidata\n` +
+                    `http://localhost:5273/MajdataView/src/${data.song}/${data.track}\n` +
+                    `http://localhost:5273/MajdataView/src/${data.song}/bg\n` +
+                    `\n` + // mv url 是空的
+                    `lv${data.level - 1}`
                 );
             }
         });

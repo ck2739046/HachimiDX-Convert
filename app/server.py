@@ -22,32 +22,9 @@ app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-"""
-# State management class
-class AppState:
-    def __init__(self):
-        self._current_song = "None"
-        self._current_level = "None"
-    
-    @property
-    def current_song(self):
-        return self._current_song
-    
-    @current_song.setter 
-    def current_song(self, value):
-        self._current_song = value
-    
-    @property
-    def current_level(self):
-        return self._current_level
-    
-    @current_level.setter
-    def current_level(self, value):
-        self._current_level = value
 
-# Create global state instance
-state = AppState()
-"""
+
+
 
 # Configure static folder path
 static_folder = os.path.join(os.path.dirname(__file__), 'static')
@@ -58,13 +35,18 @@ app.template_folder = static_folder # render_template path
 song_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'aaa-result')
 app.song_folder = song_folder
 
+
+
+
+
 # Root
 @app.route('/')
 def chart_player():
     return render_template('majdataView.html')
 
-@app.route('/MajdataView/src/<string:song>/<string:track>/ImageFull/1')
-def majdataView_bg(song, track):
+# MajdataView请求曲绘文件
+@app.route('/MajdataView/src/<string:song>/bg')
+def majdataView_bg(song):
     # Return the background image
     bg_png = os.path.join(song_folder, song, 'bg.png')
     bg_jpg = os.path.join(song_folder, song, 'bg.jpg')  
@@ -74,9 +56,10 @@ def majdataView_bg(song, track):
         return send_file(bg_jpg)
     else:
         return "BG not found", 404
-        
-@app.route('/MajdataView/src/<string:song>/<string:track>/Maidata/1')
-def majdataView_maidata(song, track):
+
+# MajdataView请求谱面文件  
+@app.route('/MajdataView/src/<string:song>/maidata')
+def majdataView_maidata(song):
     # Return the chart data
     maidata = os.path.join(song_folder, song, 'maidata.txt')
     try:
@@ -86,7 +69,8 @@ def majdataView_maidata(song, track):
     except Exception as e:
         return "Chart not found", 404
 
-@app.route('/MajdataView/src/<string:song>/<string:track>/Track/1') 
+# MajdataView请求音频文件
+@app.route('/MajdataView/src/<string:song>/<string:track>') 
 def majdataView_track(song, track):
     # Return the audio track
     track_audio = os.path.join(song_folder, song, track)
@@ -94,6 +78,10 @@ def majdataView_track(song, track):
         return send_file(track_audio)
     else:
         return "Track not found", 404
+
+
+
+
 
 def MajdataView_load_chart(song, track, level):
     # 0: no error, 1: no chart, 2: no track
