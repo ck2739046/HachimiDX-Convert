@@ -224,6 +224,7 @@ class MainWindow(QMainWindow):
         self.playButton = QPushButton()
         self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         self.playButton.clicked.connect(self.play_video)
+        self.playButton.setEnabled(False)  # 初始状态为禁用
         controls_layout.addWidget(self.playButton)
         
         # Position slider
@@ -296,20 +297,30 @@ class MainWindow(QMainWindow):
             self.mediaPlayer_r.play()
 
     def load_video(self, filepath_l, filepath_r):
-        # 卸载当前视频
-        self.mediaPlayer_l.setSource(QUrl())
-        self.mediaPlayer_r.setSource(QUrl())
         # 加载新视频
         self.mediaPlayer_l.setSource(QUrl.fromLocalFile(filepath_l))
         self.mediaPlayer_r.setSource(QUrl.fromLocalFile(filepath_r))
         # 设置右边播放器静音
         self.audioOutput_r.setVolume(0)
-        
+        # 启用播放按钮
         self.playButton.setEnabled(True)
         # Update button color after load
         self.playButton.setStyleSheet("background-color: #C0C0C0;")
         # 重置进度条
         self.positionSlider.setValue(0)
+    
+    def clear_videos(self):
+        # 停止播放
+        self.mediaPlayer_l.stop()
+        self.mediaPlayer_r.stop()
+        # 卸载视频源
+        self.mediaPlayer_l.setSource(QUrl())
+        self.mediaPlayer_r.setSource(QUrl())
+        # 重置进度条
+        self.positionSlider.setRange(0, 0)
+        self.positionSlider.setValue(0)
+        # 重置播放按钮状态
+        self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
 
     def check_video_consistency(self, filepath1, filepath2):
         # 使用OpenCV检查两个视频的是否一致
@@ -370,11 +381,7 @@ class MainWindow(QMainWindow):
         refresh_button.clicked.connect(self.on_refresh_clicked)
         layout.addWidget(refresh_button)
 
-        # Load Video button
-        load_video_button = QPushButton("Load Video")
-        load_video_button.setFixedWidth(80)
-        load_video_button.clicked.connect(self.on_load_video_clicked)
-        layout.addWidget(load_video_button)
+
         
         # Add spacing for future buttons
         layout.addStretch()
@@ -392,38 +399,10 @@ class MainWindow(QMainWindow):
         server.MajdataView_refresh_page()
 
     @pyqtSlot()
-    def on_load_video_clicked(self):
-        # 根据当前选择的歌曲加载视频
-        song = self.song_input.currentText()
-        if not song:
-            return
-        song_path = os.path.join(server.song_folder, song)
-        if not os.path.exists(song_path):
-            return
-        # 查找MP4文件
-        mp4_files = [f for f in os.listdir(song_path) if f.endswith('.mp4')]
-        standardized_video = None
-        tracked_video = None
-        for file in mp4_files:
-            if file.endswith('_standardized.mp4'):
-                standardized_video = file
-            else:
-                tracked_video = file
-        if not standardized_video or not tracked_video:
-            print("未找到两个视频文件")
-            return # 必须两个视频都存在
-        standardized_path = os.path.join(song_path, standardized_video)
-        tracked_path = os.path.join(song_path, tracked_video)
-        # 检查视频一致性
-        if not self.check_video_consistency(standardized_path, tracked_path):
-            print("视频时长不匹配")
-            return
-        # 加载视频：左边播放standardized video，右边播放tracked video
-        self.load_video(standardized_path, tracked_path)
-
-    @pyqtSlot()
-    #Update track and level combobox
+    #Update track and level combobox and auto load videos
     def on_song_changed(self):
+        # 安全清理当前视频（如果有）
+        self.clear_videos()
 
         # Check song
         song = self.song_input.currentText()
@@ -460,6 +439,31 @@ class MainWindow(QMainWindow):
         for level in levels:
             self.level_choose.addItem(level)
         self.level_choose.setCurrentIndex(0)
+        # 自动加载视频
+        self.auto_load_videos(song_path)
+
+    def auto_load_videos(self, song_path):
+        # 查找MP4文件
+        mp4_files = [f for f in os.listdir(song_path) if f.endswith('.mp4')]
+        standardized_video = None
+        tracked_video = None
+        for file in mp4_files:
+            if file.endswith('_standardized.mp4'):
+                standardized_video = file
+            else:
+                tracked_video = file
+        # 检查是否找到两个视频
+        if not standardized_video or not tracked_video:
+            print("未找到两个视频文件")
+            return
+        standardized_path = os.path.join(song_path, standardized_video)
+        tracked_path = os.path.join(song_path, tracked_video)
+        # 检查视频兼容性
+        if not self.check_video_consistency(standardized_path, tracked_path):
+            print("视频时长不匹配")
+            return
+        # 加载视频：左边播放standardized video，右边播放tracked video
+        self.load_video(standardized_path, tracked_path)
 
 #--------------------------------------------------------------
 # Main
