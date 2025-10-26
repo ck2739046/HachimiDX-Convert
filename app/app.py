@@ -4,7 +4,7 @@ from PyQt6.QtCore import QUrl, QProcess, Qt
 from PyQt6.QtGui import QWindow, QIcon
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
-from PyQt6.QtWidgets import QStyle, QSlider, QFileDialog
+from PyQt6.QtWidgets import QStyle, QSlider, QFileDialog, QToolTip
 import threading
 import sys
 import win32gui
@@ -118,6 +118,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.chrome_handler = ChromeHandler()
         self.last_selection = "" # 全局变量，song_input用的，记录上次选择的歌曲
+        self.last_first = ""     # 全局变量，first_input用的，记录上次输入的first
         self.video_fps = 0       # 全局变量，上/下一帧按钮用的，存储视频fps
         self.setup_window()
         self.setup_layout()
@@ -389,7 +390,7 @@ class MainWindow(QMainWindow):
         self.first_input.setFixedWidth(65)
         self.first_input.setPlaceholderText("&first")
         self.first_input.setEnabled(False)  # 初始禁用
-        self.first_input.textChanged.connect(self.on_first_changed)
+        self.first_input.editingFinished.connect(self.on_first_changed)
         layout.addWidget(self.first_input)
         
         # Load button
@@ -473,6 +474,7 @@ class MainWindow(QMainWindow):
             self.level_choose.setCurrentIndex(0)
         # Set first input
         if first_value:
+            self.last_first = first_value # 更新last_first
             self.first_input.setEnabled(True)
             self.first_input.setText(first_value)
         # 自动加载视频
@@ -511,19 +513,23 @@ class MainWindow(QMainWindow):
         song = self.song_input.currentText()
         if not song or song == "---": return
         first_text = self.first_input.text().strip()
-        if not first_text: return  
+        if not first_text or self.last_first == first_text: return
         # 验证输入格式
+        self.last_first = first_text
         try:
             first_value = float(first_text)
-            if first_value < -1000 or first_value > 1000:
-                print("first out of range (±999)")
+            if first_value <= -1000 or first_value >= 1000:
+                QToolTip.showText(self.first_input.mapToGlobal(self.first_input.rect().topLeft()), 
+                                 "Out of range (±999)", self.first_input, self.first_input.rect(), 3000)
                 return
             decimal_part = first_text.split('.')[-1] if '.' in first_text else '0'
             if len(decimal_part) > 3:
-                print("first is up to 3 decimal places (0.001)")
+                QToolTip.showText(self.first_input.mapToGlobal(self.first_input.rect().topLeft()), 
+                                 "Accuracy up to 0.001", self.first_input, self.first_input.rect(), 3000)
                 return
         except ValueError:
-            #print("first value format error")
+            QToolTip.showText(self.first_input.mapToGlobal(self.first_input.rect().topLeft()), 
+                             "Invalid format", self.first_input, self.first_input.rect(), 3000)
             return
         # 更新maidata.txt文件
         song_path = os.path.join(server.song_folder, song)
@@ -537,9 +543,13 @@ class MainWindow(QMainWindow):
                     lines[i] = f'&first={first_text}\n'
                     break
             with open(maidata_path, 'w', encoding='utf-8') as f:
-                f.writelines(lines)    
+                f.writelines(lines)
+            # 成功更新后显示成功提示
+            QToolTip.showText(self.first_input.mapToGlobal(self.first_input.rect().topLeft()), 
+                             "OK", self.first_input, self.first_input.rect(), 1000)
         except Exception as e:
-            print(f"error updating maidata.txt &first value: {e}")
+            QToolTip.showText(self.first_input.mapToGlobal(self.first_input.rect().topLeft()), 
+                             f"error: {e}", self.first_input, self.first_input.rect(), 5000)
 
 #--------------------------------------------------------------
 # Main
