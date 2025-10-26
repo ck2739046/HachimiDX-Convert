@@ -223,6 +223,7 @@ class MainWindow(QMainWindow):
         self.positionSlider = QSlider(Qt.Orientation.Horizontal)
         self.positionSlider.setRange(0, 0)
         self.positionSlider.sliderMoved.connect(self.set_position)
+        self.positionSlider.sliderReleased.connect(self.on_slider_released)
         controls_layout.addWidget(self.positionSlider)
         
         # Add controls to main layout
@@ -253,6 +254,11 @@ class MainWindow(QMainWindow):
         self.positionSlider.setRange(0, duration)
 
     def set_position(self, position):
+        self.mediaPlayer.setPosition(position)
+
+    def on_slider_released(self):
+        # When slider is released (including click), update the position
+        position = self.positionSlider.value()
         self.mediaPlayer.setPosition(position)
 
     def load_video(self, filepath):
