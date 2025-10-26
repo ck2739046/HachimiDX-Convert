@@ -960,6 +960,8 @@ class NoteDetector:
             
             # 输出视频设置
             video_name = os.path.basename(input_path).rsplit('.', 1)[0]
+            if video_name.endswith('_standardized'):
+                video_name = video_name[:-13]
             output_path = os.path.join(output_dir, f'{video_name}_tracked_temp.mp4')
             if os.path.exists(output_path):
                 os.remove(output_path)
@@ -1194,7 +1196,7 @@ class NoteDetector:
             # 获取视频名称
             video_name = os.path.basename(video_path).rsplit('.', 1)[0]
             if video_name.endswith('_standardized'):
-                video_name = video_name[:-14]
+                video_name = video_name[:-13]
             output_dir = os.path.join(output_dir, video_name)
             os.makedirs(output_dir, exist_ok=True)
             
