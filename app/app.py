@@ -385,13 +385,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.level_choose)
         
         # First input
-        first_label = QLabel("first:")
-        first_label.setStyleSheet("color: white;")
-        layout.addWidget(first_label)
-        
         self.first_input = QLineEdit()
-        self.first_input.setFixedWidth(80)
-        self.first_input.setPlaceholderText("")
+        self.first_input.setFixedWidth(65)
+        self.first_input.setPlaceholderText("&first")
         self.first_input.setEnabled(False)  # 初始禁用
         self.first_input.textChanged.connect(self.on_first_changed)
         layout.addWidget(self.first_input)
@@ -519,7 +515,7 @@ class MainWindow(QMainWindow):
         # 验证输入格式
         try:
             first_value = float(first_text)
-            if first_value < -999 or first_value > 999:
+            if first_value < -1000 or first_value > 1000:
                 print("first out of range (±999)")
                 return
             decimal_part = first_text.split('.')[-1] if '.' in first_text else '0'
