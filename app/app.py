@@ -384,6 +384,18 @@ class MainWindow(QMainWindow):
         self.level_choose.setFixedWidth(41)
         layout.addWidget(self.level_choose)
         
+        # First input
+        first_label = QLabel("first:")
+        first_label.setStyleSheet("color: white;")
+        layout.addWidget(first_label)
+        
+        self.first_input = QLineEdit()
+        self.first_input.setFixedWidth(80)
+        self.first_input.setPlaceholderText("")
+        self.first_input.setEnabled(False)  # 初始禁用
+        self.first_input.textChanged.connect(self.on_first_changed)
+        layout.addWidget(self.first_input)
+        
         # Load button
         load_button = QPushButton("Load")
         load_button.setFixedWidth(60)
@@ -419,6 +431,10 @@ class MainWindow(QMainWindow):
         # Check song
         song = self.song_input.currentText()
         if not song or song == "---" or song == self.last_selection:
+            # 临时禁用
+            self.track_choose.setEnabled(False)
+            self.level_choose.setEnabled(False)
+            self.first_input.setEnabled(False)
             return
         song_path = os.path.join(server.song_folder, song)
         if not os.path.exists(song_path):
@@ -426,31 +442,43 @@ class MainWindow(QMainWindow):
         # Clear combobox
         self.track_choose.clear()
         self.level_choose.clear()
+        self.first_input.clear()
         # Get all mp3/ogg files in the song_path
         audio_files = []
         for f in os.listdir(song_path):
             if f.endswith('.mp3') or f.endswith('.ogg'):
                 audio_files.append(f)
         # Update track combobox
-        audio_files.sort()
-        for audio_file in audio_files:
-            self.track_choose.addItem(audio_file)
-        self.track_choose.setCurrentIndex(len(audio_files) - 1)
-        # Get all levels in maidata.txt
+        if audio_files:
+            self.track_choose.setEnabled(True)
+            audio_files.sort()
+            for audio_file in audio_files:
+                self.track_choose.addItem(audio_file)
+            self.track_choose.setCurrentIndex(len(audio_files) - 1)
+        # Get &first and all levels in maidata.txt
         maidata_path = os.path.join(song_path, 'maidata.txt')
         if not os.path.exists(maidata_path):
             return
         with open(maidata_path, encoding='utf-8') as f:
             data = f.read()
         levels = []
+        first_value = None
         for line in data.splitlines():
             if line.startswith('&inote_'):
                 levels.append(line[7])
+            if line.startswith('&first'):
+                first_value = line.split('=')[1].strip()  # 去掉'&first='部分
         # Update level combobox
-        levels.sort(reverse=True)
-        for level in levels:
-            self.level_choose.addItem(level)
-        self.level_choose.setCurrentIndex(0)
+        if levels:
+            self.level_choose.setEnabled(True)
+            levels.sort(reverse=True)
+            for level in levels:
+                self.level_choose.addItem(level)
+            self.level_choose.setCurrentIndex(0)
+        # Set first input
+        if first_value:
+            self.first_input.setEnabled(True)
+            self.first_input.setText(first_value)
         # 自动加载视频
         self.auto_load_videos(song_path)
         # 更新last_selection
@@ -481,6 +509,41 @@ class MainWindow(QMainWindow):
             self.video_fps = 0
         # 加载视频
         self.load_video(tracked_path)
+
+    def on_first_changed(self):
+        # 过滤无效输入
+        song = self.song_input.currentText()
+        if not song or song == "---": return
+        first_text = self.first_input.text().strip()
+        if not first_text: return  
+        # 验证输入格式
+        try:
+            first_value = float(first_text)
+            if first_value < -999 or first_value > 999:
+                print("first out of range (±999)")
+                return
+            decimal_part = first_text.split('.')[-1] if '.' in first_text else '0'
+            if len(decimal_part) > 3:
+                print("first is up to 3 decimal places (0.001)")
+                return
+        except ValueError:
+            #print("first value format error")
+            return
+        # 更新maidata.txt文件
+        song_path = os.path.join(server.song_folder, song)
+        maidata_path = os.path.join(song_path, 'maidata.txt')
+        if not os.path.exists(maidata_path): return
+        try:
+            with open(maidata_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.startswith('&first='):
+                    lines[i] = f'&first={first_text}\n'
+                    break
+            with open(maidata_path, 'w', encoding='utf-8') as f:
+                f.writelines(lines)    
+        except Exception as e:
+            print(f"error updating maidata.txt &first value: {e}")
 
 #--------------------------------------------------------------
 # Main
