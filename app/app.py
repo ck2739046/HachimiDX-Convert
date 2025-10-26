@@ -15,7 +15,6 @@ import server
 import os
 import psutil
 import cv2
-import numpy as np
 import os
 
 # 设置环境变量来禁用Qt多媒体库的调试输出
@@ -119,7 +118,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.chrome_handler = ChromeHandler()
         self.last_selection = "" # 全局变量，song_input用的，记录上次选择的歌曲
-        self.video_fps = (0, 0)  # 全局变量，上/下一帧按钮用的，存储视频fps
+        self.video_fps = 0       # 全局变量，上/下一帧按钮用的，存储视频fps
         self.setup_window()
         self.setup_layout()
 
@@ -202,25 +201,15 @@ class MainWindow(QMainWindow):
         video_layout = QHBoxLayout()
         video_layout.setSpacing(9)
         
-        # Create left media player with audio output (standardized video)
-        self.mediaPlayer_l = QMediaPlayer()
-        self.audioOutput_l = QAudioOutput()
-        self.mediaPlayer_l.setAudioOutput(self.audioOutput_l)
-        # Create left video widget
-        self.videoWidget_l = QVideoWidget()
-        self.videoWidget_l.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatioByExpanding) # let video fill the widget
-        self.mediaPlayer_l.setVideoOutput(self.videoWidget_l)
-        video_layout.addWidget(self.videoWidget_l)
-
-        # Create right media player with audio output (tracked video)
-        self.mediaPlayer_r = QMediaPlayer()
-        self.audioOutput_r = QAudioOutput()
-        self.mediaPlayer_r.setAudioOutput(self.audioOutput_r)
-        # Create right video widget
-        self.videoWidget_r = QVideoWidget()
-        self.videoWidget_r.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatioByExpanding) # let video fill the widget
-        self.mediaPlayer_r.setVideoOutput(self.videoWidget_r)
-        video_layout.addWidget(self.videoWidget_r)
+        # Create single media player with audio output
+        self.mediaPlayer = QMediaPlayer()
+        self.audioOutput = QAudioOutput()
+        self.mediaPlayer.setAudioOutput(self.audioOutput)
+        # Create video widget
+        self.videoWidget = QVideoWidget()
+        self.videoWidget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatioByExpanding) # let video fill the widget
+        self.mediaPlayer.setVideoOutput(self.videoWidget)
+        video_layout.addWidget(self.videoWidget)
 
         # Add video layout to main layout
         layout.addLayout(video_layout)
@@ -266,25 +255,18 @@ class MainWindow(QMainWindow):
 
         #------------------------------------------------------
         # Connect media player signals
-        self.mediaPlayer_l.positionChanged.connect(self.position_changed)
-        self.mediaPlayer_l.durationChanged.connect(self.duration_changed)
-        self.mediaPlayer_l.playbackStateChanged.connect(self.mediastate_changed)
-        
-        self.mediaPlayer_r.positionChanged.connect(self.position_changed)
-        self.mediaPlayer_r.durationChanged.connect(self.duration_changed)
-        self.mediaPlayer_r.playbackStateChanged.connect(self.mediastate_changed)
+        self.mediaPlayer.positionChanged.connect(self.position_changed)
+        self.mediaPlayer.durationChanged.connect(self.duration_changed)
+        self.mediaPlayer.playbackStateChanged.connect(self.mediastate_changed)
 
     def play_video(self):
-        if self.mediaPlayer_l.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self.mediaPlayer_l.pause()
-            self.mediaPlayer_r.pause()
+        if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.mediaPlayer.pause()
         else:
-            self.mediaPlayer_l.play()
-            self.mediaPlayer_r.play()
+            self.mediaPlayer.play()
 
     def mediastate_changed(self):
-        # 以左边播放器状态为准
-        if self.mediaPlayer_l.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+        if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
         else:
             self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
@@ -296,14 +278,12 @@ class MainWindow(QMainWindow):
         self.positionSlider.setRange(0, duration)
 
     def set_position(self, position):
-        self.mediaPlayer_l.setPosition(position)
-        self.mediaPlayer_r.setPosition(position)
+        self.mediaPlayer.setPosition(position)
 
     def on_slider_pressed(self):
         # When slider is pressed (click), pause the video temporarily
-        if self.mediaPlayer_l.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self.mediaPlayer_l.pause()
-            self.mediaPlayer_r.pause()
+        if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.mediaPlayer.pause()
             self.was_playing = True
         else:
             self.was_playing = False
@@ -311,66 +291,47 @@ class MainWindow(QMainWindow):
     def on_slider_released(self):
         # When slider is released (including click), update the position
         position = self.positionSlider.value()
-        self.mediaPlayer_l.setPosition(position)
-        self.mediaPlayer_r.setPosition(position)
-        
+        self.mediaPlayer.setPosition(position)
         # Resume playback if it was playing before
         if self.was_playing:
-            self.mediaPlayer_l.play()
-            self.mediaPlayer_r.play()
+            self.mediaPlayer.play()
 
     def goto_last_frame(self):
         # 如果视频没有加载，不执行任何操作
-        if not self.mediaPlayer_l.source().isValid() or not self.mediaPlayer_r.source().isValid():
-            return
-        if self.video_fps[0] <= 1: return
+        if not self.mediaPlayer.source().isValid(): return
+        if self.video_fps <= 1: return
         # 如果视频正在播放，先暂停
         self.was_playing = False
-        if self.mediaPlayer_l.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self.mediaPlayer_l.pause()
-            self.mediaPlayer_r.pause()
+        if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.mediaPlayer.pause()
         # 获取当前帧时间（毫秒）
-        current_pos_l = self.mediaPlayer_l.position()
-        current_pos_r = self.mediaPlayer_r.position()
+        current_pos = self.mediaPlayer.position()
         # 计算帧间隔（基于实际fps）
-        frame_interval_l = int(1000 / self.video_fps[0]) + 1
-        frame_interval_r = int(1000 / self.video_fps[1]) + 1
+        frame_interval = int(1000 / self.video_fps) + 1 # 避免浮点数误差
         # 设置新位置（上一帧）
-        new_pos_l = max(0, current_pos_l - frame_interval_l)
-        new_pos_r = max(0, current_pos_r - frame_interval_r)
-        self.mediaPlayer_l.setPosition(new_pos_l)
-        self.mediaPlayer_r.setPosition(new_pos_r)
+        new_pos = max(0, current_pos - frame_interval)
+        self.mediaPlayer.setPosition(new_pos)
 
     def goto_next_frame(self):
         # 如果视频没有加载，不执行任何操作
-        if not self.mediaPlayer_l.source().isValid() or not self.mediaPlayer_r.source().isValid():
-            return
-        if self.video_fps[0] <= 1: return
+        if not self.mediaPlayer.source().isValid(): return
+        if self.video_fps <= 1: return
         # 如果视频正在播放，先暂停
         self.was_playing = False
-        if self.mediaPlayer_l.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self.mediaPlayer_l.pause()
-            self.mediaPlayer_r.pause()
+        if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.mediaPlayer.pause()
         # 获取当前帧时间（毫秒）
-        current_pos_l = self.mediaPlayer_l.position()
-        current_pos_r = self.mediaPlayer_r.position()
+        current_pos = self.mediaPlayer.position()
         # 计算帧间隔（基于实际fps）
-        frame_interval_l = int(1000 / self.video_fps[0]) + 1
-        frame_interval_r = int(1000 / self.video_fps[1]) + 1
+        frame_interval = int(1000 / self.video_fps) + 1 # 避免浮点数误差
         # 设置新位置（下一帧）
-        duration_l = self.mediaPlayer_l.duration()
-        duration_r = self.mediaPlayer_r.duration()
-        new_pos_l = min(duration_l, current_pos_l + frame_interval_l)
-        new_pos_r = min(duration_r, current_pos_r + frame_interval_r)
-        self.mediaPlayer_l.setPosition(new_pos_l)
-        self.mediaPlayer_r.setPosition(new_pos_r)
+        duration = self.mediaPlayer.duration()
+        new_pos = min(duration, current_pos + frame_interval)
+        self.mediaPlayer.setPosition(new_pos)
 
-    def load_video(self, filepath_l, filepath_r):
+    def load_video(self, filepath):
         # 加载新视频
-        self.mediaPlayer_l.setSource(QUrl.fromLocalFile(filepath_l))
-        self.mediaPlayer_r.setSource(QUrl.fromLocalFile(filepath_r))
-        # 设置右边播放器静音
-        self.audioOutput_r.setVolume(0)
+        self.mediaPlayer.setSource(QUrl.fromLocalFile(filepath))
         # 启用播放按钮和帧导航按钮
         self.playButton.setEnabled(True)
         self.prevFrameButton.setEnabled(True)
@@ -383,16 +344,13 @@ class MainWindow(QMainWindow):
         self.positionSlider.setValue(0)
         self.was_playing = False
         # 视频加载后暂停
-        self.mediaPlayer_l.pause()
-        self.mediaPlayer_r.pause()
+        self.mediaPlayer.pause()
     
     def clear_videos(self):
         # 停止播放
-        self.mediaPlayer_l.stop()
-        self.mediaPlayer_r.stop()
+        self.mediaPlayer.stop()
         # 卸载视频源
-        self.mediaPlayer_l.setSource(QUrl())
-        self.mediaPlayer_r.setSource(QUrl())
+        self.mediaPlayer.setSource(QUrl())
         # 重置进度条
         self.positionSlider.setRange(0, 0)
         self.positionSlider.setValue(0)
@@ -403,35 +361,6 @@ class MainWindow(QMainWindow):
         self.prevFrameButton.setEnabled(False)
         self.nextFrameButton.setEnabled(False)
 
-    def check_video_consistency(self, filepath1, filepath2):
-        # 使用OpenCV检查两个视频的是否一致
-        try:
-            self.video_fps = (0, 0) # 重置fps
-            cap1 = cv2.VideoCapture(filepath1)
-            cap2 = cv2.VideoCapture(filepath2)
-            if not cap1.isOpened() or not cap2.isOpened():
-                return False
-            # 获取视频信息
-            fps1 = cap1.get(cv2.CAP_PROP_FPS)
-            fps2 = cap2.get(cv2.CAP_PROP_FPS)
-            frame_count1 = cap1.get(cv2.CAP_PROP_FRAME_COUNT)
-            frame_count2 = cap2.get(cv2.CAP_PROP_FRAME_COUNT)
-            cap1.release()
-            cap2.release()
-            # 比较信息
-            if abs(fps1 - fps2) < 0.1 and abs(frame_count1 - frame_count2) <= 3:
-                self.video_fps = (fps1, fps2) # 保存fps值到全局变量
-                return True
-            else:
-                print(f"视频不匹配:")
-                print(f"  FPS {fps1}, Frames {frame_count1}, {filepath1}")
-                print(f"  FPS {fps2}, Frames {frame_count2}, {filepath2}")
-                return False
-
-        except Exception as e:
-            print(f"视频检查错误: {e}")
-            return False
-
 #--------------------------------------------------------------
 # Sub setup_layout: setup middle right control panel
 
@@ -441,13 +370,13 @@ class MainWindow(QMainWindow):
         # Song editable combobox
         self.song_input = FolderComboBox()
         self.song_input.setEditable(True)
-        self.song_input.setFixedWidth(130)
+        self.song_input.setFixedWidth(180)
         self.song_input.currentTextChanged.connect(self.on_song_changed)
         layout.addWidget(self.song_input)
 
         # Track choose
         self.track_choose = QComboBox()
-        self.track_choose.setFixedWidth(130)
+        self.track_choose.setFixedWidth(100)
         layout.addWidget(self.track_choose)
         
         # Level choose
@@ -530,27 +459,28 @@ class MainWindow(QMainWindow):
     def auto_load_videos(self, song_path):
         # 安全清理当前视频（如果有）
         self.clear_videos()
-        # 查找MP4文件
+        # 查找以"_tracked"结尾的MP4文件
         mp4_files = [f for f in os.listdir(song_path) if f.endswith('.mp4')]
-        standardized_video = None
         tracked_video = None
         for file in mp4_files:
-            if file.endswith('_standardized.mp4'):
-                standardized_video = file
-            else:
+            if file.endswith('_tracked.mp4'):
                 tracked_video = file
-        # 检查是否找到两个视频
-        if not standardized_video or not tracked_video:
-            print("未找到两个视频文件")
+                break
+        # 检查是否找到视频
+        if not tracked_video:
+            print("未找到_tracked视频文件")
             return
-        standardized_path = os.path.join(song_path, standardized_video)
         tracked_path = os.path.join(song_path, tracked_video)
-        # 检查视频兼容性
-        if not self.check_video_consistency(standardized_path, tracked_path):
-            print("视频时长不匹配")
-            return
-        # 加载视频：左边播放standardized video，右边播放tracked video
-        self.load_video(standardized_path, tracked_path)
+        # 使用OpenCV获取视频FPS
+        try:
+            cap = cv2.VideoCapture(tracked_path)
+            self.video_fps = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
+        except Exception as e:
+            print(f"获取视频FPS错误: {e}")
+            self.video_fps = 0
+        # 加载视频
+        self.load_video(tracked_path)
 
 #--------------------------------------------------------------
 # Main
