@@ -16,6 +16,11 @@ import os
 import psutil
 import cv2
 import numpy as np
+import os
+
+# 设置环境变量来禁用Qt多媒体库的调试输出
+os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg*=false'
+
 
 
 def exception_handler(exctype, value, traceback):
@@ -49,13 +54,14 @@ class FolderComboBox(QComboBox):
     def mousePressEvent(self, event):
         current_text = self.currentText() # Save current text before clear
         self.clear()
+        self.addItem("---")  # 添加占位符
         if os.path.exists(server.song_folder):
             subdirs = [d for d in os.listdir(server.song_folder) 
                       if os.path.isdir(os.path.join(server.song_folder, d))]
             self.addItems(subdirs)
             
         # Restore previous selection if it exists
-        if current_text:
+        if current_text and current_text != "---":
             index = self.findText(current_text)
             if index >= 0:
                 self.setCurrentIndex(index)
@@ -111,6 +117,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.chrome_handler = ChromeHandler()
+        self.last_selection = "" # 全局变量，记录上次选择的歌曲
         self.setup_window()
         self.setup_layout()
 
@@ -401,13 +408,10 @@ class MainWindow(QMainWindow):
     @pyqtSlot()
     #Update track and level combobox and auto load videos
     def on_song_changed(self):
-        # 安全清理当前视频（如果有）
-        self.clear_videos()
-
         # Check song
         song = self.song_input.currentText()
-        if not song:
-            return   
+        if not song or song == "---" or song == self.last_selection:
+            return
         song_path = os.path.join(server.song_folder, song)
         if not os.path.exists(song_path):
             return
@@ -441,8 +445,12 @@ class MainWindow(QMainWindow):
         self.level_choose.setCurrentIndex(0)
         # 自动加载视频
         self.auto_load_videos(song_path)
+        # 更新last_selection
+        self.last_selection = song
 
     def auto_load_videos(self, song_path):
+        # 安全清理当前视频（如果有）
+        self.clear_videos()
         # 查找MP4文件
         mp4_files = [f for f in os.listdir(song_path) if f.endswith('.mp4')]
         standardized_video = None
