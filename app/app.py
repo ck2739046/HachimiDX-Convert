@@ -118,7 +118,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.chrome_handler = ChromeHandler()
-        self.last_selection = "" # 全局变量，记录上次选择的歌曲
+        self.last_selection = "" # 全局变量，song_input用的，记录上次选择的歌曲
+        self.video_fps = (0, 0)  # 全局变量，上/下一帧按钮用的，存储视频fps
         self.setup_window()
         self.setup_layout()
 
@@ -235,6 +236,20 @@ class MainWindow(QMainWindow):
         self.playButton.setEnabled(False)  # 初始状态为禁用
         controls_layout.addWidget(self.playButton)
         
+        # Previous frame button
+        self.prevFrameButton = QPushButton()
+        self.prevFrameButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowLeft))
+        self.prevFrameButton.clicked.connect(self.goto_last_frame)
+        self.prevFrameButton.setEnabled(False)  # 初始状态为禁用
+        controls_layout.addWidget(self.prevFrameButton)
+        
+        # Next frame button
+        self.nextFrameButton = QPushButton()
+        self.nextFrameButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight))
+        self.nextFrameButton.clicked.connect(self.goto_next_frame)
+        self.nextFrameButton.setEnabled(False)  # 初始状态为禁用
+        controls_layout.addWidget(self.nextFrameButton)
+        
         # Position slider
         self.positionSlider = QSlider(Qt.Orientation.Horizontal)
         self.positionSlider.setRange(0, 0)
@@ -304,18 +319,72 @@ class MainWindow(QMainWindow):
             self.mediaPlayer_l.play()
             self.mediaPlayer_r.play()
 
+    def goto_last_frame(self):
+        # 如果视频没有加载，不执行任何操作
+        if not self.mediaPlayer_l.source().isValid() or not self.mediaPlayer_r.source().isValid():
+            return
+        if self.video_fps[0] <= 1: return
+        # 如果视频正在播放，先暂停
+        self.was_playing = False
+        if self.mediaPlayer_l.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.mediaPlayer_l.pause()
+            self.mediaPlayer_r.pause()
+        # 获取当前帧时间（毫秒）
+        current_pos_l = self.mediaPlayer_l.position()
+        current_pos_r = self.mediaPlayer_r.position()
+        # 计算帧间隔（基于实际fps）
+        frame_interval_l = int(1000 / self.video_fps[0]) + 1
+        frame_interval_r = int(1000 / self.video_fps[1]) + 1
+        # 设置新位置（上一帧）
+        new_pos_l = max(0, current_pos_l - frame_interval_l)
+        new_pos_r = max(0, current_pos_r - frame_interval_r)
+        self.mediaPlayer_l.setPosition(new_pos_l)
+        self.mediaPlayer_r.setPosition(new_pos_r)
+
+    def goto_next_frame(self):
+        # 如果视频没有加载，不执行任何操作
+        if not self.mediaPlayer_l.source().isValid() or not self.mediaPlayer_r.source().isValid():
+            return
+        if self.video_fps[0] <= 1: return
+        # 如果视频正在播放，先暂停
+        self.was_playing = False
+        if self.mediaPlayer_l.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.mediaPlayer_l.pause()
+            self.mediaPlayer_r.pause()
+        # 获取当前帧时间（毫秒）
+        current_pos_l = self.mediaPlayer_l.position()
+        current_pos_r = self.mediaPlayer_r.position()
+        # 计算帧间隔（基于实际fps）
+        frame_interval_l = int(1000 / self.video_fps[0]) + 1
+        frame_interval_r = int(1000 / self.video_fps[1]) + 1
+        # 设置新位置（下一帧）
+        duration_l = self.mediaPlayer_l.duration()
+        duration_r = self.mediaPlayer_r.duration()
+        new_pos_l = min(duration_l, current_pos_l + frame_interval_l)
+        new_pos_r = min(duration_r, current_pos_r + frame_interval_r)
+        self.mediaPlayer_l.setPosition(new_pos_l)
+        self.mediaPlayer_r.setPosition(new_pos_r)
+
     def load_video(self, filepath_l, filepath_r):
         # 加载新视频
         self.mediaPlayer_l.setSource(QUrl.fromLocalFile(filepath_l))
         self.mediaPlayer_r.setSource(QUrl.fromLocalFile(filepath_r))
         # 设置右边播放器静音
         self.audioOutput_r.setVolume(0)
-        # 启用播放按钮
+        # 启用播放按钮和帧导航按钮
         self.playButton.setEnabled(True)
+        self.prevFrameButton.setEnabled(True)
+        self.nextFrameButton.setEnabled(True)
         # Update button color after load
         self.playButton.setStyleSheet("background-color: #C0C0C0;")
-        # 重置进度条
+        self.prevFrameButton.setStyleSheet("background-color: #C0C0C0;")
+        self.nextFrameButton.setStyleSheet("background-color: #C0C0C0;")
+        # 重置参数
         self.positionSlider.setValue(0)
+        self.was_playing = False
+        # 视频加载后暂停
+        self.mediaPlayer_l.pause()
+        self.mediaPlayer_r.pause()
     
     def clear_videos(self):
         # 停止播放
@@ -329,10 +398,15 @@ class MainWindow(QMainWindow):
         self.positionSlider.setValue(0)
         # 重置播放按钮状态
         self.playButton.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+        # 禁用播放按钮和帧导航按钮
+        self.playButton.setEnabled(False)
+        self.prevFrameButton.setEnabled(False)
+        self.nextFrameButton.setEnabled(False)
 
     def check_video_consistency(self, filepath1, filepath2):
         # 使用OpenCV检查两个视频的是否一致
         try:
+            self.video_fps = (0, 0) # 重置fps
             cap1 = cv2.VideoCapture(filepath1)
             cap2 = cv2.VideoCapture(filepath2)
             if not cap1.isOpened() or not cap2.isOpened():
@@ -346,8 +420,12 @@ class MainWindow(QMainWindow):
             cap2.release()
             # 比较信息
             if abs(fps1 - fps2) < 0.1 and abs(frame_count1 - frame_count2) <= 3:
+                self.video_fps = (fps1, fps2) # 保存fps值到全局变量
                 return True
             else:
+                print(f"视频不匹配:")
+                print(f"  FPS {fps1}, Frames {frame_count1}, {filepath1}")
+                print(f"  FPS {fps2}, Frames {frame_count2}, {filepath2}")
                 return False
 
         except Exception as e:
