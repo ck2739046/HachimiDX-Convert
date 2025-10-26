@@ -19,7 +19,8 @@ import numpy as np
 import os
 
 # 设置环境变量来禁用Qt多媒体库的调试输出
-os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg*=false'
+os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg*=false;' \
+                                 'qt.multimedia.playbackengine.codec*=false' # 误报，实际可以使用硬件加速
 
 
 
