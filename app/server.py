@@ -54,8 +54,8 @@ static_folder = os.path.join(os.path.dirname(__file__), 'static')
 app.static_folder = static_folder
 app.template_folder = static_folder # render_template path
 
-# Configure song folder path (brooooo)
-song_folder = os.path.join(os.path.dirname(__file__), 'brooooo')
+# Configure song folder path (aaa-result)
+song_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'aaa-result')
 app.song_folder = song_folder
 
 # Root

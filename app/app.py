@@ -69,7 +69,7 @@ class ChromeHandler:
     
     def start_chrome(self):
         self.chrome_process = QProcess()
-        pywebview = os.path.join(os.path.dirname(__file__), 'launch_web.exe')
+        pywebview = os.path.join(os.path.dirname(__file__), 'static', 'launch_web.exe')
         self.chrome_process.start(pywebview)
 
     def find_chrome_window(self, timeout=5):

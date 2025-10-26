@@ -1,5 +1,5 @@
 .idea
 __pycache__
-venv
+.venv
 temp
 aaa-result
