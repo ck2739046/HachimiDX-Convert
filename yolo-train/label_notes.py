@@ -725,17 +725,16 @@ def draw_touch_hold_note(note, target_time):
     if note.touchAlpha < 0.4: return None, None # 忽略过于透明的音符
 
     if note.touchDecor > 0.01:
-        size = note.touchDecor + 100 # 缩放阶段
+        size = note.touchDecor + 68 # 缩放阶段
     else:
-        size = note.touchDecor + 120 # 转圈阶段
+        size = note.touchDecor + 100 # 转圈阶段
 
-    # 反正最后识别尺寸也是靠识别彩虹框，不需要画框很精准
-    # 返回菱形四个点
+    # 反正最后识别尺寸也是靠识别彩虹框，跟touch一样不做运动补偿了
     return [
-        (center_x, center_y - size),  # 上
-        (center_x - size, center_y),  # 左
-        (center_x, center_y + size),  # 下
-        (center_x + size, center_y),  # 右
+        (center_x - size, center_y - size),  # 左上
+        (center_x + size, center_y - size),  # 右上
+        (center_x + size, center_y + size),  # 右下
+        (center_x - size, center_y + size),  # 左下
     ], (center_x, center_y)
 
 
@@ -1795,13 +1794,13 @@ def export_all_classification_datasets():
             'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11820_120_standardized.mp4",
             'txt_path': r"C:\Users\ck273\Desktop\train\11820_2025-10-16_19-03-33.txt",
             'align_diff': -100.0,
-            'star_skin': 1
+            'star_skin': 1 # 粉色尖头星星
         },
         {
             'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11814_120_standardized.mp4",
             'txt_path': r"C:\Users\ck273\Desktop\train\11814_2025-10-16_19-17-01.txt",
             'align_diff': -216.666667,
-            'star_skin': 0
+            'star_skin': 0 # 蓝色圆头星星
         }
     ]
     
@@ -1811,25 +1810,25 @@ def export_all_classification_datasets():
             'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11818_120_standardized.mp4",
             'txt_path': r"C:\Users\ck273\Desktop\train\11818_2025-10-16_19-08-17.txt",
             'align_diff': 66.666667,
-            'star_skin': 1
+            'star_skin': 1 # 蓝色尖头星星
         },
         {
             'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4",
             'txt_path': r"C:\Users\ck273\Desktop\train\11753_2025-10-16_14-59-08.txt",
             'align_diff': -291.666667,
-            'star_skin': 0
+            'star_skin': 0 # 蓝色圆头星星
         },
         {
             'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11741_120_standardized.mp4",
             'txt_path': r"C:\Users\ck273\Desktop\train\11741_2025-10-16_18-56-29.txt",
             'align_diff': -133.333333,
-            'star_skin': 1
+            'star_skin': 1 # 粉色尖头星星
         },
         {
             'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11311_120_standardized.mp4",
             'txt_path': r"C:\Users\ck273\Desktop\train\11311_2025-10-16_19-00-53.txt",
             'align_diff': -141.666667,
-            'star_skin': 0
+            'star_skin': 0 # 粉色圆头星星
         }
     ]
     
@@ -1970,47 +1969,47 @@ if __name__ == "__main__":
     # detect: 0 Tap, 1 Slide, 2 Touch
     # obb: 0 Hold, 1 TouchHold
 
-    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4"
-    # txt_path= r"C:\Users\ck273\Desktop\train\11753_2025-10-16_14-59-08.txt"
-    # output_dir = r"C:\Users\ck273\Desktop\train\11753"
+    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11753_120_standardized.mp4"
+    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11753_2025-10-16_14-59-08.txt"
+    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11753"
     # align_diff = -291.666667
-    # star_skin = 0
+    # star_skin = 0 # 蓝色圆头星星
 
-    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11394_120_standardized.mp4"
-    # txt_path= r"C:\Users\ck273\Desktop\train\11394_2025-10-16_14-03-19.txt"
-    # output_dir = r"C:\Users\ck273\Desktop\train\11394"
+    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11394_120_standardized.mp4"
+    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11394_2025-10-16_14-03-19.txt"
+    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11394"
     # align_diff = -175.0
-    # star_skin = 1
+    # star_skin = 1 # 粉色尖头星星
 
-    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11311_120_standardized.mp4"
-    # txt_path= r"C:\Users\ck273\Desktop\train\11311_2025-10-16_19-00-53.txt"
-    # output_dir = r"C:\Users\ck273\Desktop\train\11311"
+    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11311_120_standardized.mp4"
+    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11311_2025-10-16_19-00-53.txt"
+    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11311"
     # align_diff = -141.666667
-    # star_skin = 0
+    # star_skin = 0 # 粉色圆头星星
 
-    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11741_120_standardized.mp4"
-    # txt_path= r"C:\Users\ck273\Desktop\train\11741_2025-10-16_18-56-29.txt"
-    # output_dir = r"C:\Users\ck273\Desktop\train\11741"
+    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11741_120_standardized.mp4"
+    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11741_2025-10-16_18-56-29.txt"
+    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11741"
     # align_diff = -133.333333
-    # star_skin = 1
+    # star_skin = 1 # 粉色尖头星星
 
-    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11814_120_standardized.mp4"
-    # txt_path= r"C:\Users\ck273\Desktop\train\11814_2025-10-16_19-17-01.txt"
-    # output_dir = r"C:\Users\ck273\Desktop\train\11814"
+    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11814_120_standardized.mp4"
+    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11814_2025-10-16_19-17-01.txt"
+    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11814"
     # align_diff = -216.666667
-    # star_skin = 0
+    # star_skin = 0 # 蓝色圆头星星
 
-    # video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11818_120_standardized.mp4"
-    # txt_path= r"C:\Users\ck273\Desktop\train\11818_2025-10-16_19-08-17.txt"
-    # output_dir = r"C:\Users\ck273\Desktop\train\11818"
+    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11818_120_standardized.mp4"
+    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11818_2025-10-16_19-08-17.txt"
+    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11818"
     # align_diff = 66.666667
-    # star_skin = 1
+    # star_skin = 1 # 蓝色尖头星星
 
-    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\11820_120_standardized.mp4"
-    txt_path= r"C:\Users\ck273\Desktop\train\11820_2025-10-16_19-03-33.txt"
-    output_dir = r"C:\Users\ck273\Desktop\train\11820"
+    video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11820_120_standardized.mp4"
+    txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11820_2025-10-16_19-03-33.txt"
+    output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11820"
     align_diff = -100.0
-    star_skin = 1
+    star_skin = 1 # 粉色尖头星星
    
 
     # 执行对齐

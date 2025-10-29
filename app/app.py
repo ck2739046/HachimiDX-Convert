@@ -37,7 +37,7 @@ def exception_handler(exctype, value, traceback):
         pass
     # Print the original error
     sys.__excepthook__(exctype, value, traceback)
-    print("---mai chart analyze quit in exception_handler---")
+    print("---HachimiDX-Convert quit in exception_handler---")
     print("Press ignore the following QProcess error:")
     sys.exit(1)
 
@@ -108,7 +108,7 @@ class ChromeHandler:
         time.sleep(0.2)
         if self.chrome_process:
             self.chrome_process.kill()
-            print("mai chart analyze quit normally")
+            print("HachimiDX-Convert quit normally")
 
 #--------------------------------------------------------------
 # Main Class
@@ -124,7 +124,7 @@ class MainWindow(QMainWindow):
         self.setup_layout()
 
     def setup_window(self):
-        self.setWindowTitle("Mai Chart Analyze")
+        self.setWindowTitle("HachimiDX-Convert")
         self.setFixedSize(1536, 864)
         icon_path = os.path.join(os.path.dirname(__file__), 'static', 'maimai.ico')
         self.setWindowIcon(QIcon(icon_path))
