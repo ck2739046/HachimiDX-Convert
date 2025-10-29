@@ -1019,10 +1019,15 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
                     points, center = draw_slide_note(note, notes_virtual_time)
                     class_id = 1
                 
-                # Touch音符 (class_id = 2，不包括TouchHold)
+                # Touch音符 (class_id = 2)
                 elif 'touch' in note_type and 'touchhold' not in note_type:
                     points, center = draw_touch_note(note, notes_virtual_time)
                     class_id = 2
+                
+                # TouchHold音符 (class_id = 3)
+                elif 'touchhold' in note_type:
+                    points, center = draw_touch_hold_note(note, notes_virtual_time)
+                    class_id = 3
                 
                 # 如果成功获取了角点数据
                 if points is not None and center is not None and class_id >= 0:
@@ -1077,11 +1082,6 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
                 if note_type in ['holdnote', 'breakholdnote']:
                     points, _, _ = draw_hold_note(note, notes_virtual_time)
                     class_id = 0
-                
-                # TouchHold音符 (class_id = 1)
-                elif 'touchhold' in note_type:
-                    points, _ = draw_touch_hold_note(note, notes_virtual_time)
-                    class_id = 1
                 
                 # 如果成功获取了角点数据
                 if points is not None and class_id >= 0:
@@ -1244,7 +1244,7 @@ def verify_dataset(output_dir):
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                         
                         # 标注类别
-                        class_names = ['TAP', 'SLIDE', 'TOUCH']
+                        class_names = ['TAP', 'SLIDE', 'TOUCH', 'TOUCH-HOLD']
                         label = class_names[class_id] if class_id < len(class_names) else str(class_id)
                         cv2.putText(frame, label, (x1, y1 - 5), 
                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
@@ -1273,7 +1273,7 @@ def verify_dataset(output_dir):
                         cv2.polylines(frame, [pts], isClosed=True, color=(0, 0, 255), thickness=2)
                         
                         # 标注类别
-                        class_names = ['HOLD', 'TOUCH-HOLD']
+                        class_names = ['HOLD']
                         label = class_names[class_id] if class_id < len(class_names) else str(class_id)
                         cv2.putText(frame, label, (points[0][0], points[0][1] - 5), 
                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
@@ -1966,8 +1966,8 @@ if __name__ == "__main__":
 
     align_diff = 0
     # star_skin 0 圆头星星，1 尖头星星
-    # detect: 0 Tap, 1 Slide, 2 Touch
-    # obb: 0 Hold, 1 TouchHold
+    # detect: 0 Tap, 1 Slide, 2 Touch, 3 TouchHold
+    # obb: 0 Hold
 
     # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11753_120_standardized.mp4"
     # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11753_2025-10-16_14-59-08.txt"
@@ -1996,7 +1996,7 @@ if __name__ == "__main__":
     # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11814_120_standardized.mp4"
     # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11814_2025-10-16_19-17-01.txt"
     # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11814"
-    # align_diff = -216.666667
+    # align_diff = -336.666667
     # star_skin = 0 # 蓝色圆头星星
 
     # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11818_120_standardized.mp4"
@@ -2008,7 +2008,7 @@ if __name__ == "__main__":
     video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11820_120_standardized.mp4"
     txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11820_2025-10-16_19-03-33.txt"
     output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11820"
-    align_diff = -100.0
+    align_diff = -233.333333
     star_skin = 1 # 粉色尖头星星
    
 

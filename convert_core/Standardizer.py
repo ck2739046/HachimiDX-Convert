@@ -586,8 +586,8 @@ if __name__ == "__main__":
 
     # video_path = r"11814_120.mkv"
     # video_mode = "source"
-    # start_frame = 1090
-    # end_frame = 17100
+    # start_frame = 2200
+    # end_frame = 18250
 
     # video_path = r"11741_120.mkv"
     # video_mode = "source"
@@ -601,8 +601,8 @@ if __name__ == "__main__":
 
     # video_path = r"11820_120.mkv"
     # video_mode = "source"
-    # start_frame = 610
-    # end_frame = 31820
+    # start_frame = 560
+    # end_frame = 31810
 
     # video_mode = "source" or "camera shot"
     
