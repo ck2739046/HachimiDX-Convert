@@ -205,7 +205,7 @@ class NoteDetector:
 
                 # 0 = Tap = 0, 1 = Slide = 5 , 2 = Touch = 10
                 mapped_class_id = self.main_class_id[class_id]
-                if class_id == 4: # Touch-hold
+                if class_id == 3: # Touch-hold
                     mapped_class_id = self.main_class_id[class_id+1]
                 
                 # 对于普通检测框，使用边界框的四个角点
