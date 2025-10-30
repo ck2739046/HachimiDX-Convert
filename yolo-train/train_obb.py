@@ -22,13 +22,13 @@ class CustomOBBTrainer(OBBTrainer):
 def train(model_name=None):
 
     # 检查数据集配置
-    data_config = os.path.join('/root/autodl-tmp', 'dataset', 'data.yaml')
+    data_config = os.path.join('/root/autodl-tmp', 'dataset', 'data_obb.yaml')
     if not os.path.exists(data_config):
         print(f"错误: 未找到数据集配置文件 {data_config}")
         return
     
     # 加载预训练模型
-    model = YOLO('yolo11l-obb.pt')
+    model = YOLO('yolo11s-obb.pt')
 
     project_path = os.path.join(os.path.dirname(__file__), 'result')
 
@@ -36,18 +36,19 @@ def train(model_name=None):
         model_name = 'note_unknown'
 
     # 参数
-    workers_num = 24
-    batch_num = 28
+    workers_num = 25
+    batch_num = 40
     
     # 开始训练（使用自定义的 VarifocalLoss 训练器）
     print("开始训练（使用 VarifocalLoss 处理数据集不平衡）...")
     results = model.train(
         trainer=CustomOBBTrainer,  # 使用自定义 OBB 训练器
         data=data_config,
-        epochs=100,     
+        epochs=18,     
         imgsz=960,        
         batch=batch_num,        
-        patience=5,           
+        patience=5,
+        save_period=1,
         workers=workers_num,    
         device=0,        
         project=project_path,

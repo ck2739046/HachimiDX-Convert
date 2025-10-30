@@ -19,7 +19,7 @@ class CustomDetectionTrainer(DetectionTrainer):
 def train(model_name=None):
 
     # 检查数据集配置
-    data_config = os.path.join('/root/autodl-tmp', 'dataset', 'data.yaml')
+    data_config = os.path.join('/root/autodl-tmp', 'dataset', 'data_detect.yaml')
     if not os.path.exists(data_config):
         print(f"错误: 未找到数据集配置文件 {data_config}")
         return
@@ -33,18 +33,19 @@ def train(model_name=None):
         model_name = 'note_unknown'
 
     # 参数
-    workers_num = 24
-    batch_num = 29
+    workers_num = 20
+    batch_num = 28
     
-    # 开始训练（使用自定义的FocalLoss训练器）
-    print("开始训练（使用FocalLoss处理数据集不平衡）...")
+    # 开始训练（使用自定义的VariFocalLoss训练器）
+    print("开始训练（使用VariFocalLoss处理数据集不平衡）...")
     results = model.train(
         trainer=CustomDetectionTrainer,  # 使用自定义训练器
         data=data_config,
-        epochs=100,     
+        epochs=18,     
         imgsz=960,        
         batch=batch_num,        
-        patience=5,           
+        patience=5, 
+        save_period=1,
         workers=workers_num,    
         device=0,        
         project=project_path,
@@ -61,7 +62,7 @@ def train(model_name=None):
         lr0=0.001,
         weight_decay=0.0005,
 
-        rect=True,          # 启用矩形训练以提高效率
+        rect=True,
         mosaic=0.4,         # 启用马赛克增强
 
         hsv_h=0.02,         # HSV色调增强，适应不同光照

@@ -765,7 +765,7 @@ class NoteDetector:
                 last_start_time = end_time # 重置时间给下一轮
                 last_processed_tracks = processed_tracks # 重置轨迹数给下一轮
                 tracks_per_sec = elapsed_tracks / elapsed_time if elapsed_time > 0 else 0
-                print(f"分类进度: {processed_tracks}/{total_tracks} ({progress:.1f}%) {tracks_per_sec:.1f}tracks/s", end="\r", flush=True)
+                print(f"分类进度: {processed_tracks}/{total_tracks} ({progress:.1f}%) {tracks_per_sec:.1f}tracks/s  ", end="\r", flush=True)
             
             cap.release()
 
@@ -1166,7 +1166,7 @@ class NoteDetector:
                 os.rename(output_path, final_output_path)
             
             # 复制原始视频到输出目录
-            original_video_path = os.path.join(output_dir, f'{video_name}.mp4')
+            original_video_path = os.path.join(output_dir, f'{video_name}_standardized.mp4')
             if os.path.exists(original_video_path):
                 os.remove(original_video_path)
             shutil.copy(input_path, original_video_path)

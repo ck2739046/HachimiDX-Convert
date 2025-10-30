@@ -1813,7 +1813,7 @@ class NoteAnalyzer:
         f.write(f'&title={video_name}\n')
         f.write('&artist=default\n')
         f.write('&first=0\n')
-        f.write(f'&des_{chart_lv}=10\n')
+        f.write(f'&des_{chart_lv}=default\n')
         f.write(f'&lv_{chart_lv}=10\n')
         f.write(f'&inote_{chart_lv}=({bpm})' + '{1},')
         # 打印基础信息
@@ -2047,10 +2047,10 @@ class NoteAnalyzer:
 
 if __name__ == "__main__":
 
-    folder_name = "Customized Justice EXPERT_standardized"
-    folder_path = rf"D:\git\mai-chart-analyze\yolo-train\runs\detect\{folder_name}"
+    folder_name = "ヒアソビ EXPERT"
+    folder_path = rf"D:\git\aaa-HachimiDX-Convert\aaa-result\{folder_name}"
 
-    bpm = 292
+    bpm = 134
     chart_lv = 4
     base_denominator = 32
 
