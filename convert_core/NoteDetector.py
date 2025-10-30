@@ -59,7 +59,7 @@ class NoteDetector:
             return 0  # tap
         
     def is_obb(self, id):
-        if self.get_main_class_id(id) in [3, 4]:  # hold, touch-hold
+        if self.get_main_class_id(id) == 3:  # hold
             return True
         else:
             return False
@@ -205,6 +205,8 @@ class NoteDetector:
 
                 # 0 = Tap = 0, 1 = Slide = 5 , 2 = Touch = 10
                 mapped_class_id = self.main_class_id[class_id]
+                if class_id == 4: # Touch-hold
+                    mapped_class_id = self.main_class_id[class_id+1]
                 
                 # 对于普通检测框，使用边界框的四个角点
                 x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
@@ -230,7 +232,7 @@ class NoteDetector:
                 points = xyxyxyxy[i]
                 class_id = int(cls[i])
                 
-                # 3 = Hold = 15, 4 = Touch-Hold = 20
+                # 3 = Hold = 15
                 mapped_class_id = self.main_class_id[class_id+3]
                 
                 # 对于OBB，使用原始四个点坐标
@@ -395,7 +397,7 @@ class NoteDetector:
                     class_id = detection['class_id']
                     tracker_idx = self.get_main_class_id(class_id)
                     
-                    # 对于hold和touch-hold，将OBB转换为外接矩形
+                    # 对于hold，将OBB转换为外接矩形
                     if self.is_obb(class_id):
                         x_coords = [detection['x1'], detection['x2'], detection['x3'], detection['x4']]
                         y_coords = [detection['y1'], detection['y2'], detection['y3'], detection['y4']]
@@ -952,12 +954,6 @@ class NoteDetector:
             fps = round(cap.get(cv2.CAP_PROP_FPS))
             total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             
-            # 计算黑色分隔符宽度
-            black_separator_width = max(1, int(video_width / 60))
-            
-            # 新视频宽度：左原始帧 + 黑色分隔符 + 右跟踪帧
-            new_video_width = video_width * 2 + black_separator_width
-            
             # 输出视频设置
             video_name = os.path.basename(input_path).rsplit('.', 1)[0]
             if video_name.endswith('_standardized'):
@@ -967,7 +963,7 @@ class NoteDetector:
                 os.remove(output_path)
             
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, fps, (new_video_width, video_height))
+            out = cv2.VideoWriter(output_path, fourcc, fps, (video_width, video_height))
             
             # 为不同ID生成不同颜色
             def get_color_for_id(track_id):
@@ -1014,16 +1010,13 @@ class NoteDetector:
                 if not ret:
                     break
                 
-                # 创建原始帧的副本用于右侧跟踪显示
-                tracked_frame = frame.copy()
-                
                 # 获取当前帧的轨迹点
                 current_tracks = frame_tracks.get(frame_number, [])
                 
                 # 更新当前帧中存在的轨迹
                 current_track_ids = set()
                 
-                # 在右侧跟踪帧上绘制当前帧的音符
+                # 绘制当前帧的音符
                 for track in current_tracks:
                     track_id = track['track_id']
                     class_id = track['class_id']
@@ -1040,10 +1033,10 @@ class NoteDetector:
                             [track['x3'], track['y3']],
                             [track['x4'], track['y4']]
                         ], dtype=np.int32)
-                        cv2.polylines(tracked_frame, [points], True, color, 2)
+                        cv2.polylines(frame, [points], True, color, 2)
                     else:
                         x1, y1, x2, y2 = int(track['x1']), int(track['y1']), int(track['x2']), int(track['y2'])
-                        cv2.rectangle(tracked_frame, (x1, y1), (x2, y2), color, 2)
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                     
                     # 绘制标签
                     class_name = self.class_label.get(class_id, f'unknown-{class_id}')
@@ -1063,9 +1056,9 @@ class NoteDetector:
                         label_x = x1
                         label_y = y1
                     
-                    cv2.rectangle(tracked_frame, (label_x, label_y - label_size[1] - 10), 
+                    cv2.rectangle(frame, (label_x, label_y - label_size[1] - 10), 
                                 (label_x + label_size[0], label_y), color, -1)
-                    cv2.putText(tracked_frame, label, (label_x, label_y - 5), 
+                    cv2.putText(frame, label, (label_x, label_y - 5), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
                     
                     # 更新轨迹历史
@@ -1098,31 +1091,19 @@ class NoteDetector:
                     if track_id in track_last_seen:
                         del track_last_seen[track_id]
                 
-                # 在右侧跟踪帧上绘制轨迹线
+                # 绘制轨迹线
                 for track_id, points in track_history.items():
                     if len(points) > 1:
                         color = get_color_for_id(track_id)
                         for i in range(1, len(points)):
-                            cv2.line(tracked_frame, points[i-1], points[i], color, 3)
+                            cv2.line(frame, points[i-1], points[i], color, 3)
                         
                         # 在轨迹起点绘制小圆点
                         if points:
-                            cv2.circle(tracked_frame, points[0], 3, color, -1)
-                
-                # 创建三部分组合帧：左原始 + 中黑色分隔 + 右跟踪
-                combined_frame = np.zeros((video_height, new_video_width, 3), dtype=np.uint8)
-                
-                # 左侧：原始帧
-                combined_frame[0:video_height, 0:video_width] = frame
-                
-                # 中间：黑色分隔符
-                combined_frame[0:video_height, video_width:video_width + black_separator_width] = 0
-                
-                # 右侧：跟踪帧
-                combined_frame[0:video_height, video_width + black_separator_width:new_video_width] = tracked_frame
+                            cv2.circle(frame, points[0], 3, color, -1)
                 
                 # 写入输出视频
-                out.write(combined_frame)
+                out.write(frame)
                 
                 # 显示进度
                 if frame_number % 30 == 0:
@@ -1183,7 +1164,7 @@ class NoteDetector:
 
 
 
-    def main(self, video_path, output_dir, detect_model_path, obb_model_path, cls_ex_model_path, cls_break_model_path, detect=True):
+    def main(self, video_path, output_dir, detect_model_path, obb_model_path, cls_ex_model_path, cls_break_model_path, detect=True, export=True):
         """主函数：协调各个模块的执行"""
         try:
             # 检查输入文件是否存在
@@ -1222,7 +1203,10 @@ class NoteDetector:
             del classified_tracks
             
             # 导出视频模块
-            final_output_video_path = self.export_video_module(video_path, output_dir)
+            if export:
+                self.export_video_module(video_path, output_dir)
+            else:
+                print("跳过导出视频模块。")
 
             return os.path.abspath(output_dir)
             
@@ -1235,21 +1219,15 @@ class NoteDetector:
 
 
 if __name__ == "__main__":
-    video_path = r"D:\git\mai-chart-analyze\yolo-train\temp\Customized Justice EXPERT_standardized.mp4"
-    detect_model_path = r"C:\Users\ck273\Desktop\detect_varifocalloss.pt"
-    obb_model_path = r"C:\Users\ck273\Desktop\obb.pt"
-    cls_ex_model_path = r"C:\Users\ck273\Desktop\cls-ex.pt"
-    cls_break_model_path = r"C:\Users\ck273\Desktop\cls-break.pt"
-    output_dir = r"D:\git\mai-chart-analyze\yolo-train\runs\detect"
-    detect = False  # 是否执行检测模块
-    
+
     detector = NoteDetector()
     final_output_dir_path = detector.main(
-        video_path,
-        output_dir,
-        detect_model_path,
-        obb_model_path,
-        cls_ex_model_path,
-        cls_break_model_path,
-        detect=detect
+        rf"C:\Users\ck273\Desktop\風又ねリ\ニルヴの心臓 MASTER 14.3.mp4",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'aaa-result'),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/pt/detect.pt'),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/pt/obb.pt'),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/pt/cls-ex.pt'),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'yolo-train/pt/cls-break.pt'),
+        detect=True,  # 是否执行检测模块
+        export=True   # 是否执行导出视频模块
     )
