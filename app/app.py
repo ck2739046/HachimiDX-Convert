@@ -186,9 +186,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("HachimiDX-Convert")
         icon_path = os.path.join(os.path.dirname(__file__), 'static', 'maimai.ico')
         self.setWindowIcon(QIcon(icon_path))
-        self.setMinimumSize(700, 450)  # 最小尺寸
-        self.resize(1400, 900)         # 初始尺寸
-        self.setAspectRatio(1400, 900) # 固定宽高比
+        self.setFixedSize(1400, 900)
 
 
     def setup_layout(self):
