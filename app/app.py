@@ -24,21 +24,23 @@ os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg*=false;' \
 
 
 def exception_handler(exctype, value, traceback):
-    # Close chrome before exiting
+    # Close external programs before exiting
     try:
         for proc in psutil.process_iter(['name']):
             try:
-                if proc.info['name'] == 'launch_web.exe':
+                if 'MajdataView' in proc.info['name']: # 先关闭view，防止edit弹窗
                     proc.kill()
-                    print("Browser closed")
+                    print("MajdataView force closed")
+                if 'MajdataEdit' in proc.info['name']:
+                    proc.kill()
+                    print("MajdataEdit force closed")
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
     except:
         pass
     # Print the original error
     sys.__excepthook__(exctype, value, traceback)
-    print("---HachimiDX-Convert quit in exception_handler---")
-    print("Press ignore the following QProcess error:")
+    print("---HachimiDX-Convert quit abnormally---")
     sys.exit(1)
 
 
@@ -96,9 +98,11 @@ class ExternalProgramHandler:
         self.exe_hwnd = None
         self.exe_process = None
 
+
     def start_external_program(self, program_path):
         self.exe_process = QProcess()
         self.exe_process.start(program_path)
+
 
     def find_external_program_hwnd(self, timeout=5):
 
@@ -112,12 +116,12 @@ class ExternalProgramHandler:
             external_windows = []
             win32gui.EnumWindows(callback, external_windows)
             if external_windows:
-                time.sleep(0.5) # wait 0.5s for loading
                 self.exe_hwnd = external_windows[0]
-                return self.exe_hwnd
-            time.sleep(0.1)
-        print("External program window not found")
-        return None
+                print(f"Found {self.window_title} hwnd: {self.exe_hwnd}")
+                return
+            time.sleep(0.1) # while循环冷却
+        raise Exception(f"External program hwnd not found - {self.window_title}")
+
 
     def close_external_program(self):
         if self.exe_hwnd:
@@ -126,9 +130,9 @@ class ExternalProgramHandler:
             except:
                 pass
         time.sleep(0.2)
-        if self.chrome_process:
-            self.chrome_process.kill()
-            print(" quit normally")
+        if self.exe_process:
+            self.exe_process.kill()
+            print(f"{self.window_title} quit normally")
 
 
 
@@ -174,10 +178,33 @@ class MainWindow(QMainWindow):
                 border: none; font-size: 14px; font-weight: bold;
             }}"""
         # 程序初始化
-        self.Majdata_Edit_Handler = ExternalProgramHandler("MajdataEdit")
         self.Majdata_View_Handler = ExternalProgramHandler("MajdataView")
+        self.Majdata_Edit_Handler = ExternalProgramHandler("MajdataEdit")
+        self.start_External_Programs()
         self.setup_window()
         self.setup_layout()
+
+
+    def closeEvent(self, event):
+        self.Majdata_View_Handler.close_external_program() # 先关闭view，防止edit弹窗
+        self.Majdata_Edit_Handler.close_external_program()
+        time.sleep(0.5) # wait program close
+        print("---HachimiDX-Convert MainWindow quit normally---")
+        event.accept()
+
+
+    def start_External_Programs(self):
+        # 确认majdata程序存在
+        majdata_view_path = os.path.join(os.path.dirname(__file__), "Majdata", "MajdataView.exe")
+        majdata_edit_path = os.path.join(os.path.dirname(__file__), "Majdata", "MajdataEdit.exe")
+        if not os.path.exists(majdata_view_path) or not os.path.exists(majdata_edit_path):
+            raise FileNotFoundError("Error: MajdataView.exe or MajdataEdit.exe not found in App/Majdata/")
+        # 启动程序
+        self.Majdata_View_Handler.start_external_program(majdata_view_path)
+        self.Majdata_Edit_Handler.start_external_program(majdata_edit_path)
+        # 获取窗口句柄
+        self.Majdata_View_Handler.find_external_program_hwnd()
+        self.Majdata_Edit_Handler.find_external_program_hwnd()
         
 
     def setup_window(self):
@@ -203,19 +230,17 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 2, 0) # 右侧+2px间隙，与其他间距保持一致
         left_layout.setSpacing(10)
-        square_size = 435 # (900-3*10)/2
+        square_size = 436 # (900-3*10)/2 + 1px补偿
         
         # 左上widget - 正方形
         upper_left_widget = QWidget()
         upper_left_widget.setFixedSize(square_size, square_size)
-        upper_left_widget.setStyleSheet(f"background-color: {self.color_bg}; \
-                                          border: 2px solid {self.color_border};")
+        upper_left_widget.setStyleSheet(f"background-color: {self.color_bg};")
         
         # 左下widget - 正方形
         lower_left_widget = QWidget()
         lower_left_widget.setFixedSize(square_size, square_size)
-        lower_left_widget.setStyleSheet(f"background-color: {self.color_bg}; \
-                                          border: 2px solid {self.color_border};")
+        lower_left_widget.setStyleSheet(f"background-color: {self.color_bg};")
 
 
         # ----------------------------------------------------------------------
@@ -274,7 +299,7 @@ class MainWindow(QMainWindow):
 
     def setup_tab_content_pages_layout(self, title):
         page = QWidget()
-        page.setStyleSheet("background-color: #1C2541; border-radius: 5px; margin: 10px;")
+        page.setStyleSheet("background-color: #1C2541; border-radius: 5px; margin: 8px;")
         page_layout = QVBoxLayout(page)
         page_label = QLabel(f"{title} 内容区域")
         page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
