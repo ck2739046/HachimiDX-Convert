@@ -107,7 +107,9 @@ class ExternalProgramHandler:
     def find_external_program_hwnd(self, timeout=5):
 
         def callback(hwnd, extra):
-            if win32gui.GetWindowText(hwnd).startswith(self.window_title):
+            name = win32gui.GetWindowText(hwnd)
+            # 通过排除 '-' 来避免找到 Explorer.exe 窗口
+            if name.startswith(self.window_title) and '-' not in name:
                 extra.append(hwnd)
             return True
         
@@ -232,11 +234,11 @@ class MainWindow(QMainWindow):
         left_layout.setSpacing(10)
         square_size = 436 # (900-3*10)/2 + 1px补偿
         
-        # 左上widget - 正方形
-        upper_left_widget = QWidget()
+        # 左上widget - 正方形 - 嵌入MajdataView窗口
+        upper_left_window = QWindow.fromWinId(self.Majdata_View_Handler.exe_hwnd)
+        upper_left_widget = self.createWindowContainer(upper_left_window, self)
         upper_left_widget.setFixedSize(square_size, square_size)
-        upper_left_widget.setStyleSheet(f"background-color: {self.color_bg};")
-        
+
         # 左下widget - 正方形
         lower_left_widget = QWidget()
         lower_left_widget.setFixedSize(square_size, square_size)
@@ -280,7 +282,7 @@ class MainWindow(QMainWindow):
         self.tab_stacked_widget = QStackedWidget()
         # 创建4个内容页面
         for i, title in enumerate(self.nav_titles):
-            page_widget = self.setup_tab_content_pages_layout(title) # 调用外部函数创建具体的页面布局
+            page_widget = self.setup_tab_content_pages(title) # 调用外部函数创建具体的页面布局
             self.tab_stacked_widget.addWidget(page_widget)
         tab_content_layout.addWidget(self.tab_stacked_widget)
         # 设置初始显示的页面
@@ -297,15 +299,39 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(right_layout)
 
 
-    def setup_tab_content_pages_layout(self, title):
-        page = QWidget()
-        page.setStyleSheet("background-color: #1C2541; border-radius: 5px; margin: 8px;")
-        page_layout = QVBoxLayout(page)
-        page_label = QLabel(f"{title} 内容区域")
-        page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        page_label.setStyleSheet("color: #E0E0E0; font-size: 18px; padding: 20px;")
-        page_layout.addWidget(page_label)
+    def setup_tab_content_pages(self, title):
+        if title == "MajdataEdit":
+            page = QWidget()
+            page_layout = QVBoxLayout(page)
+            page_layout.setContentsMargins(0, 0, 0, 0)
+            page_layout.setSpacing(0)
+            # 上面是选择文件区域
+            majdata_control_panel_widget = self.setup_Majdata_Control_Panel()
+            page_layout.addWidget(majdata_control_panel_widget)
+            # 下面嵌入MajdataEdit窗口
+            MajdataEdit_window = QWindow.fromWinId(self.Majdata_Edit_Handler.exe_hwnd)
+            MajdataEdit_widget = self.createWindowContainer(MajdataEdit_window, self)
+            page_layout.addWidget(MajdataEdit_widget)
+        else:
+            page = QWidget()
+            page.setStyleSheet("background-color: #1C2541; border-radius: 5px; margin: 8px;")
+            page_layout = QVBoxLayout(page)
+            page_label = QLabel(f"{title} 内容区域")
+            page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            page_label.setStyleSheet("color: #E0E0E0; font-size: 18px; padding: 20px;")
+            page_layout.addWidget(page_label)
         return page
+    
+
+    def setup_Majdata_Control_Panel(self):
+
+        widget = QWidget()
+        widget.setFixedHeight(50)
+        widget.setStyleSheet(f"background-color: {self.color_surface}; margin: 8px")
+        layout = QHBoxLayout(widget)
+
+        return widget
+
 
         
 
