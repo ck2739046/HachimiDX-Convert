@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, QVBoxLayout,
                              QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedWidget)
-from PyQt6.QtCore import QUrl, QProcess, Qt, QTimer, pyqtSignal, QObject
+from PyQt6.QtCore import QUrl, QProcess, Qt, QTimer, pyqtSignal, QObject, QEventLoop
 from PyQt6.QtGui import QWindow, QIcon
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
@@ -143,16 +143,68 @@ class ExternalProgramHandler:
         raise Exception(f"External program hwnd not found - {self.window_title}")
 
 
-    def close_external_program(self):
-        if self.exe_hwnd:
-            try:
-                win32gui.PostMessage(self.exe_hwnd, win32con.WM_CLOSE, 0, 0)
-            except:
-                pass
-        time.sleep(0.2)
-        if self.exe_process:
-            self.exe_process.kill()
-            print(f"{self.window_title} quit normally")
+    def close_external_program(self, control_file_path=None):
+
+        if not self.exe_hwnd:
+            return
+
+        # 如果没有控制文件 - 直接强制关闭
+        if not control_file_path:
+            if self.exe_process:
+                self.exe_process.kill()
+                self.exe_process.waitForFinished(500)
+                print(f"{self.window_title} force closed")
+            return
+
+        # 如果有控制文件 - 通过控制文件请求程序关闭
+        try:
+            with open(control_file_path, 'w') as f:
+                f.write("exit")
+            print(f"{self.window_title} shutdown via control file")
+        except Exception as e:
+            print(f"Error writing to control file for {self.window_title}: {e}")
+            # 如果写文件失败，强制关闭
+            if self.exe_process:
+                self.exe_process.kill()
+                self.exe_process.waitForFinished(500)
+                print(f"{self.window_title} force closed")
+            return
+
+        # 使用 QEventLoop 实现非阻塞等待（让事件循环继续处理stdout/stderr）
+        event_loop = QEventLoop()
+        check_timer = QTimer()
+        timeout_timer = QTimer()
+        
+        # 检查计时器：每100ms检查一次进程状态
+        check_count = [0]  # 使用列表以便在lambda中修改
+
+        def check_process():
+            check_count[0] += 1
+            if self.exe_process and self.exe_process.state() == QProcess.ProcessState.NotRunning:
+                print(f"{self.window_title} closed normally - {check_count[0] * 100}ms")
+                check_timer.stop()
+                timeout_timer.stop()
+                event_loop.quit()
+        
+        check_timer.timeout.connect(check_process)
+        check_timer.start(100)
+        
+        # 超时计时器：5秒后强制关闭
+        def on_timeout():
+            print(f"{self.window_title} did not close normally after 5s, forcing shutdown...")
+            check_timer.stop()
+            if self.exe_process:
+                self.exe_process.kill()
+                self.exe_process.waitForFinished(500)
+                print(f"{self.window_title} force closed")
+            event_loop.quit()
+        
+        timeout_timer.timeout.connect(on_timeout)
+        timeout_timer.setSingleShot(True)
+        timeout_timer.start(5000)  # 5秒
+        
+        # 进入事件循环等待（不阻塞Qt主事件循环的消息处理）
+        event_loop.exec()
 
 
 
@@ -201,6 +253,7 @@ class MainWindow(QMainWindow):
             }}"""
         
         # majdata tab 页面变量
+        self.majdata_control_txt = os.path.join(os.path.dirname(__file__), "Majdata",  "HachimiDX-Convert-Majdata-Control.txt")
         self.majdata_folder_input = None
         self.majdata_maidata_choose = None
         self.majdata_track_choose = None
@@ -217,18 +270,28 @@ class MainWindow(QMainWindow):
 
 
     def closeEvent(self, event):
+
+        print("\n---HachimiDX-Convert closing---")
         # 先停止代理服务器
+        print("\n--Closing Server...")
         if self.proxy_server:
             self.proxy_server.stop()
-        # 关闭外部程序
-        self.Majdata_View_Handler.close_external_program() # 先关闭view，防止edit弹窗
-        self.Majdata_Edit_Handler.close_external_program()
-        time.sleep(0.5) # wait program close
-        print("---HachimiDX-Convert MainWindow quit normally---")
+            print("Proxy server stopped")
+        # 关闭 MajdataView（强制模式，无控制文件）
+        print("\n--Closing MajdataView...")
+        self.Majdata_View_Handler.close_external_program()
+        # 关闭 MajdataEdit（优雅模式，有控制文件）
+        print("\n--Closing MajdataEdit...")
+        self.Majdata_Edit_Handler.close_external_program(self.majdata_control_txt)
+        # 打印最终退出信息
+        print("\n---HachimiDX-Convert MainWindow quit normally---")
         event.accept()
 
 
     def start_External_Programs(self):
+        # 先确保control不存在
+        if os.path.exists(self.majdata_control_txt):
+            os.remove(self.majdata_control_txt)
         # 确认majdata程序存在
         majdata_view_path = os.path.join(os.path.dirname(__file__), "Majdata", "MajdataView.exe")
         majdata_edit_path = os.path.join(os.path.dirname(__file__), "Majdata", "MajdataEdit.exe")
@@ -236,10 +299,7 @@ class MainWindow(QMainWindow):
             raise FileNotFoundError("Error: MajdataView.exe or MajdataEdit.exe not found in App/Majdata/")
         # 启动程序
         self.Majdata_View_Handler.start_external_program(majdata_view_path)
-        time.sleep(1) # 等待view启动
-        # MajdataEdit 以 embed_mode 启动
         self.Majdata_Edit_Handler.start_external_program(majdata_edit_path, ["--embed_mode"])
-        time.sleep(1) # 等待edit启动
         # 获取窗口句柄
         self.Majdata_View_Handler.find_external_program_hwnd()
         self.Majdata_Edit_Handler.find_external_program_hwnd()
@@ -262,7 +322,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("HachimiDX-Convert")
         icon_path = os.path.join(os.path.dirname(__file__), 'static', 'maimai.ico')
         self.setWindowIcon(QIcon(icon_path))
-        self.setFixedSize(1200, 900)
+        self.setFixedSize(1300, 900)
 
 
     def setup_layout(self):
@@ -355,12 +415,26 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------------------------
     # 创建各个标签页
     def setup_tab_content_pages(self, title):
+
+        def show_window_size(): # 调试用的
+            # 获取原始窗口尺寸 (通过ctypes)
+            user32 = ctypes.windll.user32
+            rect = wintypes.RECT()
+            user32.GetWindowRect(self.Majdata_Edit_Handler.exe_hwnd, ctypes.byref(rect))
+            window_width = rect.right - rect.left
+            window_height = rect.bottom - rect.top
+            print(f"MajdataEdit original size: {window_width}x{window_height}")
+            # 获取嵌入窗口尺寸
+            embedded_width = MajdataEdit_widget.width()
+            embedded_height = MajdataEdit_widget.height()
+            print(f"MajdataEdit embedded size: {embedded_width}x{embedded_height}")
+
+
         if title == "MajdataEdit":
             page = QWidget()
             page_layout = QVBoxLayout(page)
             page_layout.setContentsMargins(0, 0, 0, 0)
             page_layout.setSpacing(0)
-            
             # 上面是选择文件区域
             majdata_control_panel_widget = self.setup_Majdata_Control_Panel()
             page_layout.addWidget(majdata_control_panel_widget)
@@ -368,25 +442,6 @@ class MainWindow(QMainWindow):
             MajdataEdit_window = QWindow.fromWinId(self.Majdata_Edit_Handler.exe_hwnd)
             MajdataEdit_widget = self.createWindowContainer(MajdataEdit_window, self)
             page_layout.addWidget(MajdataEdit_widget)
-
-
-            # 强制同步窗口尺寸
-            def show_window_size():
-                # 获取原始窗口尺寸 (通过ctypes)
-                user32 = ctypes.windll.user32
-                rect = wintypes.RECT()
-                user32.GetWindowRect(self.Majdata_Edit_Handler.exe_hwnd, ctypes.byref(rect))
-                window_width = rect.right - rect.left
-                window_height = rect.bottom - rect.top
-                print(f"MajdataEdit original size: {window_width}x{window_height}")
-                # 获取嵌入窗口尺寸
-                embedded_width = MajdataEdit_widget.width()
-                embedded_height = MajdataEdit_widget.height()
-                print(f"MajdataEdit embedded size: {embedded_width}x{embedded_height}")
-            
-            QTimer.singleShot(1000, show_window_size)
-
-            
         else:
             page = QWidget()
             page.setStyleSheet("background-color: #1C2541; border-radius: 5px; margin: 8px;")
