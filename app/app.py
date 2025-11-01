@@ -243,7 +243,7 @@ class MainWindow(QMainWindow):
         # 重要变量
         self.all_songs_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), "aaa-result")
 
-        # 左下视频播放器变量
+        # 视频播放器变量
         self.media_player = None
         self.video_sync_server = None
         # Create callback emitter for cross-thread communication
@@ -251,7 +251,7 @@ class MainWindow(QMainWindow):
         self.callback_emitter.callback_signal.connect(self._execute_callback)
         
         # 导航栏变量
-        self.nav_titles = ["MajdataEdit", "Auto Convert", "Audio & PV", "Others"] # 总配置项
+        self.nav_titles = ["MajdataEdit", "Auto Convert", "Audio and PV", "Others"] # 总配置项
         self.current_tab_index = 0     # 当前标签页索引
         self.tab_stacked_widget = None # 内容区堆叠widget
         self.nav_buttons = []          # 4个导航按钮列表
@@ -355,11 +355,14 @@ class MainWindow(QMainWindow):
         lower_left_widget = QVideoWidget()
         lower_left_widget.setFixedSize(square_size, square_size)
         lower_left_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatioByExpanding) # let video fill the widget
+        # media_player
         self.media_player = QMediaPlayer()
         self.media_player.setVideoOutput(lower_left_widget)
         audio_output = QAudioOutput()
         self.media_player.setAudioOutput(audio_output)
         self.media_player.volume = 0 # mute
+        # # 连接播放状态改变信号，控制帧数
+        # self.media_player.playbackStateChanged.connect(self.on_playback_state_changed)
         # Start video sync server
         self.video_sync_server = server.VideoSyncServer(self.media_player, listen_port=8014)
         self.video_sync_server.set_main_thread_callback(self.execute_in_main_thread)
@@ -554,6 +557,32 @@ class MainWindow(QMainWindow):
         self.current_tab_index = index
 
 
+    # # 视频暂停时，计算当前帧数
+    # @pyqtSlot(QMediaPlayer.PlaybackState)
+    # def on_playback_state_changed(self, state):
+    #     if state == QMediaPlayer.PlaybackState.PausedState:
+    #         # 视频暂停时，获取并显示当前帧数
+    #         try:
+    #             # 获取当前播放位置（毫秒）
+    #             position_ms = self.media_player.position()
+    #             # 计算当前帧数
+    #             if self.video_fps > 0:
+    #                 current_frame = int((position_ms / 1000.0) * self.video_fps)
+    #                 # print(f"Current frame: {current_frame}")
+    #         except Exception as e:
+    #             print(f"Error calculating frame display: {e}")
+        # elif state == QMediaPlayer.PlaybackState.PlayingState:
+        # elif state == QMediaPlayer.PlaybackState.StoppedState:
+
+        # # 使用OpenCV获取视频帧率
+        # try:
+        #     cap = cv2.VideoCapture(video_path)
+        #     self.video_fps = cap.get(cv2.CAP_PROP_FPS)
+        #     cap.release()
+        # except Exception as e:
+        #     print(f"Error getting video FPS: {e}")
+
+
     # Majdata song changed
     @pyqtSlot()
     def on_majdata_song_changed(self):
@@ -589,13 +618,15 @@ class MainWindow(QMainWindow):
     # Open selected items in MajdataEdit
     @pyqtSlot()
     def on_majdata_load_clicked(self):
-        self.media_player.stop()            # reset
-        self.media_player.setSource(QUrl()) # reset
+        # get selected items
         selected_song = self.majdata_song_input.currentText()
         selected_maidata = self.majdata_maidata_choose.currentText()
         selected_track = self.majdata_track_choose.currentText()
         if not selected_song or not selected_maidata or not selected_track:
             return
+        # reset video player
+        self.media_player.stop()
+        self.media_player.setSource(QUrl())
         # Create a control txt for MajdataEdit
         song_path = os.path.join(self.all_songs_folder, selected_song)
         control_txt = f"folder: {song_path}\nmaidata: {selected_maidata}\ntrack: {selected_track}"
