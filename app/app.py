@@ -16,6 +16,8 @@ import os
 import psutil
 import cv2
 import os
+import ctypes
+from ctypes import wintypes
 
 
 # 设置环境变量来禁用Qt多媒体库的调试输出
@@ -43,17 +45,6 @@ def exception_handler(exctype, value, traceback):
     print("---HachimiDX-Convert quit abnormally---")
     sys.exit(1)
 
-
-
-
-
-
-#--------------------------------------------------------------
-# Flask backend
-
-class FlaskThread(threading.Thread):
-    def run(self):
-        server.app.run(port=5273)
 
 
 
@@ -93,10 +84,11 @@ class FolderComboBox(QComboBox):
 # External Program Embedder
 
 class ExternalProgramHandler:
-    def __init__(self, window_title):
+    def __init__(self, window_title, working_dir=None):
         self.window_title = window_title
         self.exe_hwnd = None
         self.exe_process = None
+        self.working_dir = working_dir
 
 
     def start_external_program(self, program_path):
@@ -182,7 +174,9 @@ class MainWindow(QMainWindow):
         self.color_accent = "#3A86FF"
 
         # 左下视频播放器变量
-        self.mediaPlayer = None
+        self.media_player = None
+        self.media_controller = None
+        self.proxy_server = None
 
         # 导航栏变量
         self.nav_titles = ["MajdataEdit", "Auto Convert", "Audio & PV", "Others"] # 总配置项
@@ -210,14 +204,20 @@ class MainWindow(QMainWindow):
         self.majdata_last_selection = "" # folder_input用的，记录上次选择的歌曲
 
         # 程序初始化
-        self.Majdata_View_Handler = ExternalProgramHandler("MajdataView")
-        self.Majdata_Edit_Handler = ExternalProgramHandler("MajdataEdit")
+        majdata_working_dir = os.path.join(os.path.dirname(__file__), "Majdata")
+        self.Majdata_View_Handler = ExternalProgramHandler("MajdataView", majdata_working_dir)
+        self.Majdata_Edit_Handler = ExternalProgramHandler("MajdataEdit", majdata_working_dir)
         self.start_External_Programs()
         self.setup_window()
         self.setup_layout()
+        # self.setup_proxy_server()
 
 
     def closeEvent(self, event):
+        # 先停止代理服务器
+        if self.proxy_server:
+            self.proxy_server.stop()
+        # 关闭外部程序
         self.Majdata_View_Handler.close_external_program() # 先关闭view，防止edit弹窗
         self.Majdata_Edit_Handler.close_external_program()
         time.sleep(0.5) # wait program close
@@ -233,17 +233,32 @@ class MainWindow(QMainWindow):
             raise FileNotFoundError("Error: MajdataView.exe or MajdataEdit.exe not found in App/Majdata/")
         # 启动程序
         self.Majdata_View_Handler.start_external_program(majdata_view_path)
+        time.sleep(1) # 等待view启动
         self.Majdata_Edit_Handler.start_external_program(majdata_edit_path)
+        time.sleep(1) # 等待edit启动
         # 获取窗口句柄
         self.Majdata_View_Handler.find_external_program_hwnd()
         self.Majdata_Edit_Handler.find_external_program_hwnd()
+
+
+    def setup_proxy_server(self):
+        # 创建媒体播放器控制器
+        self.media_controller = server.MediaPlayerController(self.media_player)
+        # 创建纯监听服务器（仅监听8013，不转发）
+        self.proxy_server = server.MajdataListenerServer(
+            listen_port=8013,
+            media_controller=self.media_controller
+        )
+        # 启动监听服务器
+        self.proxy_server.start()
+        print("Majdata监听服务器启动 (纯监听模式)")
         
 
     def setup_window(self):
         self.setWindowTitle("HachimiDX-Convert")
         icon_path = os.path.join(os.path.dirname(__file__), 'static', 'maimai.ico')
         self.setWindowIcon(QIcon(icon_path))
-        self.setFixedSize(1400, 900)
+        self.setFixedSize(1200, 900)
 
 
     def setup_layout(self):
@@ -269,12 +284,12 @@ class MainWindow(QMainWindow):
         upper_left_widget = self.createWindowContainer(upper_left_window, self)
         upper_left_widget.setFixedSize(square_size, square_size)
 
-        # 左下widget - 正方形 -  视频播放器
+        # 左下widget - 正方形 - 视频播放器
         lower_left_widget = QVideoWidget()
         lower_left_widget.setFixedSize(square_size, square_size)
         lower_left_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatioByExpanding) # let video fill the widget
-        self.mediaPlayer = QMediaPlayer()
-        self.mediaPlayer.setVideoOutput(lower_left_widget)
+        self.media_player = QMediaPlayer()
+        self.media_player.setVideoOutput(lower_left_widget)
 
 
 
@@ -341,6 +356,7 @@ class MainWindow(QMainWindow):
             page_layout = QVBoxLayout(page)
             page_layout.setContentsMargins(0, 0, 0, 0)
             page_layout.setSpacing(0)
+            
             # 上面是选择文件区域
             majdata_control_panel_widget = self.setup_Majdata_Control_Panel()
             page_layout.addWidget(majdata_control_panel_widget)
@@ -348,6 +364,25 @@ class MainWindow(QMainWindow):
             MajdataEdit_window = QWindow.fromWinId(self.Majdata_Edit_Handler.exe_hwnd)
             MajdataEdit_widget = self.createWindowContainer(MajdataEdit_window, self)
             page_layout.addWidget(MajdataEdit_widget)
+
+
+            # 强制同步窗口尺寸
+            def show_window_size():
+                # 获取原始窗口尺寸 (通过ctypes)
+                user32 = ctypes.windll.user32
+                rect = wintypes.RECT()
+                user32.GetWindowRect(self.Majdata_Edit_Handler.exe_hwnd, ctypes.byref(rect))
+                window_width = rect.right - rect.left
+                window_height = rect.bottom - rect.top
+                print(f"MajdataEdit original size: {window_width}x{window_height}")
+                # 获取嵌入窗口尺寸
+                embedded_width = MajdataEdit_widget.width()
+                embedded_height = MajdataEdit_widget.height()
+                print(f"MajdataEdit embedded size: {embedded_width}x{embedded_height}")
+            
+            QTimer.singleShot(1000, show_window_size)
+
+            
         else:
             page = QWidget()
             page.setStyleSheet("background-color: #1C2541; border-radius: 5px; margin: 8px;")
@@ -446,9 +481,6 @@ class MainWindow(QMainWindow):
 def main():
     # Set up global exception handler
     sys.excepthook = exception_handler
-
-    flask_thread = FlaskThread(daemon=True)
-    flask_thread.start()
     
     qt_app = QApplication(sys.argv)
     window = MainWindow()

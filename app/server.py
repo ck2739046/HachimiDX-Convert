@@ -1,109 +1,139 @@
-from flask import Flask, render_template, Response, send_file, jsonify
-from flask_cors import CORS
-from flask_socketio import SocketIO
-import os
-import logging
+import json
+from datetime import datetime
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import time
 
-# Filter out specific message logger
-def log_filter(record):
-    message = record.getMessage()
-    filtered_paths = [
-        '/socket.io/?EIO=',
-        '/static/socket.io.js',
-        '/static/majdata-wasm',
-        '/static/MajdataView.ico',
-        '/ImageFull/1',
-        '/Track/1 HTTP/1.1',
-    ]
-    return not any(path in message for path in filtered_paths)
-logging.getLogger('werkzeug').addFilter(log_filter)
-
-app = Flask(__name__)
-CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
-
-
-
-
-
-# Configure static folder path
-static_folder = os.path.join(os.path.dirname(__file__), 'static')
-app.static_folder = static_folder
-app.template_folder = static_folder # render_template path
-
-# Configure song folder path (aaa-result)
-song_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'aaa-result')
-app.song_folder = song_folder
-
-
-
-
-
-# Root
-@app.route('/')
-def chart_player():
-    return render_template('majdataView.html')
-
-# MajdataView请求曲绘文件
-@app.route('/MajdataView/src/<string:song>/bg')
-def majdataView_bg(song):
-    # Return the background image
-    bg_png = os.path.join(song_folder, song, 'bg.png')
-    bg_jpg = os.path.join(song_folder, song, 'bg.jpg')  
-    if os.path.exists(bg_png):
-        return send_file(bg_png)
-    elif os.path.exists(bg_jpg):
-        return send_file(bg_jpg)
-    else:
-        return "BG not found", 404
-
-# MajdataView请求谱面文件  
-@app.route('/MajdataView/src/<string:song>/maidata')
-def majdataView_maidata(song):
-    # Return the chart data
-    maidata = os.path.join(song_folder, song, 'maidata.txt')
-    try:
-        with open(maidata, encoding='utf-8') as f:
-            data = f.read()
-        return Response(data, mimetype='text/plain')
-    except Exception as e:
-        return "Chart not found", 404
-
-# MajdataView请求音频文件
-@app.route('/MajdataView/src/<string:song>/<string:track>') 
-def majdataView_track(song, track):
-    # Return the audio track
-    track_audio = os.path.join(song_folder, song, track)
-    if os.path.exists(track_audio):
-        return send_file(track_audio)
-    else:
-        return "Track not found", 404
+class MediaPlayerController:
+    
+    def __init__(self, media_player):
+        self.media_player = media_player
+        self.is_playing = False
+        
+    def play_video(self, start_time, delay_seconds, playback_speed):
+        print(f"播放视频 - 起始时间: {start_time}s, 延迟: {delay_seconds}s, 速度: {playback_speed}")
+        if self.media_player:
+            self.media_player.setPlaybackRate(playback_speed)
+            self.media_player.setPosition(int(start_time * 1000))  # 转换为毫秒
+            self.media_player.play()
+        self.is_playing = True
+        
+    def pause_video(self):
+        print("暂停视频")
+        if self.media_player:
+            self.media_player.pause()
+        self.is_playing = False
+        
+    def resume_video(self, start_time, delay_seconds, playback_speed):
+        print(f"继续播放 - 起始时间: {start_time}s, 延迟: {delay_seconds}s, 速度: {playback_speed}")
+        if self.media_player:
+            self.media_player.setPlaybackRate(playback_speed)
+            self.media_player.setPosition(int(start_time * 1000))
+            self.media_player.play()
+        self.is_playing = True
+        
+    def stop_video(self):
+        print("停止视频")
+        if self.media_player:
+            self.media_player.stop()
+        self.is_playing = False
 
 
+class MajdataListenerHandler(BaseHTTPRequestHandler):
+    
+    def __init__(self, *args, media_controller=None, **kwargs):
+        self.media_controller = media_controller
+        super().__init__(*args, **kwargs)
+    
+    def do_POST(self):
+        try:
+            # 读取请求数据
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode('utf-8'))
+            
+            print(f"监听收到MajdataEdit请求: {data.get('control')}")
+            
+            # 控制媒体播放器
+            self.control_media_player(data)
+            
+            # 返回成功响应（MajdataEdit和MajdataView的正常通信不受影响）
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b"OK")
+            
+        except Exception as e:
+            print(f"监听处理请求时出错: {e}")
+            self.send_error(500, f"Internal Server Error: {e}")
+    
+    def control_media_player(self, data):
+        if not self.media_controller:
+            return
+            
+        control = data.get('control')
+        
+        if control in ['Start', 'Continue']:
+            start_at = data.get('startAt', 0)
+            start_time = data.get('startTime', 0)
+            audio_speed = data.get('audioSpeed', 1.0)
+            
+            # 计算延迟时间
+            target_time = datetime.fromtimestamp(start_at / 10000000)  # Ticks转DateTime
+            current_time = datetime.now()
+            delay_seconds = max(0, (target_time - current_time).total_seconds())
+            
+            if control == 'Start':
+                self.media_controller.play_video(start_time, delay_seconds, audio_speed)
+            else:  # Continue
+                self.media_controller.resume_video(start_time, delay_seconds, audio_speed)
+                
+        elif control == 'Pause':
+            self.media_controller.pause_video()
+            
+        elif control == 'Stop':
+            self.media_controller.stop_video()
+    
+    def log_message(self, format, *args):
+        """自定义日志输出"""
+        # 静默日志，避免过多输出
+        pass
 
 
-
-def MajdataView_load_chart(song, track, level):
-    # 0: no error, 1: no chart, 2: no track
-
-    # Check if maidata.txt exists
-    maidata_path = os.path.join(song_folder, song, 'maidata.txt')
-    if not os.path.exists(maidata_path):
-        socketio.emit('MajdataView_load_chart', {'song': song, 'track': track, 'level': level, 'error': 1})
-        return
-    # Check if track audio exists
-    audio_path = os.path.join(song_folder, song, track)
-    if not (os.path.exists(audio_path)):
-        socketio.emit('MajdataView_load_chart', {'song': song, 'track': track, 'level': level, 'error': 2})
-        return
-    # No error
-    socketio.emit('MajdataView_load_chart', {'song': song, 'track': track, 'level': level, 'error': 0})
-
-def MajdataView_refresh_page():
-    socketio.emit('MajdataView_refresh_page')
-
-def start_server():
-    socketio.run(app, port=5273, debug=False)
-
-if __name__ == '__main__':
-    start_server()
+class MajdataListenerServer:
+    
+    def __init__(self, media_controller, listen_port=8013):
+        self.media_controller = media_controller
+        self.listen_port = listen_port
+        self.server_thread = None
+        self.http_server = None
+        
+    def start(self):
+        # 创建自定义的Handler类，传入media_controller
+        def handler_factory(*args, **kwargs):
+            return MajdataListenerHandler(*args, 
+                                        media_controller=self.media_controller, 
+                                        **kwargs)
+        
+        # 启动HTTP服务器
+        self.http_server = HTTPServer(('localhost', self.listen_port), handler_factory)
+        print(f"Majdata监听服务器启动 - 监听端口: {self.listen_port} (纯监听模式)")
+        
+        # 在后台线程中运行服务器
+        def run_server():
+            try:
+                self.http_server.serve_forever()
+            except KeyboardInterrupt:
+                print("Majdata监听服务器停止")
+            except Exception as e:
+                print(f"Majdata监听服务器错误: {e}")
+        
+        self.server_thread = threading.Thread(target=run_server, daemon=True)
+        self.server_thread.start()
+        
+    def stop(self):
+        print("Majdata监听服务器正在停止...")
+        if self.http_server:
+            self.http_server.shutdown()
+            self.http_server.server_close()
+            print("Majdata监听服务器已停止")
