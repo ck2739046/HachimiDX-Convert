@@ -1,139 +1,171 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import time
+import socket
 
-class MediaPlayerController:
+
+class VideoSyncServer:
     
-    def __init__(self, media_player):
+    def __init__(self, media_player, listen_port=8014):
         self.media_player = media_player
-        self.is_playing = False
-        
-    def play_video(self, start_time, delay_seconds, playback_speed):
-        print(f"播放视频 - 起始时间: {start_time}s, 延迟: {delay_seconds}s, 速度: {playback_speed}")
-        if self.media_player:
-            self.media_player.setPlaybackRate(playback_speed)
-            self.media_player.setPosition(int(start_time * 1000))  # 转换为毫秒
-            self.media_player.play()
-        self.is_playing = True
-        
-    def pause_video(self):
-        print("暂停视频")
-        if self.media_player:
-            self.media_player.pause()
-        self.is_playing = False
-        
-    def resume_video(self, start_time, delay_seconds, playback_speed):
-        print(f"继续播放 - 起始时间: {start_time}s, 延迟: {delay_seconds}s, 速度: {playback_speed}")
-        if self.media_player:
-            self.media_player.setPlaybackRate(playback_speed)
-            self.media_player.setPosition(int(start_time * 1000))
-            self.media_player.play()
-        self.is_playing = True
-        
-    def stop_video(self):
-        print("停止视频")
-        if self.media_player:
-            self.media_player.stop()
-        self.is_playing = False
-
-
-class MajdataListenerHandler(BaseHTTPRequestHandler):
-    
-    def __init__(self, *args, media_controller=None, **kwargs):
-        self.media_controller = media_controller
-        super().__init__(*args, **kwargs)
-    
-    def do_POST(self):
-        try:
-            # 读取请求数据
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            data = json.loads(post_data.decode('utf-8'))
-            
-            print(f"监听收到MajdataEdit请求: {data.get('control')}")
-            
-            # 控制媒体播放器
-            self.control_media_player(data)
-            
-            # 返回成功响应（MajdataEdit和MajdataView的正常通信不受影响）
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(b"OK")
-            
-        except Exception as e:
-            print(f"监听处理请求时出错: {e}")
-            self.send_error(500, f"Internal Server Error: {e}")
-    
-    def control_media_player(self, data):
-        if not self.media_controller:
-            return
-            
-        control = data.get('control')
-        
-        if control in ['Start', 'Continue']:
-            start_at = data.get('startAt', 0)
-            start_time = data.get('startTime', 0)
-            audio_speed = data.get('audioSpeed', 1.0)
-            
-            # 计算延迟时间
-            target_time = datetime.fromtimestamp(start_at / 10000000)  # Ticks转DateTime
-            current_time = datetime.now()
-            delay_seconds = max(0, (target_time - current_time).total_seconds())
-            
-            if control == 'Start':
-                self.media_controller.play_video(start_time, delay_seconds, audio_speed)
-            else:  # Continue
-                self.media_controller.resume_video(start_time, delay_seconds, audio_speed)
-                
-        elif control == 'Pause':
-            self.media_controller.pause_video()
-            
-        elif control == 'Stop':
-            self.media_controller.stop_video()
-    
-    def log_message(self, format, *args):
-        """自定义日志输出"""
-        # 静默日志，避免过多输出
-        pass
-
-
-class MajdataListenerServer:
-    
-    def __init__(self, media_controller, listen_port=8013):
-        self.media_controller = media_controller
         self.listen_port = listen_port
         self.server_thread = None
-        self.http_server = None
+        self.udp_socket = None
+        self.running = False
+        self.pending_play_timer = None    # For delayed playback
+        self.main_thread_callback = None  # Callback to execute in main thread
         
+    
     def start(self):
-        # 创建自定义的Handler类，传入media_controller
-        def handler_factory(*args, **kwargs):
-            return MajdataListenerHandler(*args, 
-                                        media_controller=self.media_controller, 
-                                        **kwargs)
+        self.running = True
         
-        # 启动HTTP服务器
-        self.http_server = HTTPServer(('localhost', self.listen_port), handler_factory)
-        print(f"Majdata监听服务器启动 - 监听端口: {self.listen_port} (纯监听模式)")
+        self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.udp_socket.bind(('localhost', self.listen_port))
+        self.udp_socket.settimeout(1.0)
         
-        # 在后台线程中运行服务器
+        print(f"[VideoSync] Server started on port {self.listen_port}")
+        
         def run_server():
-            try:
-                self.http_server.serve_forever()
-            except KeyboardInterrupt:
-                print("Majdata监听服务器停止")
-            except Exception as e:
-                print(f"Majdata监听服务器错误: {e}")
+            while self.running:
+                try:
+                    data, addr = self.udp_socket.recvfrom(65535)
+                    message = json.loads(data.decode('utf-8'))
+                    
+                    threading.Thread(
+                        target=self.handle_control_message,
+                        args=(message,),
+                        daemon=True
+                    ).start()
+                    
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    if self.running:
+                        print(f"[VideoSync] Error: {e}")
         
         self.server_thread = threading.Thread(target=run_server, daemon=True)
         self.server_thread.start()
-        
+    
+    
     def stop(self):
-        print("Majdata监听服务器正在停止...")
-        if self.http_server:
-            self.http_server.shutdown()
-            self.http_server.server_close()
-            print("Majdata监听服务器已停止")
+        self.running = False
+        
+        # Cancel any pending delayed playback
+        if self.pending_play_timer:
+            self.pending_play_timer.cancel()
+            self.pending_play_timer = None
+        
+        if self.udp_socket:
+            self.udp_socket.close()
+            print("[VideoSync] Server stopped")
+    
+    
+    def set_main_thread_callback(self, callback):
+        self.main_thread_callback = callback
+    
+    
+    def handle_control_message(self, data):
+        CONTROL_MAP = {0: 'Start', 1: 'Stop', 2: 'OpStart', 3: 'Pause', 4: 'Continue', 5: 'Record'}
+        
+        control_value = data.get('control')
+        if isinstance(control_value, int):
+            control = CONTROL_MAP.get(control_value, f'Unknown({control_value})')
+        else:
+            control = str(control_value)
+        
+        if not self.media_player or not self._has_video():
+            return
+        
+        try:
+            if control in ['Start', 'Continue']:
+                self._handle_play(data)
+            elif control in ['Stop', 'Pause']:
+                self._handle_pause()
+        except Exception as e:
+            print(f"[VideoSync] Error handling {control}: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    
+    def _handle_play(self, data):
+        start_at_ticks = data.get('startAt', 0)
+        start_time = data.get('startTime', 0.0)  # Audio position in seconds
+        playback_speed = data.get('audioSpeed', 1.0)
+        
+        # Convert C# Ticks to Python datetime
+        TICKS_AT_UNIX_EPOCH = 621355968000000000
+        unix_timestamp = (start_at_ticks - TICKS_AT_UNIX_EPOCH) / 10000000.0
+        target_time = datetime.fromtimestamp(unix_timestamp)
+        delay_seconds = (target_time - datetime.now()).total_seconds()
+        
+        # Timezone correction
+        if abs(delay_seconds) > 3600:
+            hours_to_adjust = round(delay_seconds / 3600)
+            target_time = target_time - timedelta(hours=hours_to_adjust)
+            delay_seconds = (target_time - datetime.now()).total_seconds()
+        
+        # Cancel any previous pending play
+        if self.pending_play_timer:
+            self.pending_play_timer.cancel()
+        
+        if delay_seconds < -0.5:
+            self._do_play(start_time, playback_speed)
+        elif delay_seconds > 0.01:
+            # Schedule delayed playback
+            self.pending_play_timer = threading.Timer(
+                delay_seconds, self._do_play, args=[start_time, playback_speed]
+            )
+            self.pending_play_timer.start()
+        else:
+            # Play immediately
+            self._do_play(start_time, playback_speed)
+    
+    
+    def _do_play(self, start_time, playback_speed):
+        try:
+            if not self.media_player or not self._has_video():
+                return
+            
+            # Use callback to execute in main thread
+            if self.main_thread_callback:
+                def play_action():
+                    self.media_player.setPlaybackRate(playback_speed)
+                    self.media_player.setPosition(int(start_time * 1000))
+                    self.media_player.play()
+                    print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video play: {start_time:.3f}s")
+                
+                self.main_thread_callback(play_action)
+            
+        except Exception as e:
+            import traceback
+            print(f"[VideoSync] Error during playback: {e}")
+            traceback.print_exc()
+    
+    
+    def _handle_pause(self):
+        try:
+            if not self.media_player:
+                return
+            
+            # Cancel any pending delayed playback
+            if self.pending_play_timer:
+                self.pending_play_timer.cancel()
+                self.pending_play_timer = None
+            
+            # Use callback to execute in main thread
+            if self.main_thread_callback:
+                def pause_action():
+                    self.media_player.pause()
+                    print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video pause")
+                
+                self.main_thread_callback(pause_action)
+            
+        except Exception as e:
+            print(f"[VideoSync] Error during pause: {e}")
+    
+    
+    def _has_video(self):
+        try:
+            return self.media_player.hasVideo()
+        except:
+            return False

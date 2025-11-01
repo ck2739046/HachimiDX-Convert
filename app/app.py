@@ -5,17 +5,16 @@ from PyQt6.QtGui import QWindow, QIcon
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import QStyle, QSlider, QFileDialog, QToolTip
+from PyQt6.QtCore import pyqtSlot
 import threading
 import sys
 import win32gui
 import time
 import win32con
-from PyQt6.QtCore import pyqtSlot
 import server
 import os
 import psutil
 import cv2
-import os
 import ctypes
 from ctypes import wintypes
 
@@ -23,6 +22,15 @@ from ctypes import wintypes
 # 设置环境变量来禁用Qt多媒体库的调试输出
 os.environ['QT_LOGGING_RULES'] = 'qt.multimedia.ffmpeg*=false;' \
                                  'qt.multimedia.playbackengine.codec*=false' # 误报，实际可以使用硬件加速
+
+
+# Signal emitter for cross-thread callback execution
+class CallbackEmitter(QObject):
+    callback_signal = pyqtSignal(object)  # Signal to emit callback functions
+    def __init__(self):
+        super().__init__()
+    def emit_callback(self, callback):
+        self.callback_signal.emit(callback)
 
 
 def exception_handler(exctype, value, traceback):
@@ -68,7 +76,7 @@ class FolderComboBox(QComboBox):
             subdirs = [d for d in os.listdir(self.all_songs_folder) 
                       if os.path.isdir(os.path.join(self.all_songs_folder, d))]
             self.addItems(subdirs)
-            
+
         # Restore previous selection if it exists
         if current_text and current_text != "---":
             index = self.findText(current_text)
@@ -99,7 +107,7 @@ class ExternalProgramHandler:
         self.exe_process = QProcess()
         if self.working_dir:
             self.exe_process.setWorkingDirectory(self.working_dir)
-        
+
         # 连接输出信号到处理函数
         self.exe_process.readyReadStandardOutput.connect(self._on_stdout_ready)
         self.exe_process.readyReadStandardError.connect(self._on_stderr_ready)
@@ -178,7 +186,7 @@ class ExternalProgramHandler:
         event_loop = QEventLoop()
         check_timer = QTimer()
         timeout_timer = QTimer()
-        
+
         # 检查计时器：每100ms检查一次进程状态
         check_count = [0]  # 使用列表以便在lambda中修改
 
@@ -237,9 +245,11 @@ class MainWindow(QMainWindow):
 
         # 左下视频播放器变量
         self.media_player = None
-        self.media_controller = None
-        self.proxy_server = None
-
+        self.video_sync_server = None
+        # Create callback emitter for cross-thread communication
+        self.callback_emitter = CallbackEmitter()
+        self.callback_emitter.callback_signal.connect(self._execute_callback)
+        
         # 导航栏变量
         self.nav_titles = ["MajdataEdit", "Auto Convert", "Audio & PV", "Others"] # 总配置项
         self.current_tab_index = 0     # 当前标签页索引
@@ -274,17 +284,16 @@ class MainWindow(QMainWindow):
         self.start_External_Programs()
         self.setup_window()
         self.setup_layout()
-        # self.setup_proxy_server()
 
 
     def closeEvent(self, event):
 
         print("\n---HachimiDX-Convert closing---")
-        # 先停止代理服务器
-        print("\n--Closing Server...")
-        if self.proxy_server:
-            self.proxy_server.stop()
-            print("Proxy server stopped")
+        # 停止视频同步服务器
+        print("\n--Closing VideoSync Server...")
+        if self.video_sync_server:
+            self.video_sync_server.stop()
+            print("VideoSync server stopped")
         # 关闭 MajdataView（强制模式，无控制文件）
         print("\n--Closing MajdataView...")
         self.Majdata_View_Handler.close_external_program()
@@ -307,28 +316,13 @@ class MainWindow(QMainWindow):
             raise FileNotFoundError("Error: MajdataView.exe or MajdataEdit.exe not found in App/Majdata/")
         # 启动程序
         self.Majdata_View_Handler.start_external_program(majdata_view_path)
+        time.sleep(1)
         self.Majdata_Edit_Handler.start_external_program(majdata_edit_path, ["--embed_mode"])
         # 获取窗口句柄
         self.Majdata_View_Handler.find_external_program_hwnd()
         self.Majdata_Edit_Handler.find_external_program_hwnd()
-        # 等待加载
-        time.sleep(0.5)
 
-
-
-    def setup_proxy_server(self):
-        # 创建媒体播放器控制器
-        self.media_controller = server.MediaPlayerController(self.media_player)
-        # 创建纯监听服务器（仅监听8013，不转发）
-        self.proxy_server = server.MajdataListenerServer(
-            listen_port=8013,
-            media_controller=self.media_controller
-        )
-        # 启动监听服务器
-        self.proxy_server.start()
-        print("Majdata监听服务器启动 (纯监听模式)")
-        
-
+    
     def setup_window(self):
         self.setWindowTitle("HachimiDX-Convert")
         icon_path = os.path.join(os.path.dirname(__file__), 'static', 'maimai.ico')
@@ -340,8 +334,6 @@ class MainWindow(QMainWindow):
         # 创建中央widget和主布局
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        
-        # 主水平布局 - 分为左右两部分
         main_layout = QHBoxLayout(central_widget)
 
 
@@ -365,7 +357,13 @@ class MainWindow(QMainWindow):
         lower_left_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatioByExpanding) # let video fill the widget
         self.media_player = QMediaPlayer()
         self.media_player.setVideoOutput(lower_left_widget)
-
+        audio_output = QAudioOutput()
+        self.media_player.setAudioOutput(audio_output)
+        self.media_player.volume = 0 # mute
+        # Start video sync server
+        self.video_sync_server = server.VideoSyncServer(self.media_player, listen_port=8014)
+        self.video_sync_server.set_main_thread_callback(self.execute_in_main_thread)
+        self.video_sync_server.start()
 
 
         # ----------------------------------------------------------------------
@@ -420,6 +418,7 @@ class MainWindow(QMainWindow):
         # 将左右布局添加到主布局
         main_layout.addLayout(left_layout)
         main_layout.addLayout(right_layout)
+
 
 
     # debug
@@ -520,9 +519,24 @@ class MainWindow(QMainWindow):
         
 
 
+
     # debug
     # ----------------------------------------------------------------------
     # 业务逻辑函数
+
+    # 在主线程执行回调函数 (视频播放器用的)
+    def execute_in_main_thread(self, callback):
+        self.callback_emitter.emit_callback(callback)
+    
+    @pyqtSlot(object)
+    def _execute_callback(self, callback):
+        try:
+            callback()
+        except Exception as e:
+            import traceback
+            print(f"[VideoSync] Error executing callback: {e}")
+            traceback.print_exc()
+
 
     # 导航栏按钮点击切换标签页
     @pyqtSlot()
@@ -545,9 +559,7 @@ class MainWindow(QMainWindow):
     def on_majdata_song_changed(self):
         # Check song
         song = self.majdata_song_input.currentText()
-        if (not song or
-            song == "---" or
-            song == self.majdata_last_selection):
+        if not song or song == "---" or song == self.majdata_last_selection:
             return
         song_path = os.path.join(self.all_songs_folder, song)
         if not os.path.exists(song_path):
