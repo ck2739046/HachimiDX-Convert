@@ -264,6 +264,7 @@ class MainWindow(QMainWindow):
         self.majdata_song_input = None
         self.majdata_maidata_choose = None
         self.majdata_track_choose = None
+        self.majdata_video_choose = None
         self.majdata_last_selection = "" # folder_input用的，记录上次选择的歌曲
 
         # 程序初始化
@@ -310,6 +311,9 @@ class MainWindow(QMainWindow):
         # 获取窗口句柄
         self.Majdata_View_Handler.find_external_program_hwnd()
         self.Majdata_Edit_Handler.find_external_program_hwnd()
+        # 等待加载
+        time.sleep(0.5)
+
 
 
     def setup_proxy_server(self):
@@ -481,7 +485,7 @@ class MainWindow(QMainWindow):
             padding-left: 8px;
             }}
         """)
-        self.majdata_maidata_choose.setFixedSize(200, 25)
+        self.majdata_maidata_choose.setFixedSize(150, 25)
         layout.addWidget(self.majdata_maidata_choose)
         # Track choose
         self.majdata_track_choose = QComboBox()
@@ -491,16 +495,24 @@ class MainWindow(QMainWindow):
             padding-left: 8px;
             }}
         """)
-        self.majdata_track_choose.setFixedSize(200, 25)
+        self.majdata_track_choose.setFixedSize(150, 25)
         layout.addWidget(self.majdata_track_choose)
+        # Video choose
+        self.majdata_video_choose = QComboBox()
+        self.majdata_video_choose.setStyleSheet(f"""
+            QComboBox {{
+            background-color: {self.color_grey};
+            padding-left: 8px;
+            }}
+        """)
+        self.majdata_video_choose.setFixedSize(230, 25)
+        layout.addWidget(self.majdata_video_choose)
         # Load button
         load_button = QPushButton("Load")
         load_button.setStyleSheet(f"background-color: {self.color_grey};")
         load_button.setFixedSize(60, 25)
         load_button.clicked.connect(self.on_majdata_load_clicked)
         layout.addWidget(load_button)
-        # Add spacing for future buttons
-        layout.addStretch()
 
         return widget
 
@@ -545,6 +557,7 @@ class MainWindow(QMainWindow):
         # Clear combobox
         self.majdata_maidata_choose.clear()
         self.majdata_track_choose.clear()
+        self.majdata_video_choose.clear()
         # Add all txt files to maidata_choose
         txt_files = [f for f in os.listdir(song_path)
                      if f.lower().endswith('.txt') and
@@ -555,11 +568,17 @@ class MainWindow(QMainWindow):
         audio_files = [f for f in os.listdir(song_path) if f.lower().endswith(('.mp3', '.ogg'))]
         self.majdata_track_choose.addItems(sorted(audio_files))
         self.majdata_track_choose.setCurrentIndex(0)
+        # Add all mp4/mkv files to video_choose
+        video_files = [f for f in os.listdir(song_path) if f.lower().endswith(('.mp4', '.mkv'))]
+        self.majdata_video_choose.addItems(sorted(video_files))
+        self.majdata_video_choose.setCurrentIndex(0)
 
 
     # Open selected items in MajdataEdit
     @pyqtSlot()
     def on_majdata_load_clicked(self):
+        self.media_player.stop()            # reset
+        self.media_player.setSource(QUrl()) # reset
         selected_song = self.majdata_song_input.currentText()
         selected_maidata = self.majdata_maidata_choose.currentText()
         selected_track = self.majdata_track_choose.currentText()
@@ -575,6 +594,13 @@ class MainWindow(QMainWindow):
             print(control_txt)
         except Exception as e:
             print(f"Error writing to MajdataEdit control file: {e}")
+            return
+        # Load video to media player
+        selected_video = self.majdata_video_choose.currentText()
+        if not selected_video: return
+        video_path = os.path.join(song_path, selected_video)
+        self.media_player.setSource(QUrl.fromLocalFile(video_path))
+        self.media_player.pause()
 
 
 
