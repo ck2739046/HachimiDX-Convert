@@ -56,13 +56,17 @@ def exception_handler(exctype, value, traceback):
 
 class FolderComboBox(QComboBox):
 
+    def __init__(self, all_songs_folder=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.all_songs_folder = all_songs_folder
+
     def mousePressEvent(self, event):
         current_text = self.currentText() # Save current text before clear
         self.clear()
         self.addItem("---")  # 添加占位符
-        if os.path.exists(server.song_folder):
-            subdirs = [d for d in os.listdir(server.song_folder) 
-                      if os.path.isdir(os.path.join(server.song_folder, d))]
+        if os.path.exists(self.all_songs_folder):
+            subdirs = [d for d in os.listdir(self.all_songs_folder) 
+                      if os.path.isdir(os.path.join(self.all_songs_folder, d))]
             self.addItems(subdirs)
             
         # Restore previous selection if it exists
@@ -189,9 +193,9 @@ class ExternalProgramHandler:
         check_timer.timeout.connect(check_process)
         check_timer.start(100)
         
-        # 超时计时器：5秒后强制关闭
+        # 超时计时器：15秒后强制关闭
         def on_timeout():
-            print(f"{self.window_title} did not close normally after 5s, forcing shutdown...")
+            print(f"{self.window_title} did not close normally after 15s, forcing shutdown...")
             check_timer.stop()
             if self.exe_process:
                 self.exe_process.kill()
@@ -201,7 +205,7 @@ class ExternalProgramHandler:
         
         timeout_timer.timeout.connect(on_timeout)
         timeout_timer.setSingleShot(True)
-        timeout_timer.start(5000)  # 5秒
+        timeout_timer.start(15000)  # 15秒
         
         # 进入事件循环等待（不阻塞Qt主事件循环的消息处理）
         event_loop.exec()
@@ -221,12 +225,15 @@ class MainWindow(QMainWindow):
         super().__init__()
         # 配色方案变量
         self.color_bg = "#2b2b2b"
-        self.color_border = "#454545"
+        self.color_grey = "#454545"
         self.color_surface = "#17203D"
         self.color_surface_hover = "#212C47"
         self.color_text_primary = "#E8E8E8"
         self.color_text_secondary = "#8D99AE"
         self.color_accent = "#3A86FF"
+
+        # 重要变量
+        self.all_songs_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), "aaa-result")
 
         # 左下视频播放器变量
         self.media_player = None
@@ -254,7 +261,7 @@ class MainWindow(QMainWindow):
         
         # majdata tab 页面变量
         self.majdata_control_txt = os.path.join(os.path.dirname(__file__), "Majdata",  "HachimiDX-Convert-Majdata-Control.txt")
-        self.majdata_folder_input = None
+        self.majdata_song_input = None
         self.majdata_maidata_choose = None
         self.majdata_track_choose = None
         self.majdata_last_selection = "" # folder_input用的，记录上次选择的歌曲
@@ -457,25 +464,39 @@ class MainWindow(QMainWindow):
 
         widget = QWidget()
         widget.setFixedHeight(50)
-        widget.setStyleSheet(f"background-color: {self.color_surface}; margin: 8px")
+        widget.setStyleSheet(f"background-color: {self.color_text_secondary};")
         layout = QHBoxLayout(widget)
         # folder editable combobox
-        self.majdata_folder_input = FolderComboBox()
-        self.majdata_folder_input.setEditable(True)
-        self.majdata_folder_input.setFixedWidth(200)
-        self.majdata_folder_input.currentTextChanged.connect(self.on_majdata_folder_changed)
-        layout.addWidget(self.majdata_folder_input)
+        self.majdata_song_input = FolderComboBox(self.all_songs_folder)
+        self.majdata_song_input.setStyleSheet(f"background-color: {self.color_grey};")
+        self.majdata_song_input.setEditable(True)
+        self.majdata_song_input.setFixedSize(200, 25)
+        self.majdata_song_input.currentTextChanged.connect(self.on_majdata_song_changed)
+        layout.addWidget(self.majdata_song_input)
         # Maidata choose
         self.majdata_maidata_choose = QComboBox()
-        self.majdata_maidata_choose.setFixedWidth(100)
+        self.majdata_maidata_choose.setStyleSheet(f"""
+            QComboBox {{
+            background-color: {self.color_grey};
+            padding-left: 8px;
+            }}
+        """)
+        self.majdata_maidata_choose.setFixedSize(200, 25)
         layout.addWidget(self.majdata_maidata_choose)
         # Track choose
         self.majdata_track_choose = QComboBox()
-        self.majdata_track_choose.setFixedWidth(100)
+        self.majdata_track_choose.setStyleSheet(f"""
+            QComboBox {{
+            background-color: {self.color_grey};
+            padding-left: 8px;
+            }}
+        """)
+        self.majdata_track_choose.setFixedSize(200, 25)
         layout.addWidget(self.majdata_track_choose)
         # Load button
         load_button = QPushButton("Load")
-        load_button.setFixedWidth(60)
+        load_button.setStyleSheet(f"background-color: {self.color_grey};")
+        load_button.setFixedSize(60, 25)
         load_button.clicked.connect(self.on_majdata_load_clicked)
         layout.addWidget(load_button)
         # Add spacing for future buttons
@@ -494,7 +515,6 @@ class MainWindow(QMainWindow):
     # 导航栏按钮点击切换标签页
     @pyqtSlot()
     def switch_tab(self, index):
-
         # 更新导航栏按钮样式
         for i, button in enumerate(self.nav_buttons):
             if i == index:
@@ -508,29 +528,53 @@ class MainWindow(QMainWindow):
         self.current_tab_index = index
 
 
-
-    # Majdata folder changed
+    # Majdata song changed
     @pyqtSlot()
-    def on_majdata_folder_changed(self, text):
+    def on_majdata_song_changed(self):
         # Check song
-        song = self.majdata_folder_input.currentText()
+        song = self.majdata_song_input.currentText()
         if (not song or
             song == "---" or
             song == self.majdata_last_selection):
             return
-        song_path = os.path.join(server.song_folder, song)
+        song_path = os.path.join(self.all_songs_folder, song)
         if not os.path.exists(song_path):
             return
+        # Update last selection
+        self.majdata_last_selection = song
+        # Clear combobox
+        self.majdata_maidata_choose.clear()
+        self.majdata_track_choose.clear()
+        # Add all txt files to maidata_choose
+        txt_files = [f for f in os.listdir(song_path)
+                     if f.lower().endswith('.txt') and
+                     f.lower() not in ('track_result.txt', 'detect_result.txt')]
+        self.majdata_maidata_choose.addItems(sorted(txt_files))
+        self.majdata_maidata_choose.setCurrentIndex(0)
+        # Add all mp3/ogg files to track_choose
+        audio_files = [f for f in os.listdir(song_path) if f.lower().endswith(('.mp3', '.ogg'))]
+        self.majdata_track_choose.addItems(sorted(audio_files))
+        self.majdata_track_choose.setCurrentIndex(0)
 
 
-
-
-
-
-
+    # Open selected items in MajdataEdit
     @pyqtSlot()
     def on_majdata_load_clicked(self):
-        pass
+        selected_song = self.majdata_song_input.currentText()
+        selected_maidata = self.majdata_maidata_choose.currentText()
+        selected_track = self.majdata_track_choose.currentText()
+        if not selected_song or not selected_maidata or not selected_track:
+            return
+        # Create a control txt for MajdataEdit
+        song_path = os.path.join(self.all_songs_folder, selected_song)
+        control_txt = f"folder: {song_path}\nmaidata: {selected_maidata}\ntrack: {selected_track}"
+        try:
+            with open(self.majdata_control_txt, 'w') as f:
+                f.write(control_txt)
+            print("Wrote MajdataEdit control file:")
+            print(control_txt)
+        except Exception as e:
+            print(f"Error writing to MajdataEdit control file: {e}")
 
 
 
