@@ -158,6 +158,9 @@ class MainWindow(QMainWindow):
         self.color_text_secondary = "#8D99AE"
         self.color_accent = "#3A86FF"
 
+        # 左下视频播放器变量
+        self.mediaPlayer = None
+
         # 导航栏变量
         self.nav_titles = ["MajdataEdit", "Auto Convert", "Audio & PV", "Others"] # 总配置项
         self.current_tab_index = 0     # 当前标签页索引
@@ -243,10 +246,13 @@ class MainWindow(QMainWindow):
         upper_left_widget = self.createWindowContainer(upper_left_window, self)
         upper_left_widget.setFixedSize(square_size, square_size)
 
-        # 左下widget - 正方形
-        lower_left_widget = QWidget()
+        # 左下widget - 正方形 -  视频播放器
+        lower_left_widget = QVideoWidget()
         lower_left_widget.setFixedSize(square_size, square_size)
-        lower_left_widget.setStyleSheet(f"background-color: {self.color_bg};")
+        lower_left_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatioByExpanding) # let video fill the widget
+        self.mediaPlayer = QMediaPlayer()
+        self.mediaPlayer.setVideoOutput(lower_left_widget)
+
 
 
         # ----------------------------------------------------------------------
@@ -407,6 +413,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def on_majdata_load_clicked(self):
+        pass
 
 
 
