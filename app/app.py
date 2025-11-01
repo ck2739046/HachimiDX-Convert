@@ -91,7 +91,7 @@ class ExternalProgramHandler:
         self.working_dir = working_dir
 
 
-    def start_external_program(self, program_path):
+    def start_external_program(self, program_path, args=None):
         self.exe_process = QProcess()
         if self.working_dir:
             self.exe_process.setWorkingDirectory(self.working_dir)
@@ -102,7 +102,10 @@ class ExternalProgramHandler:
         # 设置为异步模式，以便可以读取输出
         self.exe_process.setProcessChannelMode(QProcess.ProcessChannelMode.SeparateChannels)
         
-        self.exe_process.start(program_path)
+        if args:
+            self.exe_process.start(program_path, args)
+        else:
+            self.exe_process.start(program_path)
 
     
     def _on_stdout_ready(self):
@@ -234,7 +237,8 @@ class MainWindow(QMainWindow):
         # 启动程序
         self.Majdata_View_Handler.start_external_program(majdata_view_path)
         time.sleep(1) # 等待view启动
-        self.Majdata_Edit_Handler.start_external_program(majdata_edit_path)
+        # MajdataEdit 以 embed_mode 启动
+        self.Majdata_Edit_Handler.start_external_program(majdata_edit_path, ["--embed_mode"])
         time.sleep(1) # 等待edit启动
         # 获取窗口句柄
         self.Majdata_View_Handler.find_external_program_hwnd()
