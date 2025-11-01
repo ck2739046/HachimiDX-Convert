@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, QVBoxLayout,
                              QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedWidget)
-from PyQt6.QtCore import QUrl, QProcess, Qt
+from PyQt6.QtCore import QUrl, QProcess, Qt, QTimer, pyqtSignal, QObject
 from PyQt6.QtGui import QWindow, QIcon
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
@@ -101,7 +101,30 @@ class ExternalProgramHandler:
 
     def start_external_program(self, program_path):
         self.exe_process = QProcess()
+        if self.working_dir:
+            self.exe_process.setWorkingDirectory(self.working_dir)
+        
+        # 连接输出信号到处理函数
+        self.exe_process.readyReadStandardOutput.connect(self._on_stdout_ready)
+        self.exe_process.readyReadStandardError.connect(self._on_stderr_ready)
+        # 设置为异步模式，以便可以读取输出
+        self.exe_process.setProcessChannelMode(QProcess.ProcessChannelMode.SeparateChannels)
+        
         self.exe_process.start(program_path)
+
+    
+    def _on_stdout_ready(self):
+        if self.exe_process:
+            output = self.exe_process.readAllStandardOutput().data().decode('utf-8', errors='replace')
+            if output:
+                print(f"[{self.window_title} STDOUT] {output.rstrip()}")
+    
+
+    def _on_stderr_ready(self):
+        if self.exe_process:
+            output = self.exe_process.readAllStandardError().data().decode('utf-8', errors='replace')
+            if output:
+                print(f"[{self.window_title} STDERR] {output.rstrip()}")
 
 
     def find_external_program_hwnd(self, timeout=5):
