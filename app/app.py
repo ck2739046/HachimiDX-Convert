@@ -152,15 +152,12 @@ class MainWindow(QMainWindow):
         # 配色方案变量
         self.color_bg = "#2b2b2b"
         self.color_border = "#454545"
-        #self.color_base = "#0B132B"
         self.color_surface = "#17203D"
         self.color_surface_hover = "#212C47"
         self.color_text_primary = "#E8E8E8"
         self.color_text_secondary = "#8D99AE"
         self.color_accent = "#3A86FF"
-        # 全局变量
-        self.last_selection = "" # 全局变量，song_input用的，记录上次选择的歌曲
-        self.video_fps = 0       # 全局变量，上/下一帧按钮用的，存储视频fps
+
         # 导航栏变量
         self.nav_titles = ["MajdataEdit", "Auto Convert", "Audio & PV", "Others"] # 总配置项
         self.current_tab_index = 0     # 当前标签页索引
@@ -179,6 +176,13 @@ class MainWindow(QMainWindow):
                 background-color: {self.color_accent}; color: {self.color_text_primary};
                 border: none; font-size: 14px; font-weight: bold;
             }}"""
+        
+        # majdata tab 页面变量
+        self.majdata_folder_input = None
+        self.majdata_maidata_choose = None
+        self.majdata_track_choose = None
+        self.majdata_last_selection = "" # folder_input用的，记录上次选择的歌曲
+
         # 程序初始化
         self.Majdata_View_Handler = ExternalProgramHandler("MajdataView")
         self.Majdata_Edit_Handler = ExternalProgramHandler("MajdataEdit")
@@ -299,6 +303,9 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(right_layout)
 
 
+    # debug
+    # ----------------------------------------------------------------------
+    # 创建各个标签页
     def setup_tab_content_pages(self, title):
         if title == "MajdataEdit":
             page = QWidget()
@@ -329,6 +336,27 @@ class MainWindow(QMainWindow):
         widget.setFixedHeight(50)
         widget.setStyleSheet(f"background-color: {self.color_surface}; margin: 8px")
         layout = QHBoxLayout(widget)
+        # folder editable combobox
+        self.majdata_folder_input = FolderComboBox()
+        self.majdata_folder_input.setEditable(True)
+        self.majdata_folder_input.setFixedWidth(200)
+        self.majdata_folder_input.currentTextChanged.connect(self.on_majdata_folder_changed)
+        layout.addWidget(self.majdata_folder_input)
+        # Maidata choose
+        self.majdata_maidata_choose = QComboBox()
+        self.majdata_maidata_choose.setFixedWidth(100)
+        layout.addWidget(self.majdata_maidata_choose)
+        # Track choose
+        self.majdata_track_choose = QComboBox()
+        self.majdata_track_choose.setFixedWidth(100)
+        layout.addWidget(self.majdata_track_choose)
+        # Load button
+        load_button = QPushButton("Load")
+        load_button.setFixedWidth(60)
+        load_button.clicked.connect(self.on_majdata_load_clicked)
+        layout.addWidget(load_button)
+        # Add spacing for future buttons
+        layout.addStretch()
 
         return widget
 
@@ -340,6 +368,8 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------------------------
     # 业务逻辑函数
 
+    # 导航栏按钮点击切换标签页
+    @pyqtSlot()
     def switch_tab(self, index):
 
         # 更新导航栏按钮样式
@@ -353,6 +383,31 @@ class MainWindow(QMainWindow):
         # 切换堆叠widget的当前页面
         self.tab_stacked_widget.setCurrentIndex(index)
         self.current_tab_index = index
+
+
+
+    # Majdata folder changed
+    @pyqtSlot()
+    def on_majdata_folder_changed(self, text):
+        # Check song
+        song = self.majdata_folder_input.currentText()
+        if (not song or
+            song == "---" or
+            song == self.majdata_last_selection):
+            return
+        song_path = os.path.join(server.song_folder, song)
+        if not os.path.exists(song_path):
+            return
+
+
+
+
+
+
+
+    @pyqtSlot()
+    def on_majdata_load_clicked(self):
+
 
 
 #--------------------------------------------------------------
