@@ -22,6 +22,8 @@ class VideoSyncServer:
         self.last_play_speed = None
         self.last_position = None
         
+
+
     
     def start(self):
         self.running = True
@@ -52,6 +54,8 @@ class VideoSyncServer:
         self.server_thread.start()
     
     
+
+
     def stop(self):
         self.running = False
         
@@ -65,10 +69,14 @@ class VideoSyncServer:
             print("[VideoSync] Server stopped")
     
     
+
+
     def set_main_thread_callback(self, callback):
         self.main_thread_callback = callback
     
     
+
+
     def handle_control_message(self, data):
         # Fast check for valid media player
         if not self.media_player or not self._has_video(): return
@@ -78,18 +86,27 @@ class VideoSyncServer:
         control_value = data.get('control')
         try:
             if control_value in (0, 4):  # Start or Continue
-                self._handle_play(data, control_value == 0)
+                self._handle_play(data)
             elif control_value in (1, 3):  # Stop or Pause
-                self._handle_pause(control_value == 1)
+                self._handle_pause(data)
             elif control_value == 273:  # Set Position
                 self._handle_set_position(data)
         except Exception as e:
-            control_name = {0: 'Start', 1: 'Stop', 2: 'OpStart', 3: 'Pause', 4: 'Continue', 5: 'Record'}.get(control_value, f'Unknown({control_value})')
+            control_map = {0: 'Start',
+                           1: 'Stop',
+                           2: 'OpStart',
+                           3: 'Pause',
+                           4: 'Continue',
+                           5: 'Record',
+                           273: 'SetPosition'}
+            control_name = control_map.get(control_value, f'Unknown({control_value})')
             print(f"[VideoSync] Error handling {control_name}: {e}")
             traceback.print_exc()
     
     
-    def _handle_play(self, data, is_start):
+
+
+    def _handle_play(self, data):
         # extract data
         start_at_ticks = data.get('startAt', 0)
         start_time = data.get('startTime', 0.0)  # Audio position in seconds
@@ -109,91 +126,97 @@ class VideoSyncServer:
         if delay_seconds > 0.01:
             # Schedule delayed playback
             self.pending_play_timer = threading.Timer(
-                delay_seconds, self._do_play, args=[start_time, playback_speed, delay_seconds, is_start]
+                delay_seconds, self._do_play, args=[start_time, playback_speed, delay_seconds]
             )
             self.pending_play_timer.start()
         else:
             # Play immediately
-            self._do_play(start_time, playback_speed, delay_seconds, is_start)
+            self._do_play(start_time, playback_speed, delay_seconds)
 
 
-    def _do_play(self, start_time, playback_speed, delay_seconds, is_start):
+
+
+    def _do_play(self, start_time, playback_speed, delay_seconds):
         try:
             if not self.media_player or not self._has_video(): return
-
-            need_set_position = False
-            if is_start:
-                if self.last_position is None or abs(self.last_position - start_time) > 0.001:
-                    self.last_position = start_time
-                    need_set_position = True
             
             # Use callback to execute in main thread
             if self.main_thread_callback:
                 def play_action():
 
+                    # Set playback speed if changed
                     if self.last_play_speed != playback_speed:
                         self.media_player.setPlaybackRate(playback_speed)
                         self.last_play_speed = playback_speed
-                    
-                    if is_start:
-                        # Start: set position and play
-                        if need_set_position:
-                            self.media_player.setPosition(int(start_time * 1000))
-                        self.media_player.play()
-                        print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video start: {start_time:.3f}s, delay {delay_seconds:.3f}s")
-                    else: 
-                        # Continue: skip setPosition
-                        self.media_player.play()
-                        print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video continue, delay {delay_seconds:.3f}s")
-                
+                    # Set position if needed
+                    if self.last_position is None or abs(self.last_position - start_time) > 0.01:
+                        self.media_player.setPosition(int(start_time * 1000))
+                        self.last_position = start_time
+                        print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video set position: {start_time:.3f}s")
+                    # Play video
+                    self.media_player.play()
+                    print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video play: {start_time:.3f}s (delay {delay_seconds:.3f}s)")
+
                 self.main_thread_callback(play_action)
             
         except Exception as e:
-            import traceback
             print(f"[VideoSync] Error during playback: {e}")
             traceback.print_exc()
     
     
-    def _handle_pause(self, is_stop):
+
+
+    def _handle_pause(self, data):
         try:
             if not self.media_player or not self._has_video(): return
+            start_time = data.get('startTime', 0.0)  # Audio position in seconds
             
             # Cancel any pending delayed playback
             if self.pending_play_timer:
                 self.pending_play_timer.cancel()
                 self.pending_play_timer = None
-
-            # Rest last position if stop
-            if is_stop: self.last_position = None
             
             # Use callback to execute in main thread
             if self.main_thread_callback:
                 def pause_action():
+                    
                     self.media_player.pause()
-                    action_name = "stop" if is_stop else "pause"
-                    print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video {action_name}")
+                    self.media_player.setPosition(int(start_time * 1000))
+                    self.last_position = start_time + 0.05 # 补偿50ms暂停延时 (实测结果，不知道这50ms哪儿来的)
+                    print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video pause: {self.last_position:.3f}s")
                 
                 self.main_thread_callback(pause_action)
             
         except Exception as e:
             print(f"[VideoSync] Error during pause: {e}")
+            traceback.print_exc()
+
+
 
 
     def _handle_set_position(self, data):
-        if not self.media_player or not self._has_video(): return
-        position_time = data.get('position', 0.0)  # Position in seconds
+        try:
+            if not self.media_player or not self._has_video(): return
+            position_time = data.get('position', 0.0)  # Position in seconds
 
-        if self.last_position is None or abs(self.last_position - position_time) > 0.001:
+            if self.last_position and abs(self.last_position - position_time) <= 0.01:
+                return
 
-            self.last_position = position_time
-
+            # Use callback to execute in main thread
             if self.main_thread_callback:
                 def set_position_action():
+                    
                     self.media_player.setPosition(int(position_time * 1000))
+                    self.last_position = position_time
                     # print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video set position: {position_time:.3f}s")
                 
                 self.main_thread_callback(set_position_action)
 
+        except Exception as e:
+            print(f"[VideoSync] Error during set position: {e}")
+            traceback.print_exc()
+
+    
     
     
     def _has_video(self):
