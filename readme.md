@@ -24,15 +24,12 @@ venv\Scripts\activate  # Windows
 
 ### 1. app 部分
 ```bash
-pip install PyQt6 pywin32 psutil opencv-python
+pip install PyQt6 pywin32 psutil flask flask-cors flask-socketio opencv-python
 ```
 
 ### 2. convert_core 部分
 需要YOLO环境：
-1. 安装ultralytics库：`pip install ultralytics`
-2. 安装ffmpeg，确保在cmd中输入 `ffmpeg` 可以看到版本信息
-
-### 3. yolo-train 部分 (非必需)
-需要PyTorch环境:
 1. 运行cmd命令查看CUDA版本：`nvidia-smi` (如果是N卡)
 2. 到 [PyTorch官网](https://pytorch.org/get-started/locally/) 获取安装命令，然后安装PyTorch
+3. 安装ultralytics库：`pip install ultralytics`
+4. 需要安装ffmpeg，确保在cmd中输入 `ffmpeg` 可以看到版本信息
