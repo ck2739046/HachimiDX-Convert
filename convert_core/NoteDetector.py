@@ -1119,7 +1119,7 @@ class NoteDetector:
             cap.release()
             out.release()
             
-            # 使用ffmpeg添加音频
+            # 使用ffmpeg添加音频并且crf压缩
             final_output_path = output_path.replace('_temp.mp4', '.mp4')
             if os.path.exists(final_output_path):
                 os.remove(final_output_path)
@@ -1128,7 +1128,7 @@ class NoteDetector:
                 'ffmpeg', '-y',
                 '-i', output_path, # 无声的跟踪视频
                 '-i', input_path,  # 原始视频（有音频）
-                '-c:v', 'copy',    # 复制视频流
+                '-c:v', 'libx264', '-crf', '26', '-pix_fmt', 'yuv420p',
                 '-c:a', 'copy',    # 复制音频流
                 '-map', '0:v:0',   # 使用第一个输入的视频流
                 '-map', '1:a:0',   # 使用第二个输入的音频流

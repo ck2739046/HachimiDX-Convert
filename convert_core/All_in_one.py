@@ -12,150 +12,150 @@ def main():
 
     # 硬编码多组参数
     parameter_sets = [
-        # {
-        #     # standardizer 参数
-        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\廃墟にいますキャンペーン.mp4",
-        #     "video_mode": "source",
-        #     "start_frame": 670,
-        #     "end_frame": 17000,
-        #     "target_res": 1080,
-        #     "skip_detect_circle": True,
-        #     # note_analyzer 参数
-        #     "bpm": 215,
-        #     "chart_lv": 4,
-        #     "base_denominator": 32
-        # },
-        # {
-        #     # standardizer 参数
-        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\Hurtling Boys.mp4",
-        #     "video_mode": "source",
-        #     "start_frame": 670,
-        #     "end_frame": 14440,
-        #     "target_res": 1080,
-        #     "skip_detect_circle": True,
-        #     # note_analyzer 参数
-        #     "bpm": 195,
-        #     "chart_lv": 4,
-        #     "base_denominator": 32
-        # },
-        # {
-        #     # standardizer 参数
-        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\Magical Flavor[DX].mp4",
-        #     "video_mode": "source",
-        #     "start_frame": 670,
-        #     "end_frame": 15810,
-        #     "target_res": 1080,
-        #     "skip_detect_circle": True,
-        #     # note_analyzer 参数
-        #     "bpm": 98,
-        #     "chart_lv": 4,
-        #     "base_denominator": 32
-        # },
-        # {
-        #     # standardizer 参数
-        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\エンジェル ドリーム.mp4",
-        #     "video_mode": "source",
-        #     "start_frame": 670,
-        #     "end_frame": 17940,
-        #     "target_res": 1080,
-        #     "skip_detect_circle": True,
-        #     # note_analyzer 参数
-        #     "bpm": 180,
-        #     "chart_lv": 4,
-        #     "base_denominator": 32
-        # },
-        # {
-        #     # standardizer 参数
-        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\おべんきょうたいむ.mp4",
-        #     "video_mode": "source",
-        #     "start_frame": 670,
-        #     "end_frame": 18730,
-        #     "target_res": 1080,
-        #     "skip_detect_circle": True,
-        #     # note_analyzer 参数
-        #     "bpm": 165,
-        #     "chart_lv": 4,
-        #     "base_denominator": 32
-        # },
-        # {
-        #     # standardizer 参数
-        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\しゅ～しん？変身☆ハカイシンzzZ.mp4",
-        #     "video_mode": "source",
-        #     "start_frame": 670,
-        #     "end_frame": 19030,
-        #     "target_res": 1080,
-        #     "skip_detect_circle": True,
-        #     # note_analyzer 参数
-        #     "bpm": 180,
-        #     "chart_lv": 4,
-        #     "base_denominator": 32
-        # },
-        # {
-        #     # standardizer 参数
-        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\るろうらんる.mp4",
-        #     "video_mode": "source",
-        #     "start_frame": 670,
-        #     "end_frame": 15510,
-        #     "target_res": 1080,
-        #     "skip_detect_circle": True,
-        #     # note_analyzer 参数
-        #     "bpm": 156,
-        #     "chart_lv": 4,
-        #     "base_denominator": 32
-        # },
-        # {
-        #     # standardizer 参数
-        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\拝啓、最高の思い出たち.mp4",
-        #     "video_mode": "source",
-        #     "start_frame": 670,
-        #     "end_frame": 17480,
-        #     "target_res": 1080,
-        #     "skip_detect_circle": True,
-        #     # note_analyzer 参数
-        #     "bpm": 124,
-        #     "chart_lv": 4,
-        #     "base_denominator": 32
-        # },
-        # {
-        #     # standardizer 参数
-        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\怪盗Rのテーマ.mp4",
-        #     "video_mode": "source",
-        #     "start_frame": 670,
-        #     "end_frame": 15610,
-        #     "target_res": 1080,
-        #     "skip_detect_circle": True,
-        #     # note_analyzer 参数
-        #     "bpm": 147,
-        #     "chart_lv": 4,
-        #     "base_denominator": 32
-        # },
-        # {
-        #     # standardizer 参数
-        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\命テステス.mp4",
-        #     "video_mode": "source",
-        #     "start_frame": 670,
-        #     "end_frame": 13930,
-        #     "target_res": 1080,
-        #     "skip_detect_circle": True,
-        #     # note_analyzer 参数
-        #     "bpm": 240,
-        #     "chart_lv": 4,
-        #     "base_denominator": 32
-        # }
-
         {
             # standardizer 参数
-            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\ニルヴの心臓 MASTER 14.3.mp4",
+            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\廃墟にいますキャンペーン.mp4",
             "video_mode": "source",
             "start_frame": 670,
-            "end_frame": 18500,
+            "end_frame": 17000,
             "target_res": 1080,
             "skip_detect_circle": True,
             # note_analyzer 参数
-            "bpm": 256,
+            "bpm": 215,
+            "chart_lv": 4,
+            "base_denominator": 32
+        },
+        {
+            # standardizer 参数
+            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\Hurtling Boys.mp4",
+            "video_mode": "source",
+            "start_frame": 670,
+            "end_frame": 14440,
+            "target_res": 1080,
+            "skip_detect_circle": True,
+            # note_analyzer 参数
+            "bpm": 195,
+            "chart_lv": 4,
+            "base_denominator": 32
+        },
+        {
+            # standardizer 参数
+            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\Magical Flavor[DX].mp4",
+            "video_mode": "source",
+            "start_frame": 670,
+            "end_frame": 15810,
+            "target_res": 1080,
+            "skip_detect_circle": True,
+            # note_analyzer 参数
+            "bpm": 98,
+            "chart_lv": 4,
+            "base_denominator": 32
+        },
+        {
+            # standardizer 参数
+            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\エンジェル ドリーム.mp4",
+            "video_mode": "source",
+            "start_frame": 670,
+            "end_frame": 17940,
+            "target_res": 1080,
+            "skip_detect_circle": True,
+            # note_analyzer 参数
+            "bpm": 180,
+            "chart_lv": 4,
+            "base_denominator": 32
+        },
+        {
+            # standardizer 参数
+            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\おべんきょうたいむ.mp4",
+            "video_mode": "source",
+            "start_frame": 670,
+            "end_frame": 18730,
+            "target_res": 1080,
+            "skip_detect_circle": True,
+            # note_analyzer 参数
+            "bpm": 165,
+            "chart_lv": 4,
+            "base_denominator": 32
+        },
+        {
+            # standardizer 参数
+            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\しゅ～しん？変身☆ハカイシンzzZ.mp4",
+            "video_mode": "source",
+            "start_frame": 670,
+            "end_frame": 19030,
+            "target_res": 1080,
+            "skip_detect_circle": True,
+            # note_analyzer 参数
+            "bpm": 180,
+            "chart_lv": 4,
+            "base_denominator": 32
+        },
+        {
+            # standardizer 参数
+            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\るろうらんる.mp4",
+            "video_mode": "source",
+            "start_frame": 670,
+            "end_frame": 15510,
+            "target_res": 1080,
+            "skip_detect_circle": True,
+            # note_analyzer 参数
+            "bpm": 156,
+            "chart_lv": 4,
+            "base_denominator": 32
+        },
+        {
+            # standardizer 参数
+            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\拝啓、最高の思い出たち.mp4",
+            "video_mode": "source",
+            "start_frame": 670,
+            "end_frame": 17480,
+            "target_res": 1080,
+            "skip_detect_circle": True,
+            # note_analyzer 参数
+            "bpm": 124,
+            "chart_lv": 4,
+            "base_denominator": 32
+        },
+        {
+            # standardizer 参数
+            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\怪盗Rのテーマ.mp4",
+            "video_mode": "source",
+            "start_frame": 670,
+            "end_frame": 15610,
+            "target_res": 1080,
+            "skip_detect_circle": True,
+            # note_analyzer 参数
+            "bpm": 147,
+            "chart_lv": 4,
+            "base_denominator": 32
+        },
+        {
+            # standardizer 参数
+            "video_path": r"C:\Users\ck273\Desktop\風又ねリ\命テステス.mp4",
+            "video_mode": "source",
+            "start_frame": 670,
+            "end_frame": 13930,
+            "target_res": 1080,
+            "skip_detect_circle": True,
+            # note_analyzer 参数
+            "bpm": 240,
             "chart_lv": 4,
             "base_denominator": 32
         }
+
+        # {
+        #     # standardizer 参数
+        #     "video_path": r"C:\Users\ck273\Desktop\風又ねリ\ニルヴの心臓 MASTER 14.3.mp4",
+        #     "video_mode": "source",
+        #     "start_frame": 670,
+        #     "end_frame": 18500,
+        #     "target_res": 1080,
+        #     "skip_detect_circle": True,
+        #     # note_analyzer 参数
+        #     "bpm": 256,
+        #     "chart_lv": 4,
+        #     "base_denominator": 32
+        # }
     ]
 
     for i, params in enumerate(parameter_sets):
