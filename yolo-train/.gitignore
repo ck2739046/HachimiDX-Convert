@@ -1,2 +1,4 @@
 dataset/
 pt/*.pt
+pt/*.engine
+pt/*.onnx

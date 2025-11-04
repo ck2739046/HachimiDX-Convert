@@ -1,10 +1,9 @@
 .idea
-__pycache__
+*__pycache__*
 .venv
-temp
-aaa-result
 
-# Majdata
-EditorSetting.json
-PROGRAM_RUNNING
-.autosave
+aaa-result
+src/Majdata/
+src/temp/
+src/ffmpeg*
+src/models/
