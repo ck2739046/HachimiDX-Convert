@@ -6,30 +6,65 @@
 
 ## 当前局限
 - 无法识别烟花特效
-- 不支持超大尺寸的touch和touch-hold音符 (常见于basic难度)
-- 不支持变化的BPM（一首歌的BPM必须全程不变）
+- 不支持超大尺寸的 touch 和 touch-hold 音符 (常见于 basic 难度)
+- 不支持变化的 BPM（一首歌的 BPM 必须全程不变）
 - 只能识别星星头，无法识别星星轨迹
 - 只支持游戏录屏，不支持相机拍屏幕（会有色偏）
 
 
 
-## 依赖安装
-**注意：运行本项目推荐使用独立显卡，核显处理速度会很慢**
+## 依赖安装 (必须严格按照顺序安装)
+**注意：运行本项目推荐使用独立显卡，纯 cpu 或核显处理速度会很慢**
 
-### 0. 创建Python虚拟环境（建议）
-```bash
-python -m venv venv
-venv\Scripts\activate  # Windows
-```
+### 0. 安装 Python 本体
 
-### 1. app 部分
-```bash
-pip install PyQt6 pywin32 psutil flask flask-cors flask-socketio opencv-python
-```
+如果还没有安装过 Python 本体，推荐去微软商店搜索 `Python 3.12` 下载
 
-### 2. convert_core 部分
-需要YOLO环境：
-1. 运行cmd命令查看CUDA版本：`nvidia-smi` (如果是N卡)
-2. 到 [PyTorch官网](https://pytorch.org/get-started/locally/) 获取安装命令，然后安装PyTorch
-3. 安装ultralytics库：`pip install ultralytics`
-4. 需要安装ffmpeg，确保在cmd中输入 `ffmpeg` 可以看到版本信息
+![python312](src/doc/images/python312.png)
+
+在 cmd 输入 `python --version`，如果有输出 `Python 3.xx`，代表 Python 已经成功安装了
+
+### 1. 创建 Python 虚拟环境（必需）
+
+- 创建环境 - `python -m venv .venv`
+- 激活环境 - `.venv\Scripts\activate`
+- 更新依赖 - `python3 -m pip install --upgrade pip`
+- 更新依赖 - `python3 -m pip install wheel`
+
+### 2. 安装 PyTorch
+
+根据硬件选择对应的安装指令：
+
+1. 如果使用 `Nvidia` 显卡 (≥ GTX 900)：
+    - 在 cmd 输入 `nvidia-smi` 查看 cuda 版本
+    - 到 [PyTorch官网](https://pytorch.org/get-started/locally/) 选择对应 cuda 版本的安装命令
+
+2. 如果使用 `Intel` 显卡，或者 `AMD/Intel` 核显：
+    - 到 [PyTorch官网](https://pytorch.org/get-started/locally/) 选择 cpu 版本的安装命令
+
+3. 如果使用 `AMD` 显卡，或者其他硬件：
+    - 安装命令 - `pip install torch-directml` 
+
+选择对应的安装命令后，在 Python 虚拟环境中输入以安装 PyTorch
+
+### 3. 安装 Ultralytics
+
+`pip install ultralytics`
+
+### 4. 安装额外的模型推理 runtime
+
+根据硬件不同选择对应的 runtime:
+
+1. 如果使用 `Nvidia` 显卡 (≥ GTX 900)：
+    - 安装 tensorRT - `pip install --no-cache-dir tensorrt==10.13.2.6`
+    - 2025.11.05 [issue](https://github.com/NVIDIA/tensorrt/issues/4614)：当前新版 10.13.3.9 无法安装，回退到上一版
+
+2. 如果使用 `Intel` 显卡，或者 `AMD/Intel` 核显：
+    - 安装 openvino - `pip install openvino`
+
+3. 如果使用 `AMD` 显卡，或者其他硬件：
+    - 无需安装额外文件
+
+### 4. 安装其他的库
+
+`pip install PyQt6 pywin32`
