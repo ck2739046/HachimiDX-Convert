@@ -29,101 +29,125 @@ LOGGER.setLevel(logging.ERROR) # 只显示错误信息，忽略 Warning
 class NoteDetector:
     def __init__(self):
 
-        # 每个大类的id范围
-        # tap 0-4, slide 5-9, touch 10-14, hold 15-19, touch-hold 20+
-        self.main_class_id = [0, 5, 10, 15, 20]
-
-        # 定义具体id对应的名称
-        self.class_label = {
-            # tap
-            0: 'Tap',
-            1: 'Tap-B',
-            2: 'Tap-X',
-            3: 'Tap-BX',
-            # slide
-            5: 'Slide',
-            6: 'Slide-B',
-            7: 'Slide-X',
-            8: 'Slide-BX',
-            # touch
-            10: 'Touch',
-            # hold
-            15: 'Hold',
-            16: 'Hold-B',
-            17: 'Hold-X',
-            18: 'Hold-BX',
-            # touch-hold
-            20: 'Touch-hold'
+        # 每个类型的音符可以有10个子类
+        self.class_id_map = {
+            # main class
+            1: 'Tap',
+            2: 'Slide',
+            3: 'Touch',
+            4: 'Hold',
+            5: 'Touch-hold',
+            # specific tap
+            10: 'Tap',
+            11: 'Tap-B',
+            12: 'Tap-X',
+            13: 'Tap-BX',
+            # specific slide
+            21: 'Slide',
+            22: 'Slide-B',
+            23: 'Slide-X',
+            24: 'Slide-BX',
+            # specific touch
+            30: 'Touch',
+            # specific hold
+            40: 'Hold',
+            41: 'Hold-B',
+            42: 'Hold-X',
+            43: 'Hold-BX',
+            # specific touch-hold
+            50: 'Touch-hold'
         }
 
+
     def get_main_class_id(self, id):
-        # 映射class_id到大类
-        if id >= self.main_class_id[-1]:
-            return 4  # touch-hold
-        elif id >= self.main_class_id[-2]:
-            return 3  # hold
-        elif id >= self.main_class_id[-3]:
-            return 2  # touch
-        elif id >= self.main_class_id[-4]:
-            return 1  # slide
+        # main class
+        if 0 <= id <= 9:
+            result = id
+        # tap
+        elif 10 <= id <= 19:
+            result = 1
+        # slide
+        elif 20 <= id <= 29:
+            result = 2
+        # touch
+        elif 30 <= id <= 39:
+            result = 3
+        # hold
+        elif 40 <= id <= 49:
+            result = 4
+        # touch-hold
+        elif 50 <= id <= 59:
+            result = 5
         else:
-            return 0  # tap
+            result = -1  # unknown
+
+        if result != -1 and id in self.class_id_map.keys():
+            return result
+        else:
+            return -1
         
-    def get_specific_class_id(self, id, isEx, isBreak):
+
+    def get_specific_class_id(self, main_class_id, isEx=False, isBreak=False):
         # Tap
-        if id == 0:
+        if main_class_id == 1:
             if isEx and isBreak:
-                return 3  # Tap-BX
+                return 13  # Tap-BX
             elif isEx:
-                return 2  # Tap-X
+                return 12  # Tap-X
             elif isBreak:
-                return 1  # Tap-B
+                return 11  # Tap-B
             else:
-                return 0  # Tap
+                return 10  # Tap
         # Slide    
-        elif id == 1:
+        elif main_class_id == 2:
             if isEx and isBreak:
-                return 8  # Slide-BX
+                return 23  # Slide-BX
             elif isEx:
-                return 7  # Slide-X
+                return 22  # Slide-X
             elif isBreak:
-                return 6  # Slide-B
+                return 21  # Slide-B
             else:
-                return 5  # Slide
+                return 20  # Slide
+        # Touch
+        elif main_class_id == 3:
+            return 30  # Touch 没有子类
         # Hold    
-        elif id == 3:
+        elif main_class_id == 4:
             if isEx and isBreak:
-                return 18  # Hold-BX
+                return 43  # Hold-BX
             elif isEx:
-                return 17  # Hold-X
+                return 42  # Hold-X
             elif isBreak:
-                return 16  # Hold-B
+                return 41  # Hold-B
             else:
-                return 15  # Hold
+                return 40  # Hold
+        elif main_class_id == 5:
+            return 50  # Touch-hold 没有子类
         else:
-            return id  # Touch and Touch-hold 没有子分类
+            return -1  # unknown
         
+
     def get_main_class_id_from_model_output(self, model, index):
         if model == 'obb':
-            if index == 0: return 3 # Hold
+            if index == 0: return 4 # Hold
         else: # detect
-            if index == 0: return 0 # Tap
-            if index == 1: return 1 # Slide
-            if index == 2: return 2 # Touch
+            if index == 0: return 1 # Tap
+            if index == 1: return 2 # Slide
+            if index == 2: return 3 # Touch
             if index == 3: return 5 # Touch-Hold
         
-    def is_obb(self, id, id_type):
-        # 先从具体id转为大类id
-        if id_type == 'specific':
-            id = self.get_main_class_id(id)
-        # 只有 Hold 是 OBB
-        return id == 3
+
+    def is_obb(self, id):
+        id = self.get_main_class_id(id)
+        return id == 4 # 只有 Hold 是 OBB
+
 
     def get_imgsz(self, model_type):
         if model_type == 'detect' or model_type == 'obb':
             return 960
         else:
             return 224 # cls-ex, cls-break
+
 
     def print_progress(self, name, speed_unit, counter, total, last_time, last_counter):
         # 计算即时fps
@@ -206,12 +230,12 @@ class NoteDetector:
             boxes = result.boxes.cpu().numpy()
             xyxy = boxes.xyxy    # shape: (N, 4) 
             conf = boxes.conf    # shape: (N, 1)
-            cls = boxes.cls      # shape: (N, 1)
+            raw_cls = boxes.cls  # shape: (N, 1)
             # 批量构建字典列表
             boxes_list = [
                 {
                     'frame': frame_number,
-                    'class_id': int(cls[i]),
+                    'main_class_id': self.get_main_class_id_from_model_output(model_name, raw_cls[i]),
                     'x1': float(xyxy[i, 0]),  # 左上角x
                     'y1': float(xyxy[i, 1]),  # 左上角y
                     'x2': float(xyxy[i, 2]),  # 右上角x
@@ -235,12 +259,12 @@ class NoteDetector:
             xyxyxyxy = obb.xyxyxyxy  # (N, 4, 2) -> N个框，每个框4个点，每个点(x,y)
             xywhr = obb.xywhr        # (N, 5)    -> N个框，每个框(x_center, y_center, w, h, r)
             conf = obb.conf          # (N, 1)
-            cls = obb.cls            # (N, 1)
+            raw_cls = obb.cls        # (N, 1)
             # 批量构建字典列表
             boxes_list = [
                 {
                     'frame': frame_number,
-                    'class_id': int(cls[i]),
+                    'main_class_id': self.get_main_class_id_from_model_output(model_name, raw_cls[i]),
                     'x1': float(xyxyxyxy[i, 0, 0]),  # 第1个点的x坐标
                     'y1': float(xyxyxyxy[i, 0, 1]),  # 第1个点的y坐标
                     'x2': float(xyxyxyxy[i, 1, 0]),  # 第2个点的x坐标
@@ -270,7 +294,7 @@ class NoteDetector:
                     current_frame = detection['frame']
                 # 写入音符数据
                 datas = [
-                    f"{detection['class_id']}",
+                    f"{detection['main_class_id']}",
                     f"{detection['x1']:.4f}", f"{detection['y1']:.4f}",
                     f"{detection['x2']:.4f}", f"{detection['y2']:.4f}",
                     f"{detection['x3']:.4f}", f"{detection['y3']:.4f}",
@@ -302,7 +326,7 @@ class NoteDetector:
                     if len(parts) == 11:
                         detection = {
                             'frame': current_frame,
-                            'class_id': int(parts[0].strip()),
+                            'main_class_id': int(parts[0].strip()),
                             'x1': float(parts[1].strip()),
                             'y1': float(parts[2].strip()),
                             'x2': float(parts[3].strip()),
@@ -384,7 +408,7 @@ class NoteDetector:
                 parsed_track_results = self._parse_track_results(track_result, single_frame_detections)
                 # 写入最终结果
                 for track_id, original_detection in parsed_track_results:
-                    final_tracked_results[track_id]['class_id'] = original_detection['class_id']
+                    final_tracked_results[track_id]['class_id'] = original_detection['main_class_id']
                     final_tracked_results[track_id]['path'].append({
                         'frame': frame_number,
                         'x1': original_detection['x1'],
@@ -394,7 +418,8 @@ class NoteDetector:
                         'x3': original_detection['x3'],
                         'y3': original_detection['y3'],
                         'x4': original_detection['x4'],
-                        'y4': original_detection['y4']
+                        'y4': original_detection['y4'],
+                        'r': original_detection['r']
                     })
                 
                 # 打印进度
@@ -422,7 +447,7 @@ class NoteDetector:
         n = len(detections)
         data = np.zeros((n, 7), dtype=np.float32)
         for i, box in enumerate(detections):
-            if box['r']-1 < -273:
+            if box['r'] - 1 < -273:
                 # detect数据
                 cx = (box['x1'] + box['x3']) / 2.0
                 cy = (box['y1'] + box['y3']) / 2.0
@@ -437,7 +462,7 @@ class NoteDetector:
                 h = math.sqrt((box['x3'] - box['x2'])**2 + (box['y3'] - box['y2'])**2)
                 r = box['r']
             # 填充数据
-            data[i] = [cx, cy, w, h, r, box['confidence'], box['class_id']]
+            data[i] = [cx, cy, w, h, r, box['confidence'], box['main_class_id']]
         # 封装为OBB对象
         return OBB(data, frame_shape)
     
@@ -447,7 +472,7 @@ class NoteDetector:
         # 利用 idx 建立映射
         id_map = {}
         for result in track_result:
-            cx, cy, w, h, r, track_id, score, class_id, idx = result
+            cx, cy, w, h, r, track_id, score, main_class_id, idx = result
             # 此处idx是tracker_input的索引
             # 利用这个可以轻松找到对应的原始检测框
             id_map[int(idx)] = int(track_id)
@@ -459,6 +484,82 @@ class NoteDetector:
                 parsed_track_results.append((track_id, detection))
         # return
         return parsed_track_results
+    
+
+
+    def _save_track_results(self, tracks, output_dir):
+
+        track_result_path = os.path.join(output_dir, "track_result.txt")
+        
+        with open(track_result_path, 'w', encoding='utf-8') as f:
+            for track_id, track_data in tracks.items():
+                if track_data['class_id'] is not None and len(track_data['path']) > 0:
+                    # 写入轨迹头
+                    f.write(f"track_id: {track_id}, class_id: {track_data['class_id']}\n")
+                    
+                    # 写入轨迹路径
+                    for point in track_data['path']:
+                        data = [
+                            f"{point['frame']}",
+                            f"{point['x1']:.4f}", f"{point['y1']:.4f}",
+                            f"{point['x2']:.4f}", f"{point['y2']:.4f}",
+                            f"{point['x3']:.4f}", f"{point['y3']:.4f}",
+                            f"{point['x4']:.4f}", f"{point['y4']:.4f}",
+                            f"{point['r']:.4f}"
+                        ]
+                        f.write(', '.join(data) + '\n')
+
+                    f.write('\n')  # track_id之间空行分隔
+        
+        print(f"追踪结果已保存到: {track_result_path}")
+
+
+
+    def _load_track_results(self, output_dir):
+
+        track_result_path = os.path.join(output_dir, "track_result.txt")
+        tracks = defaultdict(lambda: {'class_id': None, 'path': []})
+        
+        with open(track_result_path, 'r', encoding='utf-8') as f:
+            current_track_id = -1
+            current_class_id = -1
+            
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                if line.startswith('track_id:'):
+                    # 解析轨迹头
+                    parts = line.split(',')
+                    if len(parts) == 2:
+                        current_track_id = int(parts[0].split(':')[1].strip())
+                        current_class_id = int(parts[1].split(':')[1].strip())
+                        tracks[current_track_id]['class_id'] = current_class_id
+                else:
+                    # 解析轨迹点数据
+                    parts = line.split(',')
+                    if len(parts) == 10:
+                        point = {
+                            'frame': int(parts[0].strip()),
+                            'x1': float(parts[1].strip()),
+                            'y1': float(parts[2].strip()),
+                            'x2': float(parts[3].strip()),
+                            'y2': float(parts[4].strip()),
+                            'x3': float(parts[5].strip()),
+                            'y3': float(parts[6].strip()),
+                            'x4': float(parts[7].strip()),
+                            'y4': float(parts[8].strip()),
+                            'r': float(parts[9].strip())
+                        }
+                        tracks[current_track_id]['path'].append(point)
+        
+        return tracks
+
+
+
+
+
 
 
 
@@ -556,7 +657,7 @@ if __name__ == "__main__":
         r"D:\git\aaa-HachimiDX-Convert\src\models\obb.pt",
         r"D:\git\aaa-HachimiDX-Convert\src\models\cls-ex.pt",
         r"D:\git\aaa-HachimiDX-Convert\src\models\cls-break.pt",
-        skip_detect=True,               # 是否跳过检测
+        skip_detect=False,               # 是否跳过检测
         skip_cls=False,                  # 是否跳过分类
         skip_export_tracked_video=False  # 是否跳过导出视频
     )
