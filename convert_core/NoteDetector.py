@@ -43,10 +43,10 @@ class NoteDetector:
             12: 'Tap-X',
             13: 'Tap-BX',
             # specific slide
-            21: 'Slide',
-            22: 'Slide-B',
-            23: 'Slide-X',
-            24: 'Slide-BX',
+            20: 'Slide',
+            21: 'Slide-B',
+            22: 'Slide-X',
+            23: 'Slide-BX',
             # specific touch
             30: 'Touch',
             # specific hold
@@ -675,9 +675,12 @@ class NoteDetector:
             # 跳过不需要分类的音符
             if not self.need_cls(class_id): continue
 
-            # 选择一个音符的轨迹的25%, 50%, 75%作为采样点
+            # 从一个音符的轨迹中选取采样点
             path_length = len(track_data['path'])
-            sample_positions = [25, 50, 75]
+            if self.is_obb(class_id):
+                sample_positions = [10, 15, 20] # 尽量选择早期的点，避免在后续长条hold时被闪烁特效干扰
+            else:
+                sample_positions = [25, 50, 75] # detect
 
             for sample_position in sample_positions:
                 sample_idx = int(path_length * sample_position / 100.0)
