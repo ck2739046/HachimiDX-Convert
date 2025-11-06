@@ -602,7 +602,7 @@ class NoteDetector:
 
             cap = cv2.VideoCapture(std_video_path)
             total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.005)
+            crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.003)
 
             # 按帧读取视频，提取图像并分类
             for frame_number in range(total_frames):
@@ -919,16 +919,20 @@ class NoteDetector:
 
             # 为不同ID生成不同颜色
             def get_color_for_id(track_id):
-                color_pool = [
-                    (0, 255, 255), (255, 0, 255), (255, 255, 0),
-                    (128, 255, 255), (255, 128, 255), (255, 255, 128),
-                    (255, 0, 0), (0, 255, 0), (0, 0, 255),
-                    (255, 128, 128), (128, 255, 128), (128, 128, 255),
-                    (128, 128, 128)
+                color_palette = [
+                    (0, 0, 190),   # RED
+                    (190, 0, 0),   # BLUE
+                    (0, 170, 0),   # GREEN
+                    (0, 100, 200), # ORANGE
+                    (200, 0, 150), # PURPLE
+                    (180, 130, 0), # TEAL
+                    (160, 0, 210), # MAGENTA
+                    (0, 150, 160), # OLIVE
+                    (40, 80, 160)  # SIENNA
                 ]
                 # 使用track_id对颜色池长度取模来选择颜色
-                color_index = track_id % len(color_pool)
-                return color_pool[color_index]
+                color_index = track_id % len(color_palette)
+                return color_palette[color_index]
             
             # 按帧号组织轨迹点
             frame_tracks = defaultdict(list)
@@ -993,7 +997,7 @@ class NoteDetector:
                     # 绘制标签
                     class_name = self.class_id_map.get(class_id, f'unknown')
                     label = f'{class_name} ID:{track_id}'
-                    label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+                    label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
                     
                     if self.is_obb(class_id):
                         # 找到OBB四个点中最上方的点作为标签位置；若y相同则选择x最小
@@ -1010,8 +1014,9 @@ class NoteDetector:
                     
                     cv2.rectangle(frame, (label_x, label_y - label_size[1] - 10), 
                                 (label_x + label_size[0], label_y), color, -1)
+                    
                     cv2.putText(frame, label, (label_x, label_y - 5), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
                     
                     # 更新轨迹历史
                     # 计算中心点：OBB 使用四点平均，其他类型使用矩形中心
