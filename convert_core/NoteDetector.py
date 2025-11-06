@@ -493,7 +493,7 @@ class NoteDetector:
     
 
 
-    def _save_track_results(self, tracks, output_dir, is_cls=False):
+    def _save_track_results(self, tracks, output_dir, is_cls):
 
         track_result_path = os.path.join(output_dir, "track_result.txt")
         
@@ -873,6 +873,8 @@ class NoteDetector:
 
             # 更新track_results的class_id
             track_results[track_id]['class_id'] = final_class_id
+
+        return track_results
     
  
 
@@ -927,11 +929,10 @@ class NoteDetector:
 
             # 追踪模块
             track_results = self.track_module(detect_results, std_video_path)
-
+            cls_track_results = track_results.copy()
 
             # 分类模块
             if not skip_cls:
-                cls_track_results = track_results.copy()
                 cls_track_results = self.classification_module(cls_track_results, std_video_path,
                                                                batch_cls, inference_device,
                                                                cls_ex_model_path, cls_break_model_path)
@@ -940,10 +941,10 @@ class NoteDetector:
 
 
             # 保存最终追踪结果
-            if skip_cls or cls_track_results is None:
-                self._save_track_results(track_results, output_dir, is_cls=False)
+            if not skip_cls and cls_track_results is not None:
+                self._save_track_results(cls_track_results, output_dir, True)
             else:
-                self._save_track_results(cls_track_results, output_dir, is_cls=True)
+                self._save_track_results(track_results, output_dir, False)
             
 
             # # 导出追踪视频模块
