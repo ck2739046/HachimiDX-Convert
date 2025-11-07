@@ -8,6 +8,12 @@ import traceback
 import time
 from math import dist, gcd
 import NoteDetector
+import sys
+root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if root not in sys.path: sys.path.insert(0, root)
+import tools.path_config
+
+
 
 error_trace = []
 
@@ -92,8 +98,8 @@ class NoteAnalyzer:
             if len(track_path) < 10: continue
             if 'class_id' not in track_data: continue
             class_id = round(track_data['class_id'])
-            if self.noteDetector.get_main_class_id(class_id) != 0:
-                continue # 0 = tap，忽视非tap音符
+            if self.noteDetector.get_main_class_id(class_id) != 1:
+                continue # 1 = tap，忽视非tap音符
 
 
             # read track path
@@ -101,10 +107,10 @@ class NoteAnalyzer:
             for track_box in track_path:
 
                 frame_num = track_box['frame']
-                x1 = track_box['x1']
-                y1 = track_box['y1']
-                x2 = track_box['x2']
-                y2 = track_box['y2']
+                x1 = track_box['x1'] # 左上角
+                y1 = track_box['y1'] # 左上角
+                x2 = track_box['x3'] # 右下角
+                y2 = track_box['y3'] # 右下角
                 cx = (x1 + x2) / 2
                 cy = (y1 + y2) / 2
 
@@ -432,18 +438,18 @@ class NoteAnalyzer:
             track_path = track_data['path']
             if len(track_path) < 10: continue
             class_id = round(track_data['class_id'])
-            if self.noteDetector.get_main_class_id(class_id) != 2:
-                continue # 2 = touch，忽视非touch音符
+            if self.noteDetector.get_main_class_id(class_id) != 3:
+                continue # 3 = touch，忽视非touch音符
 
             # read track path
             valid_track_path = []
             for track_box in track_path:
 
                 frame_num = track_box['frame']
-                x1 = track_box['x1']
-                y1 = track_box['y1']
-                x2 = track_box['x2']
-                y2 = track_box['y2']
+                x1 = track_box['x1'] # 左上角
+                y1 = track_box['y1'] # 左上角
+                x2 = track_box['x3'] # 右下角
+                y2 = track_box['y3'] # 右下角
                 cx = (x1 + x2) / 2
                 cy = (y1 + y2) / 2
 
@@ -940,8 +946,8 @@ class NoteAnalyzer:
             if len(track_path) < 10: continue
             if 'class_id' not in track_data: continue
             class_id = round(track_data['class_id'])
-            if self.noteDetector.get_main_class_id(class_id) != 3:
-                continue # 3 = hold，忽视非hold音符
+            if self.noteDetector.get_main_class_id(class_id) != 4:
+                continue # 4 = hold，忽视非hold音符
 
 
             # read track path
@@ -964,7 +970,7 @@ class NoteAnalyzer:
                 dist_to_center = np.sqrt(((cx - self.screen_cx)**2 + (cy - self.screen_cy)**2))
                 # 计算方向(1-8)
                 position = self.calculate_oct_position(self.screen_cx, self.screen_cy, cx, cy)
-                # 过滤10%-90%距离的数据
+                # 过滤5%-95%距离的数据
                 if dist_to_center < valid_judgeline_start:
                     continue # 掐头
                 elif dist_to_center > valid_judgeline_end:
@@ -1095,7 +1101,15 @@ class NoteAnalyzer:
         tail_x, tail_y = intersections[1] if dist1 > dist2 else intersections[0]
         dist_head = dist1 if dist1 > dist2 else dist2
         dist_tail = dist2 if dist1 > dist2 else dist1
-
+        # 防止越过起点和终点
+        if dist_head > self.judgeline_end:
+            dist_head = self.judgeline_end
+        if dist_head < self.judgeline_start:
+            dist_head = self.judgeline_start
+        if dist_tail > self.judgeline_end:
+            dist_tail = self.judgeline_end
+        if dist_tail < self.judgeline_start:
+            dist_tail = self.judgeline_start
         # 根据 label_notes 定义，整个hold的一半宽度为 70x0.77 (ex再+5)
         # 那么正六边形的端点到中心的距离约为 70x0.77 x 2/√3
         width = 70 * 0.77 if class_id not in [17,18] else 75 * 0.77 + 5
@@ -1103,15 +1117,6 @@ class NoteAnalyzer:
         # 往回缩一点
         new_dist_head = dist_head - offset
         new_dist_tail = dist_tail + offset
-        # 防止越过起点和终点
-        if new_dist_head > self.judgeline_end:
-            new_dist_head = self.judgeline_end
-        if new_dist_head < self.judgeline_start:
-            new_dist_head = self.judgeline_start
-        if new_dist_tail > self.judgeline_end:
-            new_dist_tail = self.judgeline_end
-        if new_dist_tail < self.judgeline_start:
-            new_dist_tail = self.judgeline_start
         # 计算新的head和tail坐标
         new_head_x, new_head_y = get_point_by_dist_to_center(a, b, head_x, head_y, new_dist_head)
         new_tail_x, new_tail_y = get_point_by_dist_to_center(a, b, tail_x, tail_y, new_dist_tail)
@@ -1221,8 +1226,8 @@ class NoteAnalyzer:
             track_path = track_data['path']
             if len(track_path) < 10: continue
             class_id = round(track_data['class_id'])
-            if self.noteDetector.get_main_class_id(class_id) != 4:
-                continue # 4 = touch_hold，忽视非touch_hold音符
+            if self.noteDetector.get_main_class_id(class_id) != 5:
+                continue # 5 = touch_hold，忽视非touch_hold音符
 
             counter = 0
             precent_counter = 0
@@ -1235,16 +1240,12 @@ class NoteAnalyzer:
                 counter += 1
 
                 frame_num = track_box['frame']
-                x1 = track_box['x1']
-                y1 = track_box['y1']
-                x2 = track_box['x2']
-                y2 = track_box['y2']
-                x3 = track_box['x3']
-                y3 = track_box['y3']
-                x4 = track_box['x4']
-                y4 = track_box['y4']
-                cx = (x1 + x2 + x3 + x4) / 4
-                cy = (y1 + y2 + y3 + y4) / 4
+                x1 = track_box['x1'] # 左上角
+                y1 = track_box['y1'] # 左上角
+                x2 = track_box['x3'] # 右下角
+                y2 = track_box['y3'] # 右下角
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
 
                 # 计算三角到中心的距离
                 if precent_counter >= 5: break # 节省时间，hold阶段后半都不用计算了
@@ -1680,8 +1681,8 @@ class NoteAnalyzer:
             if len(track_path) < 10: continue
             if 'class_id' not in track_data: continue
             class_id = round(track_data['class_id'])
-            if self.noteDetector.get_main_class_id(class_id) != 1:
-                continue # 1 = slide，忽视非slide音符
+            if self.noteDetector.get_main_class_id(class_id) != 2:
+                continue # 2 = slide，忽视非slide音符
 
 
             # read track path
@@ -1689,10 +1690,10 @@ class NoteAnalyzer:
             for track_box in track_path:
 
                 frame_num = track_box['frame']
-                x1 = track_box['x1']
-                y1 = track_box['y1']
-                x2 = track_box['x2']
-                y2 = track_box['y2']
+                x1 = track_box['x1'] # 左上角
+                y1 = track_box['y1'] # 左上角
+                x2 = track_box['x3'] # 右下角
+                y2 = track_box['y3'] # 右下角
                 cx = (x1 + x2) / 2
                 cy = (y1 + y2) / 2
 
@@ -2047,10 +2048,10 @@ class NoteAnalyzer:
 
 if __name__ == "__main__":
 
-    folder_name = "ヒアソビ EXPERT"
+    folder_name = "Get U ♭ack EXPERT"
     folder_path = rf"D:\git\aaa-HachimiDX-Convert\aaa-result\{folder_name}"
 
-    bpm = 134
+    bpm = 205
     chart_lv = 4
     base_denominator = 32
 

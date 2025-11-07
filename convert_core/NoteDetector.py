@@ -1148,6 +1148,7 @@ class NoteDetector:
             # 检查模型配置
             if batch_detect <= 0 or batch_cls <= 0:
                 raise ValueError(f"batch_detect 或 batch_cls 参数无效, 必须大于0: batch_detect={batch_detect}, batch_cls={batch_cls}")
+            inference_device = str(inference_device)
             if inference_device.lower() not in ['cpu', 'gpu', '0', '1', '2']:
                 raise ValueError(f"inference_device 参数无效, 必须是 cpu/gpu/0/1/2: inference_device={inference_device}")
 
