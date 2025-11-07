@@ -1101,6 +1101,13 @@ class NoteAnalyzer:
         tail_x, tail_y = intersections[1] if dist1 > dist2 else intersections[0]
         dist_head = dist1 if dist1 > dist2 else dist2
         dist_tail = dist2 if dist1 > dist2 else dist1
+        # 根据 label_notes 定义，整个hold的一半宽度为 70x0.77 (ex再+5)
+        # 那么正六边形的端点到中心的距离约为 70x0.77 x 2/√3
+        width = 70 * 0.77 if class_id not in [17,18] else 75 * 0.77 + 5
+        offset = width * 2 / math.sqrt(3)
+        # 往回缩一点
+        new_dist_head = dist_head - offset
+        new_dist_tail = dist_tail + offset
         # 防止越过起点和终点
         if dist_head > self.judgeline_end:
             dist_head = self.judgeline_end
@@ -1110,13 +1117,6 @@ class NoteAnalyzer:
             dist_tail = self.judgeline_end
         if dist_tail < self.judgeline_start:
             dist_tail = self.judgeline_start
-        # 根据 label_notes 定义，整个hold的一半宽度为 70x0.77 (ex再+5)
-        # 那么正六边形的端点到中心的距离约为 70x0.77 x 2/√3
-        width = 70 * 0.77 if class_id not in [17,18] else 75 * 0.77 + 5
-        offset = width * 2 / math.sqrt(3)
-        # 往回缩一点
-        new_dist_head = dist_head - offset
-        new_dist_tail = dist_tail + offset
         # 计算新的head和tail坐标
         new_head_x, new_head_y = get_point_by_dist_to_center(a, b, head_x, head_y, new_dist_head)
         new_tail_x, new_tail_y = get_point_by_dist_to_center(a, b, tail_x, tail_y, new_dist_tail)
@@ -1841,21 +1841,21 @@ class NoteAnalyzer:
 
             # 根据class_id设置position后缀
             position_suffix = {
-                1: 'b',    # break-tap
-                2: 'x',    # ex-tap
-                3: 'bx',   # break-ex-tap
+                11: 'b',    # break-tap
+                12: 'x',    # ex-tap
+                13: 'bx',   # break-ex-tap
 
-                5: '$',    # slide
-                6: 'b$',   # break-slide
-                7: 'x$',   # ex-slide
-                8: 'bx$',  # break-ex-slide
+                20: '$',    # slide
+                21: 'b$',   # break-slide
+                22: 'x$',   # ex-slide
+                23: 'bx$',  # break-ex-slide
 
-                15: 'h',   # hold
-                16: 'bh',  # break-hold
-                17: 'xh',  # ex-hold
-                18: 'bxh', # break-ex-hold
+                40: 'h',   # hold
+                41: 'bh',  # break-hold
+                42: 'xh',  # ex-hold
+                43: 'bxh', # break-ex-hold
 
-                20: 'h',   # touch-hold
+                50: 'h',   # touch-hold
             }
             position = f"{position}{position_suffix.get(class_id, '')}"
             
