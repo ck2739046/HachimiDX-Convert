@@ -17,6 +17,9 @@ import psutil
 import cv2
 import ctypes
 from ctypes import wintypes
+root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if root not in sys.path: sys.path.insert(0, root)
+import tools.path_config
 
 
 # 设置环境变量来禁用Qt多媒体库的调试输出
@@ -170,7 +173,7 @@ class ExternalProgramHandler:
 
         # 如果有控制文件 - 通过控制文件请求程序关闭
         try:
-            with open(control_file_path, 'w') as f:
+            with open(control_file_path, 'w', encoding='utf-8') as f:
                 f.write("exit")
             print(f"{self.window_title} shutdown via control file")
         except Exception as e:
@@ -241,7 +244,7 @@ class MainWindow(QMainWindow):
         self.color_accent = "#3A86FF"
 
         # 重要变量
-        self.all_songs_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), "aaa-result")
+        self.all_songs_folder = os.path.abspath(tools.path_config.final_data_output_dir)
 
         # 视频播放器变量
         self.media_player = None
@@ -270,7 +273,7 @@ class MainWindow(QMainWindow):
             }}"""
         
         # majdata tab 页面变量
-        self.majdata_control_txt = os.path.join(os.path.dirname(__file__), "Majdata",  "HachimiDX-Convert-Majdata-Control.txt")
+        self.majdata_control_txt = os.path.abspath(tools.path_config.majdata_control_txt)
         self.majdata_song_input = None
         self.majdata_maidata_choose = None
         self.majdata_track_choose = None
@@ -278,7 +281,7 @@ class MainWindow(QMainWindow):
         self.majdata_last_selection = "" # folder_input用的，记录上次选择的歌曲
 
         # 程序初始化
-        majdata_working_dir = os.path.join(os.path.dirname(__file__), "Majdata")
+        majdata_working_dir = os.path.abspath(tools.path_config.majdata_dir)
         self.Majdata_View_Handler = ExternalProgramHandler("MajdataView", majdata_working_dir)
         self.Majdata_Edit_Handler = ExternalProgramHandler("MajdataEdit", majdata_working_dir)
         self.start_External_Programs()
@@ -310,8 +313,8 @@ class MainWindow(QMainWindow):
         if os.path.exists(self.majdata_control_txt):
             os.remove(self.majdata_control_txt)
         # 确认majdata程序存在
-        majdata_view_path = os.path.join(os.path.dirname(__file__), "Majdata", "MajdataView.exe")
-        majdata_edit_path = os.path.join(os.path.dirname(__file__), "Majdata", "MajdataEdit.exe")
+        majdata_view_path = os.path.abspath(tools.path_config.majdataView_exe)
+        majdata_edit_path = os.path.abspath(tools.path_config.majdataEdit_exe)
         if not os.path.exists(majdata_view_path) or not os.path.exists(majdata_edit_path):
             raise FileNotFoundError("Error: MajdataView.exe or MajdataEdit.exe not found in App/Majdata/")
         # 启动程序
@@ -325,7 +328,7 @@ class MainWindow(QMainWindow):
     
     def setup_window(self):
         self.setWindowTitle("HachimiDX-Convert")
-        icon_path = os.path.join(os.path.dirname(__file__), 'static', 'maimai.ico')
+        icon_path = os.path.abspath(tools.path_config.app_icon)
         self.setWindowIcon(QIcon(icon_path))
         self.setFixedSize(1300, 900)
 
@@ -631,7 +634,7 @@ class MainWindow(QMainWindow):
         song_path = os.path.join(self.all_songs_folder, selected_song)
         control_txt = f"folder: {song_path}\nmaidata: {selected_maidata}\ntrack: {selected_track}"
         try:
-            with open(self.majdata_control_txt, 'w') as f:
+            with open(self.majdata_control_txt, 'w', encoding='utf-8') as f:
                 f.write(control_txt)
             print("Wrote MajdataEdit control file:")
             print(control_txt)
