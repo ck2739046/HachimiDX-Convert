@@ -3,7 +3,6 @@ from ultralytics.trackers import BOTSORT
 import os
 import cv2
 import time
-import torch
 import numpy as np
 from collections import defaultdict
 from types import SimpleNamespace
@@ -13,12 +12,7 @@ import logging
 import subprocess
 import shutil
 import traceback
-import sys
 import math
-
-root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if root not in sys.path: sys.path.insert(0, root)
-import tools.path_config
 
 
 
@@ -1089,7 +1083,7 @@ class NoteDetector:
                 'ffmpeg', '-y', '-hide_banner', '-stats', '-loglevel', 'error',
                 '-i', temp_track_video_path, # 无声的跟踪视频
                 '-i', std_video_path,  # 原始视频（有音频）
-                '-c:v', 'libx264', '-crf', '26', '-pix_fmt', 'yuv420p',
+                '-c:v', 'libx264', '-crf', '24', '-pix_fmt', 'yuv420p',
                 '-c:a', 'copy',    # 复制音频流
                 '-map', '0:v:0',   # 使用第一个输入的视频流
                 '-map', '1:a:0',   # 使用第二个输入的音频流

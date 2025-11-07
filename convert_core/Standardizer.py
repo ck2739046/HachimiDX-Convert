@@ -3,14 +3,23 @@ import numpy as np
 import os
 import subprocess
 from typing import Tuple, Optional
+import sys
+
+root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if root not in sys.path: sys.path.insert(0, root)
+import tools.path_config
 
 class Standardizer:
     def __init__(self):
         self.circle_center = None  # (x, y)
         self.circle_radius = None
-        self.temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'temp')
+        self.temp_dir = tools.path_config.temp_dir
         
-    def standardize_video(self, video_path: str, start_frame: int, end_frame: int, video_mode: str, target_res=1080, skip_detect_circle=False) -> str:
+
+
+
+
+    def standardize_video(self, video_path: str, start_frame: int, end_frame: int, video_mode='source', target_res=1080, skip_detect_circle=False) -> str:
         """
         标准化视频的主要函数
         
@@ -68,6 +77,11 @@ class Standardizer:
             
         except Exception as e:
             raise Exception(f"Error in standardize_video: {e}")
+
+
+
+
+
 
     def detect_circle(self, cap, video_width: int, video_height: int, total_frames: int, mode: str = 'source', target: int = 15) -> Tuple[Tuple[int, int], int]:
         """
@@ -165,6 +179,13 @@ class Standardizer:
         except Exception as e:
             raise Exception(f"Error in detect_circle: {e}")
     
+
+
+
+
+
+
+
     def display_preview(self, video_path: str, video_width: int, video_height: int, start_frame: int, end_frame: int):
         """
         显示预览窗口，绘制原始图像帧和圆形
@@ -256,6 +277,11 @@ class Standardizer:
         except Exception as e:
             raise Exception(f"Error in display_preview: {e}")
     
+
+
+
+
+
     def draw_frame(self, frame, video_width: int, video_height: int, isPaused: bool):
         """
         在帧上绘制圆形和其他元素
@@ -343,6 +369,15 @@ class Standardizer:
         except Exception as e:
             raise Exception(f"Error in draw_frame: {e}")
     
+
+
+
+
+
+
+
+
+
     def get_user_adjustment(self, video_width: int, video_height: int) -> Optional[Tuple[Tuple[int, int], int]]:
         """
         获取用户输入的圆心和半径调整参数
@@ -417,6 +452,12 @@ class Standardizer:
         except Exception as e:
             print(f"Error in get_user_adjustment: {e}")
             return None
+    
+
+
+
+
+
     
     def process_video_standardization(self, input_video: str, start_frame: int, end_frame: int, fps: float,
                                       video_width: int, video_height: int, target_res: int,
@@ -538,7 +579,7 @@ class Standardizer:
             cmd.extend(['-c:a', 'aac'])  # 使用AAC重新编码
             cmd.extend(['-b:a', '192k'])  # 统一码率192k
             # 视频编解码器
-            cmd.extend(['-c:v', 'libx264', '-crf', '26', '-pix_fmt', 'yuv420p'])
+            cmd.extend(['-c:v', 'libx264', '-crf', '24', '-pix_fmt', 'yuv420p'])
             # 确保音视频同步
             cmd.extend(['-async', '1'])
             # 输出文件
@@ -605,15 +646,18 @@ if __name__ == "__main__":
     # end_frame = 31810
 
     # video_mode = "source" or "camera shot"
-    
-    video_path = r"C:\Users\ck273\Desktop\風又ねリ\廃墟にいますキャンペーン.mp4"
+
+    # standardizer 参数
+    video_path = r"C:\Users\ck273\Desktop\風又ねリ\[maimai谱面确认] Get U ♭ack EXPERT-p01-120.mp4"
     video_mode = "source"
     start_frame = 670
-    end_frame = 17000
-    target_res = 2160
+    end_frame = 16390
+    target_res = 1080
+    skip_detect_circle = True
+    video_mode = "source"
 
     try:
-        result_path = standardizer.standardize_video(video_path, start_frame, end_frame, video_mode, target_res)
+        result_path = standardizer.standardize_video(video_path, start_frame, end_frame, video_mode, target_res, skip_detect_circle)
         print(f"Standardized video saved to: {result_path}")
     except Exception as e:
         print(f"Error: {e}")
