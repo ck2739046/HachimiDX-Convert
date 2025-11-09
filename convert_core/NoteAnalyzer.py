@@ -1799,16 +1799,18 @@ class NoteAnalyzer:
 
 
             # 先检查开头和结尾
-            need_continue = False
-            for box in [track_path[0], track_path[-1]]:
-                cx = (box['x1'] + box['x3']) / 2
-                cy = (box['y1'] + box['y3']) / 2
-                position = self.calculate_all_position(cx, cy)
-                if not position.startswith('A'):
-                    need_continue = True
-                    break
-            if need_continue:
-                continue # 忽视非A区开头和结尾的slide音符
+            box = track_path[0]
+            cx = (box['x1'] + box['x3']) / 2
+            cy = (box['y1'] + box['y3']) / 2
+            position = self.calculate_all_position(cx, cy)
+            if not position.startswith('A'):
+                continue # 忽视非A区开头音符
+            box = track_path[-1]
+            cx = (box['x1'] + box['x3']) / 2
+            cy = (box['y1'] + box['y3']) / 2
+            position = self.calculate_all_position(cx, cy)
+            if not position.startswith('A') and not position.startswith('D'):
+                continue # 忽视非A区或D区结尾音符
 
 
             # read track path
@@ -1874,6 +1876,33 @@ class NoteAnalyzer:
         return {(track_id, class_id, start_position): (movement_syntax, start_time, end_time)}
         '''
 
+        # 原点为(0, 0)，半径为480 (标准1080p)，标准xy坐标系
+        # 判定线圆圈上的8个点
+        std_dict = {
+            'A1': (184, 443),
+            'A2': (443, 184),
+            'A3': (443, -183),
+            'A4': (184, -443),
+            'A5': (-183, -443),
+            'A6': (-443, -183),
+            'A7': (-443, 183),
+            'A8': (-183, 443),
+        }
+        # 需要转换为屏幕坐标
+        new_dict = {}
+        for area_label, (x, y) in std_dict.items():
+            # 转换成标准1080p屏幕坐标系
+            # 原点是(540, 540)，y轴向下为正
+            x_on_screen_cx = x + 540
+            y_on_screen_cy = -y + 540
+            # 按比例缩放到当前分辨率
+            scaled_x = round((x_on_screen_cx - 540) * self.video_size / 1080 + self.screen_cx)
+            scaled_y = round((y_on_screen_cy - 540) * self.video_size / 1080 + self.screen_cy)
+            new_dict[area_label] = (scaled_x, scaled_y)
+
+        A_zone_endpoint_on_judgeline = new_dict
+
+
         # 分析运动模式
         # 暂时只检测边缘旋转 x>x / x<x
         # 其他的一律视为直线 x-x
@@ -1882,12 +1911,12 @@ class NoteAnalyzer:
 
             # 计算运动语法
             # 期望的返回: >5 / <3 / -7
-            movement_syntax = self.analyze_slide_tail_movement_syntax(note_path)
+            movement_syntax = self.analyze_slide_tail_movement_syntax(note_path, A_zone_endpoint_on_judgeline)
             if movement_syntax is None:
                 continue
             
             # 计算持续时间
-            start_time, end_time = self.analyze_slide_tail_start_end_time(note_path)
+            start_time, end_time = self.analyze_slide_tail_start_end_time(note_path, A_zone_endpoint_on_judgeline)
             if start_time is None or end_time is None:
                 continue
 
@@ -1897,7 +1926,7 @@ class NoteAnalyzer:
     
 
 
-    def analyze_slide_tail_movement_syntax(self, note_path):
+    def analyze_slide_tail_movement_syntax(self, note_path, A_zone_endpoint_on_judgeline):
         '''
         分析运动模式
         暂时只检测边缘旋转 x>x / x<x
@@ -1905,6 +1934,15 @@ class NoteAnalyzer:
 
         如果星星全程仅在A区或D区内移动，视为旋转
         '''
+
+        def get_A_zone_endpoint_on_judgeline(x, y, A_zone_endpoint_on_judgeline):
+            tolerance = self.video_size * 0.02
+            for label, (px, py) in A_zone_endpoint_on_judgeline.items():
+                dist = np.sqrt((x - px)**2 + (y - py)**2)
+                if dist < tolerance:
+                    return label
+            return None
+
 
         if len(note_path) < 6:
             return None
@@ -1955,16 +1993,37 @@ class NoteAnalyzer:
                 else:
                     movement_type = '>'
 
-        else: # 其他情况全部视为直线
-            movement_type = '-'
-        
-        # 最后组合语法
-        movement_syntax = f"{movement_type}{end_position_id}"
+            movement_syntax = f"{movement_type}{end_position_id}"
+
+        else:
+            # 获得音符经过的所有A区判定点
+            unique_positions = []
+            for note in note_path:
+                x1 = note['x1']
+                y1 = note['y1']
+                x2 = note['x2']
+                y2 = note['y2']
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
+                pos = get_A_zone_endpoint_on_judgeline(cx, cy, A_zone_endpoint_on_judgeline)
+                if pos is None: continue
+                if not pos.startswith('A'): continue
+                if pos in unique_positions: continue
+                unique_positions.append(pos)
+            # 考虑到有些星星最后可能提前结束，没有进入A区
+            # 使用最后一个位置作为保底结尾
+            end_position = f'A{end_position_id}'
+            if end_position not in unique_positions:
+                unique_positions.append(end_position)
+            # 按顺序用'-'连接
+            movement_syntax = '-'.join([pos[1] for pos in unique_positions])
+            movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
+
         return movement_syntax
     
 
 
-    def analyze_slide_tail_start_end_time(self, note_path):
+    def analyze_slide_tail_start_end_time(self, note_path, A_zone_endpoint_on_judgeline):
         '''
         粗略计算持续时间
 
@@ -1975,35 +2034,6 @@ class NoteAnalyzer:
         同理，找到最后一个进入终点A区的点，计算得到音符停止移动的时间
         持续时间 = 停止时间 - 开始时间
         '''
-
-        def get_A_zone_endpoint_on_judgeline(position):
-            # 原点为(0, 0)，半径为480 (标准1080p)，标准xy坐标系
-            # 判定线圆圈上的8个点
-            std_dict = {
-                'A1': (184, 443),
-                'A2': (443, 184),
-                'A3': (443, -183),
-                'A4': (184, -443),
-                'A5': (-183, -443),
-                'A6': (-443, -183),
-                'A7': (-443, 183),
-                'A8': (-183, 443),
-            }
-            # 需要转换为屏幕坐标
-            new_touch_areas = {}
-            for area_label, (x, y) in std_dict.items():
-                # 转换成标准1080p屏幕坐标系
-                # 原点是(540, 540)，y轴向下为正
-                x_on_screen_cx = x + 540
-                y_on_screen_cy = -y + 540
-                # 按比例缩放到当前分辨率
-                scaled_x = round((x_on_screen_cx - 540) * self.video_size / 1080 + self.screen_cx)
-                scaled_y = round((y_on_screen_cy - 540) * self.video_size / 1080 + self.screen_cy)
-                new_touch_areas[area_label] = (scaled_x, scaled_y)
-            
-            return new_touch_areas.get(position, None)
-
-
 
         if len(note_path) < 6:
             return None, None
@@ -2045,11 +2075,11 @@ class NoteAnalyzer:
         note_speed = sorted_speeds[index]
 
         # 定义起点和终点位置
-        point = get_A_zone_endpoint_on_judgeline(positions[0])
+        point = A_zone_endpoint_on_judgeline.get(positions[0], None)
         if point is None:
             return None, None
         start_cx, start_cy = point
-        point = get_A_zone_endpoint_on_judgeline(positions[-1])
+        point = A_zone_endpoint_on_judgeline.get(positions[-1], None)
         if point is None:
             return None, None
         end_cx, end_cy = point
@@ -2159,12 +2189,12 @@ class NoteAnalyzer:
         max_delay_tolerance = one_beat_Msec * delay_tolerance_index * 1.2
         min_delay_tolerance = one_beat_Msec * delay_tolerance_index * 0.6
 
-        print(f"\n=== Matching Parameters ===")
-        print(f"BPM: {bpm}, One Beat: {one_beat_Msec:.2f} ms")
-        print(f"Std Delay Tolerance: {std_delay_tolerance:.2f} ms")
-        print(f"Min Delay Tolerance: {min_delay_tolerance:.2f} ms")
-        print(f"Max Delay Tolerance: {max_delay_tolerance:.2f} ms")
-        print(f"===========================\n")
+        # print(f"\n=== Matching Parameters ===")
+        # print(f"BPM: {bpm}, One Beat: {one_beat_Msec:.2f} ms")
+        # print(f"Std Delay Tolerance: {std_delay_tolerance:.2f} ms")
+        # print(f"Min Delay Tolerance: {min_delay_tolerance:.2f} ms")
+        # print(f"Max Delay Tolerance: {max_delay_tolerance:.2f} ms")
+        # print(f"===========================\n")
 
         # 先按位置分组head数据
         # 这样后续tail查找head时，只会在对应位置的head中查找，减少计算量
@@ -2208,14 +2238,13 @@ class NoteAnalyzer:
             # 找到了匹配的head，进行记录
             head_track_id, head_class_id, head_position, head_end_time = best_head
             matched_head_track_ids.add(head_track_id)
+            # 由于未知原因，星星时长总是长了1/16拍，进行修正
+            tail_end_time -= one_beat_Msec / 16
             # 写入final_slide_info
             full_movement_syntax = f"{tail_start_position}{get_suffix(head_class_id)}{tail_movement_syntax}{get_suffix(tail_class_id)}"
             key = (head_track_id, head_class_id, full_movement_syntax)
             value = (head_end_time, tail_start_time, tail_end_time)
             final_slide_info[key] = value
-
-
-            print(f'{head_track_id}-{tail_track_id} Matched: Delay {(tail_start_time - head_end_time):.2f} ms')            
 
 
         # 将未匹配的head也写入final_slide_info
@@ -2225,6 +2254,16 @@ class NoteAnalyzer:
                 key = (head_track_id, head_class_id, full_movement_syntax)
                 value = head_end_time
                 final_slide_info[key] = value
+
+        # 打印final_slide_info
+        print("\n=== Final Slide Info ===")
+        for (track_id, class_id, movement_syntax), time_info in final_slide_info.items():
+            if isinstance(time_info, tuple):
+                head_end_time, tail_start_time, tail_end_time = time_info
+                print(f"Slide Note: Track ID {track_id}, Class ID {class_id}, Movement {movement_syntax}, Head End Time {head_end_time:.2f} ms, Tail Start Time {tail_start_time:.2f} ms, Tail End Time {tail_end_time:.2f} ms")
+            else:
+                head_end_time = time_info
+                print(f"Single Slide Note: Track ID {track_id}, Class ID {class_id}, Movement {movement_syntax}, Head End Time {head_end_time:.2f} ms")
 
         return final_slide_info
 
@@ -2485,7 +2524,7 @@ class NoteAnalyzer:
             slide_info = self.merge_slide_info(slide_head_info, slide_tail_info, bpm)
 
             # analyze all notes info
-            # self.analyze_all_notes_info(bpm, chart_lv, base_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
+            self.analyze_all_notes_info(bpm, chart_lv, base_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
 
         except Exception as e:
             raise Exception(f"Error in NoteAnalyzer.main: {e}")
