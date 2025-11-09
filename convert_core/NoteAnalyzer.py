@@ -1942,6 +1942,48 @@ class NoteAnalyzer:
                 if dist < tolerance:
                     return label
             return None
+        
+
+        def get_outer_rotation_syntax(start_position_id, next_position_id, end_position_id):
+            # 判断起始点在左侧还是右侧
+            if start_position_id in [1,2,7,8]:
+                start_side = 'up'
+            else:
+                start_side = 'down'
+            # 判断旋转方向
+            # > 代表从起点开始箭头向右, < 代表从起点开始箭头向左
+            if start_side == 'up':
+                # 处理1和8的特殊情况
+                if start_position_id == 1:
+                    if next_position_id in [7, 8]:
+                        next_position_id -= 8
+                elif start_position_id == 8:
+                    if next_position_id in [1, 2]:
+                        next_position_id += 8
+                # 判断方向
+                if next_position_id > start_position_id:
+                    movement_type = '>'
+                else:
+                    movement_type = '<'
+            else: # start_side == 'down'
+                if next_position_id > start_position_id:
+                    movement_type = '<'
+                else:
+                    movement_type = '>'
+            # 组合语法
+            movement_syntax = f"{movement_type}{end_position_id}"
+            return movement_syntax
+        
+
+        def is_consecutive(id1, id2):
+                # 检查两个A区ID是否连续（考虑环形结构）
+                # 顺时针：1->2, 2->3, ..., 7->8, 8->1
+                if (id2 - id1) == 1 or (id1 == 8 and id2 == 1):
+                    return True, 'clockwise'
+                # 逆时针：1->8, 8->7, ..., 2->1
+                if (id1 - id2) == 1 or (id1 == 1 and id2 == 8):
+                    return True, 'counterclockwise'
+                return False, None
 
 
         if len(note_path) < 6:
@@ -1965,35 +2007,7 @@ class NoteAnalyzer:
             if next_position_id is None:
                 return None
 
-            # 判断起始点在左侧还是右侧
-            if start_position_id in [1,2,7,8]:
-                start_side = 'up'
-            else:
-                start_side = 'down'
-
-            # 判断旋转方向
-            # > 代表从起点开始箭头向右, < 代表从起点开始箭头向左
-            if start_side == 'up':
-                # 处理1和8的特殊情况
-                if start_position_id == 1:
-                    if next_position_id in [7, 8]:
-                        next_position_id -= 8
-                elif start_position_id == 8:
-                    if next_position_id in [1, 2]:
-                        next_position_id += 8
-                # 判断方向
-                if next_position_id > start_position_id:
-                    movement_type = '>'
-                else:
-                    movement_type = '<'
-
-            else: # start_side == 'down'
-                if next_position_id > start_position_id:
-                    movement_type = '<'
-                else:
-                    movement_type = '>'
-
-            movement_syntax = f"{movement_type}{end_position_id}"
+            movement_syntax = get_outer_rotation_syntax(start_position_id, next_position_id, end_position_id)
 
         else:
             # 获得音符经过的所有A区判定点
@@ -2017,9 +2031,61 @@ class NoteAnalyzer:
             end_position = f'A{end_position_id}'
             if end_position != last_A_zone:
                 A_zones.append(end_position)
-            # 按顺序用'-'连接
-            movement_syntax = '-'.join([pos[1] for pos in A_zones])
+            if len(A_zones) < 2:
+                return None
+
+
+
+            # 检测这个A区路径里边是否包含一些圆弧，要单独拆分出来
+            arc_segments = []
+            i = 0
+            while i < len(A_zones):
+                current_id = int(A_zones[i][1])  # 'A7' -> 7
+                # 尝试检测从当前位置开始的圆弧
+                if i + 1 < len(A_zones):
+                    next_id = int(A_zones[i + 1][1])
+                    is_consec, direction = is_consecutive(current_id, next_id)
+
+                    if is_consec:
+                        # 找到圆弧的起点，继续向后查找相同方向的连续点
+                        arc_start = current_id
+                        arc_next = next_id
+                        arc_end = next_id
+                        j = i + 2
+                        while j < len(A_zones):
+                            check_id = int(A_zones[j][1])
+                            prev_id = int(A_zones[j - 1][1])
+                            is_consec_next, dir_next = is_consecutive(prev_id, check_id)
+                            # 如果方向一致且连续，继续扩展圆弧
+                            if is_consec_next and dir_next == direction:
+                                arc_end = check_id
+                                j += 1
+                            else:
+                                break
+                        # 记录这个圆弧
+                        arc_segments.append(('arc', (arc_start, arc_next, arc_end)))
+                        i = j  # 跳过已处理的圆弧部分
+                        continue
+                
+                # 不是圆弧的一部分，作为单独的点
+                arc_segments.append(('single', current_id))
+                i += 1
+            
+            
+            # 将圆弧和单独的点组合成最终语法
+            syntax_parts = []
+            for seg_type, seg_data in arc_segments:
+                if seg_type == 'arc':
+                    start_id, next_id, end_id = seg_data
+                    arc_syntax = get_outer_rotation_syntax(start_id, next_id, end_id)
+                    syntax_parts.append(f"{start_id}{arc_syntax}")
+                else:  # single
+                    syntax_parts.append(str(seg_data))
+            
+            movement_syntax = '-'.join(syntax_parts)
             movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
+
+            # print(f'{" ".join(azone for azone in A_zones)} -> {movement_syntax}')
 
         return movement_syntax
     
