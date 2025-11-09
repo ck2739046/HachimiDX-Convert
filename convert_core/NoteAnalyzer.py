@@ -2138,7 +2138,7 @@ class NoteAnalyzer:
     
 
 
-    def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_tolerance_index=0.25):
+    def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_index=0.25):
         '''
         合并slide头尾信息
         输入: for (head_track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
@@ -2147,9 +2147,9 @@ class NoteAnalyzer:
         将这两组进行匹配：
         delay = tail_start_time - head_end_time
         规则1：head_position = tail_start_position (str)
-        规则2：min_delay_tolerance < delay < max_delay_tolerance
+        规则2：min_delay < delay < max_delay
         规则3：一个tail最多只能匹配到一个head，但是一个head可以匹配多个tail
-        规则4：如果tail与多个head都符合匹配条件，选择delay与std_delay_tolerance最接近的head
+        规则4：如果tail与多个head都符合匹配条件，选择delay与std_delay最接近的head
 
         返回格式:
         dict{
@@ -2185,15 +2185,15 @@ class NoteAnalyzer:
 
         # 标准延迟是0.25拍
         one_beat_Msec = 60 / bpm * 1000 * 4
-        std_delay_tolerance = one_beat_Msec * delay_tolerance_index
-        max_delay_tolerance = one_beat_Msec * delay_tolerance_index * 1.2
-        min_delay_tolerance = one_beat_Msec * delay_tolerance_index * 0.6
+        std_delay = one_beat_Msec * delay_index
+        max_delay = one_beat_Msec * delay_index * 1.2
+        min_delay = one_beat_Msec * delay_index * 0.6
 
         # print(f"\n=== Matching Parameters ===")
         # print(f"BPM: {bpm}, One Beat: {one_beat_Msec:.2f} ms")
-        # print(f"Std Delay Tolerance: {std_delay_tolerance:.2f} ms")
-        # print(f"Min Delay Tolerance: {min_delay_tolerance:.2f} ms")
-        # print(f"Max Delay Tolerance: {max_delay_tolerance:.2f} ms")
+        # print(f"Std Delay: {std_delay:.2f} ms")
+        # print(f"Min Delay: {min_delay:.2f} ms")
+        # print(f"Max Delay: {max_delaye:.2f} ms")
         # print(f"===========================\n")
 
         # 先按位置分组head数据
@@ -2216,17 +2216,17 @@ class NoteAnalyzer:
                 print(f"{tail_track_id} Tail not match: No heads at position {tail_start_position}")
                 continue
             # 如果有，遍历这些head，寻找符合delay条件的head
-            # 条件1：min_delay_tolerance < delay < max_delay_tolerance
-            # 条件2：与std_delay_tolerance最接近
+            # 条件1：min_delay < delay < max_delay
+            # 条件2：与std_delay最接近
             best_head = None
             best_delay_diff = float('inf')
             for head_track_id, head_class_id, head_position, head_end_time in head_by_position[tail_start_position]:
                 # 条件1
                 delay = tail_start_time - head_end_time
-                if not (min_delay_tolerance < delay < max_delay_tolerance):
+                if not (min_delay < delay < max_delay):
                     continue
                 # 条件2
-                delay_diff = abs(delay - std_delay_tolerance)
+                delay_diff = abs(delay - std_delay)
                 if delay_diff < best_delay_diff:
                     best_delay_diff = delay_diff
                     best_head = (head_track_id, head_class_id, head_position, head_end_time)
