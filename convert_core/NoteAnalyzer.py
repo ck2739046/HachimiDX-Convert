@@ -2079,7 +2079,9 @@ class NoteAnalyzer:
         if point is None:
             return None, None
         start_cx, start_cy = point
-        point = A_zone_endpoint_on_judgeline.get(positions[-1], None)
+        # 允许终点在A区或D区
+        temp_position_str = f'A{positions[-1][1]}'
+        point = A_zone_endpoint_on_judgeline.get(temp_position_str, None)
         if point is None:
             return None, None
         end_cx, end_cy = point
