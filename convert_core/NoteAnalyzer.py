@@ -2037,10 +2037,12 @@ class NoteAnalyzer:
             last_cy = cy
             last_frame = frame_num
 
-        # 获取中位数速度
+        # 获取第60%的速度 (比中位数偏右一点)
         if not frame_speeds:
             return None, None
-        median_speed = np.median(frame_speeds)
+        index = round(len(frame_speeds) * 0.6)
+        sorted_speeds = sorted(frame_speeds)
+        note_speed = sorted_speeds[index]
 
         # 定义起点和终点位置
         point = get_A_zone_endpoint_on_judgeline(positions[0])
@@ -2076,7 +2078,7 @@ class NoteAnalyzer:
         # 计算开始时间
         if start_move_frame is None:
             return None, None
-        time_to_start_Msec = (dist_to_start / median_speed) * (1000 / self.fps)
+        time_to_start_Msec = (dist_to_start / note_speed) * (1000 / self.fps)
         note_start_time_Msec = start_move_frame / self.fps * 1000 - time_to_start_Msec
 
         # 找到最后一个进入终点A区的点
@@ -2099,7 +2101,7 @@ class NoteAnalyzer:
         # 计算结束时间
         if end_move_frame is None:
             return None, None
-        time_to_end_Msec = (dist_to_end / median_speed) * (1000 / self.fps)
+        time_to_end_Msec = (dist_to_end / note_speed) * (1000 / self.fps)
         note_end_time_Msec = end_move_frame / self.fps * 1000 + time_to_end_Msec
 
         return note_start_time_Msec, note_end_time_Msec
@@ -2151,11 +2153,11 @@ class NoteAnalyzer:
 
         final_slide_info = {}
 
-        # 标准延迟是0.25拍，这里放宽到0.2-0.3拍
+        # 标准延迟是0.25拍
         one_beat_Msec = 60 / bpm * 1000 * 4
         std_delay_tolerance = one_beat_Msec * delay_tolerance_index
-        max_delay_tolerance = one_beat_Msec * (delay_tolerance_index + 0.05)
-        min_delay_tolerance = one_beat_Msec * (delay_tolerance_index - 0.22)
+        max_delay_tolerance = one_beat_Msec * delay_tolerance_index * 1.2
+        min_delay_tolerance = one_beat_Msec * delay_tolerance_index * 0.6
 
         print(f"\n=== Matching Parameters ===")
         print(f"BPM: {bpm}, One Beat: {one_beat_Msec:.2f} ms")
