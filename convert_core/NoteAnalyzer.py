@@ -1997,7 +1997,8 @@ class NoteAnalyzer:
 
         else:
             # 获得音符经过的所有A区判定点
-            unique_positions = []
+            A_zones = []
+            last_A_zone = ''
             for note in note_path:
                 x1 = note['x1']
                 y1 = note['y1']
@@ -2008,15 +2009,16 @@ class NoteAnalyzer:
                 pos = get_A_zone_endpoint_on_judgeline(cx, cy, A_zone_endpoint_on_judgeline)
                 if pos is None: continue
                 if not pos.startswith('A'): continue
-                if pos in unique_positions: continue
-                unique_positions.append(pos)
+                if pos == last_A_zone: continue
+                last_A_zone = pos
+                A_zones.append(pos)
             # 考虑到有些星星最后可能提前结束，没有进入A区
             # 使用最后一个位置作为保底结尾
             end_position = f'A{end_position_id}'
-            if end_position not in unique_positions:
-                unique_positions.append(end_position)
+            if end_position != last_A_zone:
+                A_zones.append(end_position)
             # 按顺序用'-'连接
-            movement_syntax = '-'.join([pos[1] for pos in unique_positions])
+            movement_syntax = '-'.join([pos[1] for pos in A_zones])
             movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
 
         return movement_syntax
@@ -2257,15 +2259,15 @@ class NoteAnalyzer:
                 value = head_end_time
                 final_slide_info[key] = value
 
-        # 打印final_slide_info
-        print("\n=== Final Slide Info ===")
-        for (track_id, class_id, movement_syntax), time_info in final_slide_info.items():
-            if isinstance(time_info, tuple):
-                head_end_time, tail_start_time, tail_end_time = time_info
-                print(f"Slide Note: Track ID {track_id}, Class ID {class_id}, Movement {movement_syntax}, Head End Time {head_end_time:.2f} ms, Tail Start Time {tail_start_time:.2f} ms, Tail End Time {tail_end_time:.2f} ms")
-            else:
-                head_end_time = time_info
-                print(f"Single Slide Note: Track ID {track_id}, Class ID {class_id}, Movement {movement_syntax}, Head End Time {head_end_time:.2f} ms")
+        # # 打印final_slide_info
+        # print("\n=== Final Slide Info ===")
+        # for (track_id, class_id, movement_syntax), time_info in final_slide_info.items():
+        #     if isinstance(time_info, tuple):
+        #         head_end_time, tail_start_time, tail_end_time = time_info
+        #         print(f"Slide Note: Track ID {track_id}, Class ID {class_id}, Movement {movement_syntax}, Head End Time {head_end_time:.2f} ms, Tail Start Time {tail_start_time:.2f} ms, Tail End Time {tail_end_time:.2f} ms")
+        #     else:
+        #         head_end_time = time_info
+        #         print(f"Single Slide Note: Track ID {track_id}, Class ID {class_id}, Movement {movement_syntax}, Head End Time {head_end_time:.2f} ms")
 
         return final_slide_info
 
