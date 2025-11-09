@@ -1976,6 +1976,35 @@ class NoteAnalyzer:
         持续时间 = 停止时间 - 开始时间
         '''
 
+        def get_A_zone_endpoint_on_judgeline(position):
+            # 原点为(0, 0)，半径为480 (标准1080p)，标准xy坐标系
+            # 判定线圆圈上的8个点
+            std_dict = {
+                'A1': (184, 443),
+                'A2': (443, 184),
+                'A3': (443, -183),
+                'A4': (184, -443),
+                'A5': (-183, -443),
+                'A6': (-443, -183),
+                'A7': (-443, 183),
+                'A8': (-183, 443),
+            }
+            # 需要转换为屏幕坐标
+            new_touch_areas = {}
+            for area_label, (x, y) in std_dict.items():
+                # 转换成标准1080p屏幕坐标系
+                # 原点是(540, 540)，y轴向下为正
+                x_on_screen_cx = x + 540
+                y_on_screen_cy = -y + 540
+                # 按比例缩放到当前分辨率
+                scaled_x = round((x_on_screen_cx - 540) * self.video_size / 1080 + self.screen_cx)
+                scaled_y = round((y_on_screen_cy - 540) * self.video_size / 1080 + self.screen_cy)
+                new_touch_areas[area_label] = (scaled_x, scaled_y)
+            
+            return new_touch_areas.get(position, None)
+
+
+
         if len(note_path) < 6:
             return None, None
         positions = [x['position'] for x in note_path]
@@ -2014,12 +2043,12 @@ class NoteAnalyzer:
         median_speed = np.median(frame_speeds)
 
         # 定义起点和终点位置
-        point = self.touch_areas.get(positions[0], None)
-        if point is None or not isinstance(point, tuple):
+        point = get_A_zone_endpoint_on_judgeline(positions[0])
+        if point is None:
             return None, None
         start_cx, start_cy = point
-        point = self.touch_areas.get(positions[-1], None)
-        if point is None or not isinstance(point, tuple):
+        point = get_A_zone_endpoint_on_judgeline(positions[-1])
+        if point is None:
             return None, None
         end_cx, end_cy = point
 
@@ -2077,11 +2106,11 @@ class NoteAnalyzer:
     
 
 
-    def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_tolerance_index=0.3):
+    def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_tolerance_index=0.25):
         '''
         合并slide头尾信息
-        输入: for (track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
-              for (track_id, class_id, tail_start_position): (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+        输入: for (head_track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
+              for (tail_track_id, tail_class_id, tail_start_position): (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
 
         将这两组进行匹配：
         delay = tail_start_time - head_end_time
@@ -2094,7 +2123,7 @@ class NoteAnalyzer:
         dict{
             # 匹配的head_tail组合
             key: (head_track_id, head_class_id, full_movement_syntax),
-            value: (head_end_time, tail_end_time)
+            value: (head_end_time, tail_start_time, tail_end_time)
             # 未匹配的head
             key: (head_track_id, head_class_id, head_position),
             value: head_end_time
@@ -2120,20 +2149,10 @@ class NoteAnalyzer:
                 return dict.get(class_id, '')
 
 
-        # 首先print出所有数据
-        def debug_print(slide_head_info, slide_tail_info):
-            print("Slide Head Info:")
-            for (track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
-                print(f"  Track ID: {track_id}, Class ID: {head_class_id}, Position: {head_position}, End Time: {head_end_time:.2f} ms")
-            print("Slide Tail Info:")
-            for (track_id, class_id, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
-                print(f"  Track ID: {track_id}, Class ID: {class_id}, Start Position: {tail_start_position}, Movement Syntax: {tail_movement_syntax}, Start Time: {tail_start_time:.2f} ms, End Time: {tail_end_time:.2f} ms")
+        final_slide_info = {}
 
-
-        debug_print(slide_head_info, slide_tail_info)
-        slide_info = {}
-        one_beat_Msec = 60 / bpm * 1000 * 4
         # 标准延迟是0.25拍，这里放宽到0.2-0.3拍
+        one_beat_Msec = 60 / bpm * 1000 * 4
         std_delay_tolerance = one_beat_Msec * delay_tolerance_index
         max_delay_tolerance = one_beat_Msec * (delay_tolerance_index + 0.05)
         min_delay_tolerance = one_beat_Msec * (delay_tolerance_index - 0.22)
@@ -2143,136 +2162,71 @@ class NoteAnalyzer:
         print(f"Std Delay Tolerance: {std_delay_tolerance:.2f} ms")
         print(f"Min Delay Tolerance: {min_delay_tolerance:.2f} ms")
         print(f"Max Delay Tolerance: {max_delay_tolerance:.2f} ms")
+        print(f"===========================\n")
 
-        # 先按位置分组head数据，确保position都是字符串
+        # 先按位置分组head数据
+        # 这样后续tail查找head时，只会在对应位置的head中查找，减少计算量
         head_by_position = defaultdict(list)
         for (track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
-            # 确保position是字符串
-            head_position_str = str(head_position)
-            head_by_position[head_position_str].append((track_id, head_class_id, head_position, head_end_time))
-        
-        print(f"\n=== Head Data by Position ===")
-        for position, heads in head_by_position.items():
-            print(f"Position {position}: {len(heads)} heads")
-            for head in heads:
-                print(f"  Track ID: {head[0]}, Class ID: {head[1]}, End Time: {head[2]:.2f} ms")
+            head_by_position[str(head_position)].append((track_id, head_class_id, head_position, head_end_time))
 
-        # 使用set，确保每个tail只能匹配到一个head
-        matched_tails = set()
-        # 记录哪些head被匹配了
-        matched_heads = set()
-        
-        print(f"\n=== Starting Tail Matching ===")
-        total_tails = len(slide_tail_info)
-        processed_tails = 0
-        
+        # 记录哪些head_track_id被匹配了，使用set避免重复
+        matched_head_track_ids = set()
+
         # 遍历所有tail，寻找匹配的head
+        processed_tails = 0
         for (tail_track_id, tail_class_id, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
             processed_tails += 1
-            print(f"\n--- Processing Tail {processed_tails}/{total_tails} ---")
-            print(f"Tail: Track ID: {tail_track_id}, Class ID: {tail_class_id}, Start Position: {tail_start_position}")
-            print(f"      Movement Syntax: {tail_movement_syntax}, Start Time: {tail_start_time:.2f} ms, End Time: {tail_end_time:.2f} ms")
-            
-            # 跳过已匹配的tail
-            if (tail_track_id, tail_class_id, tail_start_position) in matched_tails:
-                print(f"  -> Skipped: Already matched")
+
+            # 先看看有没有任何与tail位置相同的head
+            tail_start_position = str(tail_start_position)
+            if tail_start_position not in head_by_position:
+                print(f"{tail_track_id} Tail not match: No heads at position {tail_start_position}")
                 continue
-            
-            # 规则1：位置相同，确保position都是字符串
-            tail_start_position_str = str(tail_start_position)
-            if tail_start_position_str not in head_by_position:
-                print(f"  -> No match: No heads at position {tail_start_position_str}")
-                continue
-            
-            print(f"  -> Found {len(head_by_position[tail_start_position_str])} heads at position {tail_start_position_str}")
-            head_candidates = [] # 相同位置的所有head候选
-            for head_track_id, head_class_id, head_position, head_end_time in head_by_position[tail_start_position_str]:
-                # 规则2：时间延迟匹配
+            # 如果有，遍历这些head，寻找符合delay条件的head
+            # 条件1：min_delay_tolerance < delay < max_delay_tolerance
+            # 条件2：与std_delay_tolerance最接近
+            best_head = None
+            best_delay_diff = float('inf')
+            for head_track_id, head_class_id, head_position, head_end_time in head_by_position[tail_start_position]:
+                # 条件1
                 delay = tail_start_time - head_end_time
-                print(f"    Head: Track ID: {head_track_id}, Class ID: {head_class_id}, Position: {head_position}, End Time: {head_end_time:.2f} ms")
-                print(f"    Delay: {delay:.2f} ms (min: {min_delay_tolerance:.2f}, max: {max_delay_tolerance:.2f})")
-                if min_delay_tolerance < delay < max_delay_tolerance:
-                    print(f"    -> VALID candidate")
-                    head_candidates.append((head_track_id, head_class_id, head_position, head_end_time, delay))
-                else:
-                    print(f"    -> INVALID candidate (delay out of range)")
-            
-            if not head_candidates:
-                print(f"  -> No match: No valid head candidates")
-                continue
-            
-            print(f"  -> Found {len(head_candidates)} valid head candidates")
-            
-            # 规则4：如果多个候选，选择delay与std_delay_tolerance最接近的
-            if len(head_candidates) > 1:
-                print(f"  -> Multiple candidates, selecting best match")
-                # 计算每个候选的delay与标准delay的差值
-                best_candidate = None
-                best_delay_diff = float('inf')
-                for candidate in head_candidates:
-                    head_track_id, head_class_id, head_position, head_end_time, delay = candidate
-                    delay_diff = abs(delay - std_delay_tolerance)
-                    print(f"    Candidate: Track ID: {head_track_id}, Delay: {delay:.2f} ms, Diff: {delay_diff:.2f} ms")
-                    if delay_diff < best_delay_diff:
-                        best_delay_diff = delay_diff
-                        best_candidate = candidate
-                
-                if best_candidate:
-                    head_track_id, head_class_id, head_position, head_end_time, delay = best_candidate
-                    print(f"  -> Selected: Track ID: {head_track_id}, Delay: {delay:.2f} ms")
-                else:
-                    print(f"  -> No match: No suitable candidate found")
+                if not (min_delay_tolerance < delay < max_delay_tolerance):
                     continue
-            else:
-                # 只有一个候选
-                head_track_id, head_class_id, head_position, head_end_time, delay = head_candidates[0]
-                print(f"  -> Single candidate selected: Track ID: {head_track_id}, Delay: {delay:.2f} ms")
-            
-            # 构建full_movement_syntax
-            full_movement_syntax = f"{tail_start_position_str}{get_suffix(head_class_id)}{tail_movement_syntax}{get_suffix(tail_class_id)}"
-            
-            # 添加到结果
-            slide_info[(head_track_id, head_class_id, full_movement_syntax)] = (head_end_time, tail_end_time)
-            print(f"  -> MATCHED: Key: {(head_track_id, head_class_id, full_movement_syntax)}, Value: {(head_end_time, tail_end_time)}")
-            
-            # 标记tail为已匹配
-            matched_tails.add((tail_track_id, tail_class_id, tail_start_position))
-            # 标记head为已匹配，使用head_position而不是tail_start_position
-            matched_heads.add((head_track_id, head_class_id, head_position, head_end_time))
+                # 条件2
+                delay_diff = abs(delay - std_delay_tolerance)
+                if delay_diff < best_delay_diff:
+                    best_delay_diff = delay_diff
+                    best_head = (head_track_id, head_class_id, head_position, head_end_time)
 
-        # 处理未匹配的head
-        print(f"\n=== Processing Unmatched Heads ===")
-        total_heads = len(slide_head_info)
-        unmatched_heads = 0
-        
-        for (track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
-            # 检查这个head是否被匹配过
-            if (track_id, head_class_id, head_position, head_end_time) not in matched_heads:
-                unmatched_heads += 1
-                # 添加未匹配的head到结果中
-                single_head_key = (track_id, head_class_id, f'{head_position}{get_suffix(head_class_id, isSingleHead=True)}')
-                slide_info[single_head_key] = head_end_time
-                print(f"  Unmatched Head: Track ID: {track_id}, Class ID: {head_class_id}, Position: {head_position}, End Time: {head_end_time:.2f} ms")
-                print(f"  -> Added as single head: Key: {single_head_key}, Value: {head_end_time}")
+            if best_head is None:
+                print(f"{tail_track_id} Tail not match: No heads match delay at position {tail_start_position}")
+                continue
 
-        print(f"\n=== Matching Summary ===")
-        print(f"Total Heads: {total_heads}")
-        print(f"Total Tails: {total_tails}")
-        print(f"Matched Heads: {len(matched_heads)}")
-        print(f"Matched Tails: {len(matched_tails)}")
-        print(f"Unmatched Heads: {unmatched_heads}")
-        print(f"Unmatched Tails: {total_tails - len(matched_tails)}")
+            # 找到了匹配的head，进行记录
+            head_track_id, head_class_id, head_position, head_end_time = best_head
+            matched_head_track_ids.add(head_track_id)
+            # 写入final_slide_info
+            full_movement_syntax = f"{tail_start_position}{get_suffix(head_class_id)}{tail_movement_syntax}{get_suffix(tail_class_id)}"
+            key = (head_track_id, head_class_id, full_movement_syntax)
+            value = (head_end_time, tail_start_time, tail_end_time)
+            final_slide_info[key] = value
 
-        print(f"\n=== Final Slide Info ===")
-        if slide_info:
-            for key, value in slide_info.items():
-                print(f"Slide Info Key: {key}, Value: {value}")
-        else:
-            print("No slide info generated")
 
-        return slide_info
+            print(f'{head_track_id}-{tail_track_id} Matched: Delay {(tail_start_time - head_end_time):.2f} ms')            
 
-        
+
+        # 将未匹配的head也写入final_slide_info
+        for (head_track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
+            if head_track_id not in matched_head_track_ids:
+                full_movement_syntax = f"{head_position}{get_suffix(head_class_id, isSingleHead=True)}"
+                key = (head_track_id, head_class_id, full_movement_syntax)
+                value = head_end_time
+                final_slide_info[key] = value
+
+        return final_slide_info
+
+
 
 
 
@@ -2373,7 +2327,7 @@ class NoteAnalyzer:
 
             # 处理 length 信息
             if isinstance(time, tuple):
-                length = time[1] - time[0]
+                length = time[-1] - time[-2]
                 time = time[0]
                 
                 length_beat = length / one_beat_Msec
@@ -2526,7 +2480,7 @@ class NoteAnalyzer:
             if slide_tail_data:
                 slide_tail_info = self.analyze_slide_tail(slide_tail_data)
             # 合并slide信息
-            # slide_info = self.merge_slide_info(slide_head_info, slide_tail_info, bpm)
+            slide_info = self.merge_slide_info(slide_head_info, slide_tail_info, bpm)
 
             # analyze all notes info
             # self.analyze_all_notes_info(bpm, chart_lv, base_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
