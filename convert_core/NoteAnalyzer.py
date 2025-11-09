@@ -1887,7 +1887,7 @@ class NoteAnalyzer:
             if start_time is None or end_time is None:
                 continue
 
-            slide_tail_info[(track_id, class_id, start_position)] = (movement_syntax, start_time, end_time)
+            slide_tail_info[(track_id, class_id, start_position[1])] = (movement_syntax, start_time, end_time)
 
         return slide_tail_info
     
@@ -2026,7 +2026,7 @@ class NoteAnalyzer:
         # 找到第一个离开起始A区的点
         start_move_frame = None
         dist_to_start = 0
-        for i in range(len(note_path)*0.5): # 只搜索前半段
+        for i in range(len(note_path)*0.33): # 只搜索前1/3，从前往后
             point = note_path[i]
             frame_num = point['frame']
             x1 = point['x1']
@@ -2049,7 +2049,7 @@ class NoteAnalyzer:
         # 找到最后一个进入终点A区的点
         end_move_frame = None
         dist_to_end = 0
-        for i in range(len(note_path)-1, len(note_path)*0.5, -1): # 只搜索后半段，从后往前
+        for i in range(len(note_path)-1, len(note_path)*0.33, -1): # 只搜索后1/3，从后往前
             point = note_path[i]
             frame_num = point['frame']
             x1 = point['x1']
@@ -2071,6 +2071,113 @@ class NoteAnalyzer:
 
         return note_start_time_Msec, note_end_time_Msec
     
+
+
+    def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_tolerance_index=0.3):
+        '''
+        合并slide头尾信息
+        输入: for (track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
+              for (track_id, class_id, tail_start_position): (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+
+        将这两组进行匹配：
+        delay = tail_start_time - head_end_time
+        规则1：head_position = tail_start_position (str)
+        规则2：min_delay_tolerance < delay < max_delay_tolerance
+        规则3：一个tail最多只能匹配到一个head，但是一个head可以匹配多个tail
+        规则4：如果tail与多个head都符合匹配条件，选择delay与std_delay_tolerance最接近的head
+
+        返回格式:
+        dict{
+            key: (track_id, class_id, full_movement_syntax),
+            value: (head_end_time, tail_end_time)
+        }
+        '''
+
+        def get_suffix(class_id, isSingleHead=False):
+            dict = {
+                20: '',    # slide
+                21: 'b',   # break-slide
+                22: 'x',   # ex-slide
+                23: 'bx',  # break-ex-slide
+            }
+            dict_single = {
+                20: '$',    # single-slide
+                21: 'b$',   # break-single-slide
+                22: 'x$',   # ex-single-slide
+                23: 'bx$',  # break-ex-single-slide
+            }
+            if isSingleHead:
+                return dict_single.get(class_id, '')
+            else:
+                return dict.get(class_id, '')
+        
+        slide_info = {}
+        one_beat_Msec = 60 / bpm * 1000 * 4
+        # 标准延迟是0.25拍，这里放宽到0.2-0.3拍
+        std_delay_tolerance = one_beat_Msec * delay_tolerance_index
+        max_delay_tolerance = one_beat_Msec * (delay_tolerance_index + 0.05)
+        min_delay_tolerance = one_beat_Msec * (delay_tolerance_index - 0.05)
+
+        # 先按位置分组head数据
+        head_by_position = defaultdict(list)
+        for (track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
+            head_by_position[head_position].append((track_id, head_class_id, head_end_time))
+        
+        # 使用set，确保每个tail只能匹配到一个head
+        matched_tails = set()
+        
+        # 遍历所有tail，寻找匹配的head
+        for (tail_track_id, tail_class_id, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+            
+            # 跳过已匹配的tail
+            if (tail_track_id, tail_class_id, tail_start_position) in matched_tails:
+                continue
+            
+            # 规则1：位置相同
+            if tail_start_position not in head_by_position:
+                continue
+            head_candidates = [] # 相同位置的所有head候选
+            for head_track_id, head_class_id, head_end_time in head_by_position[tail_start_position]:
+                # 规则2：时间延迟匹配
+                delay = tail_start_time - head_end_time
+                if min_delay_tolerance < delay < max_delay_tolerance:
+                    head_candidates.append((head_track_id, head_class_id, head_end_time, delay))
+            
+            if not head_candidates:
+                continue
+            
+            # 规则4：如果多个候选，选择delay与std_delay_tolerance最接近的
+            if len(head_candidates) > 1:
+                # 计算每个候选的delay与标准delay的差值
+                best_candidate = None
+                best_delay_diff = float('inf')
+                for candidate in head_candidates:
+                    head_track_id, head_class_id, head_end_time, delay = candidate
+                    delay_diff = abs(delay - std_delay_tolerance)
+                    if delay_diff < best_delay_diff:
+                        best_delay_diff = delay_diff
+                        best_candidate = candidate
+                
+                if best_candidate:
+                    head_track_id, head_class_id, head_end_time, delay = best_candidate
+                else:
+                    continue
+            else:
+                # 只有一个候选
+                head_track_id, head_class_id, head_end_time, delay = head_candidates[0]
+            
+            # 构建full_movement_syntax
+            full_movement_syntax = f"{tail_start_position}{get_suffix(head_class_id)}{tail_movement_syntax}{get_suffix(tail_class_id)}"
+            
+            # 添加到结果
+            slide_info[(head_track_id, head_class_id, full_movement_syntax)] = (head_end_time, tail_end_time)
+            
+            # 标记tail为已匹配
+            matched_tails.add((tail_track_id, tail_class_id, tail_start_position))
+
+        return slide_info
+
+        
 
 
 
