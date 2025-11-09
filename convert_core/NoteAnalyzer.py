@@ -2026,7 +2026,7 @@ class NoteAnalyzer:
         # 找到第一个离开起始A区的点
         start_move_frame = None
         dist_to_start = 0
-        for i in range(len(note_path)*0.33): # 只搜索前1/3，从前往后
+        for i in range(round(len(note_path)*0.5)): # 只搜索前半，从前往后
             point = note_path[i]
             frame_num = point['frame']
             x1 = point['x1']
@@ -2049,7 +2049,7 @@ class NoteAnalyzer:
         # 找到最后一个进入终点A区的点
         end_move_frame = None
         dist_to_end = 0
-        for i in range(len(note_path)-1, len(note_path)*0.33, -1): # 只搜索后1/3，从后往前
+        for i in range(len(note_path)-1, round(len(note_path)*0.5), -1): # 只搜索后半，从后往前
             point = note_path[i]
             frame_num = point['frame']
             x1 = point['x1']
@@ -2088,8 +2088,12 @@ class NoteAnalyzer:
 
         返回格式:
         dict{
-            key: (track_id, class_id, full_movement_syntax),
+            # 匹配的head_tail组合
+            key: (head_track_id, head_class_id, full_movement_syntax),
             value: (head_end_time, tail_end_time)
+            # 未匹配的head
+            key: (head_track_id, head_class_id, head_position),
+            value: head_end_time
         }
         '''
 
@@ -2110,7 +2114,19 @@ class NoteAnalyzer:
                 return dict_single.get(class_id, '')
             else:
                 return dict.get(class_id, '')
-        
+
+
+        # 首先print出所有数据
+        def debug_print(slide_head_info, slide_tail_info):
+            print("Slide Head Info:")
+            for (track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
+                print(f"  Track ID: {track_id}, Class ID: {head_class_id}, Position: {head_position}, End Time: {head_end_time:.2f} ms")
+            print("Slide Tail Info:")
+            for (track_id, class_id, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+                print(f"  Track ID: {track_id}, Class ID: {class_id}, Start Position: {tail_start_position}, Movement Syntax: {tail_movement_syntax}, Start Time: {tail_start_time:.2f} ms, End Time: {tail_end_time:.2f} ms")
+
+
+        debug_print(slide_head_info, slide_tail_info)
         slide_info = {}
         one_beat_Msec = 60 / bpm * 1000 * 4
         # 标准延迟是0.25拍，这里放宽到0.2-0.3拍
@@ -2125,6 +2141,8 @@ class NoteAnalyzer:
         
         # 使用set，确保每个tail只能匹配到一个head
         matched_tails = set()
+        # 记录哪些head被匹配了
+        matched_heads = set()
         
         # 遍历所有tail，寻找匹配的head
         for (tail_track_id, tail_class_id, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
@@ -2174,6 +2192,20 @@ class NoteAnalyzer:
             
             # 标记tail为已匹配
             matched_tails.add((tail_track_id, tail_class_id, tail_start_position))
+            # 标记head为已匹配
+            matched_heads.add((head_track_id, head_class_id, tail_start_position, head_end_time))
+
+        # 处理未匹配的head
+        for (track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
+            # 检查这个head是否被匹配过
+            if (track_id, head_class_id, head_position, head_end_time) not in matched_heads:
+                # 添加未匹配的head到结果中
+                single_head_key = (track_id, head_class_id, f'{head_position}{get_suffix(head_class_id, isSingleHead=True)}')
+                slide_info[single_head_key] = head_end_time
+
+
+        for key, value in slide_info.items():
+            print(f"Slide Info Key: {key}, Value: {value}")
 
         return slide_info
 
