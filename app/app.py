@@ -607,7 +607,12 @@ class MainWindow(QMainWindow):
                      if f.lower().endswith('.txt') and
                      f.lower() not in ('track_result.txt', 'detect_result.txt')]
         self.majdata_maidata_choose.addItems(sorted(txt_files))
-        self.majdata_maidata_choose.setCurrentIndex(0)
+        # 如果第一个选项中以'.bak.txt'结尾，不要选择这个，而是选择下一个
+        if txt_files and txt_files[0].lower().endswith('.bak.txt') and len(txt_files) > 1:
+            self.majdata_maidata_choose.setCurrentIndex(1)
+        else:
+            self.majdata_maidata_choose.setCurrentIndex(0)
+            
         # Add all mp3/ogg files to track_choose
         audio_files = [f for f in os.listdir(song_path) if f.lower().endswith(('.mp3', '.ogg'))]
         self.majdata_track_choose.addItems(sorted(audio_files))
