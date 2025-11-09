@@ -1803,7 +1803,7 @@ class NoteAnalyzer:
                 cx = (box['x1'] + box['x3']) / 2
                 cy = (box['y1'] + box['y3']) / 2
                 position = self.calculate_all_position(cx, cy)
-                if not position.lower().startswith('a'):
+                if not position.startswith('A'):
                     continue # 开头或结尾不在A区，忽略
 
 
@@ -1862,12 +1862,215 @@ class NoteAnalyzer:
             return {}
 
         return slide_data
+    
 
 
+    def analyze_slide_tail(self, slide_tail_data):
+        '''
+        return {(track_id, class_id, start_position): (movement_syntax, start_time, end_time)}
+        '''
+
+        # 分析运动模式
+        # 暂时只检测边缘旋转 x>x / x<x
+        # 其他的一律视为直线 x-x
+        slide_tail_info = {}
+        for (track_id, class_id, start_position), note_path in slide_tail_data.items():
+
+            # 计算运动语法
+            # 期望的返回: >5 / <3 / -7
+            movement_syntax = self.analyze_slide_tail_movement_syntax(note_path)
+            if movement_syntax is None:
+                continue
+            
+            # 计算持续时间
+            start_time, end_time = self.analyze_slide_tail_start_end_time(note_path)
+            if start_time is None or end_time is None:
+                continue
+
+            slide_tail_info[(track_id, class_id, start_position)] = (movement_syntax, start_time, end_time)
+
+        return slide_tail_info
+    
 
 
+    def analyze_slide_tail_movement_syntax(self, note_path):
+        '''
+        分析运动模式
+        暂时只检测边缘旋转 x>x / x<x
+        其他的一律视为直线 x-x
+
+        如果星星全程仅在A区或D区内移动，视为旋转
+        '''
+
+        if len(note_path) < 6:
+            return None
+        positions = [x['position'] for x in note_path]
+        if not positions or len(positions) < 6:
+            return None
+
+        start_position_id = int(positions[0][1]) # A1 -> 1
+        end_position_id = int(positions[-1][1])
+
+        # 如果只在A区或D区移动，视为旋转
+        if all(pos.startswith('A') or pos.startswith('D') for pos in positions):
+
+            # 找到第一个与起始点不同的位置
+            next_position_id = None
+            for pos in positions[1:]:
+                if pos[1] != str(start_position_id):
+                    next_position_id = int(pos[1])
+                    break
+            if next_position_id is None:
+                return None
+
+            # 判断起始点在左侧还是右侧
+            if start_position_id in [1,2,7,8]:
+                start_side = 'up'
+            else:
+                start_side = 'down'
+
+            # 判断旋转方向
+            # > 代表从起点开始箭头向右, < 代表从起点开始箭头向左
+            if start_side == 'up':
+                # 处理1和8的特殊情况
+                if start_position_id == 1:
+                    if next_position_id in [7, 8]:
+                        next_position_id -= 8
+                elif start_position_id == 8:
+                    if next_position_id in [1, 2]:
+                        next_position_id += 8
+                # 判断方向
+                if next_position_id > start_position_id:
+                    movement_type = '>'
+                else:
+                    movement_type = '<'
+
+            else: # start_side == 'down'
+                if next_position_id > start_position_id:
+                    movement_type = '<'
+                else:
+                    movement_type = '>'
+
+        else: # 其他情况全部视为直线
+            movement_type = '-'
+        
+        # 最后组合语法
+        movement_syntax = f"{movement_type}{end_position_id}"
+        return movement_syntax
+    
 
 
+    def analyze_slide_tail_start_end_time(self, note_path):
+        '''
+        粗略计算持续时间
+
+        根据每一帧之间的位移，计算音符的帧间移动速度，取中位数作为最终速度
+        找到第一个离开起始A区的点，计算此时到A区中心的距离，配合速度计算时间
+        这个时间就是音符从A区中心移动到此处所消耗的时间
+        音符此时的帧时间 - 这个时间 = 反推出音符开始移动的时间
+        同理，找到最后一个进入终点A区的点，计算得到音符停止移动的时间
+        持续时间 = 停止时间 - 开始时间
+        '''
+
+        if len(note_path) < 6:
+            return None, None
+        positions = [x['position'] for x in note_path]
+        if not positions or len(positions) < 6:
+            return None, None
+
+        # 计算帧间速度
+        last_cx = None
+        last_cy = None
+        last_frame = None
+        frame_speeds = []
+        for i in range(len(note_path)):
+            point = note_path[i]
+            frame_num = point['frame']
+            x1 = point['x1']
+            y1 = point['y1']
+            x2 = point['x2']
+            y2 = point['y2']
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+
+            if last_cx is not None and last_cy is not None and last_frame is not None:
+                dist = np.sqrt((cx - last_cx)**2 + (cy - last_cy)**2)
+                frame_diff = frame_num - last_frame
+                if frame_diff > 0:
+                    speed = dist / frame_diff
+                    frame_speeds.append(speed)
+
+            last_cx = cx
+            last_cy = cy
+            last_frame = frame_num
+
+        # 获取中位数速度
+        if not frame_speeds:
+            return None, None
+        median_speed = np.median(frame_speeds)
+
+        # 定义起点和终点位置
+        point = self.touch_areas.get(positions[0], None)
+        if point is None or not isinstance(point, tuple):
+            return None, None
+        start_cx, start_cy = point
+        point = self.touch_areas.get(positions[-1], None)
+        if point is None or not isinstance(point, tuple):
+            return None, None
+        end_cx, end_cy = point
+
+        # 定义A区中心半径
+        self.note_travel_dist = 0
+        a_zone_radius = (self.note_travel_dist) / 7
+
+        # 找到第一个离开起始A区的点
+        start_move_frame = None
+        dist_to_start = 0
+        for i in range(len(note_path)*0.5): # 只搜索前半段
+            point = note_path[i]
+            frame_num = point['frame']
+            x1 = point['x1']
+            y1 = point['y1']
+            x2 = point['x2']
+            y2 = point['y2']
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+            dist_to_start = np.sqrt((cx - start_cx)**2 + (cy - start_cy)**2)
+            if dist_to_start > a_zone_radius:
+                start_move_frame = frame_num
+                break
+        
+        # 计算开始时间
+        if start_move_frame is None:
+            return None, None
+        time_to_start_Msec = (dist_to_start / median_speed) * (1000 / self.fps)
+        note_start_time_Msec = start_move_frame / self.fps * 1000 - time_to_start_Msec
+
+        # 找到最后一个进入终点A区的点
+        end_move_frame = None
+        dist_to_end = 0
+        for i in range(len(note_path)-1, len(note_path)*0.5, -1): # 只搜索后半段，从后往前
+            point = note_path[i]
+            frame_num = point['frame']
+            x1 = point['x1']
+            y1 = point['y1']
+            x2 = point['x2']
+            y2 = point['y2']
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+            dist_to_end = np.sqrt((cx - end_cx)**2 + (cy - end_cy)**2)
+            if dist_to_end > a_zone_radius:
+                end_move_frame = frame_num
+                break
+
+        # 计算结束时间
+        if end_move_frame is None:
+            return None, None
+        time_to_end_Msec = (dist_to_end / median_speed) * (1000 / self.fps)
+        note_end_time_Msec = end_move_frame / self.fps * 1000 + time_to_end_Msec
+
+        return note_start_time_Msec, note_end_time_Msec
+    
 
 
 
@@ -1954,10 +2157,7 @@ class NoteAnalyzer:
                 12: 'x',    # ex-tap
                 13: 'bx',   # break-ex-tap
 
-                20: '$',    # slide
-                21: 'b$',   # break-slide
-                22: 'x$',   # ex-slide
-                23: 'bx$',  # break-ex-slide
+                # 没有星星，因为星星后缀在 merge_slide_info() 中处理过了
 
                 40: 'h',   # hold
                 41: 'bh',  # break-hold
@@ -2122,9 +2322,9 @@ class NoteAnalyzer:
             slide_tail_info = {}
             slide_tail_data = self.preprocess_slide_tail_data()
             if slide_tail_data:
-                slide_tail_info = self.analyze_slide_tail_duration(slide_tail_data)
+                slide_tail_info = self.analyze_slide_tail(slide_tail_data)
             # 合并slide信息
-            slide_info = self.merge_slide_info(slide_head_info, slide_tail_info)
+            slide_info = self.merge_slide_info(slide_head_info, slide_tail_info, bpm)
 
             # analyze all notes info
             self.analyze_all_notes_info(bpm, chart_lv, base_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
