@@ -472,7 +472,7 @@ class MainWindow(QMainWindow):
     def setup_Majdata_Control_Panel(self):
 
         widget = QWidget()
-        widget.setFixedHeight(50)
+        widget.setFixedHeight(40)
         widget.setStyleSheet(f"background-color: {self.color_text_secondary};")
         layout = QHBoxLayout(widget)
         # folder editable combobox
@@ -484,32 +484,20 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.majdata_song_input)
         # Maidata choose
         self.majdata_maidata_choose = QComboBox()
-        self.majdata_maidata_choose.setStyleSheet(f"""
-            QComboBox {{
-            background-color: {self.color_grey};
-            padding-left: 8px;
-            }}
-        """)
+        self.majdata_maidata_choose.setStyleSheet(f"background-color: {self.color_grey}; \
+                                                    padding-left: 8px;")
         self.majdata_maidata_choose.setFixedSize(150, 25)
         layout.addWidget(self.majdata_maidata_choose)
         # Track choose
         self.majdata_track_choose = QComboBox()
-        self.majdata_track_choose.setStyleSheet(f"""
-            QComboBox {{
-            background-color: {self.color_grey};
-            padding-left: 8px;
-            }}
-        """)
+        self.majdata_track_choose.setStyleSheet(f"background-color: {self.color_grey}; \
+                                                  padding-left: 8px;")
         self.majdata_track_choose.setFixedSize(150, 25)
         layout.addWidget(self.majdata_track_choose)
         # Video choose
         self.majdata_video_choose = QComboBox()
-        self.majdata_video_choose.setStyleSheet(f"""
-            QComboBox {{
-            background-color: {self.color_grey};
-            padding-left: 8px;
-            }}
-        """)
+        self.majdata_video_choose.setStyleSheet(f"background-color: {self.color_grey}; \
+                                                  padding-left: 8px;")
         self.majdata_video_choose.setFixedSize(230, 25)
         layout.addWidget(self.majdata_video_choose)
         # Load button
@@ -612,7 +600,7 @@ class MainWindow(QMainWindow):
             self.majdata_maidata_choose.setCurrentIndex(1)
         else:
             self.majdata_maidata_choose.setCurrentIndex(0)
-            
+
         # Add all mp3/ogg files to track_choose
         audio_files = [f for f in os.listdir(song_path) if f.lower().endswith(('.mp3', '.ogg'))]
         self.majdata_track_choose.addItems(sorted(audio_files))
