@@ -22,7 +22,14 @@
 
 
 ## 依赖安装 (必须严格按照顺序安装)
+
 **注意：运行本项目推荐使用独立显卡，纯 cpu 或核显处理速度会很慢**
+
+**注意：运行本项目推荐使用独立显卡，纯 cpu 或核显处理速度会很慢**
+
+**注意：运行本项目推荐使用独立显卡，纯 cpu 或核显处理速度会很慢**
+
+
 
 ### 0. 安装 Python 本体
 
@@ -47,11 +54,8 @@
     - 在 cmd 输入 `nvidia-smi` 查看 cuda 版本
     - 到 [PyTorch官网](https://pytorch.org/get-started/locally/) 选择对应 cuda 版本的安装命令
 
-2. 如果使用 `Intel` 显卡，或者 `AMD/Intel` 核显：
+2. 如果使用其他硬件：
     - 到 [PyTorch官网](https://pytorch.org/get-started/locally/) 选择 cpu 版本的安装命令
-
-3. 如果使用 `AMD` 显卡，或者其他硬件：
-    - 安装命令 - `pip install torch-directml` 
 
 选择对应的安装命令后，在 Python 虚拟环境中输入以安装 PyTorch
 
@@ -59,20 +63,25 @@
 
 `pip install ultralytics`
 
-### 4. 安装额外的模型推理 runtime
+### 4. 安装额外的模型推理后端
 
-根据硬件不同选择对应的 runtime:
+根据硬件不同选择对应的后端:
 
 1. 如果使用 `Nvidia` 显卡 (≥ GTX 900)：
     - 安装 tensorRT - `pip install --no-cache-dir tensorrt==10.13.2.6`
     - 2025.11.05 [issue](https://github.com/NVIDIA/tensorrt/issues/4614)：当前新版 10.13.3.9 无法安装，回退到上一版
 
-2. 如果使用 `Intel` 显卡，或者 `AMD/Intel` 核显：
-    - 安装 openvino - `pip install openvino`
+2. 如果使用其他硬件：
+    - 安装 onnx-directml - `pip install onnx onnxruntime-directml`
+    - 2025.11.11 [issue](https://github.com/ultralytics/yolov5/issues/2995)：当前 ultralytics 库原生不支持 DirectML 后端，需要修改源码
+        - 修改 `.venv\Lib\site-packages\ultralytics\nn\autobackend.py`
 
-3. 如果使用 `AMD` 显卡，或者其他硬件：
-    - 无需安装额外文件
+        ![python312](src/doc/images/dml_support_autobackend.png)
+    
+        - 修改 `.venv\Lib\site-packages\ultralytics\engine\exporter.py`
 
-### 4. 安装其他的库
+        ![python312](src/doc/images/dml_support_exporter.png)
+
+### 5. 安装其他的库
 
 `pip install PyQt6 pywin32`

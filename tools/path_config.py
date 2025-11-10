@@ -19,6 +19,10 @@ detect_pt = os.path.join(models_dir, 'detect.pt')
 obb_pt = os.path.join(models_dir, 'obb.pt')
 cls_break_pt = os.path.join(models_dir, 'cls-break.pt')
 cls_ex_pt = os.path.join(models_dir, 'cls-ex.pt')
+detect_onnx = os.path.join(models_dir, 'detect.onnx')
+obb_onnx = os.path.join(models_dir, 'obb.onnx')
+cls_break_onnx = os.path.join(models_dir, 'cls-break.onnx')
+cls_ex_onnx = os.path.join(models_dir, 'cls-ex.onnx')
 
 # ffmpeg.exe路径
 ffmpeg_exe = os.path.join(root_dir, 'src', 'ffmpeg-8.0-essentials_build', 'bin', 'ffmpeg.exe')

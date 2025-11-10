@@ -22,7 +22,7 @@ LOGGER.setLevel(logging.ERROR) # 只显示错误信息，忽略 Warning
 
 class NoteDetector:
     def __init__(self):
-
+        
         # 每个类型的音符可以有10个子类
         self.class_id_map = {
             # main class
@@ -783,6 +783,7 @@ class NoteDetector:
 
             # 模型推理
             ex_results = cls_ex_model.predict(
+                task='classify',
                 source=images,
                 conf=0.5,
                 verbose=False,
@@ -791,6 +792,7 @@ class NoteDetector:
                 half=True
             )
             break_results = cls_break_model.predict(
+                task='classify',
                 source=images,
                 conf=0.5,
                 verbose=False,
@@ -1149,9 +1151,8 @@ class NoteDetector:
             if batch_detect <= 0 or batch_cls <= 0:
                 raise ValueError(f"batch_detect 或 batch_cls 参数无效, 必须大于0: batch_detect={batch_detect}, batch_cls={batch_cls}")
             inference_device = str(inference_device)
-            if inference_device.lower() not in ['cpu', 'gpu', '0', '1', '2']:
-                raise ValueError(f"inference_device 参数无效, 必须是 cpu/gpu/0/1/2: inference_device={inference_device}")
-
+            if inference_device.lower() == 'none':
+                inference_device = None
 
             # 检测模块
             if not skip_detect:
@@ -1215,12 +1216,12 @@ if __name__ == "__main__":
         r"D:\git\aaa-HachimiDX-Convert\aaa-result\ニルヴの心臓 MASTER 14.3",
         2,    # batch_detect
         16,   # batch_cls
-        '0',  # inference_device
-        r"D:\git\aaa-HachimiDX-Convert\src\models\detect.engine",
-        r"D:\git\aaa-HachimiDX-Convert\src\models\obb.pt",
-        r"D:\git\aaa-HachimiDX-Convert\src\models\cls-ex.pt",
-        r"D:\git\aaa-HachimiDX-Convert\src\models\cls-break.pt",
-        skip_detect=True,                # 是否跳过检测
+        'None',  # inference_device
+        r"D:\git\aaa-HachimiDX-Convert\src\models\detect.onnx",
+        r"D:\git\aaa-HachimiDX-Convert\src\models\obb.onnx",
+        r"D:\git\aaa-HachimiDX-Convert\src\models\cls-ex.onnx",
+        r"D:\git\aaa-HachimiDX-Convert\src\models\cls-break.onnx",
+        skip_detect=False,               # 是否跳过检测
         skip_cls=False,                  # 是否跳过分类
         skip_export_tracked_video=False  # 是否跳过导出视频
     )
