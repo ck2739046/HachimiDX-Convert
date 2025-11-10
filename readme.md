@@ -1,15 +1,23 @@
 # HachimiDX-Convert 🐱
 
-**小团体不拉我，拿不到最新最热，所以自己抄谱😡😭😭😭🤔😋**
+**小团体不拉我，拿不到最新最热，所以自己抄谱😡😡😡😭😭😭🤔🤔🤔😋😋😋**
 
-本项目使用 YOLO11+OpenCV 识别和处理音乐游戏 maimai 的谱面确认视频，反向推理出谱面信息，最后导出为 maidata.txt。
+本项目使用 YOLO11+OpenCV 识别音乐游戏 maimai 的谱面确认视频，反向推理出谱面信息，最后导出为 simai 语法的 maidata.txt。
 
-## 当前局限
-- 无法识别烟花特效
-- 不支持超大尺寸的 touch 和 touch-hold 音符 (常见于 basic 难度)
+## 已实现的功能
+- 支持 tap, slide, touch, hold, touch-hold 全种类音符识别
+- 支持 slide, hold, touch-hold 时值的识别
+- 支持 ex-note, break-note, ex-break-note 识别
+- 支持超大尺寸的 touch, touch-hold 音符识别 (常见于 basic 难度)
+- 支持基础的星星轨迹 (< > -)
+
+## 当前的局限
+- 无法识别 touch, touch-hold 的烟花特效
 - 不支持变化的 BPM（一首歌的 BPM 必须全程不变）
-- 只能识别星星头，无法识别星星轨迹
-- 只支持游戏录屏，不支持相机拍屏幕（会有色偏）
+- 不支持复杂的 slide 轨迹
+- 仅支持 2^n 的时间分辨率，不支持6分或12分音符
+- slide, touch-hold 的时值可能不够精准
+- 如果谱面确认视频是用相机拍屏幕，受到色偏影响，此时 ex-note, break-note, ex-break-note 的识别准确率可能会降低
 
 
 
