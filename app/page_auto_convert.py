@@ -242,7 +242,7 @@ class AutoConvertPage(QWidget):
         self.colors = colors
         self.FolderComboBox = folder_combobox_class
         
-        # 配置区控件
+        # 第一行/第二行控件
         self.backend_combo = None
         self.current_selected_backend = None
         self.env_status_label = None
@@ -250,7 +250,7 @@ class AutoConvertPage(QWidget):
         self.convert_model_button = None
         self.batch_size_label = None
         self.batch_size_input = None
-        
+
         # 进程运行器
         self.check_availability_runner = None
         self.convert_model_runner = None
@@ -284,16 +284,36 @@ class AutoConvertPage(QWidget):
     # debug
     def create_config_area(self):
         widget = QWidget()
-        widget.setFixedHeight(500)  # 固定高度
+        widget.setFixedHeight(400)  # 固定高度
         widget.setStyleSheet(f"background-color: {self.colors['bg']};")
-        layout = QHBoxLayout(widget)
+        layout = QVBoxLayout(widget)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(5)
+        
+        # 第一行：，模型推理后端选择
+        first_row = self.setup_1st_row()
+        layout.addWidget(first_row)
+        
+        # 第二行：模型推理后端状态显示
+        second_row = self.setup_2nd_row()
+        layout.addWidget(second_row)
+        
+        layout.addStretch()  # 添加弹性空间，使整体靠上对齐
+        
+        return widget
+    
+    
+    def setup_1st_row(self):
+        """第一行：模型推理后端选择"""
+        first_row = QWidget()
+        first_row_layout = QHBoxLayout(first_row)
+        first_row_layout.setContentsMargins(0, 0, 0, 0)
+        first_row_layout.setSpacing(5)
         
         # Label: '模型推理后端：'
         backend_label = QLabel("模型推理后端:")
         backend_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
-        layout.addWidget(backend_label)
+        first_row_layout.addWidget(backend_label)
         
         # ComboBox: 后端选择（不可编辑）
         self.backend_combo = QComboBox()
@@ -301,12 +321,12 @@ class AutoConvertPage(QWidget):
         self.backend_combo.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
         self.backend_combo.setFixedSize(80, 25)
         self.backend_combo.addItems(["TensorRT", "DirectML"])
-        layout.addWidget(self.backend_combo)
+        first_row_layout.addWidget(self.backend_combo)
         
         # 帮助图标（圆圈中带问号）
         help_label = QLabel("❓")
         help_label.setStyleSheet(f"font-size: 13px;")
-        help_label.setFixedSize(20, 20)
+        help_label.setFixedSize(10, 20)
         help_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         help_label.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
         help_label.enterEvent = lambda event: QToolTip.showText(
@@ -316,13 +336,13 @@ class AutoConvertPage(QWidget):
             help_label.rect()
         )
         help_label.leaveEvent = lambda event: QToolTip.hideText()
-        layout.addWidget(help_label)
+        first_row_layout.addWidget(help_label)
         
         # 按钮: "检查可用性"
         check_button = QPushButton("检查可用性")
         check_button.setStyleSheet(f"background-color: {self.colors['accent']};")
         check_button.setFixedSize(80, 25)
-        layout.addWidget(check_button)
+        first_row_layout.addWidget(check_button)
         
         # 创建按钮管理器
         self.check_button_manager = ManagedButton(
@@ -334,21 +354,33 @@ class AutoConvertPage(QWidget):
             start_callback=self._start_check_availability
         )
         
+        first_row_layout.addStretch()  # 添加弹性空间
+        
+        return first_row
+    
+    
+    def setup_2nd_row(self):
+        """第二行：模型推理后端状态显示与模型转换"""
+        second_row = QWidget()
+        second_row_layout = QHBoxLayout(second_row)
+        second_row_layout.setContentsMargins(0, 0, 0, 0)
+        second_row_layout.setSpacing(5)
+        
         # Label: 运行环境状态
         self.env_status_label = QLabel("运行环境待检测⚪")
         self.env_status_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
-        layout.addWidget(self.env_status_label)
+        second_row_layout.addWidget(self.env_status_label)
         
         # Label: 模型状态
         self.model_status_label = QLabel("模型文件待检测⚪")
         self.model_status_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
-        layout.addWidget(self.model_status_label)
+        second_row_layout.addWidget(self.model_status_label)
         
         # Label: Batch（默认隐藏）
         self.batch_size_label = QLabel("batch:")
         self.batch_size_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
         self.batch_size_label.hide()
-        layout.addWidget(self.batch_size_label)
+        second_row_layout.addWidget(self.batch_size_label)
         
         # 输入框: Batch Size（默认隐藏）
         self.batch_size_input = QComboBox()
@@ -357,13 +389,13 @@ class AutoConvertPage(QWidget):
         self.batch_size_input.addItems(["1", "2", "3", "4", "5", "6", "7", "8"])
         self.batch_size_input.setFixedSize(35, 25)
         self.batch_size_input.hide()
-        layout.addWidget(self.batch_size_input)
+        second_row_layout.addWidget(self.batch_size_input)
         
         # Label: Workspace（默认隐藏）
         self.workspace_label = QLabel("workspace:")
         self.workspace_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
         self.workspace_label.hide()
-        layout.addWidget(self.workspace_label)
+        second_row_layout.addWidget(self.workspace_label)
         
         # 输入框: Workspace（默认隐藏）
         self.workspace_input = QComboBox()
@@ -372,14 +404,14 @@ class AutoConvertPage(QWidget):
         self.workspace_input.addItems(["auto", "1", "2", "3", "4", "5", "6", "7", "8"])
         self.workspace_input.setFixedSize(65, 25)
         self.workspace_input.hide()
-        layout.addWidget(self.workspace_input)
+        second_row_layout.addWidget(self.workspace_input)
         
         # 按钮: "转换模型"（默认隐藏）
         self.convert_model_button = QPushButton("转换模型")
         self.convert_model_button.setStyleSheet(f"background-color: {self.colors['accent']};")
         self.convert_model_button.setFixedSize(80, 25)
         self.convert_model_button.hide()  # 默认隐藏
-        layout.addWidget(self.convert_model_button)
+        second_row_layout.addWidget(self.convert_model_button)
         
         # 创建按钮管理器
         self.convert_button_manager = ManagedButton(
@@ -391,9 +423,9 @@ class AutoConvertPage(QWidget):
             start_callback=self._start_convert_model
         )
         
-        layout.addStretch()  # 添加弹性空间，使控件靠左对齐
+        second_row_layout.addStretch()  # 添加弹性空间，使控件靠左对齐
         
-        return widget
+        return second_row
     
 
     # debug
