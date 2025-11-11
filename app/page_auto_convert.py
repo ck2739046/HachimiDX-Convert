@@ -31,7 +31,7 @@ class ManagedButton:
         self.stop_color = stop_color
         self.is_running = False
         self.is_transitioning = False  # 是否在状态转换期间（冷却）
-        self.transition_time = 1500    # 1.5秒冷却
+        self.transition_time = 500     # 0.5秒冷却
         self.is_user_stopping = False  # 是否是用户主动停止（而非进程自然结束）
         self.process_runner = None
         self.transition_timer = QTimer()
@@ -74,16 +74,16 @@ class ManagedButton:
     
     
     def _start_transition_to_stop(self):
-        """开始转换到停止状态（1.5秒延迟）"""
+        """开始转换到停止状态（带冷却）"""
         self.is_transitioning = True
         self.button.setEnabled(False)  # 禁用按钮
 
-        # 1.5秒后转换为停止状态
+        # 冷却后转换为停止状态
         self.transition_timer.start(self.transition_time)
 
 
     def _start_transition_to_idle(self):
-        """开始转换到空闲状态（停止进程，1.5秒延迟）"""
+        """开始转换到空闲状态（停止进程带冷却）"""
         self.is_transitioning = True
         self.is_user_stopping = True  # 标记为用户主动停止
         self.button.setEnabled(False)  # 禁用按钮
@@ -96,7 +96,7 @@ class ManagedButton:
         if self.stop_callback:
             self.stop_callback()
 
-        # 1.5秒后恢复到空闲状态
+        # 冷却后恢复到空闲状态
         self.transition_timer.start(self.transition_time)
 
 
@@ -299,13 +299,13 @@ class AutoConvertPage(QWidget):
         self.backend_combo = QComboBox()
         self.backend_combo.setEditable(False)
         self.backend_combo.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
-        self.backend_combo.setFixedSize(100, 25)
+        self.backend_combo.setFixedSize(80, 25)
         self.backend_combo.addItems(["TensorRT", "DirectML"])
         layout.addWidget(self.backend_combo)
         
         # 帮助图标（圆圈中带问号）
         help_label = QLabel("❓")
-        help_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        help_label.setStyleSheet(f"font-size: 13px;")
         help_label.setFixedSize(20, 20)
         help_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         help_label.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
@@ -321,7 +321,7 @@ class AutoConvertPage(QWidget):
         # 按钮: "检查可用性"
         check_button = QPushButton("检查可用性")
         check_button.setStyleSheet(f"background-color: {self.colors['accent']};")
-        check_button.setFixedSize(90, 25)
+        check_button.setFixedSize(80, 25)
         layout.addWidget(check_button)
         
         # 创建按钮管理器
@@ -344,8 +344,8 @@ class AutoConvertPage(QWidget):
         self.model_status_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
         layout.addWidget(self.model_status_label)
         
-        # Label: Batch Size（默认隐藏）
-        self.batch_size_label = QLabel("Batch Size:")
+        # Label: Batch（默认隐藏）
+        self.batch_size_label = QLabel("batch:")
         self.batch_size_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
         self.batch_size_label.hide()
         layout.addWidget(self.batch_size_label)
@@ -354,15 +354,30 @@ class AutoConvertPage(QWidget):
         self.batch_size_input = QComboBox()
         self.batch_size_input.setEditable(False)
         self.batch_size_input.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
-        self.batch_size_input.addItems(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"])
-        self.batch_size_input.setFixedSize(40, 25)
+        self.batch_size_input.addItems(["1", "2", "3", "4", "5", "6", "7", "8"])
+        self.batch_size_input.setFixedSize(35, 25)
         self.batch_size_input.hide()
         layout.addWidget(self.batch_size_input)
+        
+        # Label: Workspace（默认隐藏）
+        self.workspace_label = QLabel("workspace:")
+        self.workspace_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        self.workspace_label.hide()
+        layout.addWidget(self.workspace_label)
+        
+        # 输入框: Workspace（默认隐藏）
+        self.workspace_input = QComboBox()
+        self.workspace_input.setEditable(False)
+        self.workspace_input.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.workspace_input.addItems(["auto", "1", "2", "3", "4", "5", "6", "7", "8"])
+        self.workspace_input.setFixedSize(65, 25)
+        self.workspace_input.hide()
+        layout.addWidget(self.workspace_input)
         
         # 按钮: "转换模型"（默认隐藏）
         self.convert_model_button = QPushButton("转换模型")
         self.convert_model_button.setStyleSheet(f"background-color: {self.colors['accent']};")
-        self.convert_model_button.setFixedSize(90, 25)
+        self.convert_model_button.setFixedSize(80, 25)
         self.convert_model_button.hide()  # 默认隐藏
         layout.addWidget(self.convert_model_button)
         
@@ -393,6 +408,8 @@ class AutoConvertPage(QWidget):
         self.convert_model_button.hide()
         self.batch_size_label.hide()
         self.batch_size_input.hide()
+        self.workspace_label.hide()
+        self.workspace_input.hide()
         
         # 开始环境检查
         self.current_selected_backend = self.backend_combo.currentText()
@@ -483,11 +500,13 @@ class AutoConvertPage(QWidget):
             self.model_status_label.setText("模型文件待转换🟡")
             self.append_output("\n✗ 模型文件检查未通过，需要转换格式")
             self.append_output("=" * 20)
-            # 显示转换按钮，如果是 TensorRT 还要显示 batch size 输入
+            # 显示转换按钮，如果是 TensorRT 还要显示 batch size 和 workspace 输入
             self.convert_model_button.show()
             if self.current_selected_backend == "TensorRT":
                 self.batch_size_label.show()
                 self.batch_size_input.show()
+                self.workspace_label.show()
+                self.workspace_input.show()
             return
         
         # 如果连原始模型都缺失
@@ -504,10 +523,12 @@ class AutoConvertPage(QWidget):
         
         # 准备参数
         args = [self.current_selected_backend]
-        # 如果是 TensorRT，额外添加 batch size 参数
+        # 如果是 TensorRT，额外添加 batch size 和 workspace 参数
         if self.current_selected_backend == "TensorRT":
             batch_size = self.batch_size_input.currentText()    
+            workspace = self.workspace_input.currentText()
             args.append(str(batch_size))
+            args.append(workspace)
         
         # 创建新的进程运行器（旧进程会自动被 Qt 清理）
         if self.convert_model_runner is not None:
@@ -539,6 +560,8 @@ class AutoConvertPage(QWidget):
             self.convert_model_button.hide()
             self.batch_size_label.hide()
             self.batch_size_input.hide()
+            self.workspace_label.hide()
+            self.workspace_input.hide()
             # 更新模型状态
             self.model_status_label.setText("模型文件正常🟢")
         else:

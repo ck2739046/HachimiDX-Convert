@@ -1216,11 +1216,11 @@ if __name__ == "__main__":
         r"D:\git\aaa-HachimiDX-Convert\aaa-result\ニルヴの心臓 MASTER 14.3",
         2,    # batch_detect
         16,   # batch_cls
-        'None',  # inference_device
-        r"D:\git\aaa-HachimiDX-Convert\src\models\detect.onnx",
-        r"D:\git\aaa-HachimiDX-Convert\src\models\obb.onnx",
-        r"D:\git\aaa-HachimiDX-Convert\src\models\cls-ex.onnx",
-        r"D:\git\aaa-HachimiDX-Convert\src\models\cls-break.onnx",
+        '0',  # inference_device
+        r"D:\git\aaa-HachimiDX-Convert\src\models\detect.engine",
+        r"D:\git\aaa-HachimiDX-Convert\src\models\obb.pt",
+        r"D:\git\aaa-HachimiDX-Convert\src\models\cls-ex.pt",
+        r"D:\git\aaa-HachimiDX-Convert\src\models\cls-break.pt",
         skip_detect=False,               # 是否跳过检测
         skip_cls=False,                  # 是否跳过分类
         skip_export_tracked_video=False  # 是否跳过导出视频
