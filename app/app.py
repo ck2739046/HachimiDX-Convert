@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         # 配色方案变量
-        self.color_bg = "#2b2b2b"
+        self.color_bg = "#303030"
         self.color_grey = "#454545"
         self.color_surface = "#17203D"
         self.color_surface_hover = "#212C47"
@@ -383,7 +383,6 @@ class MainWindow(QMainWindow):
         # 右侧顶部导航栏
         navigation_bar = QWidget()
         navigation_bar.setFixedHeight(50)
-        navigation_bar.setStyleSheet(f"background-color: {self.color_bg};")
         nav_layout = QHBoxLayout(navigation_bar)
         nav_layout.setContentsMargins(0, 0, 0, 0)
         nav_layout.setSpacing(0)
@@ -432,20 +431,21 @@ class MainWindow(QMainWindow):
     # 创建各个标签页
     def setup_tab_content_pages(self, title):
 
-        def show_window_size(): # 调试用的
-            # 获取原始窗口尺寸 (通过ctypes)
-            user32 = ctypes.windll.user32
-            rect = wintypes.RECT()
-            user32.GetWindowRect(self.Majdata_Edit_Handler.exe_hwnd, ctypes.byref(rect))
-            window_width = rect.right - rect.left
-            window_height = rect.bottom - rect.top
-            print(f"MajdataEdit original size: {window_width}x{window_height}")
-            # 获取嵌入窗口尺寸
-            embedded_width = MajdataEdit_widget.width()
-            embedded_height = MajdataEdit_widget.height()
-            print(f"MajdataEdit embedded size: {embedded_width}x{embedded_height}")
+        # def show_window_size():
+        #     # 获取原始窗口尺寸 (通过ctypes)
+        #     user32 = ctypes.windll.user32
+        #     rect = wintypes.RECT()
+        #     user32.GetWindowRect(self.Majdata_Edit_Handler.exe_hwnd, ctypes.byref(rect))
+        #     window_width = rect.right - rect.left
+        #     window_height = rect.bottom - rect.top
+        #     print(f"MajdataEdit original size: {window_width}x{window_height}")
+        #     # 获取嵌入窗口尺寸
+        #     embedded_width = MajdataEdit_widget.width()
+        #     embedded_height = MajdataEdit_widget.height()
+        #     print(f"MajdataEdit embedded size: {embedded_width}x{embedded_height}")
 
 
+        # MajdataEdit页面
         if title == "MajdataEdit":
             page = QWidget()
             page_layout = QVBoxLayout(page)
@@ -458,9 +458,17 @@ class MainWindow(QMainWindow):
             MajdataEdit_window = QWindow.fromWinId(self.Majdata_Edit_Handler.exe_hwnd)
             MajdataEdit_widget = self.createWindowContainer(MajdataEdit_window, self)
             page_layout.addWidget(MajdataEdit_widget)
+
+
+
+        # # 自动转谱页面
+        # elif title == "Auto Convert":
+        #     pass
+
+        
         else:
             page = QWidget()
-            page.setStyleSheet("background-color: #1C2541; border-radius: 5px; margin: 8px;")
+            page.setStyleSheet(f"background-color: {self.color_bg}; border-radius: 5px; margin: 8px;")
             page_layout = QVBoxLayout(page)
             page_label = QLabel(f"{title} 内容区域")
             page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
