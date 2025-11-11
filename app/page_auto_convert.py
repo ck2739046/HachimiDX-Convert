@@ -298,6 +298,19 @@ class AutoConvertPage(QWidget):
         second_row = self.setup_2nd_row()
         layout.addWidget(second_row)
         
+        # 分隔线
+        divider_container = QWidget()
+        divider_layout = QVBoxLayout(divider_container)
+        divider_layout.setContentsMargins(0, 10, 0, 10)  # 上下各10像素间距
+        divider_layout.setSpacing(0)
+        divider_line = QWidget()
+        divider_line.setFixedHeight(2)  # 细线高度
+        divider_line.setStyleSheet(f"background-color: {self.colors['grey']};")
+        divider_layout.addWidget(divider_line)
+        layout.addWidget(divider_container)
+
+        # 第三行：
+        
         layout.addStretch()  # 添加弹性空间，使整体靠上对齐
         
         return widget
@@ -428,9 +441,14 @@ class AutoConvertPage(QWidget):
         return second_row
     
 
+
+
+
+    
+
     # debug
     # ----------------------------------------------------------------------
-    # 事件处理方法
+    # 第一行/第二行 事件处理
     
     def _start_check_availability(self):
         """开始检查可用性（由按钮管理器调用）"""
@@ -599,6 +617,19 @@ class AutoConvertPage(QWidget):
         else:
             self.append_output("\n✗ 模型转换失败")
             self.append_output("=" * 20)
+
+
+
+
+
+
+
+    # debug
+    # ----------------------------------------------------------------------
+    # 第三行 事件处理
+
+
+
 
     
     

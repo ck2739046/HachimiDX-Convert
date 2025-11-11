@@ -92,7 +92,7 @@ class Standardizer:
             video_width: 视频宽度
             video_height: 视频高度
             total_frames: 总帧数
-            mode: 视频模式（'source'或'camera shot'）
+            mode: 视频模式（'source'或'camera footage'）
             target: 需要检测的圆形数量
             
         Returns:
@@ -121,7 +121,7 @@ class Standardizer:
                 if mode == 'source':
                     _, binary = cv2.threshold(gray, 30, 255, cv2.THRESH_BINARY)
                 # 如果是拍摄，使用Canny边缘检测
-                elif mode == 'camera shot':
+                elif mode == 'camera footage':
                     # 自适应Canny边缘检测
                     median = np.median(gray)
                     lower = int(max(0, 0.66 * median))
@@ -645,7 +645,7 @@ if __name__ == "__main__":
     # start_frame = 560
     # end_frame = 31810
 
-    # video_mode = "source" or "camera shot"
+    # video_mode = "source" or "camera footage"
 
     # standardizer 参数
     video_path = r"C:\Users\ck273\Desktop\風又ねリ\[maimai谱面确认] Get U ♭ack EXPERT-p01-120.mp4"
