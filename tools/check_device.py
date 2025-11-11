@@ -1,6 +1,8 @@
 # 打印一个库的所有属性
 # python -c "import torch; print([attr for attr in dir(torch) if not attr.startswith('_')])" 
 
+import sys
+
 def main(runtime):
     try:
         # 先统一检查 PyTorch
@@ -9,7 +11,7 @@ def main(runtime):
             print(f"PyTorch 已安装, 版本 {torch.__version__}")
         except ImportError:
             print("PyTorch 未安装")
-            return
+            return False
         
 
 
@@ -33,6 +35,8 @@ def main(runtime):
                     device_name = torch.cuda.get_device_name(i)
                     print(f"  - {i}: {device_name}")
 
+            return True
+
 
 
         elif runtime.lower() == 'onnx' or runtime.lower() == 'directml':
@@ -42,13 +46,13 @@ def main(runtime):
                 print(f"ONNX Runtime 已安装, 版本 {ort.__version__}")
             except ImportError:
                 print("ONNX Runtime 未安装")
-                return
+                return False
             # 检查 DirectML 支持
             available_providers = ort.get_available_providers()
             print(f"可用的执行提供程序: {available_providers}")
             if 'DmlExecutionProvider' not in available_providers:
                 print("DirectML 执行提供程序不可用")
-                return
+                return False
             # 获取 DirectML 支持的设备列表
             print("DirectML 执行提供程序可用")
             try:
@@ -56,7 +60,7 @@ def main(runtime):
                 all_devices = ort.get_ep_devices()
                 if not all_devices:
                     print("未找到任何可用的 EP 设备")
-                    return
+                    return False
                 # 筛选出 DML 设备
                 dml_devices_list = []
                 for device in all_devices:
@@ -73,6 +77,9 @@ def main(runtime):
                         print(f"  - 设备 {i}: {device_name}")
             except Exception as e:
                 print(f"获取 DirectML 设备信息失败: {e}")
+                return False
+
+            return True
 
 
 
@@ -98,10 +105,18 @@ def main(runtime):
 
     except Exception as e:
         print(f"发生错误: {e}")
+        return False
 
 
 
 if __name__ == "__main__":
-
-    runtime = 'onnx'
-    main(runtime)
+    
+    # 从命令行参数获取 runtime
+    if len(sys.argv) > 1:
+        runtime = sys.argv[1]
+    else:
+        sys.exit(1)
+    
+    # 运行检查并返回退出码
+    result = main(runtime)
+    sys.exit(0 if result else 1)

@@ -16,12 +16,13 @@ majdata_control_txt = os.path.join(majdata_dir, 'HachimiDX-Convert-Majdata-Contr
 # 模型文件
 models_dir = os.path.join(root_dir, 'src', 'models')
 detect_pt = os.path.join(models_dir, 'detect.pt')
-obb_pt = os.path.join(models_dir, 'obb.pt')
-cls_break_pt = os.path.join(models_dir, 'cls-break.pt')
-cls_ex_pt = os.path.join(models_dir, 'cls-ex.pt')
 detect_onnx = os.path.join(models_dir, 'detect.onnx')
+detect_engine = os.path.join(models_dir, 'detect.engine')
+obb_pt = os.path.join(models_dir, 'obb.pt')
 obb_onnx = os.path.join(models_dir, 'obb.onnx')
+cls_break_pt = os.path.join(models_dir, 'cls-break.pt')
 cls_break_onnx = os.path.join(models_dir, 'cls-break.onnx')
+cls_ex_pt = os.path.join(models_dir, 'cls-ex.pt')
 cls_ex_onnx = os.path.join(models_dir, 'cls-ex.onnx')
 
 # ffmpeg.exe路径

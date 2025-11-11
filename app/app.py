@@ -447,6 +447,7 @@ class MainWindow(QMainWindow):
         elif title == "Auto Convert":
             page = AutoConvertPage(
                 colors=self.colors,
+                folder_combobox_class=FolderComboBox,
                 parent=self
             )
             return page
