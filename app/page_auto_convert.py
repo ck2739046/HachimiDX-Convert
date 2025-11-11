@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, 
-                             QLabel, QComboBox, QToolTip)
+                             QLabel, QComboBox, QToolTip, QFileDialog, QLineEdit, QCheckBox)
 from PyQt6.QtCore import pyqtSlot, Qt, QProcess, pyqtSignal, QTimer
-from PyQt6.QtGui import QTextCursor, QCursor
+from PyQt6.QtGui import QTextCursor, QCursor, QIntValidator, QDoubleValidator
 import os
 import sys
 import time
@@ -250,6 +250,21 @@ class AutoConvertPage(QWidget):
         self.convert_model_button = None
         self.batch_size_label = None
         self.batch_size_input = None
+        
+        # 第三行/第四行/第五行控件
+        self.video_path_label = None
+        self.selected_video_path = None
+        self.video_name_input = None
+        self.video_type_combo = None
+        self.bpm_input = None
+        self.video_start_input = None
+        self.video_end_input = None
+        self.target_res_input = None
+        self.chart_lv_combo = None
+        self.base_denominator_combo = None
+        self.skip_detect_circle_checkbox = None
+        self.skip_detect_checkbox = None
+        self.skip_classify_checkbox = None
 
         # 进程运行器
         self.check_availability_runner = None
@@ -309,8 +324,29 @@ class AutoConvertPage(QWidget):
         divider_layout.addWidget(divider_line)
         layout.addWidget(divider_container)
 
-        # 第三行：
+        # 第三行：选择谱面视频
+        third_row = self.setup_3rd_row()
+        layout.addWidget(third_row)
         
+        # 第四行：视频参数设置
+        fourth_row = self.setup_4th_row()
+        layout.addWidget(fourth_row)
+        
+        # 第五行：高级参数设置
+        fifth_row = self.setup_5th_row()
+        layout.addWidget(fifth_row)
+
+        # 分隔线2
+        divider_container2 = QWidget()
+        divider_layout2 = QVBoxLayout(divider_container2)
+        divider_layout2.setContentsMargins(0, 10, 0, 10)  # 上下各10像素间距
+        divider_layout2.setSpacing(0)
+        divider_line2 = QWidget()
+        divider_line2.setFixedHeight(2)  # 细线高度
+        divider_line2.setStyleSheet(f"background-color: {self.colors['grey']};")
+        divider_layout2.addWidget(divider_line2)
+        layout.addWidget(divider_container2)
+
         layout.addStretch()  # 添加弹性空间，使整体靠上对齐
         
         return widget
@@ -440,12 +476,356 @@ class AutoConvertPage(QWidget):
         
         return second_row
     
+    
+    def setup_3rd_row(self):
+        """第三行：选择谱面视频"""
+        third_row = QWidget()
+        third_row_layout = QHBoxLayout(third_row)
+        third_row_layout.setContentsMargins(0, 0, 0, 0)
+        third_row_layout.setSpacing(5)
+        
+        # 按钮: "选择谱面视频"
+        select_video_button = QPushButton("选择谱面视频")
+        select_video_button.setStyleSheet(f"background-color: {self.colors['accent']};")
+        select_video_button.setFixedSize(100, 25)
+        select_video_button.clicked.connect(self._on_select_video)
+        third_row_layout.addWidget(select_video_button)
+        
+        # 输入框: 视频名称
+        self.video_name_input = QLineEdit()
+        self.video_name_input.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.video_name_input.setFixedSize(300, 25)
+        self.video_name_input.setPlaceholderText("歌曲名称")
+        third_row_layout.addWidget(self.video_name_input)
 
+        # Label: 显示选择的视频路径 (允许用户复制)
+        self.video_path_label = QLineEdit("")
+        self.video_path_label.setStyleSheet(f"background-color: {self.colors['grey']}; font-size: 13px;")
+        self.video_path_label.setReadOnly(True)
+        self.video_path_label.setFixedHeight(25)
+        third_row_layout.addWidget(self.video_path_label)
 
+        # third_row_layout.addStretch()  # 添加弹性空间
+        
+        return third_row
+    
+    
+    def setup_4th_row(self):
+        """第四行：视频参数设置"""
+        fourth_row = QWidget()
+        fourth_row_layout = QHBoxLayout(fourth_row)
+        fourth_row_layout.setContentsMargins(0, 0, 0, 0)
+        fourth_row_layout.setSpacing(5)
+        
+        # Label: "视频形式:"
+        video_type_label = QLabel("视频形式:")
+        video_type_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        fourth_row_layout.addWidget(video_type_label)
+        
+        # ComboBox: 视频形式选择
+        self.video_type_combo = QComboBox()
+        self.video_type_combo.setEditable(False)
+        self.video_type_combo.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.video_type_combo.setFixedSize(120, 25)
+        self.video_type_combo.addItems(["source", "camera footage"])
+        fourth_row_layout.addWidget(self.video_type_combo)
 
+        # 帮助图标：视频形式
+        video_type_help = QLabel("❓")
+        video_type_help.setStyleSheet(f"font-size: 13px;")
+        video_type_help.setFixedSize(10, 20)
+        video_type_help.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        video_type_help.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
+        video_type_help.enterEvent = lambda event: QToolTip.showText(
+            QCursor.pos(),
+            "source: 游戏原生画面\ncamera footage: 相机拍屏幕",
+            video_type_help,
+            video_type_help.rect()
+        )
+        video_type_help.leaveEvent = lambda event: QToolTip.hideText()
+        fourth_row_layout.addWidget(video_type_help)
+        
+        # Label: "歌曲bpm:"
+        bpm_label = QLabel("歌曲bpm:")
+        bpm_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        fourth_row_layout.addWidget(bpm_label)
+        
+        # 输入框: BPM（>=10的整数）
+        self.bpm_input = QLineEdit()
+        self.bpm_input.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.bpm_input.setFixedSize(70, 25)
+        self.bpm_input.setPlaceholderText("≥10")
+        bpm_validator = QDoubleValidator(10, 999, 3, self)
+        self.bpm_input.setValidator(bpm_validator)
+        fourth_row_layout.addWidget(self.bpm_input)
+        
+        # Label: "歌曲范围:"
+        video_range_label = QLabel("歌曲范围:")
+        video_range_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        fourth_row_layout.addWidget(video_range_label)
+        
+        # 输入框: 起始秒数（>=-1的整数）
+        self.video_start_input = QLineEdit()
+        self.video_start_input.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.video_start_input.setFixedSize(50, 25)
+        self.video_start_input.setPlaceholderText("≥-1")
+        start_validator = QIntValidator(-1, 999, self)
+        self.video_start_input.setValidator(start_validator)
+        fourth_row_layout.addWidget(self.video_start_input)
+        
+        # Label: "->"
+        arrow_label = QLabel("->")
+        arrow_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        fourth_row_layout.addWidget(arrow_label)
+        
+        # 输入框: 结束秒数（>=-1的整数）
+        self.video_end_input = QLineEdit()
+        self.video_end_input.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.video_end_input.setFixedSize(50, 25)
+        self.video_end_input.setPlaceholderText("≥-1")
+        end_validator = QIntValidator(-1, 999, self)
+        self.video_end_input.setValidator(end_validator)
+        fourth_row_layout.addWidget(self.video_end_input)
 
+        # 帮助图标：歌曲范围
+        video_range_help = QLabel("❓")
+        video_range_help.setStyleSheet(f"font-size: 13px;")
+        video_range_help.setFixedSize(10, 20)
+        video_range_help.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        video_range_help.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
+        video_range_help.enterEvent = lambda event: QToolTip.showText(
+            QCursor.pos(),
+            "歌曲真正起始和结束的时间(秒)\n" \
+            "-1 表示视频开头第 0 秒或结尾最后 1 秒\n" \
+            "正确的歌曲起始应该是游戏走转场刚刚进入黑屏，并且乐曲启动拍还没响的时间" \
+            "\n正确的歌曲结束应该是歌曲最后一个音符消失后的时间",
+            video_range_help,
+            video_range_help.rect()
+        )
+        video_range_help.leaveEvent = lambda event: QToolTip.hideText()
+        fourth_row_layout.addWidget(video_range_help)
+
+        # Label: "目标分辨率:"
+        target_res_label = QLabel("目标分辨率:")
+        target_res_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        fourth_row_layout.addWidget(target_res_label)
+        
+        # 输入框: 目标分辨率（720-2160的整数，默认1080）
+        self.target_res_input = QLineEdit()
+        self.target_res_input.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.target_res_input.setFixedSize(60, 25)
+        self.target_res_input.setText("1080")
+        target_res_validator = QIntValidator(720, 2160, self)
+        self.target_res_input.setValidator(target_res_validator)
+        fourth_row_layout.addWidget(self.target_res_input)
+        
+        # 帮助图标：目标分辨率
+        target_res_help = QLabel("❓")
+        target_res_help.setStyleSheet(f"font-size: 13px;")
+        target_res_help.setFixedSize(10, 20)
+        target_res_help.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        target_res_help.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
+        target_res_help.enterEvent = lambda event: QToolTip.showText(
+            QCursor.pos(),
+            "程序生成的标准化视频的分辨率，默认1080x1080",
+            target_res_help,
+            target_res_help.rect()
+        )
+        target_res_help.leaveEvent = lambda event: QToolTip.hideText()
+        fourth_row_layout.addWidget(target_res_help)
+
+        fourth_row_layout.addStretch()  # 添加弹性空间
+        
+        return fourth_row
+    
+    
+    def setup_5th_row(self):
+        """第五行：高级参数设置"""
+        fifth_row = QWidget()
+        fifth_row_layout = QHBoxLayout(fifth_row)
+        fifth_row_layout.setContentsMargins(0, 0, 0, 0)
+        fifth_row_layout.setSpacing(5)
+
+        # Label: "谱面难度:"
+        chart_lv_label = QLabel("谱面难度:")
+        chart_lv_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        fifth_row_layout.addWidget(chart_lv_label)
+        
+        # ComboBox: 谱面难度（1-7）
+        self.chart_lv_combo = QComboBox()
+        self.chart_lv_combo.setEditable(False)
+        self.chart_lv_combo.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.chart_lv_combo.setFixedSize(35, 25)
+        self.chart_lv_combo.addItems(["1", "2", "3", "4", "5", "6", "7"])
+        self.chart_lv_combo.setCurrentIndex(3)  # 默认选择4（expert）
+        fifth_row_layout.addWidget(self.chart_lv_combo)
+        
+        # 帮助图标：谱面难度
+        chart_lv_help = QLabel("❓")
+        chart_lv_help.setStyleSheet(f"font-size: 13px;")
+        chart_lv_help.setFixedSize(10, 20)
+        chart_lv_help.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        chart_lv_help.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
+        chart_lv_help.enterEvent = lambda event: QToolTip.showText(
+            QCursor.pos(),
+            "1-easy, 2-basic, 3-normal, 4-expert, 5-master, 6-re:master, 7-utage",
+            chart_lv_help,
+            chart_lv_help.rect()
+        )
+        chart_lv_help.leaveEvent = lambda event: QToolTip.hideText()
+        fifth_row_layout.addWidget(chart_lv_help)
+        
+        # Label: "解析分辨率:"
+        base_denominator_label = QLabel("解析分辨率:")
+        base_denominator_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        fifth_row_layout.addWidget(base_denominator_label)
+        
+        # ComboBox: 解析分辨率（4,8,16,32,64，默认16）
+        self.base_denominator_combo = QComboBox()
+        self.base_denominator_combo.setEditable(False)
+        self.base_denominator_combo.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.base_denominator_combo.setFixedSize(45, 25)
+        self.base_denominator_combo.addItems(["4", "8", "16", "32", "64"])
+        self.base_denominator_combo.setCurrentIndex(2)  # 默认选择16
+        fifth_row_layout.addWidget(self.base_denominator_combo)
+        
+        # 帮助图标：解析分辨率
+        base_denominator_help = QLabel("❓")
+        base_denominator_help.setStyleSheet(f"font-size: 13px;")
+        base_denominator_help.setFixedSize(10, 20)
+        base_denominator_help.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        base_denominator_help.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
+        base_denominator_help.enterEvent = lambda event: QToolTip.showText(
+            QCursor.pos(),
+            "程序解析谱面的分辨率，默认为16，意味着程序会将音符对齐到1/16的时间",
+            base_denominator_help,
+            base_denominator_help.rect()
+        )
+        base_denominator_help.leaveEvent = lambda event: QToolTip.hideText()
+        fifth_row_layout.addWidget(base_denominator_help)
+
+        # Label: "skip_detect_circle"
+        skip_detect_label = QLabel("skip_detect_circle:")
+        skip_detect_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        fifth_row_layout.addWidget(skip_detect_label)
+        
+        # CheckBox: 跳过检测圆形
+        self.skip_detect_circle_checkbox = QCheckBox()
+        self.skip_detect_circle_checkbox.setFixedSize(20, 20)
+        self.skip_detect_circle_checkbox.setStyleSheet(f"""
+            QCheckBox::indicator {{
+                background-color: {self.colors['grey']};
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {self.colors['accent']};
+            }}
+        """)
+        fifth_row_layout.addWidget(self.skip_detect_circle_checkbox)
+        
+        # 帮助图标：skip_detect_circle
+        skip_detect_help = QLabel("❓")
+        skip_detect_help.setStyleSheet(f"font-size: 13px;")
+        skip_detect_help.setFixedSize(10, 20)
+        skip_detect_help.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        skip_detect_help.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
+        skip_detect_help.enterEvent = lambda event: QToolTip.showText(
+            QCursor.pos(),
+            "程序会尝试自动检测圆形游戏屏幕的位置\n如果在当前谱面确认视频中，游戏画面已经是全屏并且在屏幕中心，可以跳过检测",
+            skip_detect_help,
+            skip_detect_help.rect()
+        )
+        skip_detect_help.leaveEvent = lambda event: QToolTip.hideText()
+        fifth_row_layout.addWidget(skip_detect_help)
+        
+        # Label: "skip_detect"
+        skip_detect_label2 = QLabel("skip_detect:")
+        skip_detect_label2.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        fifth_row_layout.addWidget(skip_detect_label2)
+        
+        # CheckBox: 跳过逐帧检测
+        self.skip_detect_checkbox = QCheckBox()
+        self.skip_detect_checkbox.setFixedSize(20, 20)
+        self.skip_detect_checkbox.setStyleSheet(f"""
+            QCheckBox::indicator {{
+                background-color: {self.colors['grey']};
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {self.colors['accent']};
+            }}
+        """)
+        fifth_row_layout.addWidget(self.skip_detect_checkbox)
+        
+        # 帮助图标：skip_detect
+        skip_detect_help2 = QLabel("❓")
+        skip_detect_help2.setStyleSheet(f"font-size: 13px;")
+        skip_detect_help2.setFixedSize(10, 20)
+        skip_detect_help2.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        skip_detect_help2.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
+        skip_detect_help2.enterEvent = lambda event: QToolTip.showText(
+            QCursor.pos(),
+            "跳过逐帧检测视频中的音符，直接读取已经存在的检测结果 (detect_result.txt)",
+            skip_detect_help2,
+            skip_detect_help2.rect()
+        )
+        skip_detect_help2.leaveEvent = lambda event: QToolTip.hideText()
+        fifth_row_layout.addWidget(skip_detect_help2)
+        
+        # Label: "skip_classify"
+        skip_classify_label = QLabel("skip_classify:")
+        skip_classify_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        fifth_row_layout.addWidget(skip_classify_label)
+        
+        # CheckBox: 跳过分类检测
+        self.skip_classify_checkbox = QCheckBox()
+        self.skip_classify_checkbox.setFixedSize(20, 20)
+        self.skip_classify_checkbox.setStyleSheet(f"""
+            QCheckBox::indicator {{
+                background-color: {self.colors['grey']};
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {self.colors['accent']};
+            }}
+        """)
+        fifth_row_layout.addWidget(self.skip_classify_checkbox)
+        
+        # 帮助图标：skip_classify
+        skip_classify_help = QLabel("❓")
+        skip_classify_help.setStyleSheet(f"font-size: 13px;")
+        skip_classify_help.setFixedSize(10, 20)
+        skip_classify_help.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        skip_classify_help.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
+        skip_classify_help.enterEvent = lambda event: QToolTip.showText(
+            QCursor.pos(),
+            "跳过分类检测 ex-note, break-note, ex-break-note",
+            skip_classify_help,
+            skip_classify_help.rect()
+        )
+        skip_classify_help.leaveEvent = lambda event: QToolTip.hideText()
+        fifth_row_layout.addWidget(skip_classify_help)
+        
+        fifth_row_layout.addStretch()  # 添加弹性空间
+        
+        return fifth_row
     
 
+    # debug
+    # ----------------------------------------------------------------------
+    # 第三行/第四行 事件处理
+    
+    def _on_select_video(self):
+        """选择谱面视频文件"""
+        file_dialog = QFileDialog(self)
+        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+        file_dialog.setNameFilter("视频文件 (*.mkv *.mp4 *.webm *.avi)")
+        file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
+        
+        if file_dialog.exec():
+            selected_files = file_dialog.selectedFiles()
+            if selected_files:
+                self.selected_video_path = selected_files[0]
+                self.video_path_label.setText(self.selected_video_path)
+    
+    
     # debug
     # ----------------------------------------------------------------------
     # 第一行/第二行 事件处理
