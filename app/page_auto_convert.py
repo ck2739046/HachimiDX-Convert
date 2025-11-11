@@ -1,14 +1,74 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, 
                              QLabel, QComboBox, QToolTip)
-from PyQt6.QtCore import pyqtSlot, Qt, QProcess
+from PyQt6.QtCore import pyqtSlot, Qt, QProcess, pyqtSignal
 from PyQt6.QtGui import QTextCursor, QCursor
 import os
 import sys
 import time
+import re
 
 root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
+
+
+# ----------------------------------------------------------------------
+# 通用 QProcess 辅助类
+
+class ProcessRunner(QProcess):
+
+    output_ready = pyqtSignal(str)       # 输出信号（逐行）
+    process_finished = pyqtSignal(bool)  # 完成信号（成功/失败）
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # 合并 stdout 和 stderr
+        self.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        # 连接内部信号
+        self.readyReadStandardOutput.connect(self._handle_output)
+        self.finished.connect(self._handle_finished)
+        # ANSI 转义序列的正则表达式 (例如文字颜色代码)
+        self.ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    
+    
+    def _strip_ansi(self, text):
+        return self.ansi_escape.sub('', text)
+    
+
+    def _handle_output(self):
+        output = self.readAllStandardOutput()
+        try:
+            # 先尝试 GBK 编码（Windows 控制台默认）
+            text = bytes(output).decode('gbk', errors='replace')
+        except:
+            # 失败则使用 UTF-8
+            text = bytes(output).decode('utf-8', errors='replace')
+        
+        # 按行发送信号（移除 ANSI 转义序列）
+        for line in text.splitlines():
+            if line.strip():
+                clean_line = self._strip_ansi(line)
+                self.output_ready.emit(clean_line)
+    
+
+    def _handle_finished(self, exit_code, exit_status):
+        success = (exit_code == 0)
+        self.process_finished.emit(success)
+    
+
+    def run_script(self, script_path, args=None):
+        if args is None:
+            args = []
+        
+        python_exe = sys.executable
+        self.start(python_exe, [script_path] + args)
+    
+
+    def cleanup(self):
+        if self.state() != QProcess.ProcessState.NotRunning:
+            self.kill()
+            self.waitForFinished(500)
+        self.deleteLater()
 
 
 
@@ -31,7 +91,12 @@ class AutoConvertPage(QWidget):
         self.env_status_label = None
         self.model_status_label = None
         self.convert_model_button = None
-        self.check_availability_process = None
+        self.batch_size_label = None
+        self.batch_size_input = None
+        
+        # 进程运行器
+        self.check_availability_runner = None
+        self.convert_model_runner = None
         
         # 输出区相关变量
         self.output_text_edit = None
@@ -108,6 +173,21 @@ class AutoConvertPage(QWidget):
         self.model_status_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
         layout.addWidget(self.model_status_label)
         
+        # Label: Batch Size（默认隐藏）
+        self.batch_size_label = QLabel("Batch Size:")
+        self.batch_size_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        self.batch_size_label.hide()
+        layout.addWidget(self.batch_size_label)
+        
+        # 输入框: Batch Size（默认隐藏）
+        self.batch_size_input = QComboBox()
+        self.batch_size_input.setEditable(False)
+        self.batch_size_input.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.batch_size_input.addItems(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"])
+        self.batch_size_input.setFixedSize(40, 25)
+        self.batch_size_input.hide()
+        layout.addWidget(self.batch_size_input)
+        
         # 按钮: "转换模型"（默认隐藏）
         self.convert_model_button = QPushButton("转换模型")
         self.convert_model_button.setStyleSheet(f"background-color: {self.colors['accent']};")
@@ -130,47 +210,30 @@ class AutoConvertPage(QWidget):
         self.env_status_label.setText("运行环境待检测⚪")
         self.model_status_label.setText("模型文件待检测⚪")
         self.convert_model_button.hide()
+        self.batch_size_label.hide()
+        self.batch_size_input.hide()
+        
         # 开始环境检查
         self.current_selected_backend = self.backend_combo.currentText()
         self.append_output(f'\n{"=" * 20}')
         self.append_output(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
         self.append_output(f"\n开始检查 {self.current_selected_backend} 运行环境...\n")
-        # 使用 QProcess 运行子进程
-        if self.check_availability_process is not None:
-            self.check_availability_process.kill()
-            self.check_availability_process.deleteLater()
-
-        self.check_availability_process = QProcess(self)
-        self.check_availability_process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels) # 合并stdout和stderr
-        # 连接信号
-        self.check_availability_process.readyReadStandardOutput.connect(self.on_check_availability_process_output)
-        self.check_availability_process.finished.connect(self.on_check_availability_process_finished)
-        # 启动子进程
-        python_exe = sys.executable
+        
+        # 清理旧进程
+        if self.check_availability_runner is not None:
+            self.check_availability_runner.cleanup()
+        # 创建新的进程运行器
+        self.check_availability_runner = ProcessRunner(self)
+        self.check_availability_runner.output_ready.connect(self.append_output)
+        self.check_availability_runner.process_finished.connect(self.on_check_availability_finished)    
+        # 运行检查脚本
         check_device_script = os.path.join(root, "tools", "check_device.py")
-        self.check_availability_process.start(python_exe, [check_device_script, self.current_selected_backend])
+        args = [self.current_selected_backend]
+        self.check_availability_runner.run_script(check_device_script, args)
 
-    
-    @pyqtSlot()
-    def on_check_availability_process_output(self):
-        if self.check_availability_process:
-            # 使用 GBK 编码读取 Windows 控制台输出
-            output = self.check_availability_process.readAllStandardOutput()
-            try:
-                # 先尝试 GBK 编码
-                text = bytes(output).decode('gbk', errors='replace')
-            except:
-                # 失败则使用 UTF-8
-                text = bytes(output).decode('utf-8', errors='replace')
-            # 按行输出
-            for line in text.splitlines():
-                if line.strip():
-                    self.append_output(line)
-    
 
-    @pyqtSlot(int)
-    def on_check_availability_process_finished(self, exit_code):
-        success = (exit_code == 0)
+    @pyqtSlot(bool)
+    def on_check_availability_finished(self, success):
         if success:
             self.env_status_label.setText("运行环境正常🟢")
             self.append_output("\n✓ 运行环境检查通过")
@@ -230,7 +293,11 @@ class AutoConvertPage(QWidget):
             self.model_status_label.setText("模型文件待转换🟡")
             self.append_output("\n✗ 模型文件检查未通过，需要转换格式")
             self.append_output("=" * 20)
-            self.convert_model_button.show() # 显示转换按钮
+            # 显示转换按钮，如果是 TensorRT 还要显示 batch size 输入
+            self.convert_model_button.show()
+            if self.current_selected_backend == "TensorRT":
+                self.batch_size_label.show()
+                self.batch_size_input.show()
             return
         
         # 如果连原始模型都缺失
@@ -241,8 +308,43 @@ class AutoConvertPage(QWidget):
 
     @pyqtSlot()
     def on_convert_model_clicked(self):
-        self.append_output("\n开始转换模型...")
-        # TODO: 实现模型转换逻辑
+        self.append_output(f'\n{"=" * 20}')
+        self.append_output(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        self.append_output(f"\n开始转换 {self.current_selected_backend} 模型...\n")
+        
+        # 准备参数
+        args = [self.current_selected_backend]
+        # 如果是 TensorRT，额外添加 batch size 参数
+        if self.current_selected_backend == "TensorRT":
+            batch_size = self.batch_size_input.currentText()    
+            args.append(str(batch_size))
+        
+        # 清理旧进程
+        if self.convert_model_runner is not None:
+            self.convert_model_runner.cleanup()
+        # 创建新的进程运行器
+        self.convert_model_runner = ProcessRunner(self)
+        self.convert_model_runner.output_ready.connect(self.append_output)
+        self.convert_model_runner.process_finished.connect(self.on_convert_model_finished)
+        # 运行转换脚本
+        export_models_script = os.path.join(root, "tools", "export_models.py")
+        self.convert_model_runner.run_script(export_models_script, args)
+    
+    
+    @pyqtSlot(bool)
+    def on_convert_model_finished(self, success):
+        if success:
+            self.append_output("\n✓ 模型转换完成")
+            self.append_output("=" * 20)
+            # 隐藏转换按钮和输入框
+            self.convert_model_button.hide()
+            self.batch_size_label.hide()
+            self.batch_size_input.hide()
+            # 更新模型状态
+            self.model_status_label.setText("模型文件正常🟢")
+        else:
+            self.append_output("\n✗ 模型转换失败")
+            self.append_output("=" * 20)
 
     
     
