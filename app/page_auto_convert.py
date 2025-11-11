@@ -14,6 +14,9 @@ root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
 
+# 导入独立的输出文本组件
+from output_text_widget import OutputTextWidget
+
 
 
 
@@ -343,10 +346,8 @@ class AutoConvertPage(QWidget):
         self.convert_button_manager = None
         self.auto_convert_button_manager = None
         
-        # 输出区相关变量
-        self.output_text_edit = None
-        self.max_output_lines = 400  # 最大保留行数
-        self.last_line_is_progress = False  # 标记最后一行是否是进度行（可被替换）
+        # 输出区组件
+        self.output_widget = None
         
         # 设置页面布局
         self.setup_ui()
@@ -1304,93 +1305,27 @@ class AutoConvertPage(QWidget):
     # 输出区域
 
     def create_output_area(self):
-        widget = QWidget()
-        widget.setStyleSheet(f"background-color: {self.colors['grey']};")
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        """创建输出区域，使用独立的 OutputTextWidget 组件"""
+        # 创建输出文本组件
+        self.output_widget = OutputTextWidget(
+            colors=self.colors,
+            max_lines=400
+        )
         
-        # 创建文本输出控件
-        self.output_text_edit = QTextEdit()
-        self.output_text_edit.setReadOnly(True)  # 只读模式
-        self.output_text_edit.setStyleSheet(f"""
-            QTextEdit {{
-                background-color: {self.colors['grey']};
-                color: {self.colors['text_primary']};
-                border: none;
-                padding: 10px;
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 12px;
-            }}
-            QScrollBar:vertical {{
-                background-color: {self.colors['bg']};
-                width: 12px;
-                border: none;
-            }}
-            QScrollBar::handle:vertical {{
-                background-color: {self.colors['text_secondary']};
-                border-radius: 6px;
-                min-height: 20px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background-color: {self.colors['accent']};
-            }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                height: 0px;
-            }}
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
-                background: none;
-            }}
-        """)
-        
-        layout.addWidget(self.output_text_edit)
-        
-        return widget
+        return self.output_widget
     
     
     def append_output(self, text, replace_last=False):
         """
-        添加输出文本
+        添加输出文本（委托给 OutputTextWidget）
         :param text: 要添加的文本
         :param replace_last: 是否替换最后一行（用于进度条更新）
         """
-        if replace_last:
-            # 只在上一行是进度行时才替换
-            if self.last_line_is_progress:
-                # 替换最后一行：移动到文档末尾，选择当前行，删除并插入新文本
-                cursor = self.output_text_edit.textCursor()
-                cursor.movePosition(QTextCursor.MoveOperation.End)
-                cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
-                cursor.removeSelectedText()
-                cursor.insertText(text)
-                self.output_text_edit.setTextCursor(cursor)
-            else:
-                # 如果上一行不是进度行，则追加新行
-                self.output_text_edit.append(text)
-            # 标记这一行是进度行
-            self.last_line_is_progress = True
-        else:
-            # 追加新行
-            self.output_text_edit.append(text)
-            # 标记这一行不是进度行
-            self.last_line_is_progress = False
-        
-        # 限制最大行数
-        document = self.output_text_edit.document()
-        if document.blockCount() > self.max_output_lines:
-            # 删除开头的行，保留最新的 max_output_lines 行
-            cursor = QTextCursor(document)
-            cursor.movePosition(QTextCursor.MoveOperation.Start)
-            # 计算需要删除的行数
-            lines_to_remove = document.blockCount() - self.max_output_lines
-            for _ in range(lines_to_remove):
-                cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
-                cursor.removeSelectedText()
-                cursor.deleteChar()  # 删除换行符
-        
-        # 自动滚动到底部
-        # self.output_text_edit.moveCursor(QTextCursor.MoveOperation.End)
+        if self.output_widget:
+            self.output_widget.append_output(text, replace_last)
     
     
     def clear_output(self):
-        self.output_text_edit.clear()
+        """清空输出文本"""
+        if self.output_widget:
+            self.output_widget.clear()
