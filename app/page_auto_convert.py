@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, 
                              QLabel, QComboBox, QToolTip)
-from PyQt6.QtCore import pyqtSlot, Qt, QProcess, pyqtSignal
+from PyQt6.QtCore import pyqtSlot, Qt, QProcess, pyqtSignal, QTimer
 from PyQt6.QtGui import QTextCursor, QCursor
 import os
 import sys
@@ -12,7 +12,152 @@ if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
 
 
-# ----------------------------------------------------------------------
+
+
+
+
+
+# 通用按钮状态管理类
+
+class ManagedButton:
+    """
+    管理按钮状态的辅助类
+    支持运行/停止状态切换，带延迟保护
+    """
+    def __init__(self, button, original_text, original_color, stop_color="#DC3545"):
+        self.button = button
+        self.original_text = original_text
+        self.original_color = original_color
+        self.stop_color = stop_color
+        self.is_running = False
+        self.is_transitioning = False  # 是否在状态转换期间（冷却）
+        self.transition_time = 1500    # 1.5秒冷却
+        self.is_user_stopping = False  # 是否是用户主动停止（而非进程自然结束）
+        self.process_runner = None
+        self.transition_timer = QTimer()
+        self.transition_timer.setSingleShot(True)
+        self.transition_timer.timeout.connect(self._on_transition_complete)
+        
+        # 保存原始点击处理函数
+        self.start_callback = None
+        self.stop_callback = None
+        
+        # 连接按钮点击事件
+        self.button.clicked.connect(self._on_button_clicked)
+    
+    
+    def set_callbacks(self, start_callback, stop_callback=None):
+        """设置回调函数"""
+        self.start_callback = start_callback
+        self.stop_callback = stop_callback
+    
+    
+    def attach_process(self, process_runner):
+        """关联 ProcessRunner，当进程结束时自动恢复按钮"""
+        self.process_runner = process_runner
+        if process_runner:
+            process_runner.process_finished.connect(self._on_process_finished)
+    
+    
+    def _on_button_clicked(self):
+        """按钮点击处理"""
+        # 如果在转换期间，忽略点击
+        if self.is_transitioning:
+            return
+        
+        if not self.is_running:
+            # 开始运行
+            self._start_transition_to_stop()
+        else:
+            # 停止运行
+            self._start_transition_to_idle()
+    
+    
+    def _start_transition_to_stop(self):
+        """开始转换到停止状态（1.5秒延迟）"""
+        self.is_transitioning = True
+        self.button.setEnabled(False)  # 禁用按钮
+
+        # 1.5秒后转换为停止状态
+        self.transition_timer.start(self.transition_time)
+
+
+    def _start_transition_to_idle(self):
+        """开始转换到空闲状态（停止进程，1.5秒延迟）"""
+        self.is_transitioning = True
+        self.is_user_stopping = True  # 标记为用户主动停止
+        self.button.setEnabled(False)  # 禁用按钮
+        
+        # 停止进程
+        if self.process_runner:
+            self.process_runner.cleanup()
+        
+        # 调用停止回调
+        if self.stop_callback:
+            self.stop_callback()
+
+        # 1.5秒后恢复到空闲状态
+        self.transition_timer.start(self.transition_time)
+
+
+    def _on_transition_complete(self):
+        """状态转换完成"""
+        self.is_transitioning = False
+        self.button.setEnabled(True)
+        
+        if not self.is_running:
+            # 转换到运行状态
+            self.is_running = True
+            self.button.setText("停止")
+            self.button.setStyleSheet(f"background-color: {self.stop_color};")
+            
+            # 调用启动回调
+            if self.start_callback:
+                self.start_callback()
+        else:
+            # 转换到空闲状态
+            self.is_running = False
+            self.is_user_stopping = False  # 清除标记
+            self.button.setText(self.original_text)
+            self.button.setStyleSheet(f"background-color: {self.original_color};")
+    
+    
+    def _on_process_finished(self, success):
+        """进程结束时立即恢复按钮"""
+        # 如果是用户主动停止，让转换定时器处理状态变化
+        if self.is_user_stopping:
+            return
+        
+        # 取消转换计时器
+        if self.transition_timer.isActive():
+            self.transition_timer.stop()
+        
+        # 立即恢复到空闲状态
+        self.is_running = False
+        self.is_transitioning = False
+        self.button.setEnabled(True)
+        self.button.setText(self.original_text)
+        self.button.setStyleSheet(f"background-color: {self.original_color};")
+    
+    
+    def reset(self):
+        """重置按钮状态"""
+        if self.transition_timer.isActive():
+            self.transition_timer.stop()
+        self.is_running = False
+        self.is_transitioning = False
+        self.button.setEnabled(True)
+        self.button.setText(self.original_text)
+        self.button.setStyleSheet(f"background-color: {self.original_color};")
+
+
+
+
+
+
+
+
+
 # 通用 QProcess 辅助类
 
 class ProcessRunner(QProcess):
@@ -65,13 +210,25 @@ class ProcessRunner(QProcess):
     
 
     def cleanup(self):
-        if self.state() != QProcess.ProcessState.NotRunning:
-            self.kill()
-            self.waitForFinished(500)
-        self.deleteLater()
+        """清理进程（如果正在运行则终止）"""
+        try:
+            if self.state() != QProcess.ProcessState.NotRunning:
+                self.kill()
+                self.waitForFinished(500)
+            self.deleteLater()
+        except RuntimeError:
+            # 对象已被删除，忽略
+            pass
 
 
 
+
+
+
+
+
+
+# debug
 class AutoConvertPage(QWidget):
     
     def __init__(self, 
@@ -98,6 +255,10 @@ class AutoConvertPage(QWidget):
         self.check_availability_runner = None
         self.convert_model_runner = None
         
+        # 按钮管理器
+        self.check_button_manager = None
+        self.convert_button_manager = None
+        
         # 输出区相关变量
         self.output_text_edit = None
         self.max_output_lines = 400  # 最大保留行数
@@ -120,6 +281,7 @@ class AutoConvertPage(QWidget):
         page_layout.addWidget(output_widget)
     
     
+    # debug
     def create_config_area(self):
         widget = QWidget()
         widget.setFixedHeight(500)  # 固定高度
@@ -160,8 +322,17 @@ class AutoConvertPage(QWidget):
         check_button = QPushButton("检查可用性")
         check_button.setStyleSheet(f"background-color: {self.colors['accent']};")
         check_button.setFixedSize(90, 25)
-        check_button.clicked.connect(self.on_check_availability_clicked)
         layout.addWidget(check_button)
+        
+        # 创建按钮管理器
+        self.check_button_manager = ManagedButton(
+            check_button, 
+            "检查可用性", 
+            self.colors['accent']
+        )
+        self.check_button_manager.set_callbacks(
+            start_callback=self._start_check_availability
+        )
         
         # Label: 运行环境状态
         self.env_status_label = QLabel("运行环境待检测⚪")
@@ -192,20 +363,30 @@ class AutoConvertPage(QWidget):
         self.convert_model_button = QPushButton("转换模型")
         self.convert_model_button.setStyleSheet(f"background-color: {self.colors['accent']};")
         self.convert_model_button.setFixedSize(90, 25)
-        self.convert_model_button.clicked.connect(self.on_convert_model_clicked)
         self.convert_model_button.hide()  # 默认隐藏
         layout.addWidget(self.convert_model_button)
+        
+        # 创建按钮管理器
+        self.convert_button_manager = ManagedButton(
+            self.convert_model_button,
+            "转换模型",
+            self.colors['accent']
+        )
+        self.convert_button_manager.set_callbacks(
+            start_callback=self._start_convert_model
+        )
         
         layout.addStretch()  # 添加弹性空间，使控件靠左对齐
         
         return widget
     
 
+    # debug
     # ----------------------------------------------------------------------
     # 事件处理方法
     
-    @pyqtSlot()
-    def on_check_availability_clicked(self):
+    def _start_check_availability(self):
+        """开始检查可用性（由按钮管理器调用）"""
         # 重置状态
         self.env_status_label.setText("运行环境待检测⚪")
         self.model_status_label.setText("模型文件待检测⚪")
@@ -219,13 +400,22 @@ class AutoConvertPage(QWidget):
         self.append_output(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
         self.append_output(f"\n开始检查 {self.current_selected_backend} 运行环境...\n")
         
-        # 清理旧进程
+        # 创建新的进程运行器（旧进程会自动被 Qt 清理）
         if self.check_availability_runner is not None:
-            self.check_availability_runner.cleanup()
-        # 创建新的进程运行器
+            try:
+                # 断开旧连接
+                self.check_availability_runner.output_ready.disconnect()
+                self.check_availability_runner.process_finished.disconnect()
+            except:
+                pass
+        
         self.check_availability_runner = ProcessRunner(self)
         self.check_availability_runner.output_ready.connect(self.append_output)
-        self.check_availability_runner.process_finished.connect(self.on_check_availability_finished)    
+        self.check_availability_runner.process_finished.connect(self.on_check_availability_finished)
+        
+        # 关联进程到按钮管理器
+        self.check_button_manager.attach_process(self.check_availability_runner)
+        
         # 运行检查脚本
         check_device_script = os.path.join(root, "tools", "check_device.py")
         args = [self.current_selected_backend]
@@ -306,11 +496,11 @@ class AutoConvertPage(QWidget):
         self.append_output("=" * 20)
 
 
-    @pyqtSlot()
-    def on_convert_model_clicked(self):
+    def _start_convert_model(self):
+        """开始转换模型（由按钮管理器调用）"""
         self.append_output(f'\n{"=" * 20}')
         self.append_output(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
-        self.append_output(f"\n开始转换 {self.current_selected_backend} 模型...\n")
+        self.append_output(f"\n开始转换为 {self.current_selected_backend} 模型...\n")
         
         # 准备参数
         args = [self.current_selected_backend]
@@ -319,13 +509,22 @@ class AutoConvertPage(QWidget):
             batch_size = self.batch_size_input.currentText()    
             args.append(str(batch_size))
         
-        # 清理旧进程
+        # 创建新的进程运行器（旧进程会自动被 Qt 清理）
         if self.convert_model_runner is not None:
-            self.convert_model_runner.cleanup()
-        # 创建新的进程运行器
+            try:
+                # 断开旧连接
+                self.convert_model_runner.output_ready.disconnect()
+                self.convert_model_runner.process_finished.disconnect()
+            except:
+                pass
+        
         self.convert_model_runner = ProcessRunner(self)
         self.convert_model_runner.output_ready.connect(self.append_output)
         self.convert_model_runner.process_finished.connect(self.on_convert_model_finished)
+        
+        # 关联进程到按钮管理器
+        self.convert_button_manager.attach_process(self.convert_model_runner)
+        
         # 运行转换脚本
         export_models_script = os.path.join(root, "tools", "export_models.py")
         self.convert_model_runner.run_script(export_models_script, args)
