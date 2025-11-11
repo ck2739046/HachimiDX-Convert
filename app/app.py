@@ -23,6 +23,7 @@ if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
 
 from page_majdata import MajdataPage
+from page_auto_convert import AutoConvertPage
 
 
 # 设置环境变量来禁用Qt多媒体库的调试输出
@@ -442,9 +443,13 @@ class MainWindow(QMainWindow):
             )
             return page
         
-        # # 自动转谱页面
-        # elif title == "Auto Convert":
-        #     pass
+        # 自动转谱页面
+        elif title == "Auto Convert":
+            page = AutoConvertPage(
+                colors=self.colors,
+                parent=self
+            )
+            return page
         
         # 其他页面 - 占位符
         else:
