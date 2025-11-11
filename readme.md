@@ -1,4 +1,4 @@
-# HachimiDX-Convert 🐱
+# <img src="src/icon.ico" width="60px"> HachimiDX-Convert 🐱
 
 **小团体不拉我，拿不到最新最热，所以自己抄谱😡😡😡😭😭😭🤔🤔🤔😋😋😋**
 
