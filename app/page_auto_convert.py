@@ -985,8 +985,8 @@ class AutoConvertPage(QWidget):
             # standardizer 参数
             "video_path": self.selected_video_path,
             "video_mode": self.video_type_combo.currentText(),
-            "start_frame": int(float(video_start) * video_fps),  # 使用实际 FPS 转换为帧数
-            "end_frame": int(float(video_end) * video_fps),
+            "start_frame": int(float(video_start) * video_fps) if float(video_start) >= 0 else -1,  # 使用实际 FPS 转换为帧数
+            "end_frame": int(float(video_end) * video_fps) if float(video_end) >= 0 else -1,        # 使用实际 FPS 转换为帧数
             "target_res": int(self.target_res_input.text()),
             "skip_detect_circle": self.skip_detect_circle_checkbox.isChecked(),
             

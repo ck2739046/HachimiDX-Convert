@@ -8,6 +8,7 @@ import json
 root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
+import time
 
 
 def main():
@@ -185,6 +186,7 @@ def main():
 
     for i, params in enumerate(parameter_sets):
         try:
+            time.sleep(1) # 确保能写上日志
             print(f"\n------------------------------")
             print(f"正在处理第 {i+1} 组参数...\n")
             
