@@ -165,8 +165,8 @@ class ManagedButton:
 
 class ProcessRunner(QProcess):
 
-    output_ready = pyqtSignal(str)       # 输出信号（逐行）
-    process_finished = pyqtSignal(bool)  # 完成信号（成功/失败）
+    output_ready = pyqtSignal(str, bool)  # 输出信号（文本, 是否替换当前行）
+    process_finished = pyqtSignal(bool)   # 完成信号（成功/失败）
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -177,6 +177,8 @@ class ProcessRunner(QProcess):
         self.finished.connect(self._handle_finished)
         # ANSI 转义序列的正则表达式 (例如文字颜色代码)
         self.ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        # 文本缓冲区（用于处理 \r）
+        self.text_buffer = ""
     
     
     def _strip_ansi(self, text):
@@ -198,14 +200,68 @@ class ProcessRunner(QProcess):
                 # 最后使用 UTF-8 with replace（兜底）
                 text = bytes(output).decode('utf-8', errors='replace')
         
-        # 按行发送信号（移除 ANSI 转义序列）
-        for line in text.splitlines():
-            if line.strip():
-                clean_line = self._strip_ansi(line)
-                self.output_ready.emit(clean_line)
+        # 将新文本添加到缓冲区
+        self.text_buffer += text
+        
+        # 处理缓冲区中的文本
+        while True:
+            # 检查是否有换行符
+            if '\n' in self.text_buffer:
+                # 有换行符，处理到换行符为止的内容
+                line, self.text_buffer = self.text_buffer.split('\n', 1)
+                
+                # 处理 \r（回车符）
+                if '\r' in line:
+                    # 有多个 \r 分隔的部分，只保留最后一段
+                    parts = line.split('\r')
+                    final_text = parts[-1]
+                    
+                    # 如果有多个部分，说明之前有进度更新
+                    if len(parts) > 1:
+                        # 先用倒数第二个部分更新进度行（如果存在）
+                        if len(parts) >= 2 and parts[-2].strip():
+                            clean_line = self._strip_ansi(parts[-2])
+                            self.output_ready.emit(clean_line, True)  # 替换进度行
+                    
+                    # 然后追加最终文本作为新行（如果非空）
+                    if final_text.strip():
+                        clean_line = self._strip_ansi(final_text)
+                        self.output_ready.emit(clean_line, False)  # 追加新行，固定这一行
+                    else:
+                        # 即使是空行，也要发送以固定进度行
+                        self.output_ready.emit("", False)
+                else:
+                    # 没有 \r，直接追加
+                    if line.strip():
+                        clean_line = self._strip_ansi(line)
+                        self.output_ready.emit(clean_line, False)  # 追加新行
+                        
+            elif '\r' in self.text_buffer:
+                # 有回车符但没有换行符，说明是进度更新
+                parts = self.text_buffer.split('\r')
+                # 只发送倒数第二个部分（如果有的话）
+                # 因为最后一个部分可能不完整，需要保留在缓冲区
+                if len(parts) >= 2:
+                    # 取倒数第二个部分（这是最新的完整进度）
+                    progress_text = parts[-2]
+                    if progress_text.strip():
+                        clean_line = self._strip_ansi(progress_text)
+                        self.output_ready.emit(clean_line, True)  # True = 替换当前行
+                # 保留最后一部分在缓冲区
+                self.text_buffer = parts[-1]
+                break
+            else:
+                # 没有换行符也没有回车符，等待更多数据
+                break
     
 
     def _handle_finished(self, exit_code, exit_status):
+        # 处理缓冲区中剩余的文本
+        if self.text_buffer.strip():
+            clean_line = self._strip_ansi(self.text_buffer)
+            self.output_ready.emit(clean_line, False)
+            self.text_buffer = ""
+        
         success = (exit_code == 0)
         self.process_finished.emit(success)
     
@@ -290,6 +346,7 @@ class AutoConvertPage(QWidget):
         # 输出区相关变量
         self.output_text_edit = None
         self.max_output_lines = 400  # 最大保留行数
+        self.last_line_is_progress = False  # 标记最后一行是否是进度行（可被替换）
         
         # 设置页面布局
         self.setup_ui()
@@ -1291,8 +1348,33 @@ class AutoConvertPage(QWidget):
         return widget
     
     
-    def append_output(self, text):
-        self.output_text_edit.append(text)
+    def append_output(self, text, replace_last=False):
+        """
+        添加输出文本
+        :param text: 要添加的文本
+        :param replace_last: 是否替换最后一行（用于进度条更新）
+        """
+        if replace_last:
+            # 只在上一行是进度行时才替换
+            if self.last_line_is_progress:
+                # 替换最后一行：移动到文档末尾，选择当前行，删除并插入新文本
+                cursor = self.output_text_edit.textCursor()
+                cursor.movePosition(QTextCursor.MoveOperation.End)
+                cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+                cursor.removeSelectedText()
+                cursor.insertText(text)
+                self.output_text_edit.setTextCursor(cursor)
+            else:
+                # 如果上一行不是进度行，则追加新行
+                self.output_text_edit.append(text)
+            # 标记这一行是进度行
+            self.last_line_is_progress = True
+        else:
+            # 追加新行
+            self.output_text_edit.append(text)
+            # 标记这一行不是进度行
+            self.last_line_is_progress = False
+        
         # 限制最大行数
         document = self.output_text_edit.document()
         if document.blockCount() > self.max_output_lines:
