@@ -1,11 +1,14 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, 
-                             QLabel, QComboBox, QToolTip, QFileDialog, QLineEdit, QCheckBox)
+                             QLabel, QComboBox, QToolTip, QFileDialog, QLineEdit, QCheckBox, QMessageBox)
 from PyQt6.QtCore import pyqtSlot, Qt, QProcess, pyqtSignal, QTimer
 from PyQt6.QtGui import QTextCursor, QCursor, QIntValidator, QDoubleValidator
 import os
 import sys
 import time
 import re
+import json
+import tempfile
+import cv2
 
 root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if root not in sys.path: sys.path.insert(0, root)
@@ -245,6 +248,8 @@ class AutoConvertPage(QWidget):
         # 第一行/第二行控件
         self.backend_combo = None
         self.current_selected_backend = None
+        self.batch_detect_obb_combo = None
+        self.batch_classify_combo = None
         self.env_status_label = None
         self.model_status_label = None
         self.convert_model_button = None
@@ -269,10 +274,12 @@ class AutoConvertPage(QWidget):
         # 进程运行器
         self.check_availability_runner = None
         self.convert_model_runner = None
+        self.auto_convert_runner = None
         
         # 按钮管理器
         self.check_button_manager = None
         self.convert_button_manager = None
+        self.auto_convert_button_manager = None
         
         # 输出区相关变量
         self.output_text_edit = None
@@ -346,6 +353,10 @@ class AutoConvertPage(QWidget):
         divider_line2.setStyleSheet(f"background-color: {self.colors['grey']};")
         divider_layout2.addWidget(divider_line2)
         layout.addWidget(divider_container2)
+        
+        # 第六行：开始自动转换按钮
+        sixth_row = self.setup_6th_row()
+        layout.addWidget(sixth_row)
 
         layout.addStretch()  # 添加弹性空间，使整体靠上对齐
         
@@ -392,6 +403,34 @@ class AutoConvertPage(QWidget):
         check_button.setStyleSheet(f"background-color: {self.colors['accent']};")
         check_button.setFixedSize(80, 25)
         first_row_layout.addWidget(check_button)
+
+                # Label: "batch_detect_obb:"
+        batch_detect_label = QLabel("batch_detect_obb:")
+        batch_detect_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        first_row_layout.addWidget(batch_detect_label)
+        
+        # ComboBox: batch_detect_obb（1-8）
+        self.batch_detect_obb_combo = QComboBox()
+        self.batch_detect_obb_combo.setEditable(False)
+        self.batch_detect_obb_combo.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.batch_detect_obb_combo.setFixedSize(45, 25)
+        self.batch_detect_obb_combo.addItems(["1", "2", "3", "4", "5", "6", "7", "8"])
+        self.batch_detect_obb_combo.setCurrentIndex(1)  # 默认选择2
+        first_row_layout.addWidget(self.batch_detect_obb_combo)
+        
+        # Label: "batch_classify:"
+        batch_classify_label = QLabel("batch_classify:")
+        batch_classify_label.setStyleSheet(f"color: {self.colors['text_primary']}; font-size: 13px;")
+        first_row_layout.addWidget(batch_classify_label)
+        
+        # ComboBox: batch_classify（1,2,4,8,16,32）
+        self.batch_classify_combo = QComboBox()
+        self.batch_classify_combo.setEditable(False)
+        self.batch_classify_combo.setStyleSheet(f"background-color: {self.colors['grey']}; padding-left: 8px;")
+        self.batch_classify_combo.setFixedSize(45, 25)
+        self.batch_classify_combo.addItems(["1", "2", "4", "8", "16", "32"])
+        self.batch_classify_combo.setCurrentIndex(4)  # 默认选择16
+        first_row_layout.addWidget(self.batch_classify_combo)
         
         # 创建按钮管理器
         self.check_button_manager = ManagedButton(
@@ -807,6 +846,41 @@ class AutoConvertPage(QWidget):
         
         return fifth_row
     
+    
+    def setup_6th_row(self):
+        """第六行：开始自动转换按钮"""
+        sixth_row = QWidget()
+        sixth_row_layout = QHBoxLayout(sixth_row)
+        sixth_row_layout.setContentsMargins(0, 0, 0, 0)
+        sixth_row_layout.setSpacing(5)
+        
+        # 大按钮: "Start Auto Convert!"
+        start_button = QPushButton("Start Auto Convert!")
+        start_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self.colors['accent']};
+                font-size: 16px;
+                font-weight: bold;
+                padding: 10px 20px;
+            }}
+        """)
+        start_button.setFixedSize(200, 50)
+        sixth_row_layout.addWidget(start_button)
+        
+        # 创建按钮管理器
+        self.auto_convert_button_manager = ManagedButton(
+            start_button,
+            "Start Auto Convert!",
+            self.colors['accent']
+        )
+        self.auto_convert_button_manager.set_callbacks(
+            start_callback=self._start_auto_convert
+        )
+        
+        sixth_row_layout.addStretch()  # 添加弹性空间
+        
+        return sixth_row
+    
 
     # debug
     # ----------------------------------------------------------------------
@@ -824,6 +898,155 @@ class AutoConvertPage(QWidget):
             if selected_files:
                 self.selected_video_path = selected_files[0]
                 self.video_path_label.setText(self.selected_video_path)
+    
+    
+    # debug
+    # ----------------------------------------------------------------------
+    # 第六行 事件处理
+    
+    def _start_auto_convert(self):
+        """开始自动转换（由按钮管理器调用）"""
+        # 验证必填参数
+        if not self.selected_video_path:
+            QMessageBox.warning(self, "参数错误", "请先选择谱面视频文件")
+            self.auto_convert_button_manager.reset()
+            return
+        
+        video_name = self.video_name_input.text().strip()
+        if not video_name:
+            QMessageBox.warning(self, "参数错误", "请输入歌曲名称")
+            self.auto_convert_button_manager.reset()
+            return
+        
+        bpm = self.bpm_input.text().strip()
+        if not bpm:
+            QMessageBox.warning(self, "参数错误", "请输入歌曲 BPM")
+            self.auto_convert_button_manager.reset()
+            return
+        
+        video_start = self.video_start_input.text().strip()
+        if not video_start:
+            QMessageBox.warning(self, "参数错误", "请输入歌曲起始时间")
+            self.auto_convert_button_manager.reset()
+            return
+        
+        video_end = self.video_end_input.text().strip()
+        if not video_end:
+            QMessageBox.warning(self, "参数错误", "请输入歌曲结束时间")
+            self.auto_convert_button_manager.reset()
+            return
+        
+        # 使用 OpenCV 获取视频的实际 FPS
+        try:
+            cap = cv2.VideoCapture(self.selected_video_path)
+            if not cap.isOpened():
+                QMessageBox.warning(self, "视频错误", "无法打开视频文件")
+                self.auto_convert_button_manager.reset()
+                return
+            video_fps = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
+            if video_fps <= 0:
+                QMessageBox.warning(self, "视频错误", "无法获取视频 FPS 信息")
+                self.auto_convert_button_manager.reset()
+                return
+            self.append_output(f"检测到视频 FPS: {video_fps}")
+        except Exception as e:
+            QMessageBox.warning(self, "视频错误", f"读取视频 FPS 失败: {str(e)}")
+            self.auto_convert_button_manager.reset()
+            return
+        
+        # 根据后端选择模型路径和推理设备
+        backend = self.backend_combo.currentText()
+        if backend == "TensorRT":
+            model_paths = {
+                "detect": tools.path_config.detect_engine,
+                "obb": tools.path_config.obb_pt,
+                "cls_break": tools.path_config.cls_break_pt,
+                "cls_ex": tools.path_config.cls_ex_pt
+            }
+            inference_device = "0"
+        else:  # DirectML
+            model_paths = {
+                "detect": tools.path_config.detect_onnx,
+                "obb": tools.path_config.obb_onnx,
+                "cls_break": tools.path_config.cls_break_onnx,
+                "cls_ex": tools.path_config.cls_ex_onnx
+            }
+            inference_device = "NONE"
+        
+        # 收集所有参数
+        params = {
+            # standardizer 参数
+            "video_path": self.selected_video_path,
+            "video_mode": self.video_type_combo.currentText(),
+            "start_frame": int(float(video_start) * video_fps),  # 使用实际 FPS 转换为帧数
+            "end_frame": int(float(video_end) * video_fps),
+            "target_res": int(self.target_res_input.text()),
+            "skip_detect_circle": self.skip_detect_circle_checkbox.isChecked(),
+            
+            # note-detector 参数
+            "video_name": video_name,
+            "batch_detect": int(self.batch_detect_obb_combo.currentText()),
+            "batch_cls": int(self.batch_classify_combo.currentText()),
+            "inference_device": inference_device,
+            "detect_model": model_paths["detect"],
+            "obb_model": model_paths["obb"],
+            "cls_ex_model": model_paths["cls_ex"],
+            "cls_break_model": model_paths["cls_break"],
+            "skip_detect": self.skip_detect_checkbox.isChecked(),
+            "skip_classify": self.skip_classify_checkbox.isChecked(),
+            
+            # note_analyzer 参数
+            "bpm": float(bpm),
+            "chart_lv": int(self.chart_lv_combo.currentText()),
+            "base_denominator": int(self.base_denominator_combo.currentText())
+        }
+        
+        # 输出日志
+        self.append_output(f'\n{"=" * 20}')
+        self.append_output(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        self.append_output(f"\n开始自动转换: {video_name}\n")
+        self.append_output(f"视频路径: {self.selected_video_path}")
+        self.append_output(f"BPM: {bpm}")
+        self.append_output(f"歌曲范围: {video_start}s -> {video_end}s")
+        self.append_output(f"谱面难度: {self.chart_lv_combo.currentText()}")
+        self.append_output("")
+        
+        # 创建临时 JSON 文件保存参数
+        temp_json = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8')
+        json.dump(params, temp_json, ensure_ascii=False, indent=2)
+        temp_json_path = temp_json.name
+        temp_json.close()
+        
+        # 创建新的进程运行器
+        if self.auto_convert_runner is not None:
+            try:
+                self.auto_convert_runner.output_ready.disconnect()
+                self.auto_convert_runner.process_finished.disconnect()
+            except:
+                pass
+        
+        self.auto_convert_runner = ProcessRunner(self)
+        self.auto_convert_runner.output_ready.connect(self.append_output)
+        self.auto_convert_runner.process_finished.connect(self.on_auto_convert_finished)
+        
+        # 关联进程到按钮管理器
+        self.auto_convert_button_manager.attach_process(self.auto_convert_runner)
+        
+        # 运行 All_in_one.py
+        all_in_one_script = os.path.join(root, "convert_core", "All_in_one.py")
+        args = [temp_json_path]
+        self.auto_convert_runner.run_script(all_in_one_script, args)
+    
+    
+    @pyqtSlot(bool)
+    def on_auto_convert_finished(self, success):
+        if success:
+            self.append_output("\n✓ 自动转换完成")
+            self.append_output("=" * 20)
+        else:
+            self.append_output("\n✗ 自动转换失败")
+            self.append_output("=" * 20)
     
     
     # debug
