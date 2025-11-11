@@ -185,12 +185,18 @@ class ProcessRunner(QProcess):
 
     def _handle_output(self):
         output = self.readAllStandardOutput()
+        text = None
+        
+        # 先尝试 UTF-8 编码（Python 脚本默认输出）
         try:
-            # 先尝试 GBK 编码（Windows 控制台默认）
-            text = bytes(output).decode('gbk', errors='replace')
-        except:
-            # 失败则使用 UTF-8
-            text = bytes(output).decode('utf-8', errors='replace')
+            text = bytes(output).decode('utf-8', errors='strict')
+        except UnicodeDecodeError:
+            # 失败则尝试 GBK（Windows 控制台默认）
+            try:
+                text = bytes(output).decode('gbk', errors='strict')
+            except:
+                # 最后使用 UTF-8 with replace（兜底）
+                text = bytes(output).decode('utf-8', errors='replace')
         
         # 按行发送信号（移除 ANSI 转义序列）
         for line in text.splitlines():
@@ -1301,7 +1307,7 @@ class AutoConvertPage(QWidget):
                 cursor.deleteChar()  # 删除换行符
         
         # 自动滚动到底部
-        self.output_text_edit.moveCursor(QTextCursor.MoveOperation.End)
+        # self.output_text_edit.moveCursor(QTextCursor.MoveOperation.End)
     
     
     def clear_output(self):
