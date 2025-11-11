@@ -17,9 +17,12 @@ import psutil
 import cv2
 import ctypes
 from ctypes import wintypes
+
 root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
+
+from page_majdata import MajdataPage
 
 
 # 设置环境变量来禁用Qt多媒体库的调试输出
@@ -234,17 +237,20 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        # 配色方案变量
-        self.color_bg = "#303030"
-        self.color_grey = "#454545"
-        self.color_surface = "#17203D"
-        self.color_surface_hover = "#212C47"
-        self.color_text_primary = "#E8E8E8"
-        self.color_text_secondary = "#8D99AE"
-        self.color_accent = "#3A86FF"
+        # 配色方案
+        self.colors = {
+            'bg': "#303030",
+            'grey': "#454545",
+            'surface': "#17203D",
+            'surface_hover': "#212C47",
+            'text_primary': "#E8E8E8",
+            'text_secondary': "#8D99AE",
+            'accent': "#3A86FF"
+        }
 
         # 重要变量
         self.all_songs_folder = os.path.abspath(tools.path_config.final_data_output_dir)
+        self.majdata_control_txt = os.path.abspath(tools.path_config.majdata_control_txt)
 
         # 视频播放器变量
         self.media_player = None
@@ -260,25 +266,18 @@ class MainWindow(QMainWindow):
         self.nav_buttons = []          # 4个导航按钮列表
         self.inactive_button_style = f"""
             QPushButton {{
-                background-color: {self.color_surface}; color: {self.color_text_secondary};
+                background-color: {self.colors['surface']}; color: {self.colors['text_secondary']};
                 border: none; font-size: 14px; font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {self.color_surface_hover};
+                background-color: {self.colors['surface_hover']};
             }}"""
         self.active_button_style = f"""
             QPushButton {{
-                background-color: {self.color_accent}; color: {self.color_text_primary};
+                background-color: {self.colors['accent']}; color: {self.colors['text_primary']};
                 border: none; font-size: 14px; font-weight: bold;
             }}"""
         
-        # majdata tab 页面变量
-        self.majdata_control_txt = os.path.abspath(tools.path_config.majdata_control_txt)
-        self.majdata_song_input = None
-        self.majdata_maidata_choose = None
-        self.majdata_track_choose = None
-        self.majdata_video_choose = None
-        self.majdata_last_selection = "" # folder_input用的，记录上次选择的歌曲
 
         # 程序初始化
         majdata_working_dir = os.path.abspath(tools.path_config.majdata_dir)
@@ -400,7 +399,7 @@ class MainWindow(QMainWindow):
         
         # 右侧内容区域
         tab_content_area = QWidget()
-        tab_content_area.setStyleSheet(f"background-color: {self.color_bg};")
+        tab_content_area.setStyleSheet(f"background-color: {self.colors['bg']};")
         tab_content_layout = QVBoxLayout(tab_content_area)
         tab_content_layout.setContentsMargins(0, 0, 0, 0)
         tab_content_layout.setSpacing(0)
@@ -430,97 +429,34 @@ class MainWindow(QMainWindow):
     # ----------------------------------------------------------------------
     # 创建各个标签页
     def setup_tab_content_pages(self, title):
-
-        # def show_window_size():
-        #     # 获取原始窗口尺寸 (通过ctypes)
-        #     user32 = ctypes.windll.user32
-        #     rect = wintypes.RECT()
-        #     user32.GetWindowRect(self.Majdata_Edit_Handler.exe_hwnd, ctypes.byref(rect))
-        #     window_width = rect.right - rect.left
-        #     window_height = rect.bottom - rect.top
-        #     print(f"MajdataEdit original size: {window_width}x{window_height}")
-        #     # 获取嵌入窗口尺寸
-        #     embedded_width = MajdataEdit_widget.width()
-        #     embedded_height = MajdataEdit_widget.height()
-        #     print(f"MajdataEdit embedded size: {embedded_width}x{embedded_height}")
-
-
-        # MajdataEdit页面
+        # MajdataEdit 页面
         if title == "MajdataEdit":
-            page = QWidget()
-            page_layout = QVBoxLayout(page)
-            page_layout.setContentsMargins(0, 0, 0, 0)
-            page_layout.setSpacing(0)
-            # 上面是选择文件区域
-            majdata_control_panel_widget = self.setup_Majdata_Control_Panel()
-            page_layout.addWidget(majdata_control_panel_widget)
-            # 下面嵌入MajdataEdit窗口
-            MajdataEdit_window = QWindow.fromWinId(self.Majdata_Edit_Handler.exe_hwnd)
-            MajdataEdit_widget = self.createWindowContainer(MajdataEdit_window, self)
-            page_layout.addWidget(MajdataEdit_widget)
-
-
-
+            page = MajdataPage(
+                majdata_edit_handler=self.Majdata_Edit_Handler,
+                media_player=self.media_player,
+                all_songs_folder=self.all_songs_folder,
+                majdata_control_txt=self.majdata_control_txt,
+                colors=self.colors,
+                folder_combobox_class=FolderComboBox,
+                parent=self
+            )
+            return page
+        
         # # 自动转谱页面
         # elif title == "Auto Convert":
         #     pass
-
         
+        # 其他页面 - 占位符
         else:
             page = QWidget()
-            page.setStyleSheet(f"background-color: {self.color_bg}; border-radius: 5px; margin: 8px;")
+            page.setStyleSheet(f"background-color: {self.colors['bg']}; border-radius: 5px; margin: 8px;")
             page_layout = QVBoxLayout(page)
             page_label = QLabel(f"{title} 内容区域")
             page_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             page_label.setStyleSheet("color: #E0E0E0; font-size: 18px; padding: 20px;")
             page_layout.addWidget(page_label)
-        return page
+            return page
     
-
-    def setup_Majdata_Control_Panel(self):
-
-        widget = QWidget()
-        widget.setFixedHeight(40)
-        widget.setStyleSheet(f"background-color: {self.color_text_secondary};")
-        layout = QHBoxLayout(widget)
-        # folder editable combobox
-        self.majdata_song_input = FolderComboBox(self.all_songs_folder)
-        self.majdata_song_input.setStyleSheet(f"background-color: {self.color_grey};")
-        self.majdata_song_input.setEditable(True)
-        self.majdata_song_input.setFixedSize(200, 25)
-        self.majdata_song_input.currentTextChanged.connect(self.on_majdata_song_changed)
-        layout.addWidget(self.majdata_song_input)
-        # Maidata choose
-        self.majdata_maidata_choose = QComboBox()
-        self.majdata_maidata_choose.setStyleSheet(f"background-color: {self.color_grey}; \
-                                                    padding-left: 8px;")
-        self.majdata_maidata_choose.setFixedSize(150, 25)
-        layout.addWidget(self.majdata_maidata_choose)
-        # Track choose
-        self.majdata_track_choose = QComboBox()
-        self.majdata_track_choose.setStyleSheet(f"background-color: {self.color_grey}; \
-                                                  padding-left: 8px;")
-        self.majdata_track_choose.setFixedSize(150, 25)
-        layout.addWidget(self.majdata_track_choose)
-        # Video choose
-        self.majdata_video_choose = QComboBox()
-        self.majdata_video_choose.setStyleSheet(f"background-color: {self.color_grey}; \
-                                                  padding-left: 8px;")
-        self.majdata_video_choose.setFixedSize(230, 25)
-        layout.addWidget(self.majdata_video_choose)
-        # Load button
-        load_button = QPushButton("Load")
-        load_button.setStyleSheet(f"background-color: {self.color_grey};")
-        load_button.setFixedSize(60, 25)
-        load_button.clicked.connect(self.on_majdata_load_clicked)
-        layout.addWidget(load_button)
-
-        return widget
-
-
-        
-
-
 
     # debug
     # ----------------------------------------------------------------------
@@ -581,73 +517,6 @@ class MainWindow(QMainWindow):
         # except Exception as e:
         #     print(f"Error getting video FPS: {e}")
 
-
-    # Majdata song changed
-    @pyqtSlot()
-    def on_majdata_song_changed(self):
-        # Check song
-        song = self.majdata_song_input.currentText()
-        if not song or song == "---" or song == self.majdata_last_selection:
-            return
-        song_path = os.path.join(self.all_songs_folder, song)
-        if not os.path.exists(song_path):
-            return
-        # Update last selection
-        self.majdata_last_selection = song
-        # Clear combobox
-        self.majdata_maidata_choose.clear()
-        self.majdata_track_choose.clear()
-        self.majdata_video_choose.clear()
-        # Add all txt files to maidata_choose
-        txt_files = [f for f in os.listdir(song_path)
-                     if f.lower().endswith('.txt') and
-                     f.lower() not in ('track_result.txt', 'detect_result.txt')]
-        self.majdata_maidata_choose.addItems(sorted(txt_files))
-        # 如果第一个选项中以'.bak.txt'结尾，不要选择这个，而是选择下一个
-        if txt_files and txt_files[0].lower().endswith('.bak.txt') and len(txt_files) > 1:
-            self.majdata_maidata_choose.setCurrentIndex(1)
-        else:
-            self.majdata_maidata_choose.setCurrentIndex(0)
-
-        # Add all mp3/ogg files to track_choose
-        audio_files = [f for f in os.listdir(song_path) if f.lower().endswith(('.mp3', '.ogg'))]
-        self.majdata_track_choose.addItems(sorted(audio_files))
-        self.majdata_track_choose.setCurrentIndex(0)
-        # Add all mp4/mkv files to video_choose
-        video_files = [f for f in os.listdir(song_path) if f.lower().endswith(('.mp4', '.mkv'))]
-        self.majdata_video_choose.addItems(sorted(video_files))
-        self.majdata_video_choose.setCurrentIndex(0)
-
-
-    # Open selected items in MajdataEdit
-    @pyqtSlot()
-    def on_majdata_load_clicked(self):
-        # get selected items
-        selected_song = self.majdata_song_input.currentText()
-        selected_maidata = self.majdata_maidata_choose.currentText()
-        selected_track = self.majdata_track_choose.currentText()
-        if not selected_song or not selected_maidata or not selected_track:
-            return
-        # reset video player
-        self.media_player.stop()
-        self.media_player.setSource(QUrl())
-        # Create a control txt for MajdataEdit
-        song_path = os.path.join(self.all_songs_folder, selected_song)
-        control_txt = f"folder: {song_path}\nmaidata: {selected_maidata}\ntrack: {selected_track}"
-        try:
-            with open(self.majdata_control_txt, 'w', encoding='utf-8') as f:
-                f.write(control_txt)
-            print("Wrote MajdataEdit control file:")
-            print(control_txt)
-        except Exception as e:
-            print(f"Error writing to MajdataEdit control file: {e}")
-            return
-        # Load video to media player
-        selected_video = self.majdata_video_choose.currentText()
-        if not selected_video: return
-        video_path = os.path.join(song_path, selected_video)
-        self.media_player.setSource(QUrl.fromLocalFile(video_path))
-        self.media_player.pause()
 
 
 
