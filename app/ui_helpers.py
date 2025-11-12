@@ -12,14 +12,20 @@ from PyQt6.QtWidgets import QToolTip
 # 配色方案
 COLORS = {
     'bg': "#303030",
-    'grey': "#454545",
-    'surface': "#17203D",
-    'surface_hover': "#212C47",
     'text_primary': "#E8E8E8",
     'text_secondary': "#8D99AE",
+
+    'grey': "#454545",
+    'grey_hover': "#505050",
+
+    'surface': "#17203D",
+    'surface_hover': "#212C47",
+    
     'accent': "#3A86FF",
     'accent_hover': "#4794FF",
+
     'stop': "#DC3545",
+    'stop_hover': "#E04A5A",
 }
 
 
@@ -88,12 +94,12 @@ def create_label(text):
     return label
 
 
-def create_line_edit(length, validator=None, placeholder=None):
+def create_line_edit(length=None, validator=None, placeholder=None):
     """
     创建文本输入框
     
     Args:
-        length: 宽度（像素）
+        length: 宽度（像素），默认为None
         validator: 输入验证器（QValidator），默认为None
         placeholder: 占位符文本，默认为None
     
@@ -102,8 +108,11 @@ def create_line_edit(length, validator=None, placeholder=None):
     """
     line_edit = QLineEdit()
     line_edit.setStyleSheet(f"background-color: {COLORS['grey']}; padding-left: 8px;")
-    line_edit.setFixedSize(length, 25)
-    
+    if length:
+        line_edit.setFixedSize(length, 25)
+    else:
+        line_edit.setFixedHeight(25)
+
     if validator:
         line_edit.setValidator(validator)
     
@@ -126,8 +135,14 @@ def create_check_box():
         QCheckBox::indicator:checked {{
             background-color: {COLORS['accent']};
         }}
+        QCheckBox::indicator:checked:hover {{
+            background-color: {COLORS['accent_hover']};
+        }}
         QCheckBox::indicator:unchecked {{
                 background-color: {COLORS['grey']};
+        }}
+        QCheckBox::indicator:unchecked:hover {{
+            background-color: {COLORS['grey_hover']};
         }}
     """)
     return checkbox

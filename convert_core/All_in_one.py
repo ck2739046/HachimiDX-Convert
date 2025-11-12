@@ -58,6 +58,7 @@ def main():
         cls_break_model = params["cls_break_model"]
         skip_detect = params.get("skip_detect", False)
         skip_classify = params.get("skip_classify", False)
+        skip_export_tracked_video = params.get("skip_export_tracked_video", False)
 
         # note_analyzer 参数
         bpm = params["bpm"]
@@ -86,6 +87,7 @@ def main():
         print(f"  model cls_break: {cls_break_model}")
         print(f"  skip_detect: {skip_detect}")
         print(f"  skip_classify: {skip_classify}")
+        print(f"  skip_export_tracked_video: {skip_export_tracked_video}")
         
         print("\nNoteAnalyzer")
         print(f"  BPM: {bpm}")
@@ -120,7 +122,7 @@ def main():
             cls_break_model,
             skip_detect=skip_detect,
             skip_cls=skip_classify,
-            skip_export_tracked_video=False
+            skip_export_tracked_video=skip_export_tracked_video
         )
 
         note_analyzer.main(

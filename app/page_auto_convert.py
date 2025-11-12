@@ -24,12 +24,10 @@ class AutoConvertPage(QWidget):
 
         self.colors = ui_helpers.COLORS
         
-        # 第一行/第二行 模型区域
+        # 第一行 模型管理
         self.backend_combo = None
         self.current_selected_backend = None # backend_combo.currentText()备份
-        self.batch_detect_obb_combo = None # 自动转谱运行的时候用的
-        self.batch_classify_combo = None   # 自动转谱运行的时候用的
-
+        # 第二行 模型管理
         self.env_status_label = None
         self.model_status_label = None
         self.batch_size_label = None
@@ -37,26 +35,38 @@ class AutoConvertPage(QWidget):
         self.workspace_label = None
         self.workspace_combo = None
         
-        # 第三行/第四行/第五行 自动转谱参数区域
+        # 第三行 Standardizer 配置
         self.video_path_label = None
         self.selected_video_path = None
-        self.video_name_input = None
-
+        # 第四行 Standardizer 配置
         self.video_type_combo = None
-        self.bpm_input = None
         self.video_start_input = None
         self.video_end_input = None
-
-        self.chart_lv_combo = None
-        self.base_denominator_combo = None
         self.skip_detect_circle_checkbox = None
+
+        # 第五行 NoteDetector 配置
+        self.video_name_input = None
+        # 第六行 NoteDetector 配置
+        self.batch_detect_obb_combo = None
+        self.batch_classify_combo = None
         self.skip_detect_checkbox = None
         self.skip_classify_checkbox = None
+        self.skip_export_tracked_video_checkbox = None
+        
+        # 第七行 NoteAnalyzer 配置
+        self.bpm_input = None
+        self.chart_lv_combo = None
+        self.base_denominator_combo = None
+
+        # 第八行 模块管理
+        self.enable_standardizer_checkbox = None
+        self.enable_note_detector_checkbox = None
+        self.enable_note_analyzer_checkbox = None
 
         # 进程控制按钮
-        self.check_availability_button = None
-        self.convert_model_button = None
-        self.auto_convert_button = None
+        self.check_availability_button = None # 第一行
+        self.convert_model_button = None      # 第二行
+        self.auto_convert_button = None       # 第八行
         # 输出区组件
         self.output_widget = None
         
@@ -85,16 +95,16 @@ class AutoConvertPage(QWidget):
 
     # debug
     def create_config_area(self):
+
         widget = QWidget()
-        widget.setFixedHeight(340)  # 固定高度
+        widget.setFixedHeight(396)  # 固定高度，与左下角模块对齐
         widget.setStyleSheet(f"background-color: {self.colors['bg']};")
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(5)
         
-
-        # 标题分隔线：模型
-        layout.addWidget(ui_helpers.create_divider("模型"))
+        # 标题分隔线：模型管理
+        layout.addWidget(ui_helpers.create_divider("模型管理"))
         # 第一行：模型推理后端选择
         first_row = self.setup_1st_row()
         layout.addWidget(first_row)
@@ -102,155 +112,142 @@ class AutoConvertPage(QWidget):
         second_row = self.setup_2nd_row()
         layout.addWidget(second_row)
         
-        # 标题分隔线：自动转谱
-        layout.addWidget(ui_helpers.create_divider("自动转谱"))
+        # 标题分隔线：Standardize Video
+        layout.addWidget(ui_helpers.create_divider("视频标准化"))
         # 第三行：选择谱面视频
         third_row = self.setup_3rd_row()
         layout.addWidget(third_row)
-        
-        # 第四行：视频参数设置
+        # 第四行：Standardizer 配置
         fourth_row = self.setup_4th_row()
         layout.addWidget(fourth_row)
         
-        # 第五行：高级参数设置
+        # 标题分隔线：Note Detection
+        layout.addWidget(ui_helpers.create_divider("音符识别"))
+        # 第五行: 输入歌曲名称
         fifth_row = self.setup_5th_row()
         layout.addWidget(fifth_row)
-
-        # 标题分隔线：开始转谱
-        layout.addWidget(ui_helpers.create_divider("开始转谱"))
-
-        # 第六行：开始转谱
+        # 第六行: NoteDetector 配置
         sixth_row = self.setup_6th_row()
         layout.addWidget(sixth_row)
 
-        layout.addStretch()  # 添加弹性空间，使整体靠上对齐
-        
+        # 标题分隔线：Note Analyze
+        layout.addWidget(ui_helpers.create_divider("音符分析"))
+        # 第七行: NoteAnalyzer 配置
+        seventh_row = self.setup_7th_row()
+        layout.addWidget(seventh_row)
+
+        # 标题分隔线：开始转谱
+        layout.addWidget(ui_helpers.create_divider("开始转谱"))
+        # 第八行：模块管理 + 开始按钮
+        eighth_row = self.setup_8th_row()
+        layout.addWidget(eighth_row)
+
+        layout.addStretch()  # 添加弹性空间
         return widget
     
     
 
     def setup_1st_row(self):
 
-        first_row = QWidget()
-        first_row_layout = QHBoxLayout(first_row)
-        first_row_layout.setContentsMargins(0, 0, 0, 0)
-        first_row_layout.setSpacing(5)
-        
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
+
         # Label_ComboBox_Helper 模型推理后端
         backend_label = ui_helpers.create_label("模型推理后端:")
-        first_row_layout.addWidget(backend_label)
+        row_layout.addWidget(backend_label)
         self.backend_combo = ui_helpers.create_combo_box(90, ["TensorRT", "DirectML"])
-        first_row_layout.addWidget(self.backend_combo)
+        row_layout.addWidget(self.backend_combo)
         help_label = ui_helpers.create_help_icon(
-            "TensorRT: 适用于 NVIDIA GPU\nDirectML: 适用于 AMD/Intel/Other GPU")
-        first_row_layout.addWidget(help_label)
-        
+            "TensorRT: 适用于 NVIDIA GPU (推荐)\nDirectML: 适用于 AMD/Intel/Other GPU")
+        row_layout.addWidget(help_label)
+
         # check_availability button
         self.check_availability_button = ProcessControlButton("检查可用性")
         self.check_availability_button.setFixedSize(80, 25)
-        first_row_layout.addWidget(self.check_availability_button)
+        row_layout.addWidget(self.check_availability_button)
 
-        # Label_ComboBox batch_detect_obb(1-8)
-        batch_detect_label = ui_helpers.create_label("batch_detect_obb:")
-        first_row_layout.addWidget(batch_detect_label)
-        self.batch_detect_obb_combo = ui_helpers.create_combo_box(
-            45, ["1", "2", "3", "4", "5", "6", "7", "8"], default_index=1)
-        first_row_layout.addWidget(self.batch_detect_obb_combo)
-        
-        # Label_ComboBox batch_classify(1,2,4,8,16,32)
-        batch_classify_label = ui_helpers.create_label("batch_classify:")
-        first_row_layout.addWidget(batch_classify_label)
-        self.batch_classify_combo = ui_helpers.create_combo_box(
-            45, ["1", "2", "4", "8", "16", "32"], default_index=4)
-        first_row_layout.addWidget(self.batch_classify_combo)
-
-        # Helper 解释这两个 batch 的作用
-        batch_help = ui_helpers.create_help_icon("batch_detect_obb: 用于目标检测模型运行时的批处理大小\nbatch_classify: 用于图像分类模型运行时的批处理大小")
-        first_row_layout.addWidget(batch_help)
-        
-        first_row_layout.addStretch()  # 添加弹性空间
-        return first_row
-    
+        row_layout.addStretch()  # 添加弹性空间
+        return row
 
     
+
     def setup_2nd_row(self):
 
-        second_row = QWidget()
-        second_row_layout = QHBoxLayout(second_row)
-        second_row_layout.setContentsMargins(0, 0, 0, 0)
-        second_row_layout.setSpacing(5)
-        
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
+
         # Label: 运行环境状态
         self.env_status_label = ui_helpers.create_label("运行环境待检测⚪")
-        second_row_layout.addWidget(self.env_status_label)
-        
+        row_layout.addWidget(self.env_status_label)
+
         # Label: 模型状态
         self.model_status_label = ui_helpers.create_label("模型文件待检测⚪")
-        second_row_layout.addWidget(self.model_status_label)
+        row_layout.addWidget(self.model_status_label)
 
         # 按钮: "转换模型"（默认隐藏）
         self.convert_model_button = ProcessControlButton("转换模型")
         self.convert_model_button.setFixedSize(80, 25)
         self.convert_model_button.hide()
-        second_row_layout.addWidget(self.convert_model_button)
+        row_layout.addWidget(self.convert_model_button)
         
         # Label_ComboBox Batch_size（默认隐藏）
         self.batch_size_label = ui_helpers.create_label("batch:")
         self.batch_size_label.hide()
-        second_row_layout.addWidget(self.batch_size_label)
+        row_layout.addWidget(self.batch_size_label)
         self.batch_size_combo = ui_helpers.create_combo_box(
             35, ["1", "2", "3", "4", "5", "6", "7", "8"])
         self.batch_size_combo.hide()
-        second_row_layout.addWidget(self.batch_size_combo)
-        
+        row_layout.addWidget(self.batch_size_combo)
+
         # Label_ComboBox: Workspace（默认隐藏）
         self.workspace_label = ui_helpers.create_label("workspace:")
         self.workspace_label.hide()
-        second_row_layout.addWidget(self.workspace_label)
+        row_layout.addWidget(self.workspace_label)
         self.workspace_combo = ui_helpers.create_combo_box(
             65, ["auto", "1", "2", "3", "4", "5", "6", "7", "8"])
         self.workspace_combo.hide()
-        second_row_layout.addWidget(self.workspace_combo)
-        
-        second_row_layout.addStretch()  # 添加弹性空间，使控件靠左对齐
-        return second_row
-    
+        row_layout.addWidget(self.workspace_combo)
+
+        row_layout.addStretch()  # 添加弹性空间
+        return row
+
 
     
     def setup_3rd_row(self):
 
-        third_row = QWidget()
-        third_row_layout = QHBoxLayout(third_row)
-        third_row_layout.setContentsMargins(0, 0, 0, 0)
-        third_row_layout.setSpacing(5)
-        
-        # 按钮: "选择谱面视频"
-        select_video_button = QPushButton("选择谱面视频")
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
+
+        # 按钮: "选择谱面确认视频"
+        select_video_button = QPushButton("选择谱面确认视频")
         select_video_button.setStyleSheet(f'''
             QPushButton {{
                 background-color: {self.colors['accent']};
             }}QPushButton:hover {{
                 background-color: {self.colors['accent_hover']};
             }}''')
-        select_video_button.setFixedSize(100, 25)
+        select_video_button.setFixedSize(120, 25)
         select_video_button.clicked.connect(self._on_select_video)
-        third_row_layout.addWidget(select_video_button)
-        
-        # 输入框: 视频名称
-        self.video_name_input = ui_helpers.create_line_edit(300, placeholder="歌曲名称")
-        third_row_layout.addWidget(self.video_name_input)
+        row_layout.addWidget(select_video_button)
 
-        # Label: 显示选择的视频路径 (只读，但是允许用户复制)
+        # LineEdit: 显示选择的视频路径
         self.video_path_label = QLineEdit("")
-        self.video_path_label.setStyleSheet(f"background-color: {self.colors['grey']}; font-size: 13px;")
-        self.video_path_label.setReadOnly(True)
-        self.video_path_label.setFixedHeight(25)
-        self.video_path_label.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
-        third_row_layout.addWidget(self.video_path_label)
+        self.video_path_label.setStyleSheet(f"color: {self.colors['text_secondary']}; font-size: 13px;")
+        self.video_path_label.setReadOnly(True)  # 只读
+        self.video_path_label.setFixedHeight(25) # 非固定宽度
+        self.video_path_label.setCursor(QCursor(Qt.CursorShape.IBeamCursor)) # 设置为 I-beam 光标
+        self.video_path_label.setFrame(False)    # 移除默认边框
+        row_layout.addWidget(self.video_path_label)
 
-        # third_row_layout.addStretch()  # 添加弹性空间
-        return third_row
-    
+        # row_layout.addStretch()  # 添加弹性空间
+        return row
+
 
 
     def _on_select_video(self):
@@ -268,124 +265,184 @@ class AutoConvertPage(QWidget):
     
     def setup_4th_row(self):
 
-        fourth_row = QWidget()
-        fourth_row_layout = QHBoxLayout(fourth_row)
-        fourth_row_layout.setContentsMargins(0, 0, 0, 0)
-        fourth_row_layout.setSpacing(5)
-        
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
+
         # Label_ComboBox_Helper 视频形式
         video_type_label = ui_helpers.create_label("视频形式:")
-        fourth_row_layout.addWidget(video_type_label)
+        row_layout.addWidget(video_type_label)
         self.video_type_combo = ui_helpers.create_combo_box(120, ["source video", "camera footage"])
-        fourth_row_layout.addWidget(self.video_type_combo)
+        row_layout.addWidget(self.video_type_combo)
         video_type_help = ui_helpers.create_help_icon("source video: 游戏原生画面\ncamera footage: 相机拍屏幕")
-        fourth_row_layout.addWidget(video_type_help)
-        
+        row_layout.addWidget(video_type_help)
+
         # Label_LineEdit_Helper 歌曲范围
-        video_range_label = ui_helpers.create_label("歌曲范围:")
-        fourth_row_layout.addWidget(video_range_label)
+        video_range_label = ui_helpers.create_label("歌曲范围(秒):")
+        row_layout.addWidget(video_range_label)
 
         start_validator = QDoubleValidator(-1.0, 999.0, 3, self) # -1_999的浮点数
-        self.video_start_input = ui_helpers.create_line_edit(70, validator=start_validator, placeholder="0~999/-1")
-        fourth_row_layout.addWidget(self.video_start_input)
+        self.video_start_input = ui_helpers.create_line_edit(80, validator=start_validator, placeholder="0~999/-1")
+        row_layout.addWidget(self.video_start_input)
 
         arrow_label = ui_helpers.create_label("->")
-        fourth_row_layout.addWidget(arrow_label)
+        row_layout.addWidget(arrow_label)
 
         end_validator = QDoubleValidator(-1.0, 999.0, 3, self) # -1_999的浮点数
-        self.video_end_input = ui_helpers.create_line_edit(70, validator=end_validator, placeholder="0~999/-1")
-        fourth_row_layout.addWidget(self.video_end_input)
+        self.video_end_input = ui_helpers.create_line_edit(80, validator=end_validator, placeholder="0~999/-1")
+        row_layout.addWidget(self.video_end_input)
 
         video_range_help = ui_helpers.create_help_icon(
             "歌曲真正起始和结束的时间(秒)\n"
             "-1 表示视频开头第 0 秒或结尾最后 1 秒\n"
             "正确的歌曲起始应该是游戏走转场刚刚进入黑屏，并且乐曲启动拍还没响的时间"
             "\n正确的歌曲结束应该是歌曲最后一个音符消失后的时间")
-        fourth_row_layout.addWidget(video_range_help)
+        row_layout.addWidget(video_range_help)
 
-        # Label_LineEdit 歌曲bpm
-        bpm_label = ui_helpers.create_label("歌曲bpm:")
-        fourth_row_layout.addWidget(bpm_label)
-        bpm_validator = QDoubleValidator(10.0, 999.0, 3, self) # 10_999的浮点数
-        self.bpm_input = ui_helpers.create_line_edit(70, validator=bpm_validator, placeholder="10~999")
-        fourth_row_layout.addWidget(self.bpm_input)
+        # Label_CheckBox_Helper skip_detect_circle
+        skip_detect_circle_label = ui_helpers.create_label("skip_detect_circle:")
+        row_layout.addWidget(skip_detect_circle_label)
+        self.skip_detect_circle_checkbox = ui_helpers.create_check_box()
+        self.skip_detect_circle_checkbox.setChecked(True)  # 默认启用
+        row_layout.addWidget(self.skip_detect_circle_checkbox)
+        skip_detect_circle_help = ui_helpers.create_help_icon(
+            "程序会尝试自动检测圆形游戏屏幕的位置\n" \
+            "如果在当前谱面确认视频中，游戏画面已经是全屏并且在屏幕中心，可以跳过检测")
+        row_layout.addWidget(skip_detect_circle_help)
 
-        fourth_row_layout.addStretch()  # 添加弹性空间
-        return fourth_row
+        row_layout.addStretch()  # 添加弹性空间
+        return row
     
-    
+
 
     def setup_5th_row(self):
 
-        fifth_row = QWidget()
-        fifth_row_layout = QHBoxLayout(fifth_row)
-        fifth_row_layout.setContentsMargins(0, 0, 0, 0)
-        fifth_row_layout.setSpacing(5)
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
 
-        # Label_ComboBox_Helper 谱面难度
-        chart_lv_label = ui_helpers.create_label("谱面难度:")
-        fifth_row_layout.addWidget(chart_lv_label)
-        self.chart_lv_combo = ui_helpers.create_combo_box(
-            45, ["1", "2", "3", "4", "5", "6", "7"], default_index=4)
-        fifth_row_layout.addWidget(self.chart_lv_combo)
-        chart_lv_help = ui_helpers.create_help_icon(
-            "1-easy\n2-basic\n3-normal\n4-expert\n5-master\n6-re:master\n7-utage")
-        fifth_row_layout.addWidget(chart_lv_help)
-        
-        # Label_ComboBox_Helper base_denominator
-        base_denominator_label = ui_helpers.create_label("解析分辨率:")
-        fifth_row_layout.addWidget(base_denominator_label)
-        self.base_denominator_combo = ui_helpers.create_combo_box(
-            45, ["4", "8", "16", "32", "64"], default_index=2)
-        fifth_row_layout.addWidget(self.base_denominator_combo)
-        base_denominator_help = ui_helpers.create_help_icon(
-            "程序解析谱面的分辨率\n" \
-            "默认为16，代表单位时间为1/16小节，在sinmai语法中写作'{16},'\n" \
-            "程序会将音符对齐到单位时间\n" \
-            "单位时间计算: 240000 / bpm / 分辨率 (ms)\n" \
-            "建议单位时间≥30ms，如果BPM较高，需要适当降低分辨率以保证准确性")
-        fifth_row_layout.addWidget(base_denominator_help)
+        # 输入框: 视频名称
+        self.video_name_input = ui_helpers.create_line_edit(placeholder="歌曲名称")
+        row_layout.addWidget(self.video_name_input)
 
-        # Label_CheckBox_Helper skip_detect_circle
-        skip_detect_label = ui_helpers.create_label("skip_detect_circle:")
-        fifth_row_layout.addWidget(skip_detect_label)
-        self.skip_detect_circle_checkbox = ui_helpers.create_check_box()
-        fifth_row_layout.addWidget(self.skip_detect_circle_checkbox)
-        skip_detect_help = ui_helpers.create_help_icon(
-            "程序会尝试自动检测圆形游戏屏幕的位置\n如果在当前谱面确认视频中，游戏画面已经是全屏并且在屏幕中心，可以跳过检测")
-        fifth_row_layout.addWidget(skip_detect_help)
-        
-        # Label_CheckBox_Helper skip_detect
-        skip_detect_label2 = ui_helpers.create_label("skip_detect:")
-        fifth_row_layout.addWidget(skip_detect_label2)
-        self.skip_detect_checkbox = ui_helpers.create_check_box()
-        fifth_row_layout.addWidget(self.skip_detect_checkbox)
-        skip_detect_help2 = ui_helpers.create_help_icon(
-            "跳过逐帧检测视频中的音符，直接读取已经存在的检测结果 (detect_result.txt)"
-        )
-        fifth_row_layout.addWidget(skip_detect_help2)
-        
-        # Label_CheckBox_Helper skip_classify
-        skip_classify_label = ui_helpers.create_label("skip_classify:")
-        fifth_row_layout.addWidget(skip_classify_label)
-        self.skip_classify_checkbox = ui_helpers.create_check_box()
-        fifth_row_layout.addWidget(self.skip_classify_checkbox)
-        skip_classify_help = ui_helpers.create_help_icon(
-            "跳过分类检测 ex-note, break-note, ex-break-note")
-        fifth_row_layout.addWidget(skip_classify_help)
-        
-        fifth_row_layout.addStretch()  # 添加弹性空间
-        return fifth_row
+        # row_layout.addStretch()  # 添加弹性空间
+        return row
     
-    
+
 
     def setup_6th_row(self):
 
-        sixth_row = QWidget()
-        sixth_row_layout = QHBoxLayout(sixth_row)
-        sixth_row_layout.setContentsMargins(0, 0, 0, 0)
-        sixth_row_layout.setSpacing(5)
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
+
+        # Label_ComboBox batch_detect_obb(1-8)
+        batch_detect_label = ui_helpers.create_label("batch_detect_obb:")
+        row_layout.addWidget(batch_detect_label)
+        self.batch_detect_obb_combo = ui_helpers.create_combo_box(
+            45, ["1", "2", "3", "4", "5", "6", "7", "8"], default_index=1)
+        row_layout.addWidget(self.batch_detect_obb_combo)
+        # Label_ComboBox batch_classify(1,2,4,8,16,32)
+        batch_classify_label = ui_helpers.create_label("batch_classify:")
+        row_layout.addWidget(batch_classify_label)
+        self.batch_classify_combo = ui_helpers.create_combo_box(
+            45, ["1", "2", "4", "8", "16", "32"], default_index=4)
+        row_layout.addWidget(self.batch_classify_combo)
+        # Helper 解释这两个 batch 的作用
+        batch_help = ui_helpers.create_help_icon(
+            "batch_detect_obb: 用于目标检测模型运行时的批处理大小\n" \
+            "batch_classify: 用于图像分类模型运行时的批处理大小\n" \
+            "如果推理后端是 TensorRT, batch_classify 不能超过转换模型时选择的 batch 数值")
+        row_layout.addWidget(batch_help)
         
+        # Label_CheckBox_Helper skip_detect
+        skip_detect_label = ui_helpers.create_label("skip_detect:")
+        row_layout.addWidget(skip_detect_label)
+        self.skip_detect_checkbox = ui_helpers.create_check_box()
+        row_layout.addWidget(self.skip_detect_checkbox)
+        skip_detect_help = ui_helpers.create_help_icon(
+            "跳过逐帧检测视频中的音符，直接读取已经存在的检测结果 (detect_result.txt)")
+        row_layout.addWidget(skip_detect_help)
+
+        # Label_CheckBox_Helper skip_classify
+        skip_classify_label = ui_helpers.create_label("skip_classify:")
+        row_layout.addWidget(skip_classify_label)
+        self.skip_classify_checkbox = ui_helpers.create_check_box()
+        row_layout.addWidget(self.skip_classify_checkbox)
+        skip_classify_help = ui_helpers.create_help_icon(
+            "跳过分类检测 ex-note, break-note, ex-break-note")
+        row_layout.addWidget(skip_classify_help)
+
+        # Label_CheckBox_Helper skip_export_tracked_video
+        skip_export_tracked_video_label = ui_helpers.create_label("skip_export_tracked_video:")
+        row_layout.addWidget(skip_export_tracked_video_label)
+        self.skip_export_tracked_video_checkbox = ui_helpers.create_check_box()
+        row_layout.addWidget(self.skip_export_tracked_video_checkbox)
+        skip_export_tracked_video_help = ui_helpers.create_help_icon(
+            "跳过导出追踪视频")
+        row_layout.addWidget(skip_export_tracked_video_help)
+
+        row_layout.addStretch()  # 添加弹性空间
+        return row
+    
+
+
+    def setup_7th_row(self):
+
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
+
+        # Label_LineEdit_Helper 歌曲BPM
+        bpm_label = ui_helpers.create_label("歌曲BPM:")
+        row_layout.addWidget(bpm_label)
+        bpm_validator = QDoubleValidator(10.0, 999.0, 3, self) # 10_999的浮点数
+        self.bpm_input = ui_helpers.create_line_edit(70, validator=bpm_validator, placeholder="10~999")
+        row_layout.addWidget(self.bpm_input)
+        bpm_help = ui_helpers.create_help_icon(
+            "仅支持静态 BPM (全程不变速)")
+        row_layout.addWidget(bpm_help)
+
+        # Label_ComboBox_Helper 谱面难度
+        chart_lv_label = ui_helpers.create_label("谱面难度:")
+        row_layout.addWidget(chart_lv_label)
+        self.chart_lv_combo = ui_helpers.create_combo_box(
+            45, ["1", "2", "3", "4", "5", "6", "7"], default_index=4)
+        row_layout.addWidget(self.chart_lv_combo)
+        chart_lv_help = ui_helpers.create_help_icon(
+            "1-easy\n2-basic\n3-normal\n4-expert\n5-master\n6-re:master\n7-utage")
+        row_layout.addWidget(chart_lv_help)
+
+        # Label_ComboBox_Helper base_denominator
+        base_denominator_label = ui_helpers.create_label("解析分辨率:")
+        row_layout.addWidget(base_denominator_label)
+        self.base_denominator_combo = ui_helpers.create_combo_box(
+            45, ["4", "8", "16", "32", "64"], default_index=2)
+        row_layout.addWidget(self.base_denominator_combo)
+        base_denominator_help = ui_helpers.create_help_icon(
+            "程序解析谱面的分辨率\n" \
+            "默认为 16，代表单位时间为 1/16 小节，在 sinmai 语法中写作 {16},\n" \
+            "程序会将音符对齐到单位时间\n" \
+            "单位时间计算: 240000 / bpm / 分辨率 (ms)\n" \
+            "建议单位时间 ≥30ms，如果 BPM 较高，需要适当降低分辨率以保证准确性")
+        row_layout.addWidget(base_denominator_help)
+
+        row_layout.addStretch()  # 添加弹性空间
+        return row
+
+
+
+    def setup_8th_row(self):
+
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
+
         # 大按钮: "Start Auto Convert!"（使用新组件）
         self.auto_convert_button = ProcessControlButton("Start!")
         self.auto_convert_button.setStyleSheet(f"""
@@ -396,11 +453,41 @@ class AutoConvertPage(QWidget):
             }}QPushButton:hover {{
                 background-color: {self.colors['accent_hover']};
             }}""")
-        self.auto_convert_button.setFixedSize(80, 40)
-        sixth_row_layout.addWidget(self.auto_convert_button)
-        
-        sixth_row_layout.addStretch()  # 添加弹性空间
-        return sixth_row
+        self.auto_convert_button.setFixedSize(80, 35)
+        row_layout.addWidget(self.auto_convert_button)
+
+        # Label_CheckBox_Helper enable_standardizer
+        enable_standardizer_label = ui_helpers.create_label("启用视频标准化模块:")
+        row_layout.addWidget(enable_standardizer_label)
+        self.enable_standardizer_checkbox = ui_helpers.create_check_box()
+        self.enable_standardizer_checkbox.setChecked(True)  # 默认启用
+        row_layout.addWidget(self.enable_standardizer_checkbox)
+        enable_standardizer_help = ui_helpers.create_help_icon(
+            "是否启用视频标准化模块")
+        row_layout.addWidget(enable_standardizer_help)
+
+        # Label_CheckBox_Helper enable_note_detector
+        enable_note_detector_label = ui_helpers.create_label("启用音符识别模块:")
+        row_layout.addWidget(enable_note_detector_label)
+        self.enable_note_detector_checkbox = ui_helpers.create_check_box()
+        self.enable_note_detector_checkbox.setChecked(True)  # 默认启用
+        row_layout.addWidget(self.enable_note_detector_checkbox)
+        enable_note_detector_help = ui_helpers.create_help_icon(
+            "是否启用音符识别模块")
+        row_layout.addWidget(enable_note_detector_help)
+
+        # Label_CheckBox_Helper enable_note_analyzer
+        enable_note_analyzer_label = ui_helpers.create_label("启用音符分析模块:")
+        row_layout.addWidget(enable_note_analyzer_label)
+        self.enable_note_analyzer_checkbox = ui_helpers.create_check_box()
+        self.enable_note_analyzer_checkbox.setChecked(True)  # 默认启用
+        row_layout.addWidget(self.enable_note_analyzer_checkbox)
+        enable_note_analyzer_help = ui_helpers.create_help_icon(
+            "是否启用音符分析模块")
+        row_layout.addWidget(enable_note_analyzer_help)
+
+        row_layout.addStretch()  # 添加弹性空间
+        return row
 
     
     
@@ -650,6 +737,7 @@ class AutoConvertPage(QWidget):
             "cls_break_model": model_paths["cls_break"],
             "skip_detect": self.skip_detect_checkbox.isChecked(),
             "skip_classify": self.skip_classify_checkbox.isChecked(),
+            "skip_export_tracked_video": self.skip_export_tracked_video_checkbox.isChecked(),
             
             # note_analyzer 参数
             "bpm": bpm,

@@ -442,6 +442,9 @@ class ProcessControlButton(QPushButton):
                 background-color: {stop_color};
                 font-size: {self._original_font_size}px;
                 font-weight: {self._original_font_weight};
+            }}
+            QPushButton:hover {{
+                background-color: {self._colors.get('stop_hover', '#E04A5A')};
             }}""")
         
         # 准备参数并运行
