@@ -5,7 +5,7 @@ import subprocess
 from typing import Tuple, Optional
 import sys
 
-root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
 

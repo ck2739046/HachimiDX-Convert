@@ -1,24 +1,18 @@
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, QVBoxLayout,
-                             QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedWidget)
-from PyQt6.QtCore import QUrl, QProcess, Qt, QTimer, pyqtSignal, QObject, QEventLoop
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                             QHBoxLayout, QLabel,  QPushButton, QComboBox, QStackedWidget)
+from PyQt6.QtCore import QProcess, Qt, QTimer, pyqtSignal, QObject, QEventLoop
 from PyQt6.QtGui import QWindow, QIcon
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtMultimediaWidgets import QVideoWidget
-from PyQt6.QtWidgets import QStyle, QSlider, QFileDialog, QToolTip
 from PyQt6.QtCore import pyqtSlot
-import threading
 import sys
 import win32gui
 import time
-import win32con
 import server
 import os
 import psutil
-import cv2
-import ctypes
-from ctypes import wintypes
 
-root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
 

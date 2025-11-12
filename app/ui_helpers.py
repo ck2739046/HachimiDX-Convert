@@ -146,7 +146,7 @@ def create_divider():
     divider_layout.setSpacing(0)
     
     divider_line = QWidget()
-    divider_line.setFixedHeight(1)  # 细线高度
+    divider_line.setFixedHeight(2)  # 细线高度
     divider_line.setStyleSheet(f"background-color: {COLORS['grey']};")
     
     divider_layout.addWidget(divider_line)
