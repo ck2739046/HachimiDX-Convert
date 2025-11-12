@@ -86,23 +86,24 @@ class AutoConvertPage(QWidget):
     # debug
     def create_config_area(self):
         widget = QWidget()
-        widget.setFixedHeight(240)  # 固定高度
+        widget.setFixedHeight(340)  # 固定高度
         widget.setStyleSheet(f"background-color: {self.colors['bg']};")
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(5)
         
+
+        # 标题分隔线：模型
+        layout.addWidget(ui_helpers.create_divider("模型"))
         # 第一行：模型推理后端选择
         first_row = self.setup_1st_row()
         layout.addWidget(first_row)
-        
         # 第二行：模型推理后端状态显示
         second_row = self.setup_2nd_row()
         layout.addWidget(second_row)
         
-        # 分隔线1
-        layout.addWidget(ui_helpers.create_divider())
-
+        # 标题分隔线：自动转谱
+        layout.addWidget(ui_helpers.create_divider("自动转谱"))
         # 第三行：选择谱面视频
         third_row = self.setup_3rd_row()
         layout.addWidget(third_row)
@@ -115,9 +116,9 @@ class AutoConvertPage(QWidget):
         fifth_row = self.setup_5th_row()
         layout.addWidget(fifth_row)
 
-        # 分隔线2
-        layout.addWidget(ui_helpers.create_divider())
-        
+        # 标题分隔线：开始转谱
+        layout.addWidget(ui_helpers.create_divider("开始转谱"))
+
         # 第六行：开始转谱
         sixth_row = self.setup_6th_row()
         layout.addWidget(sixth_row)

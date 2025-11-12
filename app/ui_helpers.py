@@ -3,7 +3,7 @@ UI Helper Functions and Shared Resources
 提供统一的UI组件创建函数和配色方案
 """
 
-from PyQt6.QtWidgets import QLabel, QComboBox, QLineEdit, QCheckBox, QWidget, QVBoxLayout
+from PyQt6.QtWidgets import QLabel, QComboBox, QLineEdit, QCheckBox, QWidget, QHBoxLayout, QFrame
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QCursor
 from PyQt6.QtWidgets import QToolTip
@@ -133,22 +133,42 @@ def create_check_box():
     return checkbox
 
 
-def create_divider():
+def create_divider(text=None):
     """
     创建分隔线
+
+    Args:
+        length: 分隔栏文本宽度（默认为None）
+        text: 分隔栏文本内容（默认为None）
     
     Returns:
         QWidget: 包含分隔线的容器widget
     """
     divider_container = QWidget()
-    divider_layout = QVBoxLayout(divider_container)
-    divider_layout.setContentsMargins(0, 5, 0, 5)  # 上下各5像素间距
+    divider_layout = QHBoxLayout(divider_container)
+    
+    divider_layout.setContentsMargins(0, 0, 0, 0)
     divider_layout.setSpacing(0)
-    
-    divider_line = QWidget()
-    divider_line.setFixedHeight(2)  # 细线高度
-    divider_line.setStyleSheet(f"background-color: {COLORS['grey']};")
-    
-    divider_layout.addWidget(divider_line)
-    
+
+    if text:
+        line_left = QFrame()
+        line_left.setFrameShape(QFrame.Shape.HLine)
+        line_left.setFixedSize(20, 20) # 左侧线条固定宽度20像素
+        line_left.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        divider_layout.addWidget(line_left)
+
+    if text:
+        label = QLabel(text)
+        label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        length = len(text)*13 + 6 # 一个字是13px，外加6px的边距
+        label.setFixedSize(length, 20)
+        divider_layout.addWidget(label)
+
+    line_right = QFrame()
+    line_right.setFrameShape(QFrame.Shape.HLine)
+    line_right.setFixedHeight(20) # 右侧线条没有固定宽度，自动填充剩余空间
+    line_right.setStyleSheet(f"color: {COLORS['text_secondary']};")
+    divider_layout.addWidget(line_right)
+
     return divider_container
