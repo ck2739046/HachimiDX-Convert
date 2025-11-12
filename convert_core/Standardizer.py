@@ -118,10 +118,10 @@ class Standardizer:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 
                 # 如果是录屏，直接固定阈值二值化
-                if mode == 'source':
+                if mode == 'source video':
                     _, binary = cv2.threshold(gray, 30, 255, cv2.THRESH_BINARY)
                 # 如果是拍摄，使用Canny边缘检测
-                elif mode == 'camera footage':
+                else:  # camera footage
                     # 自适应Canny边缘检测
                     median = np.median(gray)
                     lower = int(max(0, 0.66 * median))

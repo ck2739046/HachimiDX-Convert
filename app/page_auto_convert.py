@@ -639,18 +639,18 @@ class AutoConvertPage(QWidget):
     
     def _prepare_auto_convert_args(self):
 
-        # 这个参数无论如何都需要输入
-        video_name = self.video_name_input.text().strip()
-        if not video_name:
-            QMessageBox.warning(self, "参数错误", "请输入歌曲名称")
-            return None
-
         # 根据启用的模块准备参数
         enable_standardizer = self.enable_standardizer_checkbox.isChecked()
         enable_note_detector = self.enable_note_detector_checkbox.isChecked()
         enable_note_analyzer = self.enable_note_analyzer_checkbox.isChecked()
         if not (enable_standardizer or enable_note_detector or enable_note_analyzer):
             QMessageBox.warning(self, "参数错误", "请至少启用一个模块")
+            return None
+        
+        # 这个参数无论如何都需要输入
+        video_name = self.video_name_input.text().strip()
+        if not video_name:
+            QMessageBox.warning(self, "参数错误", "请输入歌曲名称")
             return None
         
         # 准备 standardizer 参数
