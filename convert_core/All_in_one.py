@@ -36,7 +36,7 @@ def main():
 
 
     try:
-        time.sleep(0.5) # 确保能写上日志
+        time.sleep(0.1) # 确保能写上日志
         print("\n" + "=" * 40)
         
         # standardizer 参数

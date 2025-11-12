@@ -327,6 +327,8 @@ class ProcessControlButton(QPushButton):
         
         # 配置参数
         self._original_text = text
+        self._original_font_size = None
+        self._original_font_weight = None
         self._colors = ui_helpers.COLORS
         self._script_path = None
         self._args_generator = None
@@ -403,6 +405,11 @@ class ProcessControlButton(QPushButton):
         self._is_transitioning = True
         self._is_user_stopping = False
         self.setEnabled(False)
+
+        # 获取原始字体大小和粗细
+        font = self.font()
+        self._original_font_size = font.pixelSize()
+        self._original_font_weight = font.weight()
         
         # 冷却后启动
         self._cooldown_timer.timeout.disconnect()
@@ -426,11 +433,16 @@ class ProcessControlButton(QPushButton):
         self._is_running = True
         self._is_transitioning = False
         self.setEnabled(True)
-        self.setText("停止")
+        self.setText("Cancel")
         
         # 获取停止状态颜色（如果没有则使用默认红色）
         stop_color = self._colors.get('stop', '#DC3545')
-        self.setStyleSheet(f"background-color: {stop_color};")
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {stop_color};
+                font-size: {self._original_font_size}px;
+                font-weight: {self._original_font_weight};
+            }}""")
         
         # 准备参数并运行
         python_exe = sys.executable
@@ -494,4 +506,12 @@ class ProcessControlButton(QPushButton):
         self._is_user_stopping = False
         self.setEnabled(True)
         self.setText(self._original_text)
-        self.setStyleSheet(f"background-color: {self._colors['accent']};")
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self._colors['accent']};
+                font-size: {self._original_font_size}px;
+                font-weight: {self._original_font_weight};
+            }}
+            QPushButton:hover {{
+                background-color: {self._colors['accent_hover']};
+            }}""")

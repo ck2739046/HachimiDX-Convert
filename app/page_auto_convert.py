@@ -86,7 +86,7 @@ class AutoConvertPage(QWidget):
     # debug
     def create_config_area(self):
         widget = QWidget()
-        widget.setFixedHeight(300)  # 固定高度
+        widget.setFixedHeight(240)  # 固定高度
         widget.setStyleSheet(f"background-color: {self.colors['bg']};")
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -138,7 +138,7 @@ class AutoConvertPage(QWidget):
         # Label_ComboBox_Helper 模型推理后端
         backend_label = ui_helpers.create_label("模型推理后端:")
         first_row_layout.addWidget(backend_label)
-        self.backend_combo = ui_helpers.create_combo_box(80, ["TensorRT", "DirectML"])
+        self.backend_combo = ui_helpers.create_combo_box(90, ["TensorRT", "DirectML"])
         first_row_layout.addWidget(self.backend_combo)
         help_label = ui_helpers.create_help_icon(
             "TensorRT: 适用于 NVIDIA GPU\nDirectML: 适用于 AMD/Intel/Other GPU")
@@ -284,14 +284,14 @@ class AutoConvertPage(QWidget):
         video_range_label = ui_helpers.create_label("歌曲范围:")
         fourth_row_layout.addWidget(video_range_label)
 
-        start_validator = QDoubleValidator(-1.0, 999.0, 1, self) # -1_999的浮点数
+        start_validator = QDoubleValidator(-1.0, 999.0, 3, self) # -1_999的浮点数
         self.video_start_input = ui_helpers.create_line_edit(70, validator=start_validator, placeholder="0~999/-1")
         fourth_row_layout.addWidget(self.video_start_input)
 
         arrow_label = ui_helpers.create_label("->")
         fourth_row_layout.addWidget(arrow_label)
 
-        end_validator = QDoubleValidator(-1.0, 999.0, 1, self) # -1_999的浮点数
+        end_validator = QDoubleValidator(-1.0, 999.0, 3, self) # -1_999的浮点数
         self.video_end_input = ui_helpers.create_line_edit(70, validator=end_validator, placeholder="0~999/-1")
         fourth_row_layout.addWidget(self.video_end_input)
 
@@ -338,7 +338,11 @@ class AutoConvertPage(QWidget):
             45, ["4", "8", "16", "32", "64"], default_index=2)
         fifth_row_layout.addWidget(self.base_denominator_combo)
         base_denominator_help = ui_helpers.create_help_icon(
-            "程序解析谱面的分辨率，默认为16，意味着程序会将音符对齐到1/16的时间")
+            "程序解析谱面的分辨率\n" \
+            "默认为16，代表单位时间为1/16小节，在sinmai语法中写作'{16},'\n" \
+            "程序会将音符对齐到单位时间\n" \
+            "单位时间计算: 240000 / bpm / 分辨率 (ms)\n" \
+            "建议单位时间≥30ms，如果BPM较高，需要适当降低分辨率以保证准确性")
         fifth_row_layout.addWidget(base_denominator_help)
 
         # Label_CheckBox_Helper skip_detect_circle
@@ -382,17 +386,16 @@ class AutoConvertPage(QWidget):
         sixth_row_layout.setSpacing(5)
         
         # 大按钮: "Start Auto Convert!"（使用新组件）
-        self.auto_convert_button = ProcessControlButton("Start Auto Convert!")
+        self.auto_convert_button = ProcessControlButton("Start!")
         self.auto_convert_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {self.colors['accent']};
                 font-size: 16px;
                 font-weight: bold;
-                padding: 10px 20px;
             }}QPushButton:hover {{
                 background-color: {self.colors['accent_hover']};
             }}""")
-        self.auto_convert_button.setFixedSize(200, 50)
+        self.auto_convert_button.setFixedSize(80, 40)
         sixth_row_layout.addWidget(self.auto_convert_button)
         
         sixth_row_layout.addStretch()  # 添加弹性空间
@@ -577,12 +580,12 @@ class AutoConvertPage(QWidget):
         video_end = float(video_end)
         bpm = round(float(bpm), 3)
         if video_start != -1:
-            video_start = round(video_start, 1)
+            video_start = round(video_start, 3)
             if video_start < 0 or video_start > 999:
                 QMessageBox.warning(self, "参数错误", "歌曲起始时间应在 0~999 秒范围内，或为 -1")
                 return None
         if video_end != -1:
-            video_end = round(video_end, 1)
+            video_end = round(video_end, 3)
             if video_end < 0 or video_end > 999:
                 QMessageBox.warning(self, "参数错误", "歌曲结束时间应在 0~999 秒范围内，或为 -1")
                 return None
@@ -594,16 +597,16 @@ class AutoConvertPage(QWidget):
         try:
             cap = cv2.VideoCapture(self.selected_video_path)
             if not cap.isOpened():
-                QMessageBox.warning(self, "视频错误", "无法打开视频文件")
+                QMessageBox.warning(self, "\n视频错误", "无法打开视频文件")
                 return None
             video_fps = cap.get(cv2.CAP_PROP_FPS)
             cap.release()
             if video_fps <= 0:
-                QMessageBox.warning(self, "视频错误", "无法获取视频 FPS 信息")
+                QMessageBox.warning(self, "\n视频错误", "无法获取视频 FPS 信息")
                 return None
-            self.output_widget.append_text(f"检测到谱面确认视频 FPS: {video_fps:.2f}")
+            self.output_widget.append_text(f"\n检测到谱面确认视频 FPS: {video_fps:.2f}")
         except Exception as e:
-            QMessageBox.warning(self, "视频错误", f"读取视频 FPS 失败: {str(e)}")
+            QMessageBox.warning(self, "\n视频错误", f"读取视频 FPS 失败: {str(e)}")
             return None
         
         # 根据后端选择模型路径和推理设备
