@@ -408,7 +408,7 @@ class NoteDetector:
                 parsed_track_results = self._parse_track_results(track_result, single_frame_detections)
                 # 写入最终结果
                 for track_id, original_detection in parsed_track_results:
-                    final_tracked_results[track_id]['class_id'] = original_detection['main_class_id']
+                    final_tracked_results[track_id]['class_id'] = self.get_specific_class_id(original_detection['main_class_id'])
                     final_tracked_results[track_id]['path'].append({
                         'frame': frame_number,
                         'x1': original_detection['x1'],

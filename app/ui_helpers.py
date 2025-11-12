@@ -185,6 +185,8 @@ def create_divider(text=None):
         line_right.setStyleSheet(f"color: {COLORS['text_secondary']};")
         divider_layout.addWidget(line_right)
 
+        divider_layout.addStretch()  # 添加弹性空间
+
     else:
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
