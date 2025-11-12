@@ -258,7 +258,7 @@ class AutoConvertPage(QWidget):
         if file_dialog.exec():
             selected_files = file_dialog.selectedFiles()
             if selected_files:
-                self.selected_video_path = selected_files[0]
+                self.selected_video_path = os.path.normpath(os.path.abspath(selected_files[0]))
                 self.video_path_label.setText(self.selected_video_path)
     
 
@@ -324,7 +324,7 @@ class AutoConvertPage(QWidget):
         row_layout.setSpacing(5)
 
         # 输入框: 视频名称
-        self.video_name_input = ui_helpers.create_line_edit(placeholder="歌曲名称")
+        self.video_name_input = ui_helpers.create_line_edit(placeholder="歌曲名称 (必填)")
         row_layout.addWidget(self.video_name_input)
 
         # row_layout.addStretch()  # 添加弹性空间
@@ -638,113 +638,190 @@ class AutoConvertPage(QWidget):
     # auto_convert
     
     def _prepare_auto_convert_args(self):
-        # 验证必填参数
-        if not self.selected_video_path:
-            QMessageBox.warning(self, "参数错误", "请先选择谱面视频文件")
-            return None
-        
+
+        # 这个参数无论如何都需要输入
         video_name = self.video_name_input.text().strip()
         if not video_name:
             QMessageBox.warning(self, "参数错误", "请输入歌曲名称")
             return None
-        
-        bpm = self.bpm_input.text().strip()
-        if not bpm:
-            QMessageBox.warning(self, "参数错误", "请输入歌曲 BPM")
+
+        # 根据启用的模块准备参数
+        enable_standardizer = self.enable_standardizer_checkbox.isChecked()
+        enable_note_detector = self.enable_note_detector_checkbox.isChecked()
+        enable_note_analyzer = self.enable_note_analyzer_checkbox.isChecked()
+        if not (enable_standardizer or enable_note_detector or enable_note_analyzer):
+            QMessageBox.warning(self, "参数错误", "请至少启用一个模块")
             return None
         
-        video_start = self.video_start_input.text().strip()
-        if not video_start:
-            QMessageBox.warning(self, "参数错误", "请输入歌曲起始时间")
-            return None
-        
-        video_end = self.video_end_input.text().strip()
-        if not video_end:
-            QMessageBox.warning(self, "参数错误", "请输入歌曲结束时间")
-            return None
-        
-        # 检查参数范围
-        video_start = float(video_start)
-        video_end = float(video_end)
-        bpm = round(float(bpm), 3)
-        if video_start != -1:
-            video_start = round(video_start, 3)
-            if video_start < 0 or video_start > 999:
-                QMessageBox.warning(self, "参数错误", "歌曲起始时间应在 0~999 秒范围内，或为 -1")
+        # 准备 standardizer 参数
+        if enable_standardizer:
+
+            if not self.selected_video_path:
+                QMessageBox.warning(self, "参数错误", "请先选择谱面确认视频文件")
                 return None
-        if video_end != -1:
-            video_end = round(video_end, 3)
-            if video_end < 0 or video_end > 999:
-                QMessageBox.warning(self, "参数错误", "歌曲结束时间应在 0~999 秒范围内，或为 -1")
+            
+            video_start = self.video_start_input.text().strip()
+            if not video_start:
+                QMessageBox.warning(self, "参数错误", "请输入歌曲起始时间")
                 return None
-        if bpm < 10 or bpm > 999:
-            QMessageBox.warning(self, "参数错误", "歌曲 BPM 应在 10~999 范围内")
-            return None
-        
-        # 使用 OpenCV 获取视频的实际 FPS
-        try:
-            cap = cv2.VideoCapture(self.selected_video_path)
-            if not cap.isOpened():
-                QMessageBox.warning(self, "\n视频错误", "无法打开视频文件")
+            
+            video_end = self.video_end_input.text().strip()
+            if not video_end:
+                QMessageBox.warning(self, "参数错误", "请输入歌曲结束时间")
                 return None
-            video_fps = cap.get(cv2.CAP_PROP_FPS)
-            cap.release()
-            if video_fps <= 0:
-                QMessageBox.warning(self, "\n视频错误", "无法获取视频 FPS 信息")
+            
+            # 检查参数范围
+            video_start = float(video_start)
+            video_end = float(video_end)
+            if video_start != -1:
+                video_start = round(video_start, 3)
+                if video_start < 0 or video_start > 999:
+                    QMessageBox.warning(self, "参数错误", "歌曲起始时间应在 0~999 秒范围内，或为 -1")
+                    return None
+            if video_end != -1:
+                video_end = round(video_end, 3)
+                if video_end < 0 or video_end > 999:
+                    QMessageBox.warning(self, "参数错误", "歌曲结束时间应在 0~999 秒范围内，或为 -1")
+                    return None
+                
+            # 使用 OpenCV 获取视频的实际 FPS，将 start/end 转为帧数
+            try:
+                cap = cv2.VideoCapture(self.selected_video_path)
+                if not cap.isOpened():
+                    QMessageBox.warning(self, "\n视频错误", f"无法打开视频文件: {self.selected_video_path}")
+                    return None
+                video_fps = cap.get(cv2.CAP_PROP_FPS)
+                cap.release()
+                if video_fps <= 0:
+                    QMessageBox.warning(self, "\n视频错误", f"无法获取视频 FPS 信息: {self.selected_video_path}")
+                    return None
+                self.output_widget.append_text(f"\n检测到谱面确认视频 FPS: {video_fps:.2f}")
+            except Exception as e:
+                QMessageBox.warning(self, "\n视频错误", f"尝试读取视频 FPS 失败: (self.selected_video_path)\n" \
+                                                       f"错误信息: {str(e)}")
                 return None
-            self.output_widget.append_text(f"\n检测到谱面确认视频 FPS: {video_fps:.2f}")
-        except Exception as e:
-            QMessageBox.warning(self, "\n视频错误", f"读取视频 FPS 失败: {str(e)}")
-            return None
-        
-        # 根据后端选择模型路径和推理设备
-        backend = self.backend_combo.currentText()
-        if backend == "TensorRT":
-            model_paths = {
-                "detect": os.path.normpath(tools.path_config.detect_engine),
-                "obb": os.path.normpath(tools.path_config.obb_pt),
-                "cls_break": os.path.normpath(tools.path_config.cls_break_pt),
-                "cls_ex": os.path.normpath(tools.path_config.cls_ex_pt)
-            }
-            inference_device = "0"
-        else:  # DirectML
-            model_paths = {
-                "detect": os.path.normpath(tools.path_config.detect_onnx),
-                "obb": os.path.normpath(tools.path_config.obb_onnx),
-                "cls_break": os.path.normpath(tools.path_config.cls_break_onnx),
-                "cls_ex": os.path.normpath(tools.path_config.cls_ex_onnx)
-            }
-            inference_device = "NONE"
-        
-        # 收集所有参数
+
+            video_path = os.path.normpath(os.path.abspath(self.selected_video_path))
+            video_mode = self.video_type_combo.currentText()
+            target_res = 1080
+            skip_detect_circle = self.skip_detect_circle_checkbox.isChecked()
+            start_frame = round(video_start * video_fps) if video_start >= 0 else -1
+            end_frame = round(video_end * video_fps) if video_end >= 0 else -1
+
+
+        # 准备 note_detector 参数
+        if enable_note_detector:
+            
+            # 如果没有启用标准化视频模块，需要检查是否已经存在标准化后的视频文件
+            if enable_standardizer:
+                standardized_video_path = None
+            else:
+                if not self.selected_video_path:
+                    QMessageBox.warning(self, "参数错误", "请先选择谱面确认视频文件")
+                    return None
+                video_filename_no_ext = os.path.basename(self.selected_video_path)[:-4] # 总是mp4
+                standardized_video_path = os.path.normpath(os.path.abspath(
+                    os.path.join(tools.path_config.temp_dir, f"{video_filename_no_ext}_standardized.mp4")))
+                if not os.path.exists(standardized_video_path) or not os.path.isfile(standardized_video_path):
+                    QMessageBox.warning(self, "参数错误", f"未找到标准化后的视频文件: {standardized_video_path}\n" \
+                                                         "请先启用并运行视频标准化模块")
+                    return None
+            
+            # 根据后端选择模型路径和推理设备
+            backend = self.backend_combo.currentText()
+            if backend == "TensorRT":
+                model_paths = {
+                    "detect": os.path.normpath(os.path.abspath(tools.path_config.detect_engine)),
+                    "obb": os.path.normpath(os.path.abspath(tools.path_config.obb_pt)),
+                    "cls_break": os.path.normpath(os.path.abspath(tools.path_config.cls_break_pt)),
+                    "cls_ex": os.path.normpath(os.path.abspath(tools.path_config.cls_ex_pt))
+                }
+                inference_device = "0"
+            else:  # DirectML
+                model_paths = {
+                    "detect": os.path.normpath(os.path.abspath(tools.path_config.detect_onnx)),
+                    "obb": os.path.normpath(os.path.abspath(tools.path_config.obb_onnx)),
+                    "cls_break": os.path.normpath(os.path.abspath(tools.path_config.cls_break_onnx)),
+                    "cls_ex": os.path.normpath(os.path.abspath(tools.path_config.cls_ex_onnx))
+                }
+                inference_device = "NONE"
+
+            batch_detect_obb = int(self.batch_detect_obb_combo.currentText())
+            batch_classify = int(self.batch_classify_combo.currentText())
+            skip_detect = self.skip_detect_checkbox.isChecked()
+            skip_classify = self.skip_classify_checkbox.isChecked()
+            skip_export_tracked_video = self.skip_export_tracked_video_checkbox.isChecked()
+
+
+        # 准备 note_analyzer 参数
+        if enable_note_analyzer:
+
+            # 如果没有启用音符识别模块，需要构建 tracked_output_dir
+            if enable_note_detector:
+                tracked_output_dir = None
+            else:
+                tracked_output_dir = os.path.normpath(os.path.abspath(
+                    os.path.join(tools.path_config.final_data_output_dir, video_name)))
+                if not os.path.exists(tracked_output_dir):
+                    QMessageBox.warning(self, "参数错误", f"未找到音符追踪结果文件夹: {tracked_output_dir}\n" \
+                                                         "请先启用并运行音符识别模块")
+                    return None
+
+            bpm = self.bpm_input.text().strip()
+            if not bpm:
+                QMessageBox.warning(self, "参数错误", "请输入歌曲 BPM")
+                return None
+
+            bpm = round(float(bpm), 3)    
+            if bpm < 10 or bpm > 999:
+                QMessageBox.warning(self, "参数错误", "歌曲 BPM 应在 10~999 范围内")
+                return None
+            
+            chart_lv = int(self.chart_lv_combo.currentText())
+            base_denominator = int(self.base_denominator_combo.currentText())
+
+
+        # 构建参数字典
         params = {
-            # standardizer 参数
-            "video_path": self.selected_video_path,
-            "video_mode": self.video_type_combo.currentText(),
-            "start_frame": round(video_start * video_fps) if video_start >= 0 else -1,  # 使用实际 FPS 转换为帧数
-            "end_frame": round(video_end * video_fps) if video_end >= 0 else -1,        # 使用实际 FPS 转换为帧数
-            "target_res": 1080,
-            "skip_detect_circle": self.skip_detect_circle_checkbox.isChecked(),
-            
-            # note-detector 参数
-            "video_name": video_name,
-            "batch_detect": int(self.batch_detect_obb_combo.currentText()),
-            "batch_cls": int(self.batch_classify_combo.currentText()),
-            "inference_device": inference_device,
-            "detect_model": model_paths["detect"],
-            "obb_model": model_paths["obb"],
-            "cls_ex_model": model_paths["cls_ex"],
-            "cls_break_model": model_paths["cls_break"],
-            "skip_detect": self.skip_detect_checkbox.isChecked(),
-            "skip_classify": self.skip_classify_checkbox.isChecked(),
-            "skip_export_tracked_video": self.skip_export_tracked_video_checkbox.isChecked(),
-            
-            # note_analyzer 参数
-            "bpm": bpm,
-            "chart_lv": int(self.chart_lv_combo.currentText()),
-            "base_denominator": int(self.base_denominator_combo.currentText())
+            "Standardizer": {"enabled": False},
+            "NoteDetector": {"enabled": False},
+            "NoteAnalyzer": {"enabled": False}
         }
+
+        if enable_standardizer:
+            params["Standardizer"] = {
+                "enabled": True,
+                "video_path": video_path,
+                "start_frame": start_frame,
+                "end_frame": end_frame,
+                "video_mode": video_mode,
+                "target_res": target_res,
+                "skip_detect_circle": skip_detect_circle,
+            }
         
+        if enable_note_detector:
+            params["NoteDetector"] = {
+                "enabled": True,
+                "std_video_path": standardized_video_path,
+                "video_name": video_name,
+                "batch_detect_obb": batch_detect_obb,
+                "batch_cls": batch_classify,
+                "inference_device": inference_device,
+                "model_paths": model_paths,
+                "skip_detect": skip_detect,
+                "skip_cls": skip_classify,
+                "skip_export_tracked_video": skip_export_tracked_video
+            }
+
+        if enable_note_analyzer:
+            params["NoteAnalyzer"] = {
+                "enabled": True,
+                "tracked_output_dir": tracked_output_dir,
+                "bpm": bpm,
+                "chart_lv": chart_lv,
+                "base_denominator": base_denominator
+            }
+
         # 输出日志
         self.output_widget.append_text(f'\n{"=" * 20}')
         self.output_widget.append_text(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))

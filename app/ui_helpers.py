@@ -168,11 +168,10 @@ def create_divider(text=None):
     if text:
         line_left = QFrame()
         line_left.setFrameShape(QFrame.Shape.HLine)
-        line_left.setFixedSize(20, 20) # 左侧线条固定宽度20像素
+        line_left.setFixedSize(20, 20) # 固定宽度20像素
         line_left.setStyleSheet(f"color: {COLORS['text_secondary']};")
         divider_layout.addWidget(line_left)
 
-    if text:
         label = QLabel(text)
         label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -180,10 +179,17 @@ def create_divider(text=None):
         label.setFixedSize(length, 20)
         divider_layout.addWidget(label)
 
-    line_right = QFrame()
-    line_right.setFrameShape(QFrame.Shape.HLine)
-    line_right.setFixedHeight(20) # 右侧线条没有固定宽度，自动填充剩余空间
-    line_right.setStyleSheet(f"color: {COLORS['text_secondary']};")
-    divider_layout.addWidget(line_right)
+        line_right = QFrame()
+        line_right.setFrameShape(QFrame.Shape.HLine)
+        line_right.setFixedSize(20, 20) # 固定宽度20像素
+        line_right.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        divider_layout.addWidget(line_right)
+
+    else:
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFixedHeight(20) # 右侧线条没有固定宽度，自动填充剩余空间
+        line.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        divider_layout.addWidget(line)
 
     return divider_container

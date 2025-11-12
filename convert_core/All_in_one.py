@@ -37,100 +37,120 @@ def main():
 
     try:
         time.sleep(0.1) # 确保能写上日志
-        print("\n" + "=" * 40)
-        
+
         # standardizer 参数
-        video_path = params["video_path"]
-        video_mode = params["video_mode"]
-        start_frame = params["start_frame"]
-        end_frame = params["end_frame"]
-        target_res = params["target_res"]
-        skip_detect_circle = params["skip_detect_circle"]
+        enable_Standardizer = params.get('Standardizer', {}).get('enabled', False)
+        video_path = params.get('Standardizer', {}).get('video_path', None)
+        video_mode = params.get('Standardizer', {}).get('video_mode', None)
+        start_frame = params.get('Standardizer', {}).get('start_frame', None)
+        end_frame = params.get('Standardizer', {}).get('end_frame', None)
+        target_res = params.get('Standardizer', {}).get('target_res', None)
+        skip_detect_circle = params.get('Standardizer', {}).get('skip_detect_circle', None)
 
         # note-detector 参数
-        video_name = params["video_name"]
-        batch_detect = params.get("batch_detect", 2)
-        batch_cls = params.get("batch_cls", 16)
-        inference_device = params["inference_device"]
-        detect_model = params["detect_model"]
-        obb_model = params["obb_model"]
-        cls_ex_model = params["cls_ex_model"]
-        cls_break_model = params["cls_break_model"]
-        skip_detect = params.get("skip_detect", False)
-        skip_classify = params.get("skip_classify", False)
-        skip_export_tracked_video = params.get("skip_export_tracked_video", False)
+        enable_NoteDetector = params.get('NoteDetector', {}).get('enabled', False)
+        std_video_path = params.get('NoteDetector', {}).get('std_video_path', None)
+        video_name = params.get('NoteDetector', {}).get('video_name', None)
+        batch_detect = params.get('NoteDetector', {}).get('batch_detect_obb', None)
+        batch_cls = params.get('NoteDetector', {}).get('batch_cls', None)
+        inference_device = params.get('NoteDetector', {}).get('inference_device', None)
+        detect_model = params.get('NoteDetector', {}).get('model_paths', {}).get("detect", None)
+        obb_model = params.get('NoteDetector', {}).get('model_paths', {}).get("obb", None)
+        cls_ex_model = params.get('NoteDetector', {}).get('model_paths', {}).get("cls_ex", None)
+        cls_break_model = params.get('NoteDetector', {}).get('model_paths', {}).get("cls_break", None)
+        skip_detect = params.get('NoteDetector', {}).get('skip_detect', None)
+        skip_cls = params.get('NoteDetector', {}).get('skip_cls', None)
+        skip_export_tracked_video = params.get('NoteDetector', {}).get('skip_export_tracked_video', None)
 
         # note_analyzer 参数
-        bpm = params["bpm"]
-        chart_lv = params["chart_lv"]
-        base_denominator = params["base_denominator"]
+        enable_NoteAnalyzer = params.get('NoteAnalyzer', {}).get('enabled', False)
+        tracked_output_dir = params.get('NoteAnalyzer', {}).get('tracked_output_dir', None)
+        bpm = params.get('NoteAnalyzer', {}).get('bpm', None)
+        chart_lv = params.get('NoteAnalyzer', {}).get('chart_lv', None)
+        base_denominator = params.get('NoteAnalyzer', {}).get('base_denominator', None)
         # one_beat_Msec = 60 / bpm * 1000 * 4
         # base_resolution = one_beat_Msec / base_denominator
 
         # 打印所有参数
-        print("Standardizer")
-        print(f"  video_path: {video_path}")
-        print(f"  video_mode: {video_mode}")
-        print(f"  start_frame: {start_frame}")
-        print(f"  end_frame: {end_frame}")
-        print(f"  target_res: {target_res}")
-        print(f"  skip_detect_circle: {skip_detect_circle}")
+        print("\n" + "=" * 40)
+
+        if enable_Standardizer:
+            print("Standardizer")
+            print(f"  video_path: {video_path}")
+            print(f"  video_mode: {video_mode}")
+            print(f"  start_frame: {start_frame}")
+            print(f"  end_frame: {end_frame}")
+            print(f"  target_res: {target_res}")
+            print(f"  skip_detect_circle: {skip_detect_circle}")
+
+        if enable_NoteDetector:
+            print("\nNoteDetector")
+            if not enable_Standardizer:
+                print(f"  std_video_path: {std_video_path}")
+            print(f"  video_name: {video_name}")
+            print(f"  batch_detect_obb: {batch_detect}")
+            print(f"  batch_classify: {batch_cls}")
+            print(f"  inference_device: {inference_device}")
+            print(f"  model detect: {detect_model}")
+            print(f"  model obb: {obb_model}")
+            print(f"  model cls_ex: {cls_ex_model}")
+            print(f"  model cls_break: {cls_break_model}")
+            print(f"  skip_detect: {skip_detect}")
+            print(f"  skip_classify: {skip_cls}")
+            print(f"  skip_export_tracked_video: {skip_export_tracked_video}")
         
-        print("\nNoteDetector")
-        print(f"  video_name: {video_name}")
-        print(f"  batch_detect_obb: {batch_detect}")
-        print(f"  batch_classify: {batch_cls}")
-        print(f"  inference_device: {inference_device}")
-        print(f"  model detect: {detect_model}")
-        print(f"  model obb: {obb_model}")
-        print(f"  model cls_ex: {cls_ex_model}")
-        print(f"  model cls_break: {cls_break_model}")
-        print(f"  skip_detect: {skip_detect}")
-        print(f"  skip_classify: {skip_classify}")
-        print(f"  skip_export_tracked_video: {skip_export_tracked_video}")
+        if enable_NoteAnalyzer:
+            print("\nNoteAnalyzer")
+            if not enable_NoteDetector:
+                print(f"  tracked_output_dir: {tracked_output_dir}")
+            print(f"  BPM: {bpm}")
+            print(f"  chart_lv: {chart_lv}")
+            print(f"  base_denominator: {base_denominator}")
         
-        print("\nNoteAnalyzer")
-        print(f"  BPM: {bpm}")
-        print(f"  chart_lv: {chart_lv}")
-        print(f"  base_denominator: {base_denominator}")
         print("=" * 40 + "\n")
 
 
 
-        standardizer = Standardizer.Standardizer()
-        note_detector = NoteDetector.NoteDetector()
-        note_analyzer = NoteAnalyzer.NoteAnalyzer()
 
-        std_video_path = standardizer.standardize_video(
-            video_path,
-            start_frame,
-            end_frame,
-            video_mode,
-            target_res,
-            skip_detect_circle
-        )
+        if enable_Standardizer:
+            standardizer = Standardizer.Standardizer()
 
-        tracked_output_dir = note_detector.main(
-            std_video_path, 
-            os.path.join(tools.path_config.final_data_output_dir, video_name),
-            batch_detect,
-            batch_cls,
-            inference_device,
-            detect_model,
-            obb_model,
-            cls_ex_model,
-            cls_break_model,
-            skip_detect=skip_detect,
-            skip_cls=skip_classify,
-            skip_export_tracked_video=skip_export_tracked_video
-        )
+            std_video_path = standardizer.standardize_video(
+                video_path,
+                start_frame,
+                end_frame,
+                video_mode,
+                target_res,
+                skip_detect_circle
+            )
 
-        note_analyzer.main(
-            tracked_output_dir,
-            bpm,
-            chart_lv,
-            base_denominator
-        )
+        if enable_NoteDetector:
+            note_detector = NoteDetector.NoteDetector()
+
+            tracked_output_dir = note_detector.main(
+                std_video_path, 
+                os.path.normpath(os.path.abspath(os.path.join(tools.path_config.final_data_output_dir, video_name))),
+                batch_detect,
+                batch_cls,
+                inference_device,
+                detect_model,
+                obb_model,
+                cls_ex_model,
+                cls_break_model,
+                skip_detect=skip_detect,
+                skip_cls=skip_cls,
+                skip_export_tracked_video=skip_export_tracked_video
+            )
+
+        if enable_NoteAnalyzer:
+            note_analyzer = NoteAnalyzer.NoteAnalyzer()
+
+            note_analyzer.main(
+                tracked_output_dir,
+                bpm,
+                chart_lv,
+                base_denominator
+            )
 
     except Exception as e:
         print(f"Error in auto convert: {e}")
