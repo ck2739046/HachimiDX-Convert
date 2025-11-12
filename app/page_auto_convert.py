@@ -14,286 +14,8 @@ root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
 
-# 导入独立的输出文本组件
-from output_text_widget import OutputTextWidget
-
-
-
-
-
-
-
-# 通用按钮状态管理类
-
-class ManagedButton:
-    """
-    管理按钮状态的辅助类
-    支持运行/停止状态切换，带延迟保护
-    """
-    def __init__(self, button, original_text, original_color, stop_color="#DC3545"):
-        self.button = button
-        self.original_text = original_text
-        self.original_color = original_color
-        self.stop_color = stop_color
-        self.is_running = False
-        self.is_transitioning = False  # 是否在状态转换期间（冷却）
-        self.transition_time = 500     # 0.5秒冷却
-        self.is_user_stopping = False  # 是否是用户主动停止（而非进程自然结束）
-        self.process_runner = None
-        self.transition_timer = QTimer()
-        self.transition_timer.setSingleShot(True)
-        self.transition_timer.timeout.connect(self._on_transition_complete)
-        
-        # 保存原始点击处理函数
-        self.start_callback = None
-        self.stop_callback = None
-        
-        # 连接按钮点击事件
-        self.button.clicked.connect(self._on_button_clicked)
-    
-    
-    def set_callbacks(self, start_callback, stop_callback=None):
-        """设置回调函数"""
-        self.start_callback = start_callback
-        self.stop_callback = stop_callback
-    
-    
-    def attach_process(self, process_runner):
-        """关联 ProcessRunner，当进程结束时自动恢复按钮"""
-        self.process_runner = process_runner
-        if process_runner:
-            process_runner.process_finished.connect(self._on_process_finished)
-    
-    
-    def _on_button_clicked(self):
-        """按钮点击处理"""
-        # 如果在转换期间，忽略点击
-        if self.is_transitioning:
-            return
-        
-        if not self.is_running:
-            # 开始运行
-            self._start_transition_to_stop()
-        else:
-            # 停止运行
-            self._start_transition_to_idle()
-    
-    
-    def _start_transition_to_stop(self):
-        """开始转换到停止状态（带冷却）"""
-        self.is_transitioning = True
-        self.button.setEnabled(False)  # 禁用按钮
-
-        # 冷却后转换为停止状态
-        self.transition_timer.start(self.transition_time)
-
-
-    def _start_transition_to_idle(self):
-        """开始转换到空闲状态（停止进程带冷却）"""
-        self.is_transitioning = True
-        self.is_user_stopping = True  # 标记为用户主动停止
-        self.button.setEnabled(False)  # 禁用按钮
-        
-        # 停止进程
-        if self.process_runner:
-            self.process_runner.cleanup()
-        
-        # 调用停止回调
-        if self.stop_callback:
-            self.stop_callback()
-
-        # 冷却后恢复到空闲状态
-        self.transition_timer.start(self.transition_time)
-
-
-    def _on_transition_complete(self):
-        """状态转换完成"""
-        self.is_transitioning = False
-        self.button.setEnabled(True)
-        
-        if not self.is_running:
-            # 转换到运行状态
-            self.is_running = True
-            self.button.setText("停止")
-            self.button.setStyleSheet(f"background-color: {self.stop_color};")
-            
-            # 调用启动回调
-            if self.start_callback:
-                self.start_callback()
-        else:
-            # 转换到空闲状态
-            self.is_running = False
-            self.is_user_stopping = False  # 清除标记
-            self.button.setText(self.original_text)
-            self.button.setStyleSheet(f"background-color: {self.original_color};")
-    
-    
-    def _on_process_finished(self, success):
-        """进程结束时立即恢复按钮"""
-        # 如果是用户主动停止，让转换定时器处理状态变化
-        if self.is_user_stopping:
-            return
-        
-        # 取消转换计时器
-        if self.transition_timer.isActive():
-            self.transition_timer.stop()
-        
-        # 立即恢复到空闲状态
-        self.is_running = False
-        self.is_transitioning = False
-        self.button.setEnabled(True)
-        self.button.setText(self.original_text)
-        self.button.setStyleSheet(f"background-color: {self.original_color};")
-    
-    
-    def reset(self):
-        """重置按钮状态"""
-        if self.transition_timer.isActive():
-            self.transition_timer.stop()
-        self.is_running = False
-        self.is_transitioning = False
-        self.button.setEnabled(True)
-        self.button.setText(self.original_text)
-        self.button.setStyleSheet(f"background-color: {self.original_color};")
-
-
-
-
-
-
-
-
-
-# 通用 QProcess 辅助类
-
-class ProcessRunner(QProcess):
-
-    output_ready = pyqtSignal(str, bool)  # 输出信号（文本, 是否替换当前行）
-    process_finished = pyqtSignal(bool)   # 完成信号（成功/失败）
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # 合并 stdout 和 stderr
-        self.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        # 连接内部信号
-        self.readyReadStandardOutput.connect(self._handle_output)
-        self.finished.connect(self._handle_finished)
-        # ANSI 转义序列的正则表达式 (例如文字颜色代码)
-        self.ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        # 文本缓冲区（用于处理 \r）
-        self.text_buffer = ""
-    
-    
-    def _strip_ansi(self, text):
-        return self.ansi_escape.sub('', text)
-    
-
-    def _handle_output(self):
-        output = self.readAllStandardOutput()
-        text = None
-        
-        # 先尝试 UTF-8 编码（Python 脚本默认输出）
-        try:
-            text = bytes(output).decode('utf-8', errors='strict')
-        except UnicodeDecodeError:
-            # 失败则尝试 GBK（Windows 控制台默认）
-            try:
-                text = bytes(output).decode('gbk', errors='strict')
-            except:
-                # 最后使用 UTF-8 with replace（兜底）
-                text = bytes(output).decode('utf-8', errors='replace')
-        
-        # 将新文本添加到缓冲区
-        self.text_buffer += text
-        
-        # 处理缓冲区中的文本
-        while True:
-            # 检查是否有换行符
-            if '\n' in self.text_buffer:
-                # 有换行符，处理到换行符为止的内容
-                line, self.text_buffer = self.text_buffer.split('\n', 1)
-                
-                # 处理 \r（回车符）
-                if '\r' in line:
-                    # 有多个 \r 分隔的部分，只保留最后一段
-                    parts = line.split('\r')
-                    final_text = parts[-1]
-                    
-                    # 如果有多个部分，说明之前有进度更新
-                    if len(parts) > 1:
-                        # 先用倒数第二个部分更新进度行（如果存在）
-                        if len(parts) >= 2 and parts[-2].strip():
-                            clean_line = self._strip_ansi(parts[-2])
-                            self.output_ready.emit(clean_line, True)  # 替换进度行
-                    
-                    # 然后追加最终文本作为新行（如果非空）
-                    if final_text.strip():
-                        clean_line = self._strip_ansi(final_text)
-                        self.output_ready.emit(clean_line, False)  # 追加新行，固定这一行
-                    else:
-                        # 即使是空行，也要发送以固定进度行
-                        self.output_ready.emit("", False)
-                else:
-                    # 没有 \r，直接追加
-                    if line.strip():
-                        clean_line = self._strip_ansi(line)
-                        self.output_ready.emit(clean_line, False)  # 追加新行
-                        
-            elif '\r' in self.text_buffer:
-                # 有回车符但没有换行符，说明是进度更新
-                parts = self.text_buffer.split('\r')
-                # 只发送倒数第二个部分（如果有的话）
-                # 因为最后一个部分可能不完整，需要保留在缓冲区
-                if len(parts) >= 2:
-                    # 取倒数第二个部分（这是最新的完整进度）
-                    progress_text = parts[-2]
-                    if progress_text.strip():
-                        clean_line = self._strip_ansi(progress_text)
-                        self.output_ready.emit(clean_line, True)  # True = 替换当前行
-                # 保留最后一部分在缓冲区
-                self.text_buffer = parts[-1]
-                break
-            else:
-                # 没有换行符也没有回车符，等待更多数据
-                break
-    
-
-    def _handle_finished(self, exit_code, exit_status):
-        # 处理缓冲区中剩余的文本
-        if self.text_buffer.strip():
-            clean_line = self._strip_ansi(self.text_buffer)
-            self.output_ready.emit(clean_line, False)
-            self.text_buffer = ""
-        
-        success = (exit_code == 0)
-        self.process_finished.emit(success)
-    
-
-    def run_script(self, script_path, args=None):
-        if args is None:
-            args = []
-        
-        python_exe = sys.executable
-        self.start(python_exe, [script_path] + args)
-    
-
-    def cleanup(self):
-        """清理进程（如果正在运行则终止）"""
-        try:
-            if self.state() != QProcess.ProcessState.NotRunning:
-                self.kill()
-                self.waitForFinished(500)
-            self.deleteLater()
-        except RuntimeError:
-            # 对象已被删除，忽略
-            pass
-
-
-
-
-
-
-
+# 导入新的进程控制组件
+from process_widgets import ProcessControlButton, OutputTextWidget
 
 
 # debug
@@ -336,15 +58,10 @@ class AutoConvertPage(QWidget):
         self.skip_detect_checkbox = None
         self.skip_classify_checkbox = None
 
-        # 进程运行器
-        self.check_availability_runner = None
-        self.convert_model_runner = None
-        self.auto_convert_runner = None
-        
-        # 按钮管理器
-        self.check_button_manager = None
-        self.convert_button_manager = None
-        self.auto_convert_button_manager = None
+        # 进程控制按钮（新组件）
+        self.check_button = None
+        self.convert_button = None
+        self.auto_convert_button = None
         
         # 输出区组件
         self.output_widget = None
@@ -365,6 +82,9 @@ class AutoConvertPage(QWidget):
         # 下半部分：输出区
         output_widget = self.create_output_area()
         page_layout.addWidget(output_widget)
+        
+        # 配置所有进程控制按钮
+        self._configure_buttons()
     
     
     # debug
@@ -462,11 +182,10 @@ class AutoConvertPage(QWidget):
         help_label.leaveEvent = lambda event: QToolTip.hideText()
         first_row_layout.addWidget(help_label)
         
-        # 按钮: "检查可用性"
-        check_button = QPushButton("检查可用性")
-        check_button.setStyleSheet(f"background-color: {self.colors['accent']};")
-        check_button.setFixedSize(80, 25)
-        first_row_layout.addWidget(check_button)
+        # 按钮: "检查可用性"（使用新组件）
+        self.check_button = ProcessControlButton("检查可用性", self.colors)
+        self.check_button.setFixedSize(80, 25)
+        first_row_layout.addWidget(self.check_button)
 
                 # Label: "batch_detect_obb:"
         batch_detect_label = QLabel("batch_detect_obb:")
@@ -496,15 +215,7 @@ class AutoConvertPage(QWidget):
         self.batch_classify_combo.setCurrentIndex(4)  # 默认选择16
         first_row_layout.addWidget(self.batch_classify_combo)
         
-        # 创建按钮管理器
-        self.check_button_manager = ManagedButton(
-            check_button, 
-            "检查可用性", 
-            self.colors['accent']
-        )
-        self.check_button_manager.set_callbacks(
-            start_callback=self._start_check_availability
-        )
+        # 配置按钮（稍后在 setup_ui 完成后配置）
         
         first_row_layout.addStretch()  # 添加弹性空间
         
@@ -558,22 +269,13 @@ class AutoConvertPage(QWidget):
         self.workspace_input.hide()
         second_row_layout.addWidget(self.workspace_input)
         
-        # 按钮: "转换模型"（默认隐藏）
-        self.convert_model_button = QPushButton("转换模型")
-        self.convert_model_button.setStyleSheet(f"background-color: {self.colors['accent']};")
-        self.convert_model_button.setFixedSize(80, 25)
-        self.convert_model_button.hide()  # 默认隐藏
-        second_row_layout.addWidget(self.convert_model_button)
+        # 按钮: "转换模型"（默认隐藏，使用新组件）
+        self.convert_button = ProcessControlButton("转换模型", self.colors)
+        self.convert_button.setFixedSize(80, 25)
+        self.convert_button.hide()  # 默认隐藏
+        second_row_layout.addWidget(self.convert_button)
         
-        # 创建按钮管理器
-        self.convert_button_manager = ManagedButton(
-            self.convert_model_button,
-            "转换模型",
-            self.colors['accent']
-        )
-        self.convert_button_manager.set_callbacks(
-            start_callback=self._start_convert_model
-        )
+        # 配置按钮（稍后在 setup_ui 完成后配置）
         
         second_row_layout.addStretch()  # 添加弹性空间，使控件靠左对齐
         
@@ -918,9 +620,9 @@ class AutoConvertPage(QWidget):
         sixth_row_layout.setContentsMargins(0, 0, 0, 0)
         sixth_row_layout.setSpacing(5)
         
-        # 大按钮: "Start Auto Convert!"
-        start_button = QPushButton("Start Auto Convert!")
-        start_button.setStyleSheet(f"""
+        # 大按钮: "Start Auto Convert!"（使用新组件）
+        self.auto_convert_button = ProcessControlButton("Start Auto Convert!", self.colors)
+        self.auto_convert_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {self.colors['accent']};
                 font-size: 16px;
@@ -928,24 +630,43 @@ class AutoConvertPage(QWidget):
                 padding: 10px 20px;
             }}
         """)
-        start_button.setFixedSize(200, 50)
-        sixth_row_layout.addWidget(start_button)
+        self.auto_convert_button.setFixedSize(200, 50)
+        sixth_row_layout.addWidget(self.auto_convert_button)
         
-        # 创建按钮管理器
-        self.auto_convert_button_manager = ManagedButton(
-            start_button,
-            "Start Auto Convert!",
-            self.colors['accent']
-        )
-        self.auto_convert_button_manager.set_callbacks(
-            start_callback=self._start_auto_convert
-        )
+        # 配置按钮（稍后在 setup_ui 完成后配置）
         
         sixth_row_layout.addStretch()  # 添加弹性空间
         
         return sixth_row
     
 
+    def _configure_buttons(self):
+        """配置所有进程控制按钮"""
+        # 配置"检查可用性"按钮
+        self.check_button.configure(
+            script_path=os.path.join(root, "tools", "check_device.py"),
+            args_generator=self._prepare_check_availability_args,
+            output_widget=self.output_widget,
+            on_finished=self._on_check_availability_finished
+        )
+        
+        # 配置"转换模型"按钮
+        self.convert_button.configure(
+            script_path=os.path.join(root, "tools", "export_models.py"),
+            args_generator=self._prepare_convert_model_args,
+            output_widget=self.output_widget,
+            on_finished=self._on_convert_model_finished
+        )
+        
+        # 配置"Start Auto Convert!"按钮
+        self.auto_convert_button.configure(
+            script_path=os.path.join(root, "convert_core", "All_in_one.py"),
+            args_generator=self._prepare_auto_convert_args,
+            output_widget=self.output_widget,
+            on_finished=self._on_auto_convert_finished
+        )
+    
+    
     # debug
     # ----------------------------------------------------------------------
     # 第三行/第四行 事件处理
@@ -966,58 +687,50 @@ class AutoConvertPage(QWidget):
     
     # debug
     # ----------------------------------------------------------------------
-    # 第六行 事件处理
+    # 参数准备方法
     
-    def _start_auto_convert(self):
-        """开始自动转换（由按钮管理器调用）"""
+    def _prepare_auto_convert_args(self):
+        """准备自动转换的参数"""
         # 验证必填参数
         if not self.selected_video_path:
             QMessageBox.warning(self, "参数错误", "请先选择谱面视频文件")
-            self.auto_convert_button_manager.reset()
-            return
+            return []
         
         video_name = self.video_name_input.text().strip()
         if not video_name:
             QMessageBox.warning(self, "参数错误", "请输入歌曲名称")
-            self.auto_convert_button_manager.reset()
-            return
+            return []
         
         bpm = self.bpm_input.text().strip()
         if not bpm:
             QMessageBox.warning(self, "参数错误", "请输入歌曲 BPM")
-            self.auto_convert_button_manager.reset()
-            return
+            return []
         
         video_start = self.video_start_input.text().strip()
         if not video_start:
             QMessageBox.warning(self, "参数错误", "请输入歌曲起始时间")
-            self.auto_convert_button_manager.reset()
-            return
+            return []
         
         video_end = self.video_end_input.text().strip()
         if not video_end:
             QMessageBox.warning(self, "参数错误", "请输入歌曲结束时间")
-            self.auto_convert_button_manager.reset()
-            return
+            return []
         
         # 使用 OpenCV 获取视频的实际 FPS
         try:
             cap = cv2.VideoCapture(self.selected_video_path)
             if not cap.isOpened():
                 QMessageBox.warning(self, "视频错误", "无法打开视频文件")
-                self.auto_convert_button_manager.reset()
-                return
+                return []
             video_fps = cap.get(cv2.CAP_PROP_FPS)
             cap.release()
             if video_fps <= 0:
                 QMessageBox.warning(self, "视频错误", "无法获取视频 FPS 信息")
-                self.auto_convert_button_manager.reset()
-                return
-            self.append_output(f"检测到视频 FPS: {video_fps}")
+                return []
+            self.output_widget.append_text(f"检测到视频 FPS: {video_fps}")
         except Exception as e:
             QMessageBox.warning(self, "视频错误", f"读取视频 FPS 失败: {str(e)}")
-            self.auto_convert_button_manager.reset()
-            return
+            return []
         
         # 根据后端选择模型路径和推理设备
         backend = self.backend_combo.currentText()
@@ -1067,14 +780,14 @@ class AutoConvertPage(QWidget):
         }
         
         # 输出日志
-        self.append_output(f'\n{"=" * 20}')
-        self.append_output(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
-        self.append_output(f"\n开始自动转换: {video_name}\n")
-        self.append_output(f"视频路径: {self.selected_video_path}")
-        self.append_output(f"BPM: {bpm}")
-        self.append_output(f"歌曲范围: {video_start}s -> {video_end}s")
-        self.append_output(f"谱面难度: {self.chart_lv_combo.currentText()}")
-        self.append_output("")
+        self.output_widget.append_text(f'\n{"=" * 20}')
+        self.output_widget.append_text(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        self.output_widget.append_text(f"\n开始自动转换: {video_name}\n")
+        self.output_widget.append_text(f"视频路径: {self.selected_video_path}")
+        self.output_widget.append_text(f"BPM: {bpm}")
+        self.output_widget.append_text(f"歌曲范围: {video_start}s -> {video_end}s")
+        self.output_widget.append_text(f"谱面难度: {self.chart_lv_combo.currentText()}")
+        self.output_widget.append_text("")
         
         # 创建临时 JSON 文件保存参数
         temp_json = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8')
@@ -1082,47 +795,30 @@ class AutoConvertPage(QWidget):
         temp_json_path = temp_json.name
         temp_json.close()
         
-        # 创建新的进程运行器
-        if self.auto_convert_runner is not None:
-            try:
-                self.auto_convert_runner.output_ready.disconnect()
-                self.auto_convert_runner.process_finished.disconnect()
-            except:
-                pass
-        
-        self.auto_convert_runner = ProcessRunner(self)
-        self.auto_convert_runner.output_ready.connect(self.append_output)
-        self.auto_convert_runner.process_finished.connect(self.on_auto_convert_finished)
-        
-        # 关联进程到按钮管理器
-        self.auto_convert_button_manager.attach_process(self.auto_convert_runner)
-        
-        # 运行 All_in_one.py
-        all_in_one_script = os.path.join(root, "convert_core", "All_in_one.py")
-        args = [temp_json_path]
-        self.auto_convert_runner.run_script(all_in_one_script, args)
+        # 返回参数列表
+        return [temp_json_path]
     
     
-    @pyqtSlot(bool)
-    def on_auto_convert_finished(self, success):
-        if success:
-            self.append_output("\n✓ 自动转换完成")
-            self.append_output("=" * 20)
+    def _on_auto_convert_finished(self, exit_code):
+        """自动转换完成回调"""
+        if exit_code == 0:
+            self.output_widget.append_text("\n✓ 自动转换完成")
+            self.output_widget.append_text("=" * 20)
         else:
-            self.append_output("\n✗ 自动转换失败")
-            self.append_output("=" * 20)
+            self.output_widget.append_text("\n✗ 自动转换失败")
+            self.output_widget.append_text("=" * 20)
     
     
     # debug
     # ----------------------------------------------------------------------
-    # 第一行/第二行 事件处理
+    # 第一行/第二行 检查可用性
     
-    def _start_check_availability(self):
-        """开始检查可用性（由按钮管理器调用）"""
+    def _prepare_check_availability_args(self):
+        """准备检查可用性的参数"""
         # 重置状态
         self.env_status_label.setText("运行环境待检测⚪")
         self.model_status_label.setText("模型文件待检测⚪")
-        self.convert_model_button.hide()
+        self.convert_button.hide()
         self.batch_size_label.hide()
         self.batch_size_input.hide()
         self.workspace_label.hide()
@@ -1130,47 +826,28 @@ class AutoConvertPage(QWidget):
         
         # 开始环境检查
         self.current_selected_backend = self.backend_combo.currentText()
-        self.append_output(f'\n{"=" * 20}')
-        self.append_output(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
-        self.append_output(f"\n开始检查 {self.current_selected_backend} 运行环境...\n")
+        self.output_widget.append_text(f'\n{"=" * 20}')
+        self.output_widget.append_text(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        self.output_widget.append_text(f"\n开始检查 {self.current_selected_backend} 运行环境...\n")
         
-        # 创建新的进程运行器（旧进程会自动被 Qt 清理）
-        if self.check_availability_runner is not None:
-            try:
-                # 断开旧连接
-                self.check_availability_runner.output_ready.disconnect()
-                self.check_availability_runner.process_finished.disconnect()
-            except:
-                pass
-        
-        self.check_availability_runner = ProcessRunner(self)
-        self.check_availability_runner.output_ready.connect(self.append_output)
-        self.check_availability_runner.process_finished.connect(self.on_check_availability_finished)
-        
-        # 关联进程到按钮管理器
-        self.check_button_manager.attach_process(self.check_availability_runner)
-        
-        # 运行检查脚本
-        check_device_script = os.path.join(root, "tools", "check_device.py")
-        args = [self.current_selected_backend]
-        self.check_availability_runner.run_script(check_device_script, args)
-
-
-    @pyqtSlot(bool)
-    def on_check_availability_finished(self, success):
-        if success:
+        return [self.current_selected_backend]
+    
+    
+    def _on_check_availability_finished(self, exit_code):
+        """检查可用性完成回调"""
+        if exit_code == 0:
             self.env_status_label.setText("运行环境正常🟢")
-            self.append_output("\n✓ 运行环境检查通过")
+            self.output_widget.append_text("\n✓ 运行环境检查通过")
             # 继续检查模型
             self.check_models()
         else:
             self.env_status_label.setText("运行环境异常🔴")
-            self.append_output("\n✗ 运行环境检查失败")
-            self.append_output("=" * 20)
+            self.output_widget.append_text("\n✗ 运行环境检查失败")
+            self.output_widget.append_text("=" * 20)
 
 
     def check_models(self):
-        self.append_output(f"\n开始检查 {self.current_selected_backend} 模型文件...\n")
+        self.output_widget.append_text(f"\n开始检查 {self.current_selected_backend} 模型文件...\n")
 
         # 先尝试查找转换后的模型文件
         if self.current_selected_backend == "TensorRT":
@@ -1187,19 +864,19 @@ class AutoConvertPage(QWidget):
         all_models_exist = True
         for model_path in model_paths:
             if os.path.exists(model_path) and os.path.isfile(model_path):
-                self.append_output(f"✓ 找到模型文件: {os.path.basename(model_path)}")
+                self.output_widget.append_text(f"✓ 找到模型文件: {os.path.basename(model_path)}")
             else:
-                self.append_output(f"✗ 缺少模型文件: {os.path.basename(model_path)}")
+                self.output_widget.append_text(f"✗ 缺少模型文件: {os.path.basename(model_path)}")
                 all_models_exist = False
         
         if all_models_exist:
             self.model_status_label.setText("模型文件正常🟢")
-            self.append_output("\n✓ 模型文件检查通过")
-            self.append_output("=" * 20)
+            self.output_widget.append_text("\n✓ 模型文件检查通过")
+            self.output_widget.append_text("=" * 20)
             return
         
         # 如果没有找到转换后的模型，则检查原始模型文件
-        self.append_output("\n未找到转换后的模型文件，开始检查原始模型文件...\n")
+        self.output_widget.append_text("\n未找到转换后的模型文件，开始检查原始模型文件...\n")
         raw_model_paths = [tools.path_config.detect_pt,
                            tools.path_config.obb_pt,
                            tools.path_config.cls_break_pt,
@@ -1208,17 +885,17 @@ class AutoConvertPage(QWidget):
         all_models_exist = True
         for model_path in raw_model_paths:
             if os.path.exists(model_path) and os.path.isfile(model_path):
-                self.append_output(f"✓ 找到模型文件: {os.path.basename(model_path)}")
+                self.output_widget.append_text(f"✓ 找到模型文件: {os.path.basename(model_path)}")
             else:
-                self.append_output(f"✗ 缺少模型文件: {os.path.basename(model_path)}")
+                self.output_widget.append_text(f"✗ 缺少模型文件: {os.path.basename(model_path)}")
                 all_models_exist = False
 
         if all_models_exist:
             self.model_status_label.setText("模型文件待转换🟡")
-            self.append_output("\n✗ 模型文件检查未通过，需要转换格式")
-            self.append_output("=" * 20)
+            self.output_widget.append_text("\n✗ 模型文件检查未通过，需要转换格式")
+            self.output_widget.append_text("=" * 20)
             # 显示转换按钮，如果是 TensorRT 还要显示 batch size 和 workspace 输入
-            self.convert_model_button.show()
+            self.convert_button.show()
             if self.current_selected_backend == "TensorRT":
                 self.batch_size_label.show()
                 self.batch_size_input.show()
@@ -1228,15 +905,15 @@ class AutoConvertPage(QWidget):
         
         # 如果连原始模型都缺失
         self.model_status_label.setText("模型文件异常🔴")
-        self.append_output("\n✗ 模型文件检查未通过，文件缺失")
-        self.append_output("=" * 20)
+        self.output_widget.append_text("\n✗ 模型文件检查未通过，文件缺失")
+        self.output_widget.append_text("=" * 20)
 
 
-    def _start_convert_model(self):
-        """开始转换模型（由按钮管理器调用）"""
-        self.append_output(f'\n{"=" * 20}')
-        self.append_output(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
-        self.append_output(f"\n开始转换为 {self.current_selected_backend} 模型...\n")
+    def _prepare_convert_model_args(self):
+        """准备转换模型的参数"""
+        self.output_widget.append_text(f'\n{"=" * 20}')
+        self.output_widget.append_text(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        self.output_widget.append_text(f"\n开始转换为 {self.current_selected_backend} 模型...\n")
         
         # 准备参数
         args = [self.current_selected_backend]
@@ -1247,34 +924,16 @@ class AutoConvertPage(QWidget):
             args.append(str(batch_size))
             args.append(workspace)
         
-        # 创建新的进程运行器（旧进程会自动被 Qt 清理）
-        if self.convert_model_runner is not None:
-            try:
-                # 断开旧连接
-                self.convert_model_runner.output_ready.disconnect()
-                self.convert_model_runner.process_finished.disconnect()
-            except:
-                pass
-        
-        self.convert_model_runner = ProcessRunner(self)
-        self.convert_model_runner.output_ready.connect(self.append_output)
-        self.convert_model_runner.process_finished.connect(self.on_convert_model_finished)
-        
-        # 关联进程到按钮管理器
-        self.convert_button_manager.attach_process(self.convert_model_runner)
-        
-        # 运行转换脚本
-        export_models_script = os.path.join(root, "tools", "export_models.py")
-        self.convert_model_runner.run_script(export_models_script, args)
+        return args
     
     
-    @pyqtSlot(bool)
-    def on_convert_model_finished(self, success):
-        if success:
-            self.append_output("\n✓ 模型转换完成")
-            self.append_output("=" * 20)
+    def _on_convert_model_finished(self, exit_code):
+        """转换模型完成回调"""
+        if exit_code == 0:
+            self.output_widget.append_text("\n✓ 模型转换完成")
+            self.output_widget.append_text("=" * 20)
             # 隐藏转换按钮和输入框
-            self.convert_model_button.hide()
+            self.convert_button.hide()
             self.batch_size_label.hide()
             self.batch_size_input.hide()
             self.workspace_label.hide()
@@ -1282,8 +941,8 @@ class AutoConvertPage(QWidget):
             # 更新模型状态
             self.model_status_label.setText("模型文件正常🟢")
         else:
-            self.append_output("\n✗ 模型转换失败")
-            self.append_output("=" * 20)
+            self.output_widget.append_text("\n✗ 模型转换失败")
+            self.output_widget.append_text("=" * 20)
 
 
 
@@ -1313,19 +972,3 @@ class AutoConvertPage(QWidget):
         )
         
         return self.output_widget
-    
-    
-    def append_output(self, text, replace_last=False):
-        """
-        添加输出文本（委托给 OutputTextWidget）
-        :param text: 要添加的文本
-        :param replace_last: 是否替换最后一行（用于进度条更新）
-        """
-        if self.output_widget:
-            self.output_widget.append_output(text, replace_last)
-    
-    
-    def clear_output(self):
-        """清空输出文本"""
-        if self.output_widget:
-            self.output_widget.clear()
