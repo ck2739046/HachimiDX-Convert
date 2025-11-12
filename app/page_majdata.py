@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QCo
 from PyQt6.QtCore import QUrl, pyqtSlot
 from PyQt6.QtGui import QWindow
 import os
+import ui_helpers
 
 
 class MajdataPage(QWidget):
@@ -11,7 +12,6 @@ class MajdataPage(QWidget):
                  media_player,          # QMediaPlayer 实例，用于控制视频播放
                  all_songs_folder,      # 歌曲文件夹路径
                  majdata_control_txt,   # MajdataEdit 控制文件路径
-                 colors,                # 配色方案字典
                  folder_combobox_class, # FolderComboBox 类引用
                  parent=None):          # 父 widget
 
@@ -22,7 +22,7 @@ class MajdataPage(QWidget):
         self.media_player = media_player
         self.all_songs_folder = all_songs_folder
         self.majdata_control_txt = majdata_control_txt
-        self.colors = colors
+        self.colors = ui_helpers.COLORS
         self.FolderComboBox = folder_combobox_class
         
         # 其他公共变量

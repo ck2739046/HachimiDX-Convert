@@ -270,6 +270,8 @@ class MainWindow(QMainWindow):
             QPushButton {{
                 background-color: {self.colors['accent']}; color: {self.colors['text_primary']};
                 border: none; font-size: 14px; font-weight: bold;
+            }}QPushButton:hover {{
+                background-color: {self.colors['accent_hover']};
             }}"""
         
 
@@ -430,7 +432,6 @@ class MainWindow(QMainWindow):
                 media_player=self.media_player,
                 all_songs_folder=self.all_songs_folder,
                 majdata_control_txt=self.majdata_control_txt,
-                colors=self.colors,
                 folder_combobox_class=FolderComboBox,
                 parent=self
             )
@@ -439,7 +440,6 @@ class MainWindow(QMainWindow):
         # 自动转谱页面
         elif title == "Auto Convert":
             page = AutoConvertPage(
-                colors=self.colors,
                 parent=self
             )
             return page

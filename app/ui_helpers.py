@@ -18,13 +18,14 @@ COLORS = {
     'text_primary': "#E8E8E8",
     'text_secondary': "#8D99AE",
     'accent': "#3A86FF",
+    'accent_hover': "#4794FF",
     'stop': "#DC3545",
 }
 
 
 def create_help_icon(text):
     """
-    创建帮助图标（❓），鼠标悬停时显示提示文本
+    创建帮助图标（ⓘ），鼠标悬停时显示提示文本
     
     Args:
         text: 提示文本内容
@@ -32,7 +33,7 @@ def create_help_icon(text):
     Returns:
         QLabel: 配置好的帮助图标widget
     """
-    help_label = QLabel("❓")
+    help_label = QLabel("ⓘ")
     help_label.setStyleSheet("font-size: 13px;")
     help_label.setFixedSize(10, 20)
     help_label.setAlignment(Qt.AlignmentFlag.AlignCenter)

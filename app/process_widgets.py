@@ -10,6 +10,7 @@ from PyQt6.QtCore import QProcess, QTimer, pyqtSignal
 from PyQt6.QtGui import QTextCursor
 import sys
 import re
+import ui_helpers
 
 
 class OutputTextWidget(QWidget):
@@ -24,22 +25,16 @@ class OutputTextWidget(QWidget):
     - 最大行数限制
     """
     
-    def __init__(self, colors, max_lines=400, parent=None):
+    def __init__(self, max_lines=400, parent=None):
         """
         初始化输出文本组件
         
-        :param colors: 配色方案字典，需要包含以下键：
-            - 'grey': 背景色
-            - 'text_primary': 主文本颜色
-            - 'bg': 滚动条背景色
-            - 'text_secondary': 滚动条颜色
-            - 'accent': 滚动条悬停颜色
         :param max_lines: 最大保留行数，默认 400
         :param parent: 父 widget
         """
         super().__init__(parent)
         
-        self.colors = colors
+        self.colors = ui_helpers.COLORS
         self.max_output_lines = max_lines
         self.last_line_is_progress = False  # 标记最后一行是否是进度行（可被替换）
         
@@ -321,21 +316,18 @@ class ProcessControlButton(QPushButton):
     # 对外信号
     process_finished = pyqtSignal(int)  # exit_code
     
-    def __init__(self, text, colors, parent=None):
+    def __init__(self, text, parent=None):
         """
         初始化进程控制按钮
         
         :param text: 按钮文本
-        :param colors: 配色方案字典，需要包含：
-            - 'accent': 按钮默认背景色
-            - 'stop': 停止状态背景色（可选，默认 #DC3545）
         :param parent: 父 widget
         """
         super().__init__(text, parent)
         
         # 配置参数
         self._original_text = text
-        self._colors = colors
+        self._colors = ui_helpers.COLORS
         self._script_path = None
         self._args_generator = None
         self._output_widget = None
@@ -360,7 +352,13 @@ class ProcessControlButton(QPushButton):
         self._process.finished.connect(self._on_process_finished)
         
         # 样式
-        self.setStyleSheet(f"background-color: {colors['accent']};")
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {self._colors['accent']};
+            }}
+            QPushButton:hover {{
+                background-color: {self._colors['accent_hover']};
+            }}""")
     
     
     def configure(self, script_path, args_generator=None, 
