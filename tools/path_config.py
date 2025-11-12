@@ -5,6 +5,7 @@ root_dir = os.path.join(os.path.dirname(__file__), '..')
 
 # 用于临时存放文件
 temp_dir = os.path.join(root_dir, 'src', 'temp')
+temp_auto_convert_args_json = os.path.join(temp_dir, 'auto_convert_args.json')
 
 # Majdata
 majdata_dir = os.path.join(root_dir, 'src', 'Majdata')

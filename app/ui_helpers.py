@@ -35,8 +35,8 @@ def create_help_icon(text):
     """
     help_label = QLabel("ⓘ")
     help_label.setStyleSheet("font-size: 13px;")
-    help_label.setFixedSize(10, 20)
-    help_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    help_label.setFixedSize(20, 20)
+    help_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
     help_label.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
     help_label.enterEvent = lambda event: QToolTip.showText(
         QCursor.pos(),
@@ -123,11 +123,11 @@ def create_check_box():
     checkbox = QCheckBox()
     checkbox.setFixedSize(20, 20)
     checkbox.setStyleSheet(f"""
-        QCheckBox::indicator {{
-            background-color: {COLORS['grey']};
-        }}
         QCheckBox::indicator:checked {{
             background-color: {COLORS['accent']};
+        }}
+        QCheckBox::indicator:unchecked {{
+                background-color: {COLORS['grey']};
         }}
     """)
     return checkbox
@@ -142,11 +142,11 @@ def create_divider():
     """
     divider_container = QWidget()
     divider_layout = QVBoxLayout(divider_container)
-    divider_layout.setContentsMargins(0, 10, 0, 10)  # 上下各10像素间距
+    divider_layout.setContentsMargins(0, 5, 0, 5)  # 上下各5像素间距
     divider_layout.setSpacing(0)
     
     divider_line = QWidget()
-    divider_line.setFixedHeight(2)  # 细线高度
+    divider_line.setFixedHeight(1)  # 细线高度
     divider_line.setStyleSheet(f"background-color: {COLORS['grey']};")
     
     divider_layout.addWidget(divider_line)
