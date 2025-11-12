@@ -2507,7 +2507,7 @@ class NoteAnalyzer:
         max = np.max(time_deviations)
         median = np.median(time_deviations)
         std_dev = np.std(time_deviations)
-        print(f"Time deviations {length}: Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
+        print(f"Time deviations of {length} notes: Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
 
 
