@@ -24,6 +24,7 @@ import tools.path_config
 
 from page_majdata import MajdataPage
 from page_auto_convert import AutoConvertPage
+import ui_helpers
 
 
 # 设置环境变量来禁用Qt多媒体库的调试输出
@@ -238,16 +239,8 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        # 配色方案
-        self.colors = {
-            'bg': "#303030",
-            'grey': "#454545",
-            'surface': "#17203D",
-            'surface_hover': "#212C47",
-            'text_primary': "#E8E8E8",
-            'text_secondary': "#8D99AE",
-            'accent': "#3A86FF"
-        }
+        # 配色方案（从ui_helpers导入）
+        self.colors = ui_helpers.COLORS
 
         # 重要变量
         self.all_songs_folder = os.path.abspath(tools.path_config.final_data_output_dir)
@@ -447,7 +440,6 @@ class MainWindow(QMainWindow):
         elif title == "Auto Convert":
             page = AutoConvertPage(
                 colors=self.colors,
-                folder_combobox_class=FolderComboBox,
                 parent=self
             )
             return page

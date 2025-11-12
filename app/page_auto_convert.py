@@ -14,23 +14,20 @@ root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
 
-# 导入新的进程控制组件
 from process_widgets import ProcessControlButton, OutputTextWidget
 
 
-# debug
+
 class AutoConvertPage(QWidget):
     
     def __init__(self, 
                  colors,                # 配色方案字典
-                 folder_combobox_class, # FolderComboBox 类引用（用于创建不可编辑的选择框）
                  parent=None):          # 父 widget
 
         super().__init__(parent)
         
         # 保存传入的依赖
         self.colors = colors
-        self.FolderComboBox = folder_combobox_class
         
         # 第一行/第二行控件
         self.backend_combo = None
