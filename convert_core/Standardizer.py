@@ -4,6 +4,8 @@ import os
 import subprocess
 from typing import Tuple, Optional
 import sys
+import tkinter as tk
+from tkinter import ttk, messagebox
 
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path: sys.path.insert(0, root)
@@ -381,73 +383,144 @@ class Standardizer:
     def get_user_adjustment(self, video_width: int, video_height: int) -> Optional[Tuple[Tuple[int, int], int]]:
         """
         获取用户输入的圆心和半径调整参数
+        通过GUI窗口获取输入
+        用户可以调整圆心坐标和圆的半径
         
         Args:
-            video_width: 视频宽度
-            video_height: 视频高度
+            video_width: 视频宽度（像素）
+            video_height: 视频高度（像素）
             
         Returns:
-            如果参数合法，返回新的(圆心坐标, 半径)，否则返回None
+            如果用户确认调整，返回新的 ((圆心X, 圆心Y), 半径)
+            如果用户取消或出错，返回 None
         """
         try:
-            print("\nCircle Adjustment")
-            print("Enter three numbers separated by commas:")
-            print("1. X offset (pixels, can be positive or negative)")
-            print("2. Y offset (pixels, can be positive or negative)")
-            print("3. Radius scale factor (0.5-1.5, can be positive or negative)")
-            print("   Or type radius directly (pixels, must be over 100)")
-            print("Example: 10, -5, 1.1")
+            # 存储用户的调整结果
+            result = {'value': None}
             
-            while True:
-                user_input = input("Enter adjustment parameters: ").strip()
-
+            def on_submit():
+                """用户点击"确定"按钮时的处理函数"""
                 try:
-                    # 解析用户输入
-                    parts = user_input.replace(' ', '').split(',')
-                    if len(parts) != 3:
-                        print("Error: Please enter exactly three numbers separated by commas.")
-                        continue
+                    # 从GUI输入框中获取用户输入的数值
+                    x_offset = int(entry_x.get())
+                    y_offset = int(entry_y.get())
+                    radius = float(entry_radius.get())
                     
-                    x_offset = int(parts[0])
-                    y_offset = int(parts[1])
-                    radius = float(parts[2])
-                    
-                    # 验证参数
+                    # 计算新的圆心坐标（当前坐标 + 用户输入的偏移量）
                     new_x = self.circle_center[0] + x_offset
                     new_y = self.circle_center[1] + y_offset
                     
-                    # 检查圆心是否在画面内
+                    # 验证新的圆心坐标是否在视频范围内
                     if new_x < 0 or new_x >= video_width or new_y < 0 or new_y >= video_height:
-                        print(f"Error: Adjusted center ({new_x}, {new_y}) is outside the video frame.")
-                        print(f"Valid range: X: 0-{video_width-1}, Y: 0-{video_height-1}")
-                        continue
+                        messagebox.showerror(
+                            "错误", 
+                            f"调整后的圆心 ({new_x}, {new_y}) 超出视频范围\n"
+                            f"有效范围: X: 0-{video_width-1}, Y: 0-{video_height-1}"
+                        )
+                        return
 
-                    # 检查半径参数
+                    # 处理半径参数：支持两种输入方式
                     if radius >= 100:
-                        # 用户直接输入了半径
+                        # 方式1：用户直接输入了半径值（大于等于100）
                         new_radius = round(radius)
                     else:
-                        # 检查缩放系数
+                        # 方式2：用户输入了缩放系数（0.5-1.5）
+                        # 验证缩放系数的范围
                         if radius < 0.5 or radius > 1.5:
-                            print("Error: Radius scale factor must be between 0.5 and 1.5.")
-                            continue
+                            messagebox.showerror("错误", "半径缩放系数必须在 0.5 到 1.5 之间")
+                            return
+                        # 计算新的半径 = 当前半径 * 缩放系数
                         new_radius = round(self.circle_radius * radius)
 
-                    # 检查新的半径    
+                    # 验证新的半径值
                     if new_radius > max(video_width, video_height):
-                        print(f"Error: New radius {new_radius} is too large for the video.")
-                        continue
+                        messagebox.showerror("错误", f"新半径 {new_radius} 超出视频范围")
+                        return
                     if new_radius < 100:
-                        print(f"Error: New radius {new_radius} is too small (minimum 100).")
-                        continue
+                        messagebox.showerror("错误", f"新半径 {new_radius} 太小（最小值为 100）")
+                        return
                     
-                    # 所有检查通过，返回新的圆心和半径
+                    # 所有验证通过，保存调整结果并关闭窗口
+                    result['value'] = ((new_x, new_y), new_radius)
                     print(f"Adjustment applied: New center ({new_x}, {new_y}), New radius {new_radius}")
-                    return ((new_x, new_y), new_radius)
+                    dialog.destroy()
                     
                 except ValueError:
-                    print("Error: Invalid input format. Please enter three numbers separated by commas.")
-                    print("Example: 10, -5, 1.1")
+                    # 用户输入的不是有效的数字
+                    messagebox.showerror("错误", "请输入有效的数字")
+
+            
+            # ========== 创建GUI窗口 ==========
+            dialog = tk.Tk()
+            dialog.title("Adjust circle")
+            dialog.geometry("400x300")
+            dialog.resizable(False, False)
+            
+            # 将窗口显示在屏幕中央
+            dialog.update_idletasks()
+            screen_width = dialog.winfo_screenwidth()
+            screen_height = dialog.winfo_screenheight()
+            x = (screen_width - 400) // 2
+            y = (screen_height - 300) // 2
+            dialog.geometry(f"400x300+{x}+{y}")
+
+            # ========== 上半部分：显示当前圆心和半径信息 ==========
+            info_frame = ttk.LabelFrame(dialog, text="Current", padding="10")
+            info_frame.pack(fill=tk.X, padx=10, pady=5)
+            
+            current_info = ttk.Label(
+                info_frame,
+                text=f"Center: ({self.circle_center[0]}, {self.circle_center[1]})   Radius: {self.circle_radius}"
+            )
+            current_info.pack()
+            
+            # ========== 中间部分：参数调整输入框 ==========
+            input_frame = ttk.LabelFrame(dialog, text="Adjustment", padding="10")
+            input_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+            
+            # X轴偏移输入框
+            x_frame = ttk.Frame(input_frame)
+            x_frame.pack(fill=tk.X, pady=8)
+            ttk.Label(x_frame, text="X offset:", width=7).pack(side=tk.LEFT, padx=(0, 10))
+            entry_x = ttk.Entry(x_frame, width=6)
+            entry_x.pack(side=tk.LEFT)
+            entry_x.insert(0, "0")
+            ttk.Label(x_frame, text="(unit: pixel) + right, - left").pack(side=tk.LEFT, padx=(10, 0))
+            
+            # Y轴偏移输入框
+            y_frame = ttk.Frame(input_frame)
+            y_frame.pack(fill=tk.X, pady=8)
+            ttk.Label(y_frame, text="Y offset:", width=7).pack(side=tk.LEFT, padx=(0, 10))
+            entry_y = ttk.Entry(y_frame, width=6)
+            entry_y.pack(side=tk.LEFT)
+            entry_y.insert(0, "0")
+            ttk.Label(y_frame, text="(unit: pixel) + down, - up").pack(side=tk.LEFT, padx=(10, 0))
+            
+            # 半径调整输入框
+            radius_frame = ttk.Frame(input_frame)
+            radius_frame.pack(fill=tk.X, pady=8)
+            ttk.Label(radius_frame, text="Radius:", width=7).pack(side=tk.LEFT, padx=(0, 10))
+            entry_radius = ttk.Entry(radius_frame, width=6)
+            entry_radius.pack(side=tk.LEFT)
+            entry_radius.insert(0, "1.0")
+            ttk.Label(radius_frame, text="0.5-1.5 scale or >100 set value directly").pack(side=tk.LEFT, padx=(10, 0))
+            
+            # ========== 下半部分：按钮区域 ==========
+            button_frame = ttk.Frame(dialog, padding="10")
+            button_frame.pack(fill=tk.X)
+            
+            ttk.Button(button_frame, text="OK", command=on_submit, width=10).pack(side=tk.RIGHT, padx=5)
+            
+            # 焦点设置到第一个输入框
+            entry_x.focus()
+            
+            # 绑定快捷键：回车键=提交
+            dialog.bind('<Return>', lambda e: on_submit())
+            
+            # 显示窗口并等待用户操作
+            dialog.mainloop()
+            
+            return result['value']
                     
         except Exception as e:
             print(f"Error in get_user_adjustment: {e}")

@@ -147,7 +147,7 @@ def create_divider(text=None):
     divider_container = QWidget()
     divider_layout = QHBoxLayout(divider_container)
     
-    divider_layout.setContentsMargins(0, 0, 0, 0)
+    divider_layout.setContentsMargins(0, 2, 0, 0)
     divider_layout.setSpacing(0)
 
     if text:
