@@ -13,16 +13,7 @@ def suppress_audio_warnings():
     # 抑制 librosa FutureWarning
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
-        
-        # 抑制 mpg123 的 stderr 输出
-        old_stderr = sys.stderr
-        sys.stderr = open(os.devnull, 'w')
-        
-        try:
-            yield
-        finally:
-            sys.stderr.close()
-            sys.stderr = old_stderr
+        yield
 
 
 def find_best_alignment_offset(signal1, signal2):
