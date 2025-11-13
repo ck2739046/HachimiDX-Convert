@@ -2509,8 +2509,18 @@ class NoteAnalyzer:
         std_dev = np.std(time_deviations)
         print(f"Time deviations of {length} notes: Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
-
-
+        # 保存分析结果到文件
+        analyze_result_path = os.path.join(output_dir, 'analyze_result.txt')
+        if os.path.exists(analyze_result_path):
+            os.remove(analyze_result_path)
+        with open(analyze_result_path, 'w', encoding='utf-8') as f:
+            for (track_id, class_id, position), time in sorted_notes:
+                # 如果time是元组，取第一个元素作为时间
+                if isinstance(time, tuple):
+                    time = time[0]
+                # 写入格式：track_id, class_id, position, time
+                f.write(f"{track_id}, {class_id}, {position}, {time}\n")
+        print(f"Analysis raw data saved to {analyze_result_path}")
 
 
 
