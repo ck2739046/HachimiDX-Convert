@@ -133,13 +133,14 @@ def create_check_box():
     return checkbox
 
 
-def create_divider(text=None):
+def create_divider(text, up_margin=5, down_margin=5):
     """
     创建分隔线
 
     Args:
-        length: 分隔栏文本宽度（默认为None）
-        text: 分隔栏文本内容（默认为None）
+        text: 分隔栏文本内容
+        up_margin: 分隔栏上边距（像素），默认为5
+        down_margin: 分隔栏下边距（像素），默认为5
     
     Returns:
         QWidget: 包含分隔线的容器widget
@@ -147,37 +148,30 @@ def create_divider(text=None):
     divider_container = QWidget()
     divider_layout = QHBoxLayout(divider_container)
     
-    divider_layout.setContentsMargins(0, 2, 0, 0)
+    divider_layout.setContentsMargins(0, up_margin, 0, down_margin)
     divider_layout.setSpacing(0)
 
     if text:
         line_left = QFrame()
         line_left.setFrameShape(QFrame.Shape.HLine)
         line_left.setFixedSize(20, 20) # 固定宽度20像素
-        line_left.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        line_left.setStyleSheet(f"color: {COLORS['grey']};")
         divider_layout.addWidget(line_left)
 
         label = QLabel(text)
         label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        length = len(text)*13 + 6 # 一个字是13px，外加6px的边距
+        length = len(text)*13 + 10 # 一个字是13px，外加10px的边距
         label.setFixedSize(length, 20)
         divider_layout.addWidget(label)
 
         line_right = QFrame()
         line_right.setFrameShape(QFrame.Shape.HLine)
-        line_right.setFixedSize(20, 20) # 固定宽度20像素
-        line_right.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        line_right.setFixedHeight(20) # 无固定宽度
+        line_right.setStyleSheet(f"color: {COLORS['grey']};")
         divider_layout.addWidget(line_right)
 
-        divider_layout.addStretch()  # 添加弹性空间
-
-    else:
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFixedHeight(20) # 右侧线条没有固定宽度，自动填充剩余空间
-        line.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        divider_layout.addWidget(line)
+        #divider_layout.addStretch()  # 添加弹性空间
 
     return divider_container
 

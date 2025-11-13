@@ -97,14 +97,12 @@ class AutoConvertPage(QWidget):
     def create_config_area(self):
 
         widget = QWidget()
-        widget.setFixedHeight(396)  # 固定高度，与左下角模块对齐
         widget.setStyleSheet(f"background-color: {self.colors['bg']};")
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(5)
         
         # 标题分隔线：模型管理
-        layout.addWidget(ui_helpers.create_divider("模型管理"))
+        layout.addWidget(ui_helpers.create_divider("模型管理", 0, 0))
         # 第一行：模型推理后端选择
         first_row = self.setup_1st_row()
         layout.addWidget(first_row)
@@ -455,6 +453,7 @@ class AutoConvertPage(QWidget):
             }}""")
         self.auto_convert_button.setFixedSize(80, 35)
         row_layout.addWidget(self.auto_convert_button)
+        row_layout.addSpacing(5)
 
         # Label_CheckBox_Helper enable_standardizer
         enable_standardizer_label = ui_helpers.create_label("启用视频标准化模块:")

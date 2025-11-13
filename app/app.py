@@ -334,8 +334,8 @@ class MainWindow(QMainWindow):
         
         # 左侧区域 - 上下布局两个正方形widget
         left_layout = QVBoxLayout()
-        left_layout.setContentsMargins(0, 0, 4, 0) # 右侧+4px间隙，与其他间距保持一致
-        left_layout.setSpacing(10)
+        left_layout.setContentsMargins(0, 0, 3, 0) # 右侧+3px间隙，与其他间距保持一致
+        left_layout.setSpacing(9)
         square_size = 436 # (900-3*10)/2 + 1px补偿
         
         # 左上widget - 正方形 - 嵌入MajdataView窗口
