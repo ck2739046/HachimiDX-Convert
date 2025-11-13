@@ -154,14 +154,14 @@ def create_divider(text, up_margin=5, down_margin=5):
     if text:
         line_left = QFrame()
         line_left.setFrameShape(QFrame.Shape.HLine)
-        line_left.setFixedSize(20, 20) # 固定宽度20像素
+        line_left.setFixedSize(18, 20) # 固定宽度18像素
         line_left.setStyleSheet(f"color: {COLORS['grey']};")
         divider_layout.addWidget(line_left)
 
         label = QLabel(text)
         label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        length = len(text)*13 + 10 # 一个字是13px，外加10px的边距
+        length = len(text)*13 + 8 # 一个字是13px，外加8px的边距
         label.setFixedSize(length, 20)
         divider_layout.addWidget(label)
 

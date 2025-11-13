@@ -140,6 +140,7 @@ class AutoConvertPage(QWidget):
         eighth_row = self.setup_8th_row()
         layout.addWidget(eighth_row)
 
+        layout.addSpacing(5)
         layout.addStretch()  # 添加弹性空间
         return widget
     
