@@ -761,7 +761,7 @@ class AutoConvertPage(QWidget):
                 tracked_output_dir = None
             else:
                 tracked_output_dir = os.path.normpath(os.path.abspath(
-                    os.path.join(tools.path_config.all_songs_output_dir, video_name)))
+                    os.path.join(tools.path_config.all_songs_dir, video_name)))
                 if not os.path.exists(tracked_output_dir):
                     QMessageBox.warning(self, "参数错误", f"未找到音符追踪结果文件夹: {tracked_output_dir}\n" \
                                                          "请先启用并运行音符识别模块")
