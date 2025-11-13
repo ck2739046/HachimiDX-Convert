@@ -2,6 +2,27 @@ import librosa
 import numpy as np
 from scipy import signal
 import os
+import warnings
+import sys
+from contextlib import contextmanager
+
+
+@contextmanager
+def suppress_audio_warnings():
+    """抑制音频加载时的警告和错误信息"""
+    # 抑制 librosa FutureWarning
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
+        
+        # 抑制 mpg123 的 stderr 输出
+        old_stderr = sys.stderr
+        sys.stderr = open(os.devnull, 'w')
+        
+        try:
+            yield
+        finally:
+            sys.stderr.close()
+            sys.stderr = old_stderr
 
 
 def find_best_alignment_offset(signal1, signal2):
@@ -67,15 +88,17 @@ def calculate_audio_offset(file1_path, file2_path):
 
     # 1. Load audio files
     try:
-        y1, sr1 = librosa.load(file1_path, sr=None, mono=False)
-        print(f"Successfully load audio from file1: {file1_path}")
+        with suppress_audio_warnings():
+            y1, sr1 = librosa.load(file1_path, sr=None, mono=False)
+            print(f"Successfully load audio from file1: {file1_path}")
     except Exception as e:
         print(f"Error loading audio from file1: {e}")
         return None
     
     try:
-        y2, sr2 = librosa.load(file2_path, sr=None, mono=False)
-        print(f"Successfully load audio from file2: {file2_path}")
+        with suppress_audio_warnings():
+            y2, sr2 = librosa.load(file2_path, sr=None, mono=False)
+            print(f"Successfully load audio from file2: {file2_path}")
     except Exception as e:
         print(f"Error loading audio from file2: {e}")
         return None
