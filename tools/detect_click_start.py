@@ -13,7 +13,7 @@ import tools.path_config
 
 def main(video_path, bpm, click_times=4):
     """
-    在视频的音频里检测启动拍的起始时间 (ms)
+    在视频中的音频起始时间 (ms)
 
     参数:
         video_path (str): 视频文件路径（librosa 能读取的路径）
@@ -26,16 +26,30 @@ def main(video_path, bpm, click_times=4):
     抛出:
         FileNotFoundError, ValueError: 在模板或音频无法加载时抛出
     """
-    # template path
-    template_path = os.path.normpath(os.path.abspath(tools.path_config.click_template))
-    # Load template and audio
-    template, template_sr = _load_audio_file(template_path)
-    audio_data, audio_sr = _load_audio_file(video_path)
-    # Generate multi-beat template
-    full_template = generate_template(bpm, click_times, template, template_sr, audio_sr)
-    # Perform template matching and return match time in seconds
-    match_time = template_match(audio_data, audio_sr, full_template)
-    return match_time
+
+    try:
+        # template path
+        template_path = os.path.normpath(os.path.abspath(tools.path_config.click_template))
+        # Load template and audio
+        template, template_sr = _load_audio_file(template_path)
+        audio_data, audio_sr = _load_audio_file(video_path)
+        # Generate multi-beat template
+        full_template = generate_template(bpm, click_times, template, template_sr, audio_sr)
+        # Perform template matching and return match time in seconds
+        match_time = template_match(audio_data, audio_sr, full_template)
+        
+        # 不知道为什么，match_time是第三声click响起的时刻
+        # 模板click开头有10ms空白，要减去
+        # 1个click是1/4小节，(60/bpm*1000*4)/4
+        # 由于是第三声响起，要减去前2个click的时间
+        # 最后加上91ms的游戏固定音频延迟
+        # 这才是真正的音频起始时间
+        adjusted_match_time = match_time - 10 - 2 * (60 / bpm * 1000 * 4) / 4 + 91
+        return adjusted_match_time
+    
+    except Exception as e:
+        print(f"Error in detecting audio start: {e}")
+        return None
 
 
 def _load_audio_file(path):
@@ -72,6 +86,13 @@ def generate_template(bpm, click_times, template, template_sr, audio_sr):
         if end_pos <= total_length:
             full_template[start_pos:end_pos] = template_resampled
 
+    # Save the generated template to desktop
+    # from scipy.io import wavfile
+    # desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+    # output_file = os.path.join(desktop_path, "generated_template.wav")
+    # normalized_template = full_template / (np.max(np.abs(full_template)) + 1e-8)
+    # wavfile.write(output_file, int(audio_sr), normalized_template.astype(np.float32))
+
     return full_template
 
 
@@ -105,3 +126,16 @@ def template_match(audio_data, audio_sr, full_template):
     match_time = max_pos / float(audio_sr) * 1000
 
     return match_time
+
+
+if __name__ == '__main__':
+    
+    args = sys.argv
+    if len(args) == 4:
+        result = main(args[1], float(args[2]), int(args[3]))
+        print(f"Detected start time: {result} ms")
+    elif len(args) == 3:
+        result = main(args[1], float(args[2]))
+        print(f"Detected start time: {result} ms")
+    else:
+        print('Missing arguments')
