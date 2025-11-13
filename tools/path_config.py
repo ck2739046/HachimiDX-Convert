@@ -34,3 +34,6 @@ all_songs_dir = os.path.join(root_dir, 'aaa-result')
 
 # 程序图标路径
 app_icon = os.path.join(root_dir, 'src', 'icon.ico')
+
+# click_template路径
+click_template = os.path.join(root_dir, 'src', 'click_template.aac')
