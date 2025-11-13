@@ -452,7 +452,7 @@ class ProcessControlButton(QPushButton):
         
         # 准备参数并运行
         python_exe = sys.executable
-        self._process.start(python_exe, [self._script_path] + args)
+        self._process.start(python_exe, ['-u', self._script_path] + args)
     
     
     def _stop_process(self):
