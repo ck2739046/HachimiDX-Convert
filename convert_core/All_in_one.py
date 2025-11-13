@@ -129,7 +129,7 @@ def main():
 
             tracked_output_dir = note_detector.main(
                 std_video_path, 
-                os.path.normpath(os.path.abspath(os.path.join(tools.path_config.final_data_output_dir, video_name))),
+                os.path.normpath(os.path.abspath(os.path.join(tools.path_config.all_songs_output_dir, video_name))),
                 batch_detect,
                 batch_cls,
                 inference_device,

@@ -30,7 +30,7 @@ cls_ex_onnx = os.path.join(models_dir, 'cls-ex.onnx')
 ffmpeg_exe = os.path.join(root_dir, 'src', 'ffmpeg-8.0-essentials_build', 'bin', 'ffmpeg.exe')
 
 # 最终数据输出文件夹 (歌曲)
-final_data_output_dir = os.path.join(root_dir, 'aaa-result')
+all_songs_output_dir = os.path.join(root_dir, 'aaa-result')
 
 # 程序图标路径
 app_icon = os.path.join(root_dir, 'src', 'icon.ico')

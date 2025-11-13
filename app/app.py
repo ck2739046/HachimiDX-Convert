@@ -237,7 +237,7 @@ class MainWindow(QMainWindow):
         self.colors = ui_helpers.COLORS
 
         # 重要变量
-        self.all_songs_folder = os.path.abspath(tools.path_config.final_data_output_dir)
+        self.all_songs_folder = os.path.abspath(tools.path_config.all_songs_dir)
         self.majdata_control_txt = os.path.abspath(tools.path_config.majdata_control_txt)
 
         # 视频播放器变量
