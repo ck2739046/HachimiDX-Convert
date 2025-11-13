@@ -13,6 +13,11 @@ import subprocess
 import shutil
 import traceback
 import math
+import sys
+
+root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if root not in sys.path: sys.path.insert(0, root)
+import tools.path_config
 
 
 
@@ -1081,8 +1086,9 @@ class NoteDetector:
             if os.path.exists(final_track_video_path):
                 os.remove(final_track_video_path)
             # 构建ffmpeg命令来合并视频和音频
+            ffmpeg_path = os.path.normpath(os.path.abspath(tools.path_config.ffmpeg_exe))
             ffmpeg_cmd = [
-                'ffmpeg', '-y', '-hide_banner', '-stats', '-loglevel', 'error',
+                ffmpeg_path, '-y', '-hide_banner', '-stats', '-loglevel', 'error',
                 '-i', temp_track_video_path, # 无声的跟踪视频
                 '-i', std_video_path,  # 原始视频（有音频）
                 '-c:v', 'libx264', '-crf', '24', '-pix_fmt', 'yuv420p',

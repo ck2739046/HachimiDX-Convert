@@ -621,7 +621,8 @@ class Standardizer:
             print(f"Standardizing video...")
             
             # 构建ffmpeg命令
-            cmd = ['ffmpeg', '-y', '-hide_banner', '-stats', '-loglevel', 'error']
+            ffmpeg_path = os.path.normpath(os.path.abspath(tools.path_config.ffmpeg_exe))
+            cmd = [ffmpeg_path, '-y', '-hide_banner', '-stats', '-loglevel', 'error']
             # -y: 覆盖文件 -hide_banner: 隐藏FFmpeg的版本信息和配置信息
             # -loglevel error: 只显示错误信息（不显示流信息）
             # -stats: 显示编码统计信息
