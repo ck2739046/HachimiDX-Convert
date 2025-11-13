@@ -408,7 +408,9 @@ class ProcessControlButton(QPushButton):
 
         # 获取原始字体大小和粗细
         font = self.font()
-        self._original_font_size = font.pixelSize()
+        pixel_size = font.pixelSize()
+        if pixel_size > 0:
+            self._original_font_size = pixel_size
         self._original_font_weight = font.weight()
         
         # 冷却后启动
