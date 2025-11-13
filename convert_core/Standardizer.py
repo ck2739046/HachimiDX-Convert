@@ -15,7 +15,7 @@ class Standardizer:
     def __init__(self):
         self.circle_center = None  # (x, y)
         self.circle_radius = None
-        self.temp_dir = tools.path_config.temp_dir
+        self.temp_dir = os.path.normpath(os.path.abspath(tools.path_config.temp_dir))
         
 
 
