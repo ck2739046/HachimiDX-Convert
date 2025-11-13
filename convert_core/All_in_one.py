@@ -36,8 +36,6 @@ def main():
 
 
     try:
-        time.sleep(0.5) # 确保能写上日志
-
         # standardizer 参数
         enable_Standardizer = params.get('Standardizer', {}).get('enabled', False)
         video_path = params.get('Standardizer', {}).get('video_path', None)
@@ -106,10 +104,7 @@ def main():
             print(f"  BPM: {bpm}")
             print(f"  chart_lv: {chart_lv}")
             print(f"  base_denominator: {base_denominator}")
-        
         print("=" * 40 + "\n")
-
-
 
 
         if enable_Standardizer:

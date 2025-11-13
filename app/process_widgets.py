@@ -10,6 +10,7 @@ from PyQt6.QtCore import QProcess, QTimer, pyqtSignal
 from PyQt6.QtGui import QTextCursor
 import sys
 import re
+import psutil
 import ui_helpers
 
 
@@ -464,10 +465,21 @@ class ProcessControlButton(QPushButton):
         if self._output_widget:
             self._output_widget.append_text("程序已终止")
         
-        # 终止进程
+        # 终止进程（包括所有子进程）
         if self._process.state() != QProcess.ProcessState.NotRunning:
-            self._process.kill()
-            self._process.waitForFinished(500)
+            try:
+                pid = self._process.processId()
+                if pid > 0:
+                    # 使用 psutil 终止进程树，确保子进程（如 ffmpeg）也被终止
+                    self._kill_process_tree(pid)
+                
+                # 等待进程结束
+                self._process.waitForFinished(500)
+            except Exception as e:
+                # 如果 psutil 方法失败，回退到 QProcess.kill()
+                print(f"Error using psutil to kill process tree: {e}")
+                self._process.kill()
+                self._process.waitForFinished(500)
         
         # 冷却后恢复
         self._cooldown_timer.timeout.disconnect()
@@ -494,6 +506,57 @@ class ProcessControlButton(QPushButton):
         
         # 发出信号
         self.process_finished.emit(exit_code)
+    
+    
+    def _kill_process_tree(self, pid):
+        """
+        终止进程及其所有子进程
+        
+        使用 psutil 库递归查找并终止所有子进程，防止孤儿进程产生。
+        先尝试优雅终止，超时后强制杀死。
+        
+        :param pid: 父进程 ID
+        """
+        try:
+            # 获取父进程对象
+            parent = psutil.Process(pid)
+            
+            # 获取所有子进程（递归，包括子进程的子进程）
+            children = parent.children(recursive=True)
+            
+            # 尝试优雅终止所有子进程
+            for child in children:
+                try:
+                    child.terminate()
+                except psutil.NoSuchProcess:
+                    pass  # 进程已不存在，忽略
+            
+            # 等待子进程退出（最多3秒）
+            _, alive = psutil.wait_procs(children, timeout=3)
+            
+            # 强制杀死仍在运行的子进程
+            for child in alive:
+                try:
+                    child.kill()
+                except psutil.NoSuchProcess:
+                    pass  # 进程已不存在，忽略
+            
+            # 终止父进程
+            parent.terminate()
+            
+            # 等待父进程退出（最多3秒）
+            try:
+                parent.wait(timeout=3)
+            except psutil.TimeoutExpired:
+                # 超时后强制杀死父进程
+                parent.kill()
+                
+        except psutil.NoSuchProcess:
+            # 进程已不存在，无需处理
+            pass
+        except Exception as e:
+            # 记录错误但不抛出异常，确保上层调用可以继续执行
+            print(f"Error killing process tree: {e}")
     
     
     def _on_cooldown_complete(self):
