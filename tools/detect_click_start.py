@@ -3,12 +3,26 @@ import os
 import librosa
 import numpy as np
 from scipy.signal import correlate
+import warnings
+import sys
+from contextlib import contextmanager
 
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path:
     sys.path.insert(0, root)
 
 import tools.path_config
+
+
+@contextmanager
+def suppress_audio_warnings():
+    """抑制音频加载时的警告和错误信息"""
+    # 抑制 librosa FutureWarning
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
+        warnings.filterwarnings("ignore", message='PySoundFile failed. Trying audioread instead.')
+        yield
+
 
 
 def main(video_path, bpm, click_times=4):
@@ -53,12 +67,16 @@ def main(video_path, bpm, click_times=4):
 
 
 def _load_audio_file(path):
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Audio file not found: {path}")
-    data, sr = librosa.load(path, sr=None, mono=True)
-    if data is None or len(data) == 0:
-        raise ValueError(f"Cannot load audio data from: {path}")
-    return data, sr
+    try:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Audio file not found: {path}")
+        with suppress_audio_warnings():
+            data, sr = librosa.load(path, sr=None, mono=True)
+            if data is None or len(data) == 0:
+                raise ValueError(f"Cannot load audio data from: {path}")
+            return data, sr
+    except Exception as e:
+        raise Exception(f"Error loading audio file '{path}': {e}")
 
 
 def generate_template(bpm, click_times, template, template_sr, audio_sr):

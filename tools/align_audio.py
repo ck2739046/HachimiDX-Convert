@@ -13,6 +13,7 @@ def suppress_audio_warnings():
     # 抑制 librosa FutureWarning
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
+        warnings.filterwarnings("ignore", message='PySoundFile failed. Trying audioread instead.')
         yield
 
 
