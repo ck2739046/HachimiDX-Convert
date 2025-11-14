@@ -23,12 +23,14 @@ def detect_video_params_cv2(input_file: str) -> Optional[Dict[str, Any]]:
     """
     cap = cv2.VideoCapture(input_file)
     if not cap.isOpened():
+        cap.release()
         return None
     
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     if not fps or fps <= 0:
+        cap.release()
         raise Exception("Cannot determine FPS of the video")
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     duration = frame_count / fps
@@ -142,9 +144,9 @@ def generate_output_path(input_file: str, offset_ms: float) -> str:
         
         # 生成后缀
         if offset_ms >= 0:
-            suffix = f"_trim_{int(offset_ms)}ms"
+            suffix = f"_trim_{round(offset_ms)}ms"
         else:
-            suffix = f"_pad_{int(abs(offset_ms))}ms"
+            suffix = f"_pad_{round(abs(offset_ms))}ms"
         
         output_file = os.path.join(dir_name, f"{name}{suffix}{ext}")
         
