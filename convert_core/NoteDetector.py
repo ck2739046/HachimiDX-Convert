@@ -1091,7 +1091,7 @@ class NoteDetector:
                 ffmpeg_path, '-y', '-hide_banner', '-stats', '-loglevel', 'error',
                 '-i', temp_track_video_path, # 无声的跟踪视频
                 '-i', std_video_path,  # 原始视频（有音频）
-                '-c:v', 'libx264', '-crf', '24', '-pix_fmt', 'yuv420p',
+                '-c:v', 'libx264',  '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
                 '-c:a', 'copy',    # 复制音频流
                 '-map', '0:v:0',   # 使用第一个输入的视频流
                 '-map', '1:a:0',   # 使用第二个输入的音频流

@@ -653,7 +653,7 @@ class Standardizer:
             cmd.extend(['-c:a', 'aac'])  # 使用AAC重新编码
             cmd.extend(['-b:a', '192k'])  # 统一码率192k
             # 视频编解码器
-            cmd.extend(['-c:v', 'libx264', '-crf', '24', '-pix_fmt', 'yuv420p'])
+            cmd.extend(['-c:v', 'libx264',  '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'])
             # 确保音视频同步
             cmd.extend(['-async', '1'])
             # 输出文件

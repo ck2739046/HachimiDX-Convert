@@ -28,6 +28,7 @@ cls_ex_onnx = os.path.join(models_dir, 'cls-ex.onnx')
 
 # ffmpeg.exe路径
 ffmpeg_exe = os.path.join(root_dir, 'src', 'ffmpeg-8.0-essentials_build', 'bin', 'ffmpeg.exe')
+ffprobe_exe = os.path.join(root_dir, 'src', 'ffmpeg-8.0-essentials_build', 'bin', 'ffprobe.exe')
 
 # 最终数据输出文件夹 (歌曲)
 all_songs_dir = os.path.join(root_dir, 'aaa-result')
