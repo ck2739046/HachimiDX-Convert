@@ -133,7 +133,7 @@ def create_check_box():
     return checkbox
 
 
-def create_divider(text, up_margin=5, down_margin=5):
+def create_divider(text, up_margin=5, down_margin=5, width=None):
     """
     创建分隔线
 
@@ -141,6 +141,7 @@ def create_divider(text, up_margin=5, down_margin=5):
         text: 分隔栏文本内容
         up_margin: 分隔栏上边距（像素），默认为5
         down_margin: 分隔栏下边距（像素），默认为5
+        width: 分隔栏总宽度（像素），默认为None
     
     Returns:
         QWidget: 包含分隔线的容器widget
@@ -161,8 +162,13 @@ def create_divider(text, up_margin=5, down_margin=5):
         label = QLabel(text)
         label.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        length = len(text)*13 + 8 # 一个字是13px，外加8px的边距
-        label.setFixedSize(length, 20)
+
+        if not width:
+            length = len(text)*13 + 8 # 一个中文汉字是13px，外加8px的边距
+            label.setFixedSize(length, 20)
+        else:
+            label.setFixedSize(width, 20)
+
         divider_layout.addWidget(label)
 
         line_right = QFrame()

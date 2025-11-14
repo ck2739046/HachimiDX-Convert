@@ -18,6 +18,7 @@ import tools.path_config
 
 from page_majdata import MajdataPage
 from page_auto_convert import AutoConvertPage
+from page_audio_pv import AudioPvPage
 import ui_helpers
 
 
@@ -434,6 +435,13 @@ class MainWindow(QMainWindow):
         # 自动转谱页面
         elif title == "Auto Convert":
             page = AutoConvertPage(
+                parent=self
+            )
+            return page
+        
+        # Audio and PV 页面
+        elif title == "Audio and PV":
+            page = AudioPvPage(
                 parent=self
             )
             return page
