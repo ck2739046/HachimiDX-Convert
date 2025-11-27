@@ -16,7 +16,7 @@ import ui_helpers
 
 
 
-class AudioPvPage(QWidget):
+class AudioPvAlignPage(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
