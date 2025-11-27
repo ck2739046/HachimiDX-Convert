@@ -21,7 +21,7 @@ def main():
         bpm (float): 启动拍的BPM值
     
     返回:
-        dict: detect_click_start, align_audio, final_time
+        final_time
     """
 
     if len(sys.argv) <= 1:
@@ -54,43 +54,39 @@ def main():
     print(f"  beat_count: {beat_count}")
     print(f"  bpm: {bpm}")
     
-    results = {}
     
 
     # 1. 调用 detect_click_start 分析基准文件
     print("\n根据启动拍分析基准文件的音频起始时间...")
-    
     detect_result = detect_click_start_main(reference_file, bpm, beat_count)
-    if detect_result is not None and detect_result >= 0:
-        results['detect_click_start'] = detect_result
+    if detect_result is not None:
         print(f"{detect_result:.2f} ms")
     else:
-        results['detect_click_start'] = None
         print("分析失败")
-        return results
+        return None
     
 
     # 2. 调用 align_audio 分析文件对齐
     print("\n对齐基准文件和目标文件...")
-    
     align_result = calculate_audio_offset(reference_file, target_file)
-    if align_result is not None:
-        results['align_audio'] = align_result
-    else:
-        results['align_audio'] = None
+    if align_result is None:
         print("对齐失败")
-        return results
+        return None
     
 
     # 3. 计算最终结果
-    print("\n计算最终结果...")
+    final_time = detect_result - align_result
+    print(f"\n在基准文件中，音频从 {detect_result:.2f} ms 开始")
+    print(f"在基准文件中，目标文件的音频从 {align_result:.2f} ms 开始")
+    if final_time == 0:
+        print("已经对齐了，无需调整")
+    elif final_time > 0:
+        print(f"目标文件需要提前 {final_time:.2f} ms")
+    else:
+        print(f"目标文件需要延后 {abs(final_time):.2f} ms")
     
-    # 最终时间 = 基准文件启动拍时间 + 对齐偏移
-    final_time = results['detect_click_start'] + results['align_audio']
-    results['final_time'] = final_time
-    print(f"最终时间: {final_time:.2f} ms")
-    
-    return results
+    return final_time
+
 
 
 if __name__ == '__main__':

@@ -5,6 +5,7 @@ import os
 import sys
 import time
 import json
+import re
 
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path: sys.path.insert(0, root)
@@ -30,6 +31,9 @@ class AudioPvPage(QWidget):
         self.start_beat_count_input = None
         self.initial_bpm_input = None
         self.result_label = None
+        
+        # 保存分析结果
+        self.final_time = None  # detect_and_align 返回的最终时间偏移量
         
         # 进程控制按钮
         self.analyze_button = None # 第二行
@@ -308,21 +312,34 @@ class AudioPvPage(QWidget):
     
     def _on_analyze_finished(self, exit_code):
         if exit_code == 0:
-            self.output_widget.append_text("\n✓ 分析完成")
-            self.output_widget.append_text("=" * 20)
-            
-            # # 从输出中提取结果
-            # output_text = self.output_widget.get_text()
-            # match = re.search(r'最终时间:\s*([\d.]+)\s*ms', output_text)
-            # if match:
-            #     detected_time = match.group(1)
-            #     self.result_label.setText(f"估值: {float(detected_time):.3f} ms")
-            #     self.result_label.show()
-            # else:
-            #     self.output_widget.append_text("\n⚠ 无法解析分析结果")
+        
+            # 获取最近7行文本解析final_time
+            recent_output = self.output_widget.get_recent_lines(7)
+            # 匹配 detect_and_align.py 输出中的结果
+            # 格式如: "目标文件需要提前 150.00 ms" 或 "目标文件需要延后 200.00 ms"
+            match = re.search(r'目标文件需要(提前|延后)\s*([\d.]+)\s*ms', recent_output)
+            if match:
+                action = match.group(1)
+                value = float(match.group(2))
+                # 如果是"提前"，final_time 为正值；如果是"延后"，final_time 为负值
+                self.final_time = value if action == "提前" else -value
+                # 显示结果到标签
+                self.result_label.setText(f"估值: {self.final_time:.2f} ms")
+                self.result_label.show()
+
+                self.output_widget.append_text("\n✓ 分析完成")
+                self.output_widget.append_text("=" * 20)
+
+            else:
+                self.final_time = None
+                self.output_widget.append_text("未能从输出中解析最终时间偏移量")
+                self.output_widget.append_text("\n✗ 分析失败")
+                self.output_widget.append_text("=" * 20)
+
         else:
             self.output_widget.append_text("\n✗ 分析失败")
             self.output_widget.append_text("=" * 20)
+            self.final_time = None
     
     
     # ----------------------------------------------------------------------

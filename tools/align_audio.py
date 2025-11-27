@@ -113,81 +113,12 @@ def calculate_audio_offset(file1_path, file2_path):
     if offset_ms == 0:
         final_str = "file1 equals file2"
     elif offset_ms > 0:
-        final_str = "file2 is later than file1"
-    else:
         final_str = "file2 is earlier than file1"
+    else:
+        final_str = "file2 is later than file1"
     
-    print(f"Offset: {offset_ms:.2f} ms ({final_str})")
+    print(f"{offset_ms:.2f} ms ({final_str})")
     return offset_ms
-
-    # # 4. Align audio based on offset
-    # print("Aligning audio based on offset...")
-    # if offset > 0:
-    #     y_drums_aligned = y_drums[..., offset:]
-    #     y_no_drums_aligned = y_no_drums
-    # else:
-    #     y_drums_aligned = y_drums
-    #     y_no_drums_aligned = y_no_drums[..., abs(offset):]
-
-    # # 5. Crop audio length
-    # min_len = min(y_drums_aligned.shape[-1], y_no_drums_aligned.shape[-1])
-    # y_drums_aligned = y_drums_aligned[..., :min_len]
-    # y_no_drums_aligned = y_no_drums_aligned[..., :min_len]
-
-    # # 6. Subtract
-    # drum_track = y_drums_aligned - y_no_drums_aligned
-
-    # # 7. Audio Normalization
-    # max_abs_val = np.max(np.abs(drum_track))
-    # if max_abs_val > 0:
-    #     drum_track /= max_abs_val
-    # else:
-    #     print("Warning: Subtraction result is silent, normalization skipped.")
-
-    # # 8. Export mp3
-    # try:
-    #     output_mp3 = output_path + ".mp3"
-    #     ffmpeg_path = shutil.which("ffmpeg")
-    #     if not ffmpeg_path:
-    #         print("ffmpeg not found, save as wav")
-    #         output_wav_fallback = output_path + ".wav"
-    #         sf.write(output_wav_fallback, drum_track.T, sr_drums, subtype='PCM_16')
-    #         print(f"audio save to: {output_wav_fallback}")
-    #         return
-
-
-
-    #     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
-    #         tmp_wav_path = tmp_wav.name
-    #     sf.write(tmp_wav_path, drum_track.T, sr_drums, subtype='PCM_16')
-
-    #     print(f"Use ffmpeg to convert to MP3: {output_mp3}")
-    #     cmd = [
-    #         ffmpeg_path,
-    #         "-y",
-    #         "-i", tmp_wav_path,
-    #         "-codec:a", "libmp3lame",
-    #         "-b:a", "256k",
-    #         output_mp3,
-    #     ]
-    #     result = subprocess.run(cmd, capture_output=True, text=True)
-    #     try:
-    #         os.remove(tmp_wav_path)
-    #     except Exception:
-    #         pass
-
-    #     if result.returncode != 0:
-    #         print("ffmpeg conversion failed.")
-    #         print(result.stderr)
-    #         print("Fallback: Saving as WAV...")
-    #         output_wav_fallback = output_path + ".wav"
-    #         sf.write(output_wav_fallback, drum_track.T, sr_drums, subtype='PCM_16')
-    #         print(f"audio save to: {output_wav_fallback}")
-    #         return
-
-    #     print(f"success! MP3 save to {output_mp3}")
-    # except Exception as e:
-    #     print(f"Error saving audio: {e}")
 
 
 

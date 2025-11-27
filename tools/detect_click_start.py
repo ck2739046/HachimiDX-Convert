@@ -59,6 +59,11 @@ def main(video_path, bpm, click_times=4):
         # 最后加上91ms的游戏固定音频延迟
         # 这才是真正的音频起始时间
         adjusted_match_time = match_time - 10 - 2 * (60 / bpm * 1000 * 4) / 4 + 91
+
+        if adjusted_match_time < 0:
+            print(f"error: adjusted_match_time < 0 ({adjusted_match_time})")
+            return None
+        
         return adjusted_match_time
     
     except Exception as e:
