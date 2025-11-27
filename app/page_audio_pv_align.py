@@ -238,8 +238,18 @@ class AudioPvAlignPage(QWidget):
         
         # 按钮: "修改目标文件"
         self.modify_target_button = ProcessControlButton("修改目标文件")
-        self.modify_target_button.setFixedSize(100, 25)
+        self.modify_target_button.setFixedSize(120, 25)
         row_layout.addWidget(self.modify_target_button)
+
+        modify_target_help = ui_helpers.create_help_icon(
+            "根据分析结果，修改待对齐的文件\n" \
+            "视频待对齐\n" \
+            "  正偏移：裁剪视频开头\n" \
+            "  负偏移：为视频开头添加黑屏片段\n" \
+            "音频待对齐\n" \
+            "  正偏移：裁剪音频开头\n" \
+            "  负偏移：为音频开头添加静音片段")
+        row_layout.addWidget(modify_target_help)
         
         row_layout.addStretch()  # 添加弹性空间
         return row
