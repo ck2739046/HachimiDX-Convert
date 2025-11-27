@@ -2,7 +2,7 @@ import sys
 import os
 import librosa
 import numpy as np
-from scipy.signal import correlate
+from scipy import signal
 import warnings
 import sys
 from contextlib import contextmanager
@@ -42,28 +42,34 @@ def main(video_path, bpm, click_times=4):
     """
 
     try:
-        # template path
+        # 1. Load template and audio
         template_path = os.path.normpath(os.path.abspath(tools.path_config.click_template))
-        # Load template and audio
         template, template_sr = _load_audio_file(template_path)
         audio_data, audio_sr = _load_audio_file(video_path)
-        # Generate multi-beat template
-        full_template = generate_template(bpm, click_times, template, template_sr, audio_sr)
-        # Perform template matching and return match time in seconds
-        match_time = template_match(audio_data, audio_sr, full_template)
+
+        # 2. Generate multi-beat template
+        full_template = generate_template(bpm, click_times, template, template_sr)
         
-        # 不知道为什么，match_time是第三声click响起的时刻
-        # 模板click开头有10ms空白，要减去
-        # 1个click是1/4小节，(60/bpm*1000*4)/4
-        # 由于是第三声响起，要减去前2个click的时间
-        # 最后加上91ms的游戏固定音频延迟
-        # 这才是真正的音频起始时间
-        adjusted_match_time = match_time - 10 - 2 * (60 / bpm * 1000 * 4) / 4 + 91
+        # 3. Resample both to 44100 Hz
+        target_sr = 44100
+        if template_sr != target_sr:
+            full_template = librosa.resample(full_template, orig_sr=template_sr, target_sr=target_sr)
+        if audio_sr != target_sr:
+            audio_data = librosa.resample(audio_data, orig_sr=audio_sr, target_sr=target_sr)
+        
+        full_template_mono = librosa.to_mono(full_template)
+        audio_mono = librosa.to_mono(audio_data)
+        
+        # 4. Calculate offset
+        match_time = template_match(audio_mono, full_template_mono)
+
+        # 虽然不知道为什么，但实测需要 -25ms 才能得到正确结果
+        adjusted_match_time = match_time - 25
 
         if adjusted_match_time < 0:
             print(f"error: adjusted_match_time < 0 ({adjusted_match_time})")
             return None
-        
+   
         return adjusted_match_time
     
     except Exception as e:
@@ -84,71 +90,78 @@ def _load_audio_file(path):
         raise Exception(f"Error loading audio file '{path}': {e}")
 
 
-def generate_template(bpm, click_times, template, template_sr, audio_sr):
+def generate_template(bpm, click_times, template, template_sr):
     """
     基于 BPM 生成多个启动拍的完整模板
     """
     beat_interval = 60.0 / float(bpm)
-
-    # Resample template to audio sample rate if needed
-    if template_sr != audio_sr:
-        template_resampled = librosa.resample(template, orig_sr=template_sr, target_sr=audio_sr)
-    else:
-        template_resampled = template.copy()
-
-    # Calculate sample interval between beats
-    sample_interval = round(beat_interval * audio_sr)
-    template_length = len(template_resampled)
+    sample_interval = round(beat_interval * template_sr)
+    template_length = len(template)
 
     # Create multi-beat template with proper intervals
     total_length = template_length + (click_times - 1) * sample_interval
-    full_template = np.zeros(total_length, dtype=template_resampled.dtype)
+    full_template = np.zeros(total_length, dtype=template.dtype)
     for i in range(click_times):
         start_pos = i * sample_interval
         end_pos = start_pos + template_length
         if end_pos <= total_length:
-            full_template[start_pos:end_pos] = template_resampled
+            full_template[start_pos:end_pos] = template
+
+    # 剔除开头的静音片段
+    # 设置阈值：找到第一个振幅超过最大振幅1%的位置
+    threshold = np.max(np.abs(full_template)) * 0.01
+    non_silent_indices = np.where(np.abs(full_template) > threshold)[0]
+    
+    if len(non_silent_indices) > 0:
+        first_sound_pos = non_silent_indices[0]
+        if first_sound_pos > 0:
+            full_template = full_template[first_sound_pos:]
+            # print(f"Removed {first_sound_pos} samples of silence from template start")
 
     # Save the generated template to desktop
     # from scipy.io import wavfile
     # desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
     # output_file = os.path.join(desktop_path, "generated_template.wav")
     # normalized_template = full_template / (np.max(np.abs(full_template)) + 1e-8)
-    # wavfile.write(output_file, int(audio_sr), normalized_template.astype(np.float32))
+    # wavfile.write(output_file, template_sr, normalized_template.astype(np.float32))
 
     return full_template
 
 
-def template_match(audio_data, audio_sr, full_template):
+def template_match(signal1, signal2):
     """
-    在给定的音频中查找启动拍的最佳匹配位置 (ms)
+    在给定的音频中查找启动拍的匹配位置 (ms)
     """
-    if len(audio_data) < len(full_template):
+    if len(signal1) < len(signal2):
         raise ValueError("Audio data too short for template matching")
 
-    def rms_normalize(signal):
-        rms = np.sqrt(np.mean(signal ** 2))
-        return signal / (rms + 1e-8)
+    if signal1.ndim > 1:
+        signal1 = signal1.mean(axis=1)
+    if signal2.ndim > 1:
+        signal2 = signal2.mean(axis=1)
 
-    audio_norm = rms_normalize(audio_data)
-    template_norm = rms_normalize(full_template)
+    # Precise mode: RMS归一化 + 能量归一化
+    def rms_normalize(sig):
+        rms = np.sqrt(np.mean(sig ** 2))
+        return sig / (rms + 1e-8)
+    
+    sig1_norm = rms_normalize(signal1)
+    sig2_norm = rms_normalize(signal2)
+    
+    correlation = signal.correlate(sig1_norm, sig2_norm, mode='full', method='fft')
+    
+    # 能量归一化
+    template_energy = np.sum(sig2_norm ** 2)
+    if template_energy > 0:
+        correlation = correlation / np.sqrt(template_energy)
 
-    # Perform normalized cross-correlation
-    correlation = correlate(audio_norm, template_norm, mode='valid')
+    lag_index = np.argmax(correlation)
+    offset = lag_index - (len(signal2) - 1)
 
-    # Normalize by template energy
-    template_energy = np.sum(template_norm ** 2)
-    if template_energy <= 0:
-        raise ValueError("Template energy is zero")
-    correlation = correlation / np.sqrt(template_energy)
+    # Convert to milliseconds
+    offset_ms = (offset / 44100) * 1000
 
-    # Find the position of maximum correlation
-    max_pos = int(np.argmax(correlation))
-
-    # Compute match time in ms
-    match_time = max_pos / float(audio_sr) * 1000
-
-    return match_time
+    return offset_ms
 
 
 if __name__ == '__main__':
