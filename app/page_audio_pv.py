@@ -23,17 +23,16 @@ class AudioPvPage(QWidget):
         
         self.colors = ui_helpers.COLORS
         
-        # Section 1: 分析 &first 数值
         self.file_path_label_1 = None
         self.selected_file_path_1 = None
         self.file_path_label_2 = None
         self.selected_file_path_2 = None
-        self.start_beat_count_input = None
+        self.start_beat_count_combo = None
         self.initial_bpm_input = None
-        self.result_label = None
-        
-        # 保存分析结果
-        self.final_time = None  # detect_and_align 返回的最终时间偏移量
+
+        # detect_and_align 返回的最终时间偏移量
+        self.final_time_label = None
+        self.final_time = None  
         
         # 进程控制按钮
         self.analyze_button = None # 第二行
@@ -71,18 +70,16 @@ class AudioPvPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # 标题分隔线：分析对齐
-        layout.addWidget(ui_helpers.create_divider("分析对齐", 0, 5, width=100))
         # 第一行：选择基准文件
         first_row = self.setup_1st_row()
         layout.addWidget(first_row)
         # 第二行：选择待对齐文件
         second_row = self.setup_2nd_row()
         layout.addWidget(second_row)
-        # 第三行：启动拍数量 + Initial BPM
+        # 第三行：启动拍数量 + Initial BPM + 开始分析按钮/结果 label
         third_row = self.setup_3rd_row()
         layout.addWidget(third_row)
-        # 第四行：开始分析按钮 + 结果 label
+        # 第四行：开始裁剪按钮
         fourth_row = self.setup_4th_row()
         layout.addWidget(fourth_row)
         
@@ -193,14 +190,13 @@ class AudioPvPage(QWidget):
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(5)
         
-        # Label_LineEdit_Helper 启动拍数量
+        # Label_ComboBox_Helper 启动拍数量
         start_beat_count_label = ui_helpers.create_label("启动拍数量:")
         row_layout.addWidget(start_beat_count_label)
         
-        beat_count_validator = QIntValidator(1, 9, self)  # 1-9 的整数
-        self.start_beat_count_input = ui_helpers.create_line_edit(30, validator=beat_count_validator, placeholder="1~9")
-        self.start_beat_count_input.setText("4")  # 默认值4
-        row_layout.addWidget(self.start_beat_count_input)
+        self.start_beat_count_combo = ui_helpers.create_combo_box(
+            45, ["4", "7"], default_index=0)
+        row_layout.addWidget(self.start_beat_count_combo)
         
         beat_count_help = ui_helpers.create_help_icon("歌曲开头的启动拍的数量，默认为4")
         row_layout.addWidget(beat_count_help)
@@ -215,6 +211,18 @@ class AudioPvPage(QWidget):
         
         bpm_help = ui_helpers.create_help_icon("启动拍的 BPM 数值")
         row_layout.addWidget(bpm_help)
+
+        # 按钮: "开始分析"
+        self.analyze_button = ProcessControlButton("开始分析")
+        self.analyze_button.setFixedSize(80, 25)
+        row_layout.addWidget(self.analyze_button)
+        row_layout.addSpacing(5)
+        
+        # Label: 显示结果（默认隐藏）
+        self.final_time_label = ui_helpers.create_label("default")
+        self.final_time_label.setStyleSheet(f"color: {self.colors['accent']}; font-size: 13px; font-weight: bold;")
+        self.final_time_label.hide()
+        row_layout.addWidget(self.final_time_label)
         
         row_layout.addStretch()  # 添加弹性空间
         return row
@@ -227,18 +235,6 @@ class AudioPvPage(QWidget):
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(5)
-        
-        # 按钮: "开始分析"
-        self.analyze_button = ProcessControlButton("开始分析")
-        self.analyze_button.setFixedSize(80, 25)
-        row_layout.addWidget(self.analyze_button)
-        row_layout.addSpacing(5)
-        
-        # Label: 显示结果（默认隐藏）
-        self.result_label = ui_helpers.create_label("估值:")
-        self.result_label.setStyleSheet(f"color: {self.colors['accent']}; font-size: 13px; font-weight: bold;")
-        self.result_label.hide()
-        row_layout.addWidget(self.result_label)
         
         row_layout.addStretch()  # 添加弹性空间
         return row
@@ -260,15 +256,8 @@ class AudioPvPage(QWidget):
             QMessageBox.warning(self, "参数错误", "请先选择待对齐文件")
             return None
         
-        # 验证启动拍数量输入
-        start_beat_count = self.start_beat_count_input.text().strip()
-        if not start_beat_count:
-            start_beat_count = "4"  # 默认值
-        
-        start_beat_count = int(float(start_beat_count))  # 转换为整数
-        if start_beat_count < 1 or start_beat_count > 9:
-            QMessageBox.warning(self, "参数错误", "启动拍数量应在 1~9 范围内")
-            return None
+        # 获取启动拍数量（从下拉框选择）
+        start_beat_count = int(self.start_beat_count_combo.currentText())
         
         # 验证 BPM 输入
         initial_bpm = self.initial_bpm_input.text().strip()
@@ -282,7 +271,7 @@ class AudioPvPage(QWidget):
             return None
         
         # 隐藏结果 label
-        self.result_label.hide()
+        self.final_time_label.hide()
         
         # 输出日志
         self.output_widget.append_text(f'\n{"=" * 20}')
@@ -324,8 +313,8 @@ class AudioPvPage(QWidget):
                 # 如果是"提前"，final_time 为正值；如果是"延后"，final_time 为负值
                 self.final_time = value if action == "提前" else -value
                 # 显示结果到标签
-                self.result_label.setText(f"估值: {self.final_time:.2f} ms")
-                self.result_label.show()
+                self.final_time_label.setText(f"offset: {self.final_time:.2f} ms")
+                self.final_time_label.show()
 
                 self.output_widget.append_text("\n✓ 分析完成")
                 self.output_widget.append_text("=" * 20)
