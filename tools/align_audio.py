@@ -51,8 +51,6 @@ def find_best_alignment_offset(signal1, signal2):
 
     lag_index = np.argmax(correlation)
     offset = lag_index - (len(signal2) - 1)
-
-    print(f"calculate completed. Detected sample offset is: {offset}")
     return offset
 
 
@@ -72,17 +70,16 @@ def calculate_audio_offset(file1_path, file2_path):
     """
 
     if not os.path.exists(file1_path):
-        print(f"file not found -> file1")
+        print(f"file not found -> {file1_path}")
         return None
     if not os.path.exists(file2_path):
-        print(f"file not found -> file2")
+        print(f"file not found -> {file2_path}")
         return None
 
     # 1. Load audio files
     try:
         with suppress_audio_warnings():
             y1, sr1 = librosa.load(file1_path, sr=None, mono=False)
-            print(f"Successfully load audio from file1")
     except Exception as e:
         print(f"Error loading audio from file1: {e}")
         return None
@@ -90,7 +87,6 @@ def calculate_audio_offset(file1_path, file2_path):
     try:
         with suppress_audio_warnings():
             y2, sr2 = librosa.load(file2_path, sr=None, mono=False)
-            print(f"Successfully load audio from file2")
     except Exception as e:
         print(f"Error loading audio from file2: {e}")
         return None
@@ -112,8 +108,16 @@ def calculate_audio_offset(file1_path, file2_path):
     
     # 4. Convert to milliseconds
     offset_ms = (offset_samples / float(target_sr)) * 1000
+
+    # build output
+    if offset_ms == 0:
+        final_str = "file1 equals file2"
+    elif offset_ms > 0:
+        final_str = "file2 is later than file1"
+    else:
+        final_str = "file2 is earlier than file1"
     
-    print(f"Offset: {offset_ms:.2f} ms (file2 is {'later' if offset_ms > 0 else 'earlier'} than file1)")
+    print(f"Offset: {offset_ms:.2f} ms ({final_str})")
     return offset_ms
 
     # # 4. Align audio based on offset

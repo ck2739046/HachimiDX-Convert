@@ -1,10 +1,10 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QLineEdit, QMessageBox)
-from PyQt6.QtGui import QDoubleValidator, QCursor
+from PyQt6.QtGui import QDoubleValidator, QIntValidator, QCursor
 from PyQt6.QtCore import Qt
 import os
 import sys
 import time
-import re
+import json
 
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path: sys.path.insert(0, root)
@@ -23,14 +23,13 @@ class AudioPvPage(QWidget):
         self.colors = ui_helpers.COLORS
         
         # Section 1: 分析 &first 数值
-        self.video_path_label_1 = None
-        self.selected_video_path_1 = None
+        self.file_path_label_1 = None
+        self.selected_file_path_1 = None
+        self.file_path_label_2 = None
+        self.selected_file_path_2 = None
+        self.start_beat_count_input = None
         self.initial_bpm_input = None
         self.result_label = None
-        
-        # Section 2: 对齐文件
-        self.audio_video_path_label = None
-        self.selected_audio_video_path = None
         
         # 进程控制按钮
         self.analyze_button = None # 第二行
@@ -68,20 +67,20 @@ class AudioPvPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # 标题分隔线：分析 &first 数值
-        layout.addWidget(ui_helpers.create_divider("分析 &first 数值", 0, 5, width=100))
-        # 第一行：选择谱面确认视频
+        # 标题分隔线：分析对齐
+        layout.addWidget(ui_helpers.create_divider("分析对齐", 0, 5, width=100))
+        # 第一行：选择基准文件
         first_row = self.setup_1st_row()
         layout.addWidget(first_row)
-        # 第二行：Initial BPM + 开始分析按钮 + 结果 label
+        # 第二行：选择待对齐文件
         second_row = self.setup_2nd_row()
         layout.addWidget(second_row)
-        
-        # 标题分隔线：对齐文件
-        layout.addWidget(ui_helpers.create_divider("对齐文件"))
-        # 第三行：选择音频/视频
+        # 第三行：启动拍数量 + Initial BPM
         third_row = self.setup_3rd_row()
         layout.addWidget(third_row)
+        # 第四行：开始分析按钮 + 结果 label
+        fourth_row = self.setup_4th_row()
+        layout.addWidget(fourth_row)
         
         layout.addSpacing(5)
         layout.addStretch()  # 添加弹性空间
@@ -96,32 +95,35 @@ class AudioPvPage(QWidget):
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(5)
         
-        # 按钮: "选择谱面确认视频"
-        select_video_button = QPushButton("选择谱面确认视频")
-        select_video_button.setStyleSheet(f'''
+        # 按钮: "选择基准文件"
+        select_file_button_1 = QPushButton("选择基准文件")
+        select_file_button_1.setStyleSheet(f'''
             QPushButton {{
                 background-color: {self.colors['accent']};
             }}QPushButton:hover {{
                 background-color: {self.colors['accent_hover']};
             }}''')
-        select_video_button.setFixedSize(120, 25)
-        select_video_button.clicked.connect(self._on_select_video_1)
-        row_layout.addWidget(select_video_button)
+        select_file_button_1.setFixedSize(120, 25)
+        select_file_button_1.clicked.connect(self._on_select_file_1)
+        row_layout.addWidget(select_file_button_1)
         
-        # LineEdit: 显示选择的视频路径
-        self.video_path_label_1 = QLineEdit("")
-        self.video_path_label_1.setStyleSheet(f"color: {self.colors['text_secondary']}; font-size: 13px;")
-        self.video_path_label_1.setReadOnly(True)
-        self.video_path_label_1.setFixedHeight(25)
-        self.video_path_label_1.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
-        self.video_path_label_1.setFrame(False)
-        row_layout.addWidget(self.video_path_label_1)
+        # Helper: 基准文件说明
+        file_1_help = ui_helpers.create_help_icon("可以是音频或视频，需要包含完整的几声启动拍")
+        row_layout.addWidget(file_1_help)
+        
+        # LineEdit: 显示选择的文件路径
+        self.file_path_label_1 = QLineEdit("")
+        self.file_path_label_1.setStyleSheet(f"color: {self.colors['text_secondary']}; font-size: 13px;")
+        self.file_path_label_1.setReadOnly(True)
+        self.file_path_label_1.setFixedHeight(25)
+        self.file_path_label_1.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
+        self.file_path_label_1.setFrame(False)
+        row_layout.addWidget(self.file_path_label_1)
         
         return row
     
     
-
-    def _on_select_video_1(self):
+    def _on_select_file_1(self):
         file_dialog = QFileDialog(self)
         file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
         file_dialog.setNameFilter("video/audio (*.mkv *.mp4 *.webm *.avi *.mp3 *.ogg *.wav)")
@@ -129,17 +131,75 @@ class AudioPvPage(QWidget):
         if file_dialog.exec():
             selected_files = file_dialog.selectedFiles()
             if selected_files:
-                self.selected_video_path_1 = os.path.normpath(os.path.abspath(selected_files[0]))
-                self.video_path_label_1.setText(self.selected_video_path_1)
+                self.selected_file_path_1 = os.path.normpath(os.path.abspath(selected_files[0]))
+                self.file_path_label_1.setText(self.selected_file_path_1)
     
     
-
     def setup_2nd_row(self):
 
         row = QWidget()
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(5)
+        
+        # 按钮: "选择待对齐文件"
+        select_file_button_2 = QPushButton("选择待对齐文件")
+        select_file_button_2.setStyleSheet(f'''
+            QPushButton {{
+                background-color: {self.colors['accent']};
+            }}QPushButton:hover {{
+                background-color: {self.colors['accent_hover']};
+            }}''')
+        select_file_button_2.setFixedSize(120, 25)
+        select_file_button_2.clicked.connect(self._on_select_file_2)
+        row_layout.addWidget(select_file_button_2)
+        
+        # Helper: 待对齐文件说明
+        file_2_help = ui_helpers.create_help_icon("可以是音频或视频")
+        row_layout.addWidget(file_2_help)
+        
+        # LineEdit: 显示选择的文件路径
+        self.file_path_label_2 = QLineEdit("")
+        self.file_path_label_2.setStyleSheet(f"color: {self.colors['text_secondary']}; font-size: 13px;")
+        self.file_path_label_2.setReadOnly(True)
+        self.file_path_label_2.setFixedHeight(25)
+        self.file_path_label_2.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
+        self.file_path_label_2.setFrame(False)
+        row_layout.addWidget(self.file_path_label_2)
+        
+        return row
+    
+
+    def _on_select_file_2(self):
+        file_dialog = QFileDialog(self)
+        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+        file_dialog.setNameFilter("video/audio (*.mkv *.mp4 *.webm *.avi *.mp3 *.ogg *.wav)")
+        file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
+        if file_dialog.exec():
+            selected_files = file_dialog.selectedFiles()
+            if selected_files:
+                self.selected_file_path_2 = os.path.normpath(os.path.abspath(selected_files[0]))
+                self.file_path_label_2.setText(self.selected_file_path_2)
+    
+    
+    def setup_3rd_row(self):
+
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
+        
+        # Label_LineEdit_Helper 启动拍数量
+        start_beat_count_label = ui_helpers.create_label("启动拍数量:")
+        row_layout.addWidget(start_beat_count_label)
+        
+        beat_count_validator = QIntValidator(1, 9, self)  # 1-9 的整数
+        self.start_beat_count_input = ui_helpers.create_line_edit(30, validator=beat_count_validator, placeholder="1~9")
+        self.start_beat_count_input.setText("4")  # 默认值4
+        row_layout.addWidget(self.start_beat_count_input)
+        
+        beat_count_help = ui_helpers.create_help_icon("歌曲开头的启动拍的数量，默认为4")
+        row_layout.addWidget(beat_count_help)
         
         # Label_LineEdit_Helper Initial BPM
         initial_bpm_label = ui_helpers.create_label("Initial BPM:")
@@ -151,6 +211,18 @@ class AudioPvPage(QWidget):
         
         bpm_help = ui_helpers.create_help_icon("启动拍的 BPM 数值")
         row_layout.addWidget(bpm_help)
+        
+        row_layout.addStretch()  # 添加弹性空间
+        return row
+    
+    
+
+    def setup_4th_row(self):
+
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
         
         # 按钮: "开始分析"
         self.analyze_button = ProcessControlButton("开始分析")
@@ -167,50 +239,6 @@ class AudioPvPage(QWidget):
         row_layout.addStretch()  # 添加弹性空间
         return row
     
-    
-    def setup_3rd_row(self):
-
-        row = QWidget()
-        row_layout = QHBoxLayout(row)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(5)
-        
-        # 按钮: "选择音频/视频"
-        select_audio_video_button = QPushButton("选择音频/视频")
-        select_audio_video_button.setStyleSheet(f'''
-            QPushButton {{
-                background-color: {self.colors['accent']};
-            }}QPushButton:hover {{
-                background-color: {self.colors['accent_hover']};
-            }}''')
-        select_audio_video_button.setFixedSize(120, 25)
-        select_audio_video_button.clicked.connect(self._on_select_audio_video)
-        row_layout.addWidget(select_audio_video_button)
-        
-        # LineEdit: 显示选择的文件路径
-        self.audio_video_path_label = QLineEdit("")
-        self.audio_video_path_label.setStyleSheet(f"color: {self.colors['text_secondary']}; font-size: 13px;")
-        self.audio_video_path_label.setReadOnly(True)
-        self.audio_video_path_label.setFixedHeight(25)
-        self.audio_video_path_label.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
-        self.audio_video_path_label.setFrame(False)
-        row_layout.addWidget(self.audio_video_path_label)
-        
-        return row
-    
-    
-
-    def _on_select_audio_video(self):
-        file_dialog = QFileDialog(self)
-        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        file_dialog.setNameFilter("video/audio (*.mkv *.mp4 *.webm *.avi *.mp3 *.ogg *.wav)")
-        file_dialog.setViewMode(QFileDialog.ViewMode.Detail)
-        if file_dialog.exec():
-            selected_files = file_dialog.selectedFiles()
-            if selected_files:
-                self.selected_audio_video_path = os.path.normpath(os.path.abspath(selected_files[0]))
-                self.audio_video_path_label.setText(self.selected_audio_video_path)
-    
 
     
     # debug
@@ -218,9 +246,24 @@ class AudioPvPage(QWidget):
     # analyze_button
     
     def _prepare_analyze_args(self):
-        # 验证视频路径
-        if not self.selected_video_path_1:
-            QMessageBox.warning(self, "参数错误", "请先选择谱面确认视频文件")
+        # 验证基准文件路径
+        if not self.selected_file_path_1:
+            QMessageBox.warning(self, "参数错误", "请先选择基准文件")
+            return None
+        
+        # 验证待对齐文件路径
+        if not self.selected_file_path_2:
+            QMessageBox.warning(self, "参数错误", "请先选择待对齐文件")
+            return None
+        
+        # 验证启动拍数量输入
+        start_beat_count = self.start_beat_count_input.text().strip()
+        if not start_beat_count:
+            start_beat_count = "4"  # 默认值
+        
+        start_beat_count = int(float(start_beat_count))  # 转换为整数
+        if start_beat_count < 1 or start_beat_count > 9:
+            QMessageBox.warning(self, "参数错误", "启动拍数量应在 1~9 范围内")
             return None
         
         # 验证 BPM 输入
@@ -240,10 +283,27 @@ class AudioPvPage(QWidget):
         # 输出日志
         self.output_widget.append_text(f'\n{"=" * 20}')
         self.output_widget.append_text(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
-        self.output_widget.append_text(f"\n开始分析 &first 数值...\n")
+        self.output_widget.append_text(f"\n开始分析对齐...\n")
         
-        # 返回参数列表
-        return [self.selected_video_path_1, str(initial_bpm)]
+        # 构建参数字典
+        params = {
+            "reference_file": self.selected_file_path_1,
+            "target_file": self.selected_file_path_2,
+            "beat_count": start_beat_count,
+            "bpm": initial_bpm
+        }
+        
+        # 创建临时 JSON 文件保存参数
+        if not os.path.exists(tools.path_config.temp_dir):
+            os.makedirs(tools.path_config.temp_dir)
+        temp_json_path = os.path.normpath(os.path.join(tools.path_config.temp_dir, "detect_and_align_args.json"))
+        if os.path.exists(temp_json_path):
+            os.remove(temp_json_path)
+        with open(temp_json_path, 'w', encoding='utf-8') as temp_json:
+            json.dump(params, temp_json, ensure_ascii=False, indent=2)
+        
+        # 返回 JSON 文件路径
+        return [temp_json_path]
     
     
     def _on_analyze_finished(self, exit_code):
@@ -251,15 +311,15 @@ class AudioPvPage(QWidget):
             self.output_widget.append_text("\n✓ 分析完成")
             self.output_widget.append_text("=" * 20)
             
-            # 从输出中提取结果
-            output_text = self.output_widget.get_text()
-            match = re.search(r'Detected start time:\s*([\d.]+)\s*ms', output_text)
-            if match:
-                detected_time = match.group(1)
-                self.result_label.setText(f"估值: {float(detected_time):.3f} ms")
-                self.result_label.show()
-            else:
-                self.output_widget.append_text("\n⚠ 无法解析分析结果")
+            # # 从输出中提取结果
+            # output_text = self.output_widget.get_text()
+            # match = re.search(r'最终时间:\s*([\d.]+)\s*ms', output_text)
+            # if match:
+            #     detected_time = match.group(1)
+            #     self.result_label.setText(f"估值: {float(detected_time):.3f} ms")
+            #     self.result_label.show()
+            # else:
+            #     self.output_widget.append_text("\n⚠ 无法解析分析结果")
         else:
             self.output_widget.append_text("\n✗ 分析失败")
             self.output_widget.append_text("=" * 20)
@@ -270,7 +330,7 @@ class AudioPvPage(QWidget):
     
     def _configure_buttons(self):
         self.analyze_button.configure(
-            script_path=os.path.join(root, "tools", "detect_click_start.py"),
+            script_path=os.path.join(root, "tools", "detect_and_align.py"),
             args_generator=self._prepare_analyze_args,
             output_widget=self.output_widget,
             on_finished=self._on_analyze_finished
