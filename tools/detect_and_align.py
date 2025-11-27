@@ -78,7 +78,7 @@ def main():
     final_time = detect_result - align_result
     print(f"\n在基准文件中，音频从 {detect_result:.2f} ms 开始")
     print(f"在基准文件中，目标文件的音频从 {align_result:.2f} ms 开始")
-    if final_time == 0:
+    if abs(final_time) < 0.01:
         print("已经对齐了，无需调整")
     elif final_time > 0:
         print(f"目标文件需要提前 {final_time:.2f} ms")

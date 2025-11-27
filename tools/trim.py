@@ -4,11 +4,19 @@ import subprocess
 import json
 from typing import Tuple, Dict, Any, Optional
 import cv2
+import io
+import tkinter as tk
+from tkinter import messagebox
 
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path:
     sys.path.insert(0, root)
 import tools.path_config
+
+
+# 解决 Windows 控制台 Unicode 编码问题
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 
 def detect_video_params_cv2(input_file: str) -> Optional[Dict[str, Any]]:
@@ -252,16 +260,40 @@ def trim_media(input_file: str, offset_ms: float, output_file: str = None) -> st
         action = "Trimming" if offset_ms >= 0 else "Adding padding to"
         print(f"{action} {file_type}: {abs(offset_ms)}ms")
         
+        # 显示确认弹窗
+        root = tk.Tk()
+        root.withdraw()  # 隐藏主窗口
+        
+        # 根据文件类型和偏移量生成确认消息
+        if file_type == 'video':
+            if offset_ms >= 0:
+                message = f"确认裁剪视频开头 {abs(offset_ms):.2f} ms ?"
+            else:
+                message = f"确认为视频开头添加 {abs(offset_ms):.2f} ms 黑屏片段？"
+        else:
+            if offset_ms >= 0:
+                message = f"确认裁剪音频开头 {abs(offset_ms):.2f} ms ?"
+            else:
+                message = f"确认为音频开头添加 {abs(offset_ms):.2f} ms 静音片段？"
+        
+        # 显示确认对话框
+        confirmed = messagebox.askyesno("确认操作", message)
+        root.destroy()
+        
+        if not confirmed:
+            print("已取消")
+            return
+        
         cmd = build_trim_command(file_type, params, offset_ms, input_file, output_file)
         print(f"Using FFmpeg command: {' '.join(cmd)}")
         
-        # 不捕获输出，让进度信息直接显示到终端
+        # 执行命令
         result = subprocess.run(cmd, capture_output=False, text=True, encoding='utf-8')
         if result.returncode != 0:
             raise Exception(f"FFmpeg processing failed with return code {result.returncode}")
         
         print(f"Trim completed successfully: {output_file}")
-        return output_file
+        return
         
     except Exception as e:
         raise Exception(f"Error in trim_media: {e}")
@@ -282,8 +314,7 @@ def main():
         offset_ms = float(sys.argv[2])
         output_file = sys.argv[3] if len(sys.argv) > 3 else None
         
-        result = trim_media(input_file, offset_ms, output_file)
-        print(f"Output: {result}")
+        trim_media(input_file, offset_ms, output_file)
         
     except Exception as e:
         print(f"Error: {e}")

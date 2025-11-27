@@ -236,6 +236,11 @@ class AudioPvAlignPage(QWidget):
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(5)
         
+        # 按钮: "修改目标文件"
+        self.modify_target_button = ProcessControlButton("修改目标文件")
+        self.modify_target_button.setFixedSize(100, 25)
+        row_layout.addWidget(self.modify_target_button)
+        
         row_layout.addStretch()  # 添加弹性空间
         return row
     
@@ -315,7 +320,13 @@ class AudioPvAlignPage(QWidget):
                 # 显示结果到标签
                 self.final_time_label.setText(f"offset: {self.final_time:.2f} ms")
                 self.final_time_label.show()
+                self.output_widget.append_text("\n✓ 分析完成")
+                self.output_widget.append_text("=" * 20)
 
+            elif "已经对齐了，无需调整" in recent_output:
+                self.final_time = 0.0
+                self.final_time_label.setText(f"offset: {self.final_time:.2f} ms")
+                self.final_time_label.show()
                 self.output_widget.append_text("\n✓ 分析完成")
                 self.output_widget.append_text("=" * 20)
 
@@ -331,6 +342,39 @@ class AudioPvAlignPage(QWidget):
             self.final_time = None
     
     
+    def _prepare_modify_args(self):
+        # 检查final_time数值
+        if self.final_time is None:
+            QMessageBox.warning(self, "参数错误", "请先分析时间偏移量")
+            return None
+        
+        if abs(self.final_time) < 0.01:
+            QMessageBox.information(self, "无需修改", "目标文件已经对齐，无需修改")
+            return None
+        
+        # 检查目标文件路径
+        if not self.selected_file_path_2:
+            QMessageBox.warning(self, "参数错误", "请先选择待对齐文件")
+            return None
+        
+        # 输出日志
+        self.output_widget.append_text(f'\n{"=" * 20}')
+        self.output_widget.append_text(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        self.output_widget.append_text(f"\n开始修改目标文件...\n")
+        
+        # 返回参数：输入文件路径和偏移量
+        return [self.selected_file_path_2, str(self.final_time)]
+    
+
+    def _on_modify_finished(self, exit_code):
+        if exit_code == 0:
+            self.output_widget.append_text("\n✓ 目标文件修改完成")
+            self.output_widget.append_text("=" * 20)
+        else:
+            self.output_widget.append_text("\n✗ 目标文件修改失败")
+            self.output_widget.append_text("=" * 20)
+    
+    
     # ----------------------------------------------------------------------
     # 按钮配置
     
@@ -340,4 +384,11 @@ class AudioPvAlignPage(QWidget):
             args_generator=self._prepare_analyze_args,
             output_widget=self.output_widget,
             on_finished=self._on_analyze_finished
+        )
+        
+        self.modify_target_button.configure(
+            script_path=os.path.join(root, "tools", "trim.py"),
+            args_generator=self._prepare_modify_args,
+            output_widget=self.output_widget,
+            on_finished=self._on_modify_finished
         )
