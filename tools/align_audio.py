@@ -72,17 +72,17 @@ def calculate_audio_offset(file1_path, file2_path):
     """
 
     if not os.path.exists(file1_path):
-        print(f"file not found -> {file1_path}")
+        print(f"file not found -> file1")
         return None
     if not os.path.exists(file2_path):
-        print(f"file not found -> {file2_path}")
+        print(f"file not found -> file2")
         return None
 
     # 1. Load audio files
     try:
         with suppress_audio_warnings():
             y1, sr1 = librosa.load(file1_path, sr=None, mono=False)
-            print(f"Successfully load audio from file1: {file1_path}")
+            print(f"Successfully load audio from file1")
     except Exception as e:
         print(f"Error loading audio from file1: {e}")
         return None
@@ -90,7 +90,7 @@ def calculate_audio_offset(file1_path, file2_path):
     try:
         with suppress_audio_warnings():
             y2, sr2 = librosa.load(file2_path, sr=None, mono=False)
-            print(f"Successfully load audio from file2: {file2_path}")
+            print(f"Successfully load audio from file2")
     except Exception as e:
         print(f"Error loading audio from file2: {e}")
         return None
