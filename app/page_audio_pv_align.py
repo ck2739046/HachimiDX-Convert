@@ -1,5 +1,5 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QLineEdit, QMessageBox)
-from PyQt6.QtGui import QDoubleValidator, QIntValidator, QCursor
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QLineEdit, QMessageBox, QLabel)
+from PyQt6.QtGui import QDoubleValidator, QIntValidator, QCursor, QPixmap
 from PyQt6.QtCore import Qt
 import os
 import sys
@@ -30,6 +30,8 @@ class AudioPvAlignPage(QWidget):
         self.start_beat_count_combo = None
         self.initial_bpm_input = None
         self.duration_input = None
+        self.modify_target_label = None
+
 
         # detect_and_align 返回的最终时间偏移量
         self.final_time_label = None
@@ -37,8 +39,12 @@ class AudioPvAlignPage(QWidget):
         
         # 进程控制按钮
         self.analyze_button = None # 第二行
+        self.modify_target_button = None # 第四行
         # 输出区组件
         self.output_widget = None
+        
+        # 波形图显示widget
+        self.waveform_label = None
         
         # 设置页面布局
         self.setup_ui()
@@ -53,9 +59,10 @@ class AudioPvAlignPage(QWidget):
         # 上半部分：配置区
         config_widget = self.create_config_area()
         page_layout.addWidget(config_widget)
-        
+
         # 下半部分：输出区
         self.output_widget = OutputTextWidget(max_lines=400)
+        self.output_widget.setFixedHeight(390)
         page_layout.addWidget(self.output_widget)
         
         # 配置所有进程控制按钮
@@ -74,7 +81,7 @@ class AudioPvAlignPage(QWidget):
         # 第一行：选择基准文件
         first_row = self.setup_1st_row()
         layout.addWidget(first_row)
-        # 第二行：选择待对齐文件
+        # 第二行：选择目标文件
         second_row = self.setup_2nd_row()
         layout.addWidget(second_row)
         # 第三行：启动拍数量 + Initial BPM + Duration + 开始分析按钮/结果 label
@@ -83,6 +90,14 @@ class AudioPvAlignPage(QWidget):
         # 第四行：开始裁剪按钮
         fourth_row = self.setup_4th_row()
         layout.addWidget(fourth_row)
+        # 显示波形图
+        layout.addSpacing(10)
+        self.waveform_label = QLabel()
+        self.waveform_label.setStyleSheet(f"background-color: {self.colors['bg']};")
+        self.waveform_label.setMinimumHeight(220)
+        self.waveform_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.waveform_label.hide()  # 初始隐藏
+        layout.addWidget(self.waveform_label)
         
         layout.addSpacing(5)
         layout.addStretch()  # 添加弹性空间
@@ -144,8 +159,8 @@ class AudioPvAlignPage(QWidget):
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(5)
         
-        # 按钮: "选择待对齐文件"
-        select_file_button_2 = QPushButton("选择待对齐文件")
+        # 按钮: "选择目标文件"
+        select_file_button_2 = QPushButton("选择目标文件")
         select_file_button_2.setStyleSheet(f'''
             QPushButton {{
                 background-color: {self.colors['accent']};
@@ -156,7 +171,7 @@ class AudioPvAlignPage(QWidget):
         select_file_button_2.clicked.connect(self._on_select_file_2)
         row_layout.addWidget(select_file_button_2)
         
-        # Helper: 待对齐文件说明
+        # Helper: 目标文件说明
         file_2_help = ui_helpers.create_help_icon("可以是音频或视频")
         row_layout.addWidget(file_2_help)
         
@@ -229,7 +244,20 @@ class AudioPvAlignPage(QWidget):
         self.analyze_button = ProcessControlButton("开始分析")
         self.analyze_button.setFixedSize(80, 25)
         row_layout.addWidget(self.analyze_button)
-        row_layout.addSpacing(5)
+
+        # Helper
+        analyze_help = ui_helpers.create_help_icon(
+            "程序将根据输入参数进行音频对齐分析\n" \
+            "首先根据基准文件的启动拍，预估音频的标准起始时间\n" \
+            "然后对齐基准文件和目标文件的音频\n" \
+            "最后计算目标文件音频相对于标准音频起始时间的偏移量\n" \
+            "\n在理想情况下，音频应该和启动拍同时开始播放\n" \
+            "但是游戏加载音频需要时间，实际上两者并非严格同时开始播放\n" \
+            "导致估算出的标准音频起始时间可能存在 ±10ms 的误差\n" \
+            "结果仅供参考\n" \
+            "\n波形图: 红色虚线是程序估算的标准音频起始时间\n" \
+            "波形图: 绿色虚线是目标文件音频的实际起始时间")
+        row_layout.addWidget(analyze_help)
         
         # Label: 显示结果（默认隐藏）
         self.final_time_label = ui_helpers.create_label("default")
@@ -254,17 +282,27 @@ class AudioPvAlignPage(QWidget):
         self.modify_target_button.setFixedSize(120, 25)
         row_layout.addWidget(self.modify_target_button)
 
+        # Helper: 修改目标文件说明
         modify_target_help = ui_helpers.create_help_icon(
-            "根据分析结果，修改待对齐的文件\n" \
-            "视频待对齐\n" \
+            "根据分析结果，修改目标文件\n" \
+            "视频目标\n" \
             "  正偏移：裁剪视频开头\n" \
             "  负偏移：为视频开头添加黑屏片段\n" \
-            "音频待对齐\n" \
+            "音频目标\n" \
             "  正偏移：裁剪音频开头\n" \
             "  负偏移：为音频开头添加静音片段")
         row_layout.addWidget(modify_target_help)
+
+        # LineEdit: 显示选择的文件路径
+        self.modify_target_label = QLineEdit("")
+        self.modify_target_label.setStyleSheet(f"color: {self.colors['text_secondary']}; font-size: 13px;")
+        self.modify_target_label.setReadOnly(True)
+        self.modify_target_label.setFixedHeight(25)
+        self.modify_target_label.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
+        self.modify_target_label.setFrame(False)
+        row_layout.addWidget(self.modify_target_label)
         
-        row_layout.addStretch()  # 添加弹性空间
+        # row_layout.addStretch()  # 添加弹性空间
         return row
     
 
@@ -279,9 +317,9 @@ class AudioPvAlignPage(QWidget):
             QMessageBox.warning(self, "参数错误", "请先选择基准文件")
             return None
         
-        # 验证待对齐文件路径
+        # 验证目标文件路径
         if not self.selected_file_path_2:
-            QMessageBox.warning(self, "参数错误", "请先选择待对齐文件")
+            QMessageBox.warning(self, "参数错误", "请先选择目标文件")
             return None
         
         # 获取启动拍数量（从下拉框选择）
@@ -311,6 +349,20 @@ class AudioPvAlignPage(QWidget):
         
         # 隐藏结果 label
         self.final_time_label.hide()
+        
+        # 隐藏并清除波形图
+        if self.waveform_label:
+            self.waveform_label.hide()
+            self.waveform_label.clear()
+        
+        # 删除旧的波形图文件
+        sound_wave_path = os.path.join(tools.path_config.temp_dir, 'sound_wave.png')
+        sound_wave_path = os.path.normpath(os.path.abspath(sound_wave_path))
+        if os.path.exists(sound_wave_path):
+            try:
+                os.remove(sound_wave_path)
+            except:
+                pass
         
         # 输出日志
         self.output_widget.append_text(f'\n{"=" * 20}')
@@ -382,6 +434,16 @@ class AudioPvAlignPage(QWidget):
             self.output_widget.append_text("\n✗ 分析失败")
             self.output_widget.append_text("=" * 20)
             return
+        
+        # 检查波形图是否生成成功
+        sound_wave_path = os.path.join(tools.path_config.temp_dir, 'sound_wave.png')
+        sound_wave_path = os.path.normpath(os.path.abspath(sound_wave_path))
+        if "波形图已保存到" not in recent_output or not os.path.exists(sound_wave_path):
+            self.final_time = None
+            self.output_widget.append_text("未能生成音频波形图")
+            self.output_widget.append_text("\n✗ 分析失败")
+            self.output_widget.append_text("=" * 20)
+            return
 
         # 解析成功
         self.output_widget.append_text("\n✓ 分析完成")
@@ -391,6 +453,14 @@ class AudioPvAlignPage(QWidget):
         self.final_time = final_time
         self.final_time_label.setText(f"offset: {self.final_time:.2f} ms")
         self.final_time_label.show()
+
+        # 显示波形图片
+        sound_wave_path = os.path.join(tools.path_config.temp_dir, 'sound_wave.png')
+        sound_wave_path = os.path.normpath(os.path.abspath(sound_wave_path))
+        if os.path.exists(sound_wave_path):
+            pixmap = QPixmap(sound_wave_path)
+            self.waveform_label.setPixmap(pixmap)
+            self.waveform_label.show()
 
 
     
@@ -407,8 +477,11 @@ class AudioPvAlignPage(QWidget):
         
         # 检查目标文件路径
         if not self.selected_file_path_2:
-            QMessageBox.warning(self, "参数错误", "请先选择待对齐文件")
+            QMessageBox.warning(self, "参数错误", "请先选择目标文件")
             return None
+        
+        # 隐藏路径
+        self.modify_target_label.hide()
         
         # 输出日志
         self.output_widget.append_text(f'\n{"=" * 20}')
@@ -421,6 +494,8 @@ class AudioPvAlignPage(QWidget):
 
     def _on_modify_finished(self, exit_code):
         if exit_code == 0:
+            self.modify_target_label.setText(self.selected_file_path_2)
+            self.modify_target_label.show()
             self.output_widget.append_text("\n✓ 目标文件修改完成")
             self.output_widget.append_text("=" * 20)
         else:
