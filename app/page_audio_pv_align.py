@@ -340,41 +340,59 @@ class AudioPvAlignPage(QWidget):
     
     
     def _on_analyze_finished(self, exit_code):
-        if exit_code == 0:
-        
-            # 获取最近7行文本解析final_time
-            recent_output = self.output_widget.get_recent_lines(7)
-            # 匹配 detect_and_align.py 输出中的结果
-            # 格式如: "目标文件需要提前 150.00 ms" 或 "目标文件需要延后 200.00 ms"
-            match = re.search(r'目标文件需要(提前|延后)\s*([\d.]+)\s*ms', recent_output)
-            if match:
-                action = match.group(1)
-                value = float(match.group(2))
-                # 如果是"提前"，final_time 为正值；如果是"延后"，final_time 为负值
-                self.final_time = value if action == "提前" else -value
-                # 显示结果到标签
-                self.final_time_label.setText(f"offset: {self.final_time:.2f} ms")
-                self.final_time_label.show()
-                self.output_widget.append_text("\n✓ 分析完成")
-                self.output_widget.append_text("=" * 20)
 
-            elif "已经对齐了，无需调整" in recent_output:
-                self.final_time = 0.0
-                self.final_time_label.setText(f"offset: {self.final_time:.2f} ms")
-                self.final_time_label.show()
-                self.output_widget.append_text("\n✓ 分析完成")
-                self.output_widget.append_text("=" * 20)
-
-            else:
-                self.final_time = None
-                self.output_widget.append_text("未能从输出中解析最终时间偏移量")
-                self.output_widget.append_text("\n✗ 分析失败")
-                self.output_widget.append_text("=" * 20)
-
-        else:
+        if exit_code != 0:
             self.output_widget.append_text("\n✗ 分析失败")
             self.output_widget.append_text("=" * 20)
             self.final_time = None
+            return
+        
+        # 获取最近7行文本解析final_time
+        recent_output = self.output_widget.get_recent_lines(7)
+        
+        # 从 detect_and_align.py 输出的结果解析三个时间值
+        click_start_time = None
+        audio_start_time = None
+        final_time = None
+        
+        # 解析click_start_time: "在基准文件中，音频从 xxx ms 开始"
+        click_match = re.search(r'在基准文件中，音频从\s*([\d.]+)\s*ms\s*开始', recent_output)
+        if click_match:
+            click_start_time = float(click_match.group(1))
+        
+        # 解析audio_start_time: "在基准文件中，目标文件的音频从 xxx ms 开始"
+        audio_match = re.search(r'在基准文件中，目标文件的音频从\s*([\d.]+)\s*ms\s*开始', recent_output)
+        if audio_match:
+            audio_start_time = float(audio_match.group(1))
+        
+        # 格式如: "目标文件需要提前 150.00 ms" 或 "目标文件需要延后 200.00 ms"
+        match = re.search(r'目标文件需要(提前|延后)\s*([\d.]+)\s*ms', recent_output)
+        if match:
+            action = match.group(1)
+            value = float(match.group(2))
+            # 如果是"提前"，final_time 为正值；如果是"延后"，final_time 为负值
+            final_time = value if action == "提前" else -value
+        elif "已经对齐了，无需调整" in recent_output:
+            final_time = 0.0
+
+        # 解析失败
+        if final_time is None or click_start_time is None or audio_start_time is None:
+            self.final_time = None
+            self.output_widget.append_text("未能从输出中解析最终时间偏移量")
+            self.output_widget.append_text("\n✗ 分析失败")
+            self.output_widget.append_text("=" * 20)
+            return
+
+        # 解析成功
+        self.output_widget.append_text("\n✓ 分析完成")
+        self.output_widget.append_text("=" * 20)
+
+        # 显示结果到标签
+        self.final_time = final_time
+        self.final_time_label.setText(f"offset: {self.final_time:.2f} ms")
+        self.final_time_label.show()
+
+
     
     
     def _prepare_modify_args(self):
