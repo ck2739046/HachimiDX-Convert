@@ -36,7 +36,10 @@ def main(video_path, bpm, click_times, duration):
         duration (int): 仅加载前多少秒
 
     返回:
-        float: 匹配到的时间（秒）
+        dict: 包含匹配结果和音频数据的字典
+            - adjusted_match_time: 调整后的匹配时间 (ms)
+            - match_time: 原始匹配时间 (ms) 
+            - generated_template: 生成的模板音频 (44100Hz)
     """
 
     try:
@@ -65,8 +68,13 @@ def main(video_path, bpm, click_times, duration):
         if adjusted_match_time < 0:
             print(f"error: adjusted_match_time < 0 ({adjusted_match_time})")
             return None
-   
-        return adjusted_match_time
+    
+        # 返回调整后的时间和原始匹配时间，以及生成的模板用于可视化
+        return {
+            'adjusted_match_time': adjusted_match_time,
+            'match_time': match_time,
+            'generated_template': full_template,
+        }    
     
     except Exception as e:
         print(f"Error in detecting audio start: {e}")

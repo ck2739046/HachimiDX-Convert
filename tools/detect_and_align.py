@@ -4,6 +4,7 @@ import json
 import io
 from detect_click_start import main as detect_click_start_main
 from align_audio import calculate_audio_offset
+import draw_audio_wave 
 
 # 解决 Windows 控制台 Unicode 编码问题
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -61,8 +62,11 @@ def main():
 
     # 1. 调用 detect_click_start 分析基准文件
     print("\n根据启动拍分析基准文件的音频起始时间...")
-    detect_result = detect_click_start_main(reference_file, bpm, beat_count, duration)
-    if detect_result is not None:
+    detect_result_dict = detect_click_start_main(reference_file, bpm, beat_count, duration)
+    if detect_result_dict is not None:
+        detect_result = detect_result_dict['adjusted_match_time']
+        match_time = detect_result_dict['match_time']
+        generated_template = detect_result_dict['generated_template']
         print(f"{detect_result:.2f} ms")
     else:
         print("分析失败")
@@ -71,10 +75,13 @@ def main():
 
     # 2. 调用 align_audio 分析文件对齐
     print("\n对齐基准文件和目标文件...")
-    align_result = calculate_audio_offset(reference_file, target_file)
-    if align_result is None:
+    align_result_dict = calculate_audio_offset(reference_file, target_file)
+    if align_result_dict is None:
         print("对齐失败")
         return None
+    align_result = align_result_dict['offset_ms']
+    reference_audio = align_result_dict['reference_audio']
+    target_audio = align_result_dict['target_audio']
     
 
     # 3. 计算最终结果
@@ -87,6 +94,20 @@ def main():
         print(f"目标文件需要提前 {final_time:.2f} ms")
     else:
         print(f"目标文件需要延后 {abs(final_time):.2f} ms")
+    
+    # 4. 生成音频波形图
+    print("\n生成音频波形图...")
+    try:
+        draw_audio_wave.main(
+            reference_audio=reference_audio,
+            template_audio=generated_template,
+            target_audio=target_audio,
+            match_time=match_time,
+            align_result=align_result,
+            adjusted_match_time=detect_result
+        )
+    except Exception as e:
+        print(f"波形图生成失败: {e}")
     
     return final_time
 

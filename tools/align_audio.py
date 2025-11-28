@@ -61,8 +61,12 @@ def calculate_audio_offset(file1_path, file2_path):
         file2_path: 待对齐音频文件路径
             
     返回:
-        float: file2 相对于 file1 的偏移（毫秒）
-               正值表示 file2 需要向后移动才能与 file1 对齐
+        dict: 包含对齐结果和音频数据的字典
+            - offset_ms: file2 相对于 file1 的偏移（毫秒）
+                       正值表示 file2 需要向后移动才能与 file1 对齐
+            - reference_audio: 基准音频数据 (44100Hz)
+            - target_audio: 目标音频数据 (44100Hz)
+            
         None: 如果发生错误
     """
     if not os.path.exists(file1_path):
@@ -109,7 +113,13 @@ def calculate_audio_offset(file1_path, file2_path):
         final_str = "file2 is later than file1"
     
     print(f"{offset_ms:.2f} ms ({final_str})")
-    return offset_ms
+    
+    # 返回对齐结果和音频数据用于可视化
+    return {
+        'offset_ms': offset_ms,
+        'reference_audio': y1,
+        'target_audio': y2
+    }
 
 
 

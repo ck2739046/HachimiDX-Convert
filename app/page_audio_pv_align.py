@@ -347,8 +347,8 @@ class AudioPvAlignPage(QWidget):
             self.final_time = None
             return
         
-        # 获取最近7行文本解析final_time
-        recent_output = self.output_widget.get_recent_lines(7)
+        # 获取最近12行文本解析final_time
+        recent_output = self.output_widget.get_recent_lines(12)
         
         # 从 detect_and_align.py 输出的结果解析三个时间值
         click_start_time = None
