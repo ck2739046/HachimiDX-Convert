@@ -1,6 +1,7 @@
 .idea
 *__pycache__*
 .venv
+.venv_main
 
 aaa-result
 src/Majdata/

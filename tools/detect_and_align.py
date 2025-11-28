@@ -19,6 +19,7 @@ def main():
         target_file (str): 待对齐文件路径
         beat_count (int): 启动拍数量
         bpm (float): 启动拍的BPM值
+        duration (int): 仅加载前多少秒
     
     返回:
         final_time
@@ -48,17 +49,19 @@ def main():
     target_file = params.get('target_file')
     beat_count = params.get('beat_count')
     bpm = params.get('bpm')
+    duration = params.get('duration')
 
     print(f"  reference_file: {reference_file}")
     print(f"  target_file: {target_file}")
     print(f"  beat_count: {beat_count}")
     print(f"  bpm: {bpm}")
+    print(f"  duration: {duration}")
     
     
 
     # 1. 调用 detect_click_start 分析基准文件
     print("\n根据启动拍分析基准文件的音频起始时间...")
-    detect_result = detect_click_start_main(reference_file, bpm, beat_count)
+    detect_result = detect_click_start_main(reference_file, bpm, beat_count, duration)
     if detect_result is not None:
         print(f"{detect_result:.2f} ms")
     else:

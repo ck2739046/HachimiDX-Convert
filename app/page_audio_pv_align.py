@@ -29,6 +29,7 @@ class AudioPvAlignPage(QWidget):
         self.selected_file_path_2 = None
         self.start_beat_count_combo = None
         self.initial_bpm_input = None
+        self.duration_input = None
 
         # detect_and_align 返回的最终时间偏移量
         self.final_time_label = None
@@ -76,7 +77,7 @@ class AudioPvAlignPage(QWidget):
         # 第二行：选择待对齐文件
         second_row = self.setup_2nd_row()
         layout.addWidget(second_row)
-        # 第三行：启动拍数量 + Initial BPM + 开始分析按钮/结果 label
+        # 第三行：启动拍数量 + Initial BPM + Duration + 开始分析按钮/结果 label
         third_row = self.setup_3rd_row()
         layout.addWidget(third_row)
         # 第四行：开始裁剪按钮
@@ -195,12 +196,24 @@ class AudioPvAlignPage(QWidget):
         row_layout.addWidget(start_beat_count_label)
         
         self.start_beat_count_combo = ui_helpers.create_combo_box(
-            45, ["4", "7"], default_index=0)
+            45, ["4", "5", "6", "7", "8"], default_index=0)
         row_layout.addWidget(self.start_beat_count_combo)
         
         beat_count_help = ui_helpers.create_help_icon("歌曲开头的启动拍的数量，默认为4")
         row_layout.addWidget(beat_count_help)
         
+        # Label_LineEdit_Helper Duration
+        duration_label = ui_helpers.create_label("搜索范围(秒):")
+        row_layout.addWidget(duration_label)
+        duration_validator = QIntValidator(5, 999, self)  # 最少5秒
+        self.duration_input = ui_helpers.create_line_edit(70, validator=duration_validator, placeholder="5~999")
+        self.duration_input.setText("10") # 默认10秒
+        row_layout.addWidget(self.duration_input)
+        duration_help = ui_helpers.create_help_icon(
+            "仅加载基准音频的前多少秒进行分析\n" \
+            "这个时间段应该包含所有启动拍")
+        row_layout.addWidget(duration_help)
+
         # Label_LineEdit_Helper Initial BPM
         initial_bpm_label = ui_helpers.create_label("Initial BPM:")
         row_layout.addWidget(initial_bpm_label)
@@ -285,6 +298,17 @@ class AudioPvAlignPage(QWidget):
             QMessageBox.warning(self, "参数错误", "Initial BPM 应在 10~999 范围内")
             return None
         
+        # 验证 duration 输入
+        duration_text = self.duration_input.text().strip()
+        if not duration_text:
+            QMessageBox.warning(self, "参数错误", "请输入 Duration")
+            return None
+        
+        duration = round(int(duration_text), 3)
+        if duration < 5 or duration > 999:
+            QMessageBox.warning(self, "参数错误", "Duration 应为至少 5 秒")
+            return None
+        
         # 隐藏结果 label
         self.final_time_label.hide()
         
@@ -298,7 +322,8 @@ class AudioPvAlignPage(QWidget):
             "reference_file": self.selected_file_path_1,
             "target_file": self.selected_file_path_2,
             "beat_count": start_beat_count,
-            "bpm": initial_bpm
+            "bpm": initial_bpm,
+            "duration": duration
         }
         
         # 创建临时 JSON 文件保存参数

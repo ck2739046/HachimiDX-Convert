@@ -29,36 +29,33 @@ def find_best_alignment_offset(signal1, signal2):
         int: 样本偏移量（正值表示signal2需要向后移动）
     """
 
-    if signal1.ndim > 1:
-        signal1 = signal1.mean(axis=1)
-    if signal2.ndim > 1:
-        signal2 = signal2.mean(axis=1)
-
-    # Precise mode: RMS归一化 + 能量归一化
-    def rms_normalize(sig):
-        rms = np.sqrt(np.mean(sig ** 2))
-        return sig / (rms + 1e-8)
+    # --- 零均值标准化 (Zero-Mean / Z-Score) ---
+    # 1. 减去均值：消除直流偏移（DC Offset）和低频背景噪音的影响
+    # 2. 除以标准差：消除音量大小差异（游戏音效大或者音乐声音小都不受影响）
     
-    sig1_norm = rms_normalize(signal1)
-    sig2_norm = rms_normalize(signal2)
+    def standardize(sig):
+        # 减去均值 (Center)
+        sig = sig - np.mean(sig)
+        # 除以标准差 (Scale)，加 eps 防止除以零
+        std = np.std(sig)
+        return sig / (std + 1e-8)
     
+    sig1_norm = standardize(signal1)
+    sig2_norm = standardize(signal2)
+    
+    # 执行互相关 (FFT加速)
     correlation = signal.correlate(sig1_norm, sig2_norm, mode='full', method='fft')
-    
-    # 能量归一化
-    template_energy = np.sum(sig2_norm ** 2)
-    if template_energy > 0:
-        correlation = correlation / np.sqrt(template_energy)
 
     lag_index = np.argmax(correlation)
     offset = lag_index - (len(signal2) - 1)
+    
     return offset
-
 
 
 def calculate_audio_offset(file1_path, file2_path):
     """
     计算两个音频文件之间的时间偏移
-    
+        
     参数:
         file1_path: 基准音频文件路径
         file2_path: 待对齐音频文件路径
@@ -68,7 +65,6 @@ def calculate_audio_offset(file1_path, file2_path):
                正值表示 file2 需要向后移动才能与 file1 对齐
         None: 如果发生错误
     """
-
     if not os.path.exists(file1_path):
         print(f"file not found -> {file1_path}")
         return None
@@ -79,14 +75,14 @@ def calculate_audio_offset(file1_path, file2_path):
     # 1. Load audio files
     try:
         with suppress_audio_warnings():
-            y1, sr1 = librosa.load(file1_path, sr=None, mono=False)
+            y1, sr1 = librosa.load(file1_path, sr=None, mono=True) # 直接加载为 Mono
     except Exception as e:
         print(f"Error loading audio from file1: {e}")
         return None
     
     try:
         with suppress_audio_warnings():
-            y2, sr2 = librosa.load(file2_path, sr=None, mono=False)
+            y2, sr2 = librosa.load(file2_path, sr=None, mono=True)
     except Exception as e:
         print(f"Error loading audio from file2: {e}")
         return None
@@ -95,16 +91,11 @@ def calculate_audio_offset(file1_path, file2_path):
     target_sr = 44100
     if sr1 != target_sr:
         y1 = librosa.resample(y1, orig_sr=sr1, target_sr=target_sr)
-        sr1 = target_sr
     if sr2 != target_sr:
         y2 = librosa.resample(y2, orig_sr=sr2, target_sr=target_sr)
-        sr2 = target_sr
     
-    y1_mono = librosa.to_mono(y1)
-    y2_mono = librosa.to_mono(y2)
-
     # 3. Calculate offset
-    offset_samples = find_best_alignment_offset(y1_mono, y2_mono)
+    offset_samples = find_best_alignment_offset(y1, y2)
     
     # 4. Convert to milliseconds
     offset_ms = (offset_samples / float(target_sr)) * 1000
