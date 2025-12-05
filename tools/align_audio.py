@@ -131,7 +131,7 @@ if __name__ == '__main__':
         
         offset = calculate_audio_offset(file1, file2)
         if offset is not None:
-            print(f"\nFinal result: {offset:.2f} ms")
+            print(f"\nFinal result: {offset['offset_ms']:.2f} ms")
         else:
             print("\nFailed to calculate offset")
     else:

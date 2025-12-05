@@ -449,7 +449,7 @@ class AudioPvAlignPage(QWidget):
             value = float(match.group(2))
             # 如果是"提前"，final_time 为正值；如果是"延后"，final_time 为负值
             final_time = value if action == "提前" else -value
-        elif "已经对齐了，无需调整" in recent_output:
+        elif "已经对齐了" in recent_output:
             final_time = 0.0
 
         # 解析失败
@@ -494,9 +494,84 @@ class AudioPvAlignPage(QWidget):
     # allign_only_button
 
     def _prepare_align_only_args(self):
-        pass
+        # 验证基准文件路径
+        if not self.selected_file_path_1:
+            QMessageBox.warning(self, "参数错误", "请先选择基准文件")
+            return None
+        
+        # 验证目标文件路径
+        if not self.selected_file_path_2:
+            QMessageBox.warning(self, "参数错误", "请先选择目标文件")
+            return None
+        
+        # 隐藏结果 label
+        self.trim_offset_time_label.hide()
+        
+        # 隐藏并清除波形图
+        if self.waveform_label:
+            self.waveform_label.hide()
+            self.waveform_label.clear()
+        
+        # 删除旧的波形图文件（如果存在）
+        sound_wave_path = os.path.join(tools.path_config.temp_dir, 'sound_wave.png')
+        sound_wave_path = os.path.normpath(os.path.abspath(sound_wave_path))
+        if os.path.exists(sound_wave_path):
+            try:
+                os.remove(sound_wave_path)
+            except:
+                pass
+        
+        # 输出日志
+        self.output_widget.append_text(f'\n{"=" * 20}')
+        self.output_widget.append_text(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        self.output_widget.append_text(f"\n开始仅对齐音频...\n")
+        
+        # 返回参数：基准文件路径和目标文件路径
+        return [self.selected_file_path_1, self.selected_file_path_2]
+    
+
     def _on_align_only_finished(self, exit_code):
-        pass
+        if exit_code != 0:
+            self.output_widget.append_text("\n✗ 仅对齐音频失败")
+            self.output_widget.append_text("=" * 20)
+            self.trim_offset_time = None
+            return
+        
+        # 获取最近输出文本解析 offset
+        recent_output = self.output_widget.get_recent_lines(6)
+        
+        # 从 align_audio.py 输出的结果解析时间偏移量
+        # 格式如: "150.00 ms (file2 is earlier than file1)" 或 "-150.00 ms (file2 is later than file1)"
+        # 匹配带可选负号的浮点数，后跟 "ms"，可能还有括号
+        offset_match = re.search(r'(-?\d+\.?\d*)\s*ms', recent_output)
+        if offset_match:
+            offset_ms = float(offset_match.group(1))
+            # offset_ms 的符号已经正确，无需额外处理
+            self.trim_offset_time = offset_ms
+        else:
+            # 尝试其他格式
+            self.trim_offset_time = None
+        
+        if self.trim_offset_time is None:
+            self.output_widget.append_text("未能从输出中解析时间偏移量")
+            self.output_widget.append_text("\n✗ 仅对齐音频失败")
+            self.output_widget.append_text("=" * 20)
+            return
+        
+        # 解析成功
+        if abs(self.trim_offset_time) < 0.01:
+            self.trim_offset_time = 0.0
+            self.output_widget.append_text("已经对齐了")
+        else:
+            self.output_widget.append_text(f"最终offset为 -1 * {self.trim_offset_time}ms")
+            self.trim_offset_time = -1 * self.trim_offset_time
+
+        self.output_widget.append_text("\n✓ 仅对齐音频完成")
+        self.output_widget.append_text("=" * 20)
+        
+        # 显示结果到标签
+        self.trim_offset_time_label.setText(f"offset: {self.trim_offset_time:.2f} ms")
+        self.trim_offset_time_label.show()
 
 
 
@@ -542,7 +617,7 @@ class AudioPvAlignPage(QWidget):
             self.output_widget.append_text("=" * 20)
     
     
-    
+
     # debug
     # ----------------------------------------------------------------------
     # 按钮配置
