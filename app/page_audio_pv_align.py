@@ -32,14 +32,15 @@ class AudioPvAlignPage(QWidget):
         self.duration_input = None
         self.modify_target_label = None
 
-
-        # detect_align_all_in_one 返回的最终时间偏移量
-        self.final_time_label = None
-        self.final_time = None  
+        # detect_align_all_in_one 返回的时间偏移量会赋值到这里
+        # 或者单纯仅 allign_audio 返回的时间偏移量
+        self.trim_offset_time_label = None
+        self.trim_offset_time = None  
         
         # 进程控制按钮
-        self.analyze_button = None # 第二行
-        self.modify_target_button = None # 第四行
+        self.analyze_button = None # 第四行
+        self.align_only_button = None # 第四行
+        self.modify_target_button = None # 第五行
         # 输出区组件
         self.output_widget = None
         
@@ -84,12 +85,15 @@ class AudioPvAlignPage(QWidget):
         # 第二行：选择目标文件
         second_row = self.setup_2nd_row()
         layout.addWidget(second_row)
-        # 第三行：启动拍数量 + Initial BPM + Duration + 开始分析按钮/结果 label
+        # 第三行：启动拍数量 + Initial_BPM + Duration
         third_row = self.setup_3rd_row()
         layout.addWidget(third_row)
-        # 第四行：开始裁剪按钮
+        # 第四行：开始分析按钮/仅对齐音频按钮
         fourth_row = self.setup_4th_row()
         layout.addWidget(fourth_row)
+        # 第五行：开始裁剪按钮/offset显示
+        fifth_row = self.setup_5th_row()
+        layout.addWidget(fifth_row)
         # 显示波形图
         layout.addSpacing(10)
         self.waveform_label = QLabel()
@@ -239,12 +243,23 @@ class AudioPvAlignPage(QWidget):
         
         bpm_help = ui_helpers.create_help_icon("启动拍的 BPM 数值")
         row_layout.addWidget(bpm_help)
+        
+        row_layout.addStretch()  # 添加弹性空间
+        return row
+    
+
+
+    def setup_4th_row(self):
+
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
 
         # 按钮: "开始分析"
         self.analyze_button = ProcessControlButton("开始分析")
         self.analyze_button.setFixedSize(80, 25)
         row_layout.addWidget(self.analyze_button)
-
         # Helper
         analyze_help = ui_helpers.create_help_icon(
             "程序将根据输入参数进行音频对齐分析\n" \
@@ -258,19 +273,23 @@ class AudioPvAlignPage(QWidget):
             "\n波形图: 红色虚线是程序估算的标准音频起始时间\n" \
             "波形图: 绿色虚线是目标文件音频的实际起始时间")
         row_layout.addWidget(analyze_help)
-        
-        # Label: 显示结果（默认隐藏）
-        self.final_time_label = ui_helpers.create_label("default")
-        self.final_time_label.setStyleSheet(f"color: {self.colors['accent']}; font-size: 13px; font-weight: bold;")
-        self.final_time_label.hide()
-        row_layout.addWidget(self.final_time_label)
-        
+
+        # 按钮: "仅对齐"
+        self.align_only_button = ProcessControlButton("仅对齐")
+        self.align_only_button.setFixedSize(80, 25)
+        row_layout.addWidget(self.align_only_button)
+        # Helper
+        align_only_help = ui_helpers.create_help_icon(
+            "仅对齐基准文件和目标文件的音频\n" \
+            "计算目标文件音频相对于基准文件音频的偏移量")
+        row_layout.addWidget(align_only_help)
+
         row_layout.addStretch()  # 添加弹性空间
         return row
     
     
 
-    def setup_4th_row(self):
+    def setup_5th_row(self):
 
         row = QWidget()
         row_layout = QHBoxLayout(row)
@@ -292,6 +311,12 @@ class AudioPvAlignPage(QWidget):
             "  正偏移：裁剪音频开头\n" \
             "  负偏移：为音频开头添加静音片段")
         row_layout.addWidget(modify_target_help)
+
+        # Label: 显示结果（默认隐藏）
+        self.trim_offset_time_label = ui_helpers.create_label("default")
+        self.trim_offset_time_label.setStyleSheet(f"color: {self.colors['accent']}; font-size: 13px; font-weight: bold;")
+        self.trim_offset_time_label.hide()
+        row_layout.addWidget(self.trim_offset_time_label)
 
         # LineEdit: 显示选择的文件路径
         self.modify_target_label = QLineEdit("")
@@ -348,7 +373,7 @@ class AudioPvAlignPage(QWidget):
             return None
         
         # 隐藏结果 label
-        self.final_time_label.hide()
+        self.trim_offset_time_label.hide()
         
         # 隐藏并清除波形图
         if self.waveform_label:
@@ -396,7 +421,7 @@ class AudioPvAlignPage(QWidget):
         if exit_code != 0:
             self.output_widget.append_text("\n✗ 分析失败")
             self.output_widget.append_text("=" * 20)
-            self.final_time = None
+            self.trim_offset_time = None
             return
         
         # 获取最近12行文本解析final_time
@@ -429,7 +454,7 @@ class AudioPvAlignPage(QWidget):
 
         # 解析失败
         if final_time is None or click_start_time is None or audio_start_time is None:
-            self.final_time = None
+            self.trim_offset_time = None
             self.output_widget.append_text("未能从输出中解析最终时间偏移量")
             self.output_widget.append_text("\n✗ 分析失败")
             self.output_widget.append_text("=" * 20)
@@ -439,7 +464,7 @@ class AudioPvAlignPage(QWidget):
         sound_wave_path = os.path.join(tools.path_config.temp_dir, 'sound_wave.png')
         sound_wave_path = os.path.normpath(os.path.abspath(sound_wave_path))
         if "波形图已保存到" not in recent_output or not os.path.exists(sound_wave_path):
-            self.final_time = None
+            self.trim_offset_time = None
             self.output_widget.append_text("未能生成音频波形图")
             self.output_widget.append_text("\n✗ 分析失败")
             self.output_widget.append_text("=" * 20)
@@ -450,9 +475,9 @@ class AudioPvAlignPage(QWidget):
         self.output_widget.append_text("=" * 20)
 
         # 显示结果到标签
-        self.final_time = final_time
-        self.final_time_label.setText(f"offset: {self.final_time:.2f} ms")
-        self.final_time_label.show()
+        self.trim_offset_time = final_time
+        self.trim_offset_time_label.setText(f"offset: {self.trim_offset_time:.2f} ms")
+        self.trim_offset_time_label.show()
 
         # 显示波形图片
         sound_wave_path = os.path.join(tools.path_config.temp_dir, 'sound_wave.png')
@@ -463,15 +488,29 @@ class AudioPvAlignPage(QWidget):
             self.waveform_label.show()
 
 
-    
+
+    # debug
+    # ----------------------------------------------------------------------
+    # allign_only_button
+
+    def _prepare_align_only_args(self):
+        pass
+    def _on_align_only_finished(self, exit_code):
+        pass
+
+
+
+    # debug
+    # ----------------------------------------------------------------------
+    # modify_target_label_button    
     
     def _prepare_modify_args(self):
         # 检查final_time数值
-        if self.final_time is None:
+        if self.trim_offset_time is None:
             QMessageBox.warning(self, "参数错误", "请先分析时间偏移量")
             return None
         
-        if abs(self.final_time) < 0.01:
+        if abs(self.trim_offset_time) < 0.01:
             QMessageBox.information(self, "无需修改", "目标文件已经对齐，无需修改")
             return None
         
@@ -489,7 +528,7 @@ class AudioPvAlignPage(QWidget):
         self.output_widget.append_text(f"\n开始修改目标文件...\n")
         
         # 返回参数：输入文件路径和偏移量
-        return [self.selected_file_path_2, str(self.final_time)]
+        return [self.selected_file_path_2, str(self.trim_offset_time)]
     
 
     def _on_modify_finished(self, exit_code):
@@ -503,6 +542,8 @@ class AudioPvAlignPage(QWidget):
             self.output_widget.append_text("=" * 20)
     
     
+    
+    # debug
     # ----------------------------------------------------------------------
     # 按钮配置
     
@@ -512,6 +553,13 @@ class AudioPvAlignPage(QWidget):
             args_generator=self._prepare_analyze_args,
             output_widget=self.output_widget,
             on_finished=self._on_analyze_finished
+        )
+
+        self.align_only_button.configure(
+            script_path=os.path.join(root, "tools", "align_audio.py"),
+            args_generator=self._prepare_align_only_args,
+            output_widget=self.output_widget,
+            on_finished=self._on_align_only_finished
         )
         
         self.modify_target_button.configure(

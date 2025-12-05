@@ -124,7 +124,6 @@ def calculate_audio_offset(file1_path, file2_path):
 
 
 if __name__ == '__main__':
-    import sys
     
     if len(sys.argv) >= 3:
         file1 = sys.argv[1]
