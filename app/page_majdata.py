@@ -119,9 +119,14 @@ class MajdataPage(QWidget):
                      if f.lower().endswith('.txt') and
                      f.lower() not in ('track_result.txt', 'detect_result.txt')]
         self.majdata_maidata_choose.addItems(sorted(txt_files))
+        # 如果有 maidata.txt，优先选择它
+        if 'maidata.txt' in txt_files:
+            index = txt_files.index('maidata.txt')
+            self.majdata_maidata_choose.setCurrentIndex(index)
         # 如果第一个选项以 '.bak.txt' 结尾，选择下一个
-        if txt_files and txt_files[0].lower().endswith('.bak.txt') and len(txt_files) > 1:
+        elif txt_files and txt_files[0].lower().endswith('.bak.txt') and len(txt_files) > 1:
             self.majdata_maidata_choose.setCurrentIndex(1)
+        # 否则默认选择第一个
         else:
             self.majdata_maidata_choose.setCurrentIndex(0)
         
