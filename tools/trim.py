@@ -152,9 +152,9 @@ def generate_output_path(input_file: str, offset_ms: float) -> str:
         
         # 生成后缀
         if offset_ms >= 0:
-            suffix = f"_trim_{round(offset_ms)}ms"
+            suffix = f"_trim_{offset_ms:.3f}ms"
         else:
-            suffix = f"_pad_{round(abs(offset_ms))}ms"
+            suffix = f"_pad_{abs(offset_ms):.3f}ms"
         
         output_file = os.path.join(dir_name, f"{name}{suffix}{ext}")
         
@@ -163,6 +163,9 @@ def generate_output_path(input_file: str, offset_ms: float) -> str:
         while os.path.exists(output_file):
             output_file = os.path.join(dir_name, f"{name}{suffix}_{counter}{ext}")
             counter += 1
+
+        # 确保输出目录存在
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
         
         return output_file
         
@@ -252,9 +255,6 @@ def trim_media(input_file: str, offset_ms: float, output_file: str = None) -> st
         # 设置输出路径
         if output_file is None:
             output_file = generate_output_path(input_file, offset_ms)
-        
-        # 确保输出目录存在
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
         
         # 构建并执行命令
         action = "Trimming" if offset_ms >= 0 else "Adding padding to"
