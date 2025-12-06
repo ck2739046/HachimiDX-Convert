@@ -2347,33 +2347,65 @@ class NoteAnalyzer:
     @log_error
     def analyze_all_notes_info(self, bpm, chart_lv, base_denominator, duration_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
 
-        def get_fraction(diff_beat, denominator):
+
+        def get_best_numerator_denominator(diff_beat, input_denominator):
+            """在12和输入分母中选择误差最小的分母"""
+
+            # 如果输入的分母 >=16，启用12作为备选分母
+            candidates = [input_denominator]
+            if input_denominator >= 16:
+                candidates.append(12)
+            
+            # 选择误差最小的分母
+            best_error = float('inf')
+            best_total_numerator = 0
+            best_denominator = input_denominator
+
+            for denom in candidates:
+                total_numerator = round(diff_beat * denom)
+                # 零间隔
+                if total_numerator == 0:
+                    error = abs(diff_beat)
+                    if error < best_error:
+                        best_error = error
+                        best_total_numerator = 0
+                        best_denominator = 1
+                    continue
+                # 计算误差
+                fraction_value = total_numerator / denom
+                error = abs(diff_beat - fraction_value)
+                if error < best_error:
+                    best_error = error
+                    best_total_numerator = total_numerator
+                    best_denominator = denom
+
+            return best_total_numerator, best_denominator
+            
+
+        def get_fraction(diff_beat, input_denominator):
             # 返回格式：分子，分母，整数
             # 0.75 -> 3/4     -> 3, 4, 0
-            # 1.75 -> 7/4     -> 7, 4, 0
-            # 2.0  -> 2/1     -> 2, 1, 0
-            # 2.5  -> 2 + 1/2 -> 1, 2, 2   对于>2的分数，分离出整数部分
+            # 1.75 -> 3/4 + 1 -> 3, 4, 1
+            # 2.5  -> 1/2 + 2 -> 1, 2, 2
+            
+            raw_numerator, raw_denominator = get_best_numerator_denominator(diff_beat, input_denominator)
+            if raw_numerator == 0: return 0, 1, 0
+            # 获取整数和余数
+            one = raw_numerator // raw_denominator
+            remainder = raw_numerator % raw_denominator
+            if remainder == 0: return 0, 1, one  # 不需要进一步约分
+            # 约分余数部分
+            gcd_num = gcd(remainder, raw_denominator)
+            numerator = remainder // gcd_num
+            denominator = raw_denominator // gcd_num
 
-            #numerator分子, denominator分母
-            one = 0
-            base_numerator = round(diff_beat * denominator)
-            if base_numerator == 0:
-                return 0, 1, 0 # 异常情况
-            # 先处理整倍数
-            if base_numerator // denominator >= 1 and base_numerator % denominator == 0:
-                return base_numerator // denominator, 1, 0
-            # 处理分数
-            if base_numerator > denominator:
-                one = base_numerator // denominator
-                if one > 1: # 仅对2以上的分离出整数部分
-                    base_numerator = base_numerator % denominator
-                else:
-                    one = 0
-            # 约分
-            gcd_num = gcd(base_numerator, denominator)
-            numerator = base_numerator // gcd_num
-            denominator = denominator // gcd_num
             return numerator, denominator, one
+
+
+
+
+
+
 
 
         # 准备输出txt文件
@@ -2383,13 +2415,13 @@ class NoteAnalyzer:
             os.remove(txt_path)
         # 写入文件头
         video_name = os.path.splitext(os.path.basename(self.video_path))[0].replace('_standardized', '')
-        f = open(txt_path, 'w', encoding='utf-8')
-        f.write(f'&title={video_name}\n')
-        f.write('&artist=default\n')
-        f.write('&first=0\n')
-        f.write(f'&des_{chart_lv}=default\n')
-        f.write(f'&lv_{chart_lv}=10\n')
-        f.write(f'&inote_{chart_lv}=({bpm})' + '{1},')
+        with open(txt_path, 'w', encoding='utf-8') as f:
+            f.write(f'&title={video_name}\n')
+            f.write('&artist=default\n')
+            f.write('&first=0\n')
+            f.write(f'&des_{chart_lv}=default\n')
+            f.write(f'&lv_{chart_lv}=10\n')
+            f.write(f'&inote_{chart_lv}=({bpm})' + '{1},')
         # 打印基础信息
         level_label = ['zero', 'easy', 'basic', 'advanced', 'expert', 'master', 'remaster', 'special']
         print(f"\n{video_name} - {level_label[chart_lv]}")
@@ -2397,11 +2429,51 @@ class NoteAnalyzer:
         base_resolution = one_beat_Msec / base_denominator
         print(f"bpm: {bpm}, one beat: {one_beat_Msec:.3f} ms, base resolution: {base_resolution:.3f} ms")
 
-
         # 合并所有info
         all_notes_info = {**tap_info, **slide_info, **touch_info, **hold_info, **touch_hold_info}
         # 按时间排序
         sorted_notes = sorted(all_notes_info.items(), key=lambda item: item[1][0] if isinstance(item[1], tuple) else item[1])
+        # 保存合并后的整体预处理数据到文件
+        note_preprocess_result_path = os.path.join(output_dir, 'note_preprocess_result.txt')
+        if os.path.exists(note_preprocess_result_path):
+            os.remove(note_preprocess_result_path)
+        with open(note_preprocess_result_path, 'w', encoding='utf-8') as f:
+            for (track_id, class_id, position), time in sorted_notes:
+                # 将time元组转为字符串
+                if isinstance(time, tuple):
+                    time = ','.join(str(item) for item in time)
+                # 写入格式：track_id, class_id, position, time
+                f.write(f"{track_id}, {class_id}, {position}, {time}\n")
+        print(f"note preprocess data saved to {note_preprocess_result_path}")
+
+
+
+
+
+
+
+
+        # 计算最小公倍数分母用于累加
+        if base_denominator >= 16:
+            lcm_denom = base_denominator * 12 // gcd(base_denominator, 12)
+        else:
+            lcm_denom = base_denominator
+
+        # 定义后缀词典
+        position_suffix = {
+            11: 'b',    # break-tap
+            12: 'x',    # ex-tap
+            13: 'bx',   # break-ex-tap
+
+            # 没有星星，因为星星后缀在 merge_slide_info() 中处理过了
+
+            40: 'h',   # hold
+            41: 'bh',  # break-hold
+            42: 'xh',  # ex-hold
+            43: 'bxh', # break-ex-hold
+
+            50: 'h',   # touch-hold
+        }
 
         init_time = 0
         last_time = 0
@@ -2413,30 +2485,21 @@ class NoteAnalyzer:
         for (track_id, class_id, position), time in sorted_notes:
 
             # 根据class_id设置position后缀
-            position_suffix = {
-                11: 'b',    # break-tap
-                12: 'x',    # ex-tap
-                13: 'bx',   # break-ex-tap
-
-                # 没有星星，因为星星后缀在 merge_slide_info() 中处理过了
-
-                40: 'h',   # hold
-                41: 'bh',  # break-hold
-                42: 'xh',  # ex-hold
-                43: 'bxh', # break-ex-hold
-
-                50: 'h',   # touch-hold
-            }
             position = f"{position}{position_suffix.get(class_id, '')}"
-            
 
-            # 处理 length 信息
-            if isinstance(time, tuple):
-                length = time[-1] - time[-2]
-                time = time[0]
-                
-                length_beat = length / one_beat_Msec
+            if isinstance(time, float) or isinstance(time, int):
+                note_time = time
+            elif isinstance(time, tuple):
+                note_time = time[0]
+            else:
+                print(f"analyze_all_notes_info: invalid time format for track_id {track_id}, time: {time}")
+                continue
 
+            if isinstance(time, tuple) and len(time) >= 2:
+                # 处理 length 信息
+                note_length = time[-1] - time[-2]
+                note_time = time[0]
+                length_beat = note_length / one_beat_Msec
                 # 分类处理: hold -> base_denominator，touch_hold/slide -> duration_denominator
                 denominator_to_use = base_denominator \
                     if self.noteDetector.get_main_class_id(class_id) in [2, 5] \
@@ -2445,7 +2508,7 @@ class NoteAnalyzer:
                 # 将整数部分加入分子
                 if one > 0:
                     numerator = numerator + one * denominator
-                # 异常情况默认变为1/1
+                # 异常情况默认变为1/1 (时值不能为0)
                 if numerator == 0 and denominator == 1 and one == 0:
                     numerator = 1
                     denominator = 1
@@ -2453,39 +2516,50 @@ class NoteAnalyzer:
 
 
             if last_time == 0:
-                init_time = time
-                last_time = time
+                # 第一个音符
+                init_time = note_time
+                last_time = note_time
                 last_position = position
-                print(f"[{time:.3f}] ", end='')
+                print(f"[{note_time:.3f}] ", end='')
                 continue
             
-            diff_Msec = time - last_time
+            diff_Msec = note_time - last_time
             diff_beat = diff_Msec / one_beat_Msec
             numerator, denominator, one = get_fraction(diff_beat, base_denominator)
 
             # update last_time
-            base_numerator = round(diff_beat * base_denominator)
+            # 使用最小公倍数分母进行累加 (为了兼容1/12)
+            # 采用 init_time + 总passed_beat
+            # 这是精确的谱面播放到此处的时间点，避免了累加误差
+            base_numerator = round(diff_beat * lcm_denom)
             base_numerator_counter += base_numerator
-            passed_beat = base_numerator_counter / base_denominator
+            passed_beat = base_numerator_counter / lcm_denom
             passed_beat_Msec = passed_beat * one_beat_Msec
             last_time = passed_beat_Msec + init_time
 
             # 统计误差
-            real_time_diff = time - init_time
+            real_time_diff = note_time - init_time
             time_deviation = real_time_diff - passed_beat_Msec
             time_deviations.append(time_deviation)
 
             if numerator == 0:
+                # 零间隔，使用 '/' 与上一个音符连接 
                 last_position = f'{last_position}/{position}'
                 continue
-
+            
+            # 打印当前音符信息
             if one > 0:
-                commas = f'{"," * numerator}' + '{1}' + f'{"," * one}'
                 print(f"{last_position}-{numerator}/{denominator}+{one}, ", end='')
             else:
-                commas = f'{"," * numerator}'
                 print(f"{last_position}-{numerator}/{denominator}, ", end='')
 
+            # 生成逗号部分
+            if one > 0:
+                commas = f'{"," * numerator}' + '{1}' + f'{"," * one}'
+            else:
+                commas = f'{"," * numerator}'
+
+            # 将当前音符写入txt
             if denominator != last_denominator:
                 f.write('\n{' + f'{denominator}' + '}' + f'{last_position}{commas}')
             else:
@@ -2496,10 +2570,20 @@ class NoteAnalyzer:
             last_position = position
                 
 
-        print(f'{last_position}-E')
-        f.write(f'{last_position},E\n')
-        f.close()
 
+
+
+
+
+
+
+
+        # 添加结尾E
+        print(f'{last_position}-E')
+        with open(txt_path, 'a', encoding='utf-8') as f:
+            f.write(f'{last_position},E\n')
+
+        # 打印offset统计信息
         length = len(time_deviations)
         mean = np.mean(time_deviations)
         min = np.min(time_deviations)
@@ -2508,18 +2592,6 @@ class NoteAnalyzer:
         std_dev = np.std(time_deviations)
         print(f"Time deviations of {length} notes: Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
-        # 保存分析结果到文件
-        analyze_result_path = os.path.join(output_dir, 'analyze_result.txt')
-        if os.path.exists(analyze_result_path):
-            os.remove(analyze_result_path)
-        with open(analyze_result_path, 'w', encoding='utf-8') as f:
-            for (track_id, class_id, position), time in sorted_notes:
-                # 如果time是元组，取第一个元素作为时间
-                if isinstance(time, tuple):
-                    time = time[0]
-                # 写入格式：track_id, class_id, position, time
-                f.write(f"{track_id}, {class_id}, {position}, {time}\n")
-        print(f"Analysis raw data saved to {analyze_result_path}")
 
 
 
