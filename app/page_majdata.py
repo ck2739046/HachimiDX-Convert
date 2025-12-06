@@ -30,6 +30,7 @@ class MajdataPage(QWidget):
         self.majdata_maidata_choose = None
         self.majdata_track_choose = None
         self.majdata_video_choose = None
+        self.is_majdataview_play_video_checkbox = None
         self.majdata_last_selection = ""  # 记录上次选择的歌曲
         
         # 设置页面布局
@@ -69,30 +70,44 @@ class MajdataPage(QWidget):
         self.majdata_maidata_choose = QComboBox()
         self.majdata_maidata_choose.setStyleSheet(f"background-color: {self.colors['grey']}; \
                                                     padding-left: 8px;")
-        self.majdata_maidata_choose.setFixedSize(150, 25)
+        self.majdata_maidata_choose.setFixedSize(132, 25)
         layout.addWidget(self.majdata_maidata_choose)
         
         # Track choose
         self.majdata_track_choose = QComboBox()
         self.majdata_track_choose.setStyleSheet(f"background-color: {self.colors['grey']}; \
                                                   padding-left: 8px;")
-        self.majdata_track_choose.setFixedSize(150, 25)
+        self.majdata_track_choose.setFixedSize(132, 25)
         layout.addWidget(self.majdata_track_choose)
         
         # Video choose
         self.majdata_video_choose = QComboBox()
         self.majdata_video_choose.setStyleSheet(f"background-color: {self.colors['grey']}; \
                                                   padding-left: 8px;")
-        self.majdata_video_choose.setFixedSize(230, 25)
+        self.majdata_video_choose.setFixedSize(132, 25)
         layout.addWidget(self.majdata_video_choose)
+
+        # Label_CheckBox_Helper is_majdataview_play_video
+        is_majdataview_play_video_label = ui_helpers.create_label("MajdataView:")
+        is_majdataview_play_video_label.setStyleSheet(f"color: {ui_helpers.COLORS['grey']};" \
+                                                       "font-size: 13px; font-weight: bold;")
+        layout.addWidget(is_majdataview_play_video_label)
+        self.is_majdataview_play_video_checkbox = ui_helpers.create_check_box()
+        self.is_majdataview_play_video_checkbox.setChecked(True)  # 默认启用
+        layout.addWidget(self.is_majdataview_play_video_checkbox)
+        is_majdataview_play_video_help = ui_helpers.create_help_icon(
+            "勾选：视频会在左上 MajdataView 和左下视频播放器中都播放\n" \
+            "不勾选：视频只在左下视频播放器中播放")
+        layout.addWidget(is_majdataview_play_video_help)
         
         # Load button
         load_button = QPushButton("Load")
         load_button.setStyleSheet(f"background-color: {self.colors['grey']};")
-        load_button.setFixedSize(60, 25)
+        load_button.setFixedSize(50, 25)
         load_button.clicked.connect(self.on_load_clicked)
         layout.addWidget(load_button)
         
+        # layout.addStretch()
         return widget
     
     
@@ -149,9 +164,16 @@ class MajdataPage(QWidget):
         selected_song = self.majdata_song_input.currentText()
         selected_maidata = self.majdata_maidata_choose.currentText()
         selected_track = self.majdata_track_choose.currentText()
+        selected_video = self.majdata_video_choose.currentText()
+        is_play_video = self.is_majdataview_play_video_checkbox.isChecked()
         
         if not selected_song or not selected_maidata or not selected_track:
             return
+        
+        if selected_video and is_play_video:
+            majdataview_has_video = True
+        else:
+            majdataview_has_video = False
         
         # Reset video player
         self.media_player.stop()
@@ -160,6 +182,8 @@ class MajdataPage(QWidget):
         # Create a control txt for MajdataEdit
         song_path = os.path.join(self.all_songs_folder, selected_song)
         control_txt = f"folder: {song_path}\nmaidata: {selected_maidata}\ntrack: {selected_track}"
+        if majdataview_has_video:
+            control_txt += f"\nmovie: {selected_video}"
         
         try:
             with open(self.majdata_control_txt, 'w', encoding='utf-8') as f:
@@ -170,8 +194,8 @@ class MajdataPage(QWidget):
             print(f"Error writing to MajdataEdit control file: {e}")
             return
         
-        # Load video to media player
-        selected_video = self.majdata_video_choose.currentText()
+        # Load video to media player (if applicable)
+        # 在 control_file 创建完成后才检查 video 是否存在
         if not selected_video:
             return
         

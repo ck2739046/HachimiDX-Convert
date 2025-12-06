@@ -5,7 +5,7 @@ UI Helper Functions and Shared Resources
 
 from PyQt6.QtWidgets import QLabel, QComboBox, QLineEdit, QCheckBox, QWidget, QHBoxLayout, QFrame, QStyle, QStyleOptionButton
 from PyQt6.QtCore import Qt, QRectF
-from PyQt6.QtGui import QCursor, QPainter, QColor, QPen, QPainterPath
+from PyQt6.QtGui import QCursor, QPainter, QColor, QPen, QPainterPath, QFont
 from PyQt6.QtWidgets import QToolTip
 
 
@@ -28,7 +28,6 @@ COLORS = {
     'stop_hover': "#E04A5A",
 }
 
-
 def create_help_icon(text):
     """
     创建帮助图标（ⓘ），鼠标悬停时显示提示文本
@@ -39,17 +38,27 @@ def create_help_icon(text):
     Returns:
         QLabel: 配置好的帮助图标widget
     """
+
+    def enter_event():
+        # show text
+        # 必须先显示文字再设置样式，避免样式被覆盖
+        QToolTip.showText(QCursor.pos(), text, help_label, help_label.rect())
+        # set palette
+        palette = QToolTip.palette()
+        palette.setColor(palette.ColorRole.Window, QColor(COLORS['grey']))
+        palette.setColor(palette.ColorRole.WindowText, QColor(COLORS['text_secondary']))
+        QToolTip.setPalette(palette)
+        # set font
+        font = QToolTip.font()
+        font.setBold(True)
+        QToolTip.setFont(font)
+
     help_label = QLabel("ⓘ")
     help_label.setStyleSheet("font-size: 13px;")
     help_label.setFixedSize(20, 20)
     help_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
     help_label.setCursor(QCursor(Qt.CursorShape.WhatsThisCursor))
-    help_label.enterEvent = lambda event: QToolTip.showText(
-        QCursor.pos(),
-        text,
-        help_label,
-        help_label.rect()
-    )
+    help_label.enterEvent = lambda event: enter_event()
     help_label.leaveEvent = lambda event: QToolTip.hideText()
     return help_label
 

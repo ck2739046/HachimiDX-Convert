@@ -426,9 +426,8 @@ class AutoConvertPage(QWidget):
             "程序解析谱面的分辨率\n" \
             "默认为 16，代表单位时间为 1/16 小节，在 sinmai 语法中写作 {16},\n" \
             "程序会将音符对齐到单位时间\n" \
-            "单位时间 = 240000 / bpm / 分辨率 (ms)\n" \
-            "单位时间越低，解析精度越高，但是越容易出错\n" \
-            "建议根据谱面难度动态调整，推荐单位时间 ≥30ms\n")
+            "单位时间计算: 240000 / bpm / 分辨率 (ms)\n" \
+            "建议单位时间 ≥30ms，如果 BPM 较高，需要适当降低分辨率以保证准确性")
         row_layout.addWidget(base_denominator_help)
 
         row_layout.addStretch()  # 添加弹性空间
