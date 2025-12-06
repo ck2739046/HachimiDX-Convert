@@ -481,7 +481,12 @@ class AutoConvertPage(QWidget):
         self.enable_standardizer_checkbox.setChecked(True)  # 默认启用
         row_layout.addWidget(self.enable_standardizer_checkbox)
         enable_standardizer_help = ui_helpers.create_help_icon(
-            "是否启用视频标准化模块")
+            "是否启用视频标准化模块\n" \
+            "启用: 对选择的谱面确认视频进行标准化处理 (裁剪\缩放\截取)" \
+            "禁用: 跳过此步骤，后续操作直接使用已有的标准化视频\n" \
+            "\n" \
+            "启用时需要的参数:\n" \
+            "谱面确认视频，歌曲名称，和“视频标准化”区域的所有参数")
         row_layout.addWidget(enable_standardizer_help)
 
         # Label_CheckBox_Helper enable_note_detector
@@ -491,7 +496,12 @@ class AutoConvertPage(QWidget):
         self.enable_note_detector_checkbox.setChecked(True)  # 默认启用
         row_layout.addWidget(self.enable_note_detector_checkbox)
         enable_note_detector_help = ui_helpers.create_help_icon(
-            "是否启用音符识别模块")
+            "是否启用音符识别模块\n" \
+            "启用: 对标准化后的视频进行音符识别\n" \
+            "禁用: 跳过此步骤，后续操作直接使用已有的音符识别结果\n" \
+            "\n" \
+            "启用时需要的参数:\n" \
+            "歌曲名称，和“音符识别”区域的所有参数")
         row_layout.addWidget(enable_note_detector_help)
 
         # Label_CheckBox_Helper enable_note_analyzer
@@ -501,7 +511,12 @@ class AutoConvertPage(QWidget):
         self.enable_note_analyzer_checkbox.setChecked(True)  # 默认启用
         row_layout.addWidget(self.enable_note_analyzer_checkbox)
         enable_note_analyzer_help = ui_helpers.create_help_icon(
-            "是否启用音符分析模块")
+            "是否启用音符分析模块\n" \
+            "启用: 对音符识别结果进行分析，生成最终谱面\n" \
+            "禁用: 跳过此步骤\n" \
+            "\n" \
+            "启用时需要的参数:\n" \
+            "歌曲名称，和“音符分析”区域的所有参数")
         row_layout.addWidget(enable_note_analyzer_help)
 
         row_layout.addStretch()  # 添加弹性空间
