@@ -2384,17 +2384,18 @@ class NoteAnalyzer:
 
         def get_fraction(diff_beat, input_denominator):
             # 返回格式：分子，分母，整数
-            # 0.75 -> 3/4     -> 3, 4, 0
-            # 1.75 -> 3/4 + 1 -> 3, 4, 1
-            # 2.5  -> 1/2 + 2 -> 1, 2, 2
+            # 0.5  -> 1/2 + 0 -> 1, 2, 0
+            # 1.0  -> 0/1 + 1 -> 0, 1, 1
+            # 2.25 -> 1/4 + 2 -> 1, 4, 2
             
             raw_numerator, raw_denominator = get_best_numerator_denominator(diff_beat, input_denominator)
-            if raw_numerator == 0: return 0, 1, 0
-            # 获取整数和余数
+            if raw_numerator == 0: return 0, 1, 0 # 零间隔直接返回
+            # 获取整数和余数部分
             one = raw_numerator // raw_denominator
             remainder = raw_numerator % raw_denominator
-            if remainder == 0: return 0, 1, one  # 不需要进一步约分
-            # 约分余数部分
+            # 是整数，直接返回，不需要约分余数
+            if remainder == 0: return 0, 1, one
+            # 是小数，约分余数部分
             gcd_num = gcd(remainder, raw_denominator)
             numerator = remainder // gcd_num
             denominator = raw_denominator // gcd_num
@@ -2499,7 +2500,6 @@ class NoteAnalyzer:
                 if isinstance(time, tuple) and len(time) >= 2:
                     # 处理 length 信息
                     note_length = time[-1] - time[-2]
-                    note_time = time[0]
                     length_beat = note_length / one_beat_Msec
                     # 分类处理: hold -> base_denominator，touch_hold/slide -> duration_denominator
                     denominator_to_use = base_denominator \
@@ -2543,7 +2543,7 @@ class NoteAnalyzer:
                 time_deviation = real_time_diff - passed_beat_Msec
                 time_deviations.append(time_deviation)
 
-                if numerator == 0:
+                if numerator == 0 and one == 0:
                     # 零间隔，使用 '/' 与上一个音符连接 
                     last_position = f'{last_position}/{position}'
                     continue
@@ -2555,7 +2555,9 @@ class NoteAnalyzer:
                     print(f"{last_position}-{numerator}/{denominator}, ", end='')
 
                 # 生成逗号部分
-                if one > 0:
+                if numerator == 0 and denominator == 1 and one > 0:
+                    commas = f'{"," * one}'
+                elif one > 0:
                     commas = f'{"," * numerator}' + '{1}' + f'{"," * one}'
                 else:
                     commas = f'{"," * numerator}'
