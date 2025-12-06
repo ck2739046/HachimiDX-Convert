@@ -65,7 +65,7 @@ def exception_handler(exctype, value, traceback):
 #--------------------------------------------------------------
 # Custom FolderComboBox (support recover last selection)
 
-class FolderComboBox(QComboBox):
+class FolderComboBox(ui_helpers.ToolTipComboBox):
 
     def __init__(self, all_songs_folder=None, *args, **kwargs):
         super().__init__(*args, **kwargs)

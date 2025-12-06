@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QLabel)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel)
 from PyQt6.QtCore import QUrl, pyqtSlot
 from PyQt6.QtGui import QWindow
 import os
@@ -67,24 +67,15 @@ class MajdataPage(QWidget):
         layout.addWidget(self.majdata_song_input)
         
         # Maidata choose
-        self.majdata_maidata_choose = QComboBox()
-        self.majdata_maidata_choose.setStyleSheet(f"background-color: {self.colors['grey']}; \
-                                                    padding-left: 8px;")
-        self.majdata_maidata_choose.setFixedSize(132, 25)
+        self.majdata_maidata_choose = ui_helpers.create_combo_box(132, show_tooltip=True)
         layout.addWidget(self.majdata_maidata_choose)
         
         # Track choose
-        self.majdata_track_choose = QComboBox()
-        self.majdata_track_choose.setStyleSheet(f"background-color: {self.colors['grey']}; \
-                                                  padding-left: 8px;")
-        self.majdata_track_choose.setFixedSize(132, 25)
+        self.majdata_track_choose = ui_helpers.create_combo_box(132, show_tooltip=True)
         layout.addWidget(self.majdata_track_choose)
         
         # Video choose
-        self.majdata_video_choose = QComboBox()
-        self.majdata_video_choose.setStyleSheet(f"background-color: {self.colors['grey']}; \
-                                                  padding-left: 8px;")
-        self.majdata_video_choose.setFixedSize(132, 25)
+        self.majdata_video_choose = ui_helpers.create_combo_box(132, show_tooltip=True)
         layout.addWidget(self.majdata_video_choose)
 
         # Label_CheckBox_Helper is_majdataview_play_video
