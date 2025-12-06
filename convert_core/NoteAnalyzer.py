@@ -2502,9 +2502,9 @@ class NoteAnalyzer:
                     note_length = time[-1] - time[-2]
                     length_beat = note_length / one_beat_Msec
                     # 分类处理: hold -> base_denominator，touch_hold/slide -> duration_denominator
-                    denominator_to_use = base_denominator \
+                    denominator_to_use = duration_denominator \
                         if self.noteDetector.get_main_class_id(class_id) in [2, 5] \
-                        else duration_denominator
+                        else base_denominator
                     numerator, denominator, one = get_fraction(length_beat, denominator_to_use)
                     # 将整数部分加入分子
                     if one > 0:
