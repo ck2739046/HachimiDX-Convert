@@ -2482,92 +2482,93 @@ class NoteAnalyzer:
         last_denominator = 0
         time_deviations = []
 
-        for (track_id, class_id, position), time in sorted_notes:
+        with open(txt_path, 'a', encoding='utf-8') as f:
+            for (track_id, class_id, position), time in sorted_notes:
 
-            # 根据class_id设置position后缀
-            position = f"{position}{position_suffix.get(class_id, '')}"
+                # 根据class_id设置position后缀
+                position = f"{position}{position_suffix.get(class_id, '')}"
 
-            if isinstance(time, float) or isinstance(time, int):
-                note_time = time
-            elif isinstance(time, tuple):
-                note_time = time[0]
-            else:
-                print(f"analyze_all_notes_info: invalid time format for track_id {track_id}, time: {time}")
-                continue
+                if isinstance(time, float) or isinstance(time, int):
+                    note_time = time
+                elif isinstance(time, tuple):
+                    note_time = time[0]
+                else:
+                    print(f"analyze_all_notes_info: invalid time format for track_id {track_id}, time: {time}")
+                    continue
 
-            if isinstance(time, tuple) and len(time) >= 2:
-                # 处理 length 信息
-                note_length = time[-1] - time[-2]
-                note_time = time[0]
-                length_beat = note_length / one_beat_Msec
-                # 分类处理: hold -> base_denominator，touch_hold/slide -> duration_denominator
-                denominator_to_use = base_denominator \
-                    if self.noteDetector.get_main_class_id(class_id) in [2, 5] \
-                    else duration_denominator
-                numerator, denominator, one = get_fraction(length_beat, denominator_to_use)
-                # 将整数部分加入分子
+                if isinstance(time, tuple) and len(time) >= 2:
+                    # 处理 length 信息
+                    note_length = time[-1] - time[-2]
+                    note_time = time[0]
+                    length_beat = note_length / one_beat_Msec
+                    # 分类处理: hold -> base_denominator，touch_hold/slide -> duration_denominator
+                    denominator_to_use = base_denominator \
+                        if self.noteDetector.get_main_class_id(class_id) in [2, 5] \
+                        else duration_denominator
+                    numerator, denominator, one = get_fraction(length_beat, denominator_to_use)
+                    # 将整数部分加入分子
+                    if one > 0:
+                        numerator = numerator + one * denominator
+                    # 异常情况默认变为1/1 (时值不能为0)
+                    if numerator == 0 and denominator == 1 and one == 0:
+                        numerator = 1
+                        denominator = 1
+                    position = f'{position}[{denominator}:{numerator}]'
+
+
+                if last_time == 0:
+                    # 第一个音符
+                    init_time = note_time
+                    last_time = note_time
+                    last_position = position
+                    print(f"[{note_time:.3f}] ", end='')
+                    continue
+                
+                diff_Msec = note_time - last_time
+                diff_beat = diff_Msec / one_beat_Msec
+                numerator, denominator, one = get_fraction(diff_beat, base_denominator)
+
+                # update last_time
+                # 使用最小公倍数分母进行累加 (为了兼容1/12)
+                # 采用 init_time + 总passed_beat
+                # 这是精确的谱面播放到此处的时间点，避免了累加误差
+                base_numerator = round(diff_beat * lcm_denom)
+                base_numerator_counter += base_numerator
+                passed_beat = base_numerator_counter / lcm_denom
+                passed_beat_Msec = passed_beat * one_beat_Msec
+                last_time = passed_beat_Msec + init_time
+
+                # 统计误差
+                real_time_diff = note_time - init_time
+                time_deviation = real_time_diff - passed_beat_Msec
+                time_deviations.append(time_deviation)
+
+                if numerator == 0:
+                    # 零间隔，使用 '/' 与上一个音符连接 
+                    last_position = f'{last_position}/{position}'
+                    continue
+                
+                # 打印当前音符信息
                 if one > 0:
-                    numerator = numerator + one * denominator
-                # 异常情况默认变为1/1 (时值不能为0)
-                if numerator == 0 and denominator == 1 and one == 0:
-                    numerator = 1
-                    denominator = 1
-                position = f'{position}[{denominator}:{numerator}]'
+                    print(f"{last_position}-{numerator}/{denominator}+{one}, ", end='')
+                else:
+                    print(f"{last_position}-{numerator}/{denominator}, ", end='')
 
+                # 生成逗号部分
+                if one > 0:
+                    commas = f'{"," * numerator}' + '{1}' + f'{"," * one}'
+                else:
+                    commas = f'{"," * numerator}'
 
-            if last_time == 0:
-                # 第一个音符
-                init_time = note_time
-                last_time = note_time
+                # 将当前音符写入txt
+                if denominator != last_denominator:
+                    f.write('\n{' + f'{denominator}' + '}' + f'{last_position}{commas}')
+                else:
+                    f.write(f'{last_position}{commas}')
+
+                if one > 0: denominator = 1
+                last_denominator = denominator
                 last_position = position
-                print(f"[{note_time:.3f}] ", end='')
-                continue
-            
-            diff_Msec = note_time - last_time
-            diff_beat = diff_Msec / one_beat_Msec
-            numerator, denominator, one = get_fraction(diff_beat, base_denominator)
-
-            # update last_time
-            # 使用最小公倍数分母进行累加 (为了兼容1/12)
-            # 采用 init_time + 总passed_beat
-            # 这是精确的谱面播放到此处的时间点，避免了累加误差
-            base_numerator = round(diff_beat * lcm_denom)
-            base_numerator_counter += base_numerator
-            passed_beat = base_numerator_counter / lcm_denom
-            passed_beat_Msec = passed_beat * one_beat_Msec
-            last_time = passed_beat_Msec + init_time
-
-            # 统计误差
-            real_time_diff = note_time - init_time
-            time_deviation = real_time_diff - passed_beat_Msec
-            time_deviations.append(time_deviation)
-
-            if numerator == 0:
-                # 零间隔，使用 '/' 与上一个音符连接 
-                last_position = f'{last_position}/{position}'
-                continue
-            
-            # 打印当前音符信息
-            if one > 0:
-                print(f"{last_position}-{numerator}/{denominator}+{one}, ", end='')
-            else:
-                print(f"{last_position}-{numerator}/{denominator}, ", end='')
-
-            # 生成逗号部分
-            if one > 0:
-                commas = f'{"," * numerator}' + '{1}' + f'{"," * one}'
-            else:
-                commas = f'{"," * numerator}'
-
-            # 将当前音符写入txt
-            if denominator != last_denominator:
-                f.write('\n{' + f'{denominator}' + '}' + f'{last_position}{commas}')
-            else:
-                f.write(f'{last_position}{commas}')
-
-            if one > 0: denominator = 1
-            last_denominator = denominator
-            last_position = position
                 
 
 
