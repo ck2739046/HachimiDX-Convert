@@ -2345,36 +2345,34 @@ class NoteAnalyzer:
 
     # debug
     @log_error
-    def analyze_all_notes_info(self, bpm, chart_lv, base_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
+    def analyze_all_notes_info(self, bpm, chart_lv, base_denominator, duration_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
 
-        def get_fraction(diff_beat, base_denominator):
+        def get_fraction(diff_beat, denominator):
             # 返回格式：分子，分母，整数
             # 0.75 -> 3/4     -> 3, 4, 0
             # 1.75 -> 7/4     -> 7, 4, 0
             # 2.0  -> 2/1     -> 2, 1, 0
             # 2.5  -> 2 + 1/2 -> 1, 2, 2   对于>2的分数，分离出整数部分
 
-
-
             #numerator分子, denominator分母
             one = 0
-            base_numerator = round(diff_beat * base_denominator)
+            base_numerator = round(diff_beat * denominator)
             if base_numerator == 0:
                 return 0, 1, 0 # 异常情况
             # 先处理整倍数
-            if base_numerator // base_denominator >= 1 and base_numerator % base_denominator == 0:
-                return base_numerator // base_denominator, 1, 0
+            if base_numerator // denominator >= 1 and base_numerator % denominator == 0:
+                return base_numerator // denominator, 1, 0
             # 处理分数
-            if base_numerator > base_denominator:
-                one = base_numerator // base_denominator
+            if base_numerator > denominator:
+                one = base_numerator // denominator
                 if one > 1: # 仅对2以上的分离出整数部分
-                    base_numerator = base_numerator % base_denominator
+                    base_numerator = base_numerator % denominator
                 else:
                     one = 0
             # 约分
-            gcd_num = gcd(base_numerator, base_denominator)
+            gcd_num = gcd(base_numerator, denominator)
             numerator = base_numerator // gcd_num
-            denominator = base_denominator // gcd_num
+            denominator = denominator // gcd_num
             return numerator, denominator, one
 
 
@@ -2438,7 +2436,12 @@ class NoteAnalyzer:
                 time = time[0]
                 
                 length_beat = length / one_beat_Msec
-                numerator, denominator, one = get_fraction(length_beat, base_denominator)
+
+                # 分类处理: hold -> base_denominator，touch_hold/slide -> duration_denominator
+                denominator_to_use = base_denominator \
+                    if self.noteDetector.get_main_class_id(class_id) in [2, 5] \
+                    else duration_denominator
+                numerator, denominator, one = get_fraction(length_beat, denominator_to_use)
                 # 将整数部分加入分子
                 if one > 0:
                     numerator = numerator + one * denominator
@@ -2527,7 +2530,7 @@ class NoteAnalyzer:
 
     # debug
     @log_error
-    def main(self, main_folder: str, bpm: float, chart_lv: int, base_denominator: int):
+    def main(self, main_folder: str, bpm: float, chart_lv: int, base_denominator: int, duration_denominator: int):
         try:
             # 在文件夹查找视频文件
             for root, _, files in os.walk(main_folder):
@@ -2600,7 +2603,7 @@ class NoteAnalyzer:
             slide_info = self.merge_slide_info(slide_head_info, slide_tail_info, bpm)
 
             # analyze all notes info
-            self.analyze_all_notes_info(bpm, chart_lv, base_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
+            self.analyze_all_notes_info(bpm, chart_lv, base_denominator, duration_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
 
         except Exception as e:
             raise Exception(f"Error in NoteAnalyzer.main: {e}")
@@ -2642,11 +2645,12 @@ if __name__ == "__main__":
 
     bpm = 205
     chart_lv = 4
-    base_denominator = 32
+    base_denominator = 16
+    duration_denominator = 8
 
     try:
         analyzer = NoteAnalyzer()
-        analyzer.main(folder_path, bpm, chart_lv, base_denominator)
+        analyzer.main(folder_path, bpm, chart_lv, base_denominator, duration_denominator)
     except Exception as e:
         print(f"Error: {e}")
         print(f"Error trace: {error_trace}")

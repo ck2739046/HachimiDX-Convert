@@ -57,6 +57,7 @@ class AutoConvertPage(QWidget):
         self.bpm_input = None
         self.chart_lv_combo = None
         self.base_denominator_combo = None
+        self.duration_denominator_combo = None
 
         # 第八行 模块管理
         self.enable_standardizer_checkbox = None
@@ -417,18 +418,35 @@ class AutoConvertPage(QWidget):
         row_layout.addWidget(chart_lv_help)
 
         # Label_ComboBox_Helper base_denominator
-        base_denominator_label = ui_helpers.create_label("解析分辨率:")
+        base_denominator_label = ui_helpers.create_label("音符间隔分辨率:")
         row_layout.addWidget(base_denominator_label)
         self.base_denominator_combo = ui_helpers.create_combo_box(
             45, ["4", "8", "16", "32", "64"], default_index=2)
         row_layout.addWidget(self.base_denominator_combo)
         base_denominator_help = ui_helpers.create_help_icon(
-            "程序解析谱面的分辨率\n" \
+            "程序解析音符间隔的时间分辨率\n" \
             "默认为 16，代表单位时间为 1/16 小节，在 sinmai 语法中写作 {16},\n" \
-            "程序会将音符对齐到单位时间\n" \
+            "程序会将音符间隔对齐到单位时间\n" \
             "单位时间计算: 240000 / bpm / 分辨率 (ms)\n" \
             "建议单位时间 ≥30ms，如果 BPM 较高，需要适当降低分辨率以保证准确性")
         row_layout.addWidget(base_denominator_help)
+
+        # Label_ComboBox_Helper duration_denominator
+        duration_denominator_label = ui_helpers.create_label("音符时值分辨率:")
+        row_layout.addWidget(duration_denominator_label)
+        self.duration_denominator_combo = ui_helpers.create_combo_box(
+            45, ["4", "8", "16", "32", "64"], default_index=1)
+        row_layout.addWidget(self.duration_denominator_combo)
+        duration_denominator_help = ui_helpers.create_help_icon(
+            "程序解析音符时值的时间分辨率\n" \
+            "默认为 8，代表单位时间为 1/8 小节，在 sinmai 语法中写作 [8],\n" \
+            "程序会将音符时值对齐到单位时间\n" \
+            "单位时间计算: 240000 / bpm / 分辨率 (ms)\n" \
+            "建议单位时间 ≥30ms，如果 BPM 较高，需要适当降低分辨率以保证准确性\n" \
+            "\n" \
+            "此选项仅适用于 slide 和 touch-hold 音符的时值\n" \
+            "hold 音符的时值的分辨率与“音符间隔分辨率”相同")
+        row_layout.addWidget(duration_denominator_help)
 
         row_layout.addStretch()  # 添加弹性空间
         return row
@@ -779,6 +797,7 @@ class AutoConvertPage(QWidget):
             
             chart_lv = int(self.chart_lv_combo.currentText())
             base_denominator = int(self.base_denominator_combo.currentText())
+            duration_denominator = int(self.duration_denominator_combo.currentText())
 
 
         # 构建参数字典
@@ -819,7 +838,8 @@ class AutoConvertPage(QWidget):
                 "tracked_output_dir": tracked_output_dir,
                 "bpm": bpm,
                 "chart_lv": chart_lv,
-                "base_denominator": base_denominator
+                "base_denominator": base_denominator,
+                "duration_denominator": duration_denominator
             }
 
         # 输出日志

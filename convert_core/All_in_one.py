@@ -65,6 +65,7 @@ def main():
         bpm = params.get('NoteAnalyzer', {}).get('bpm', None)
         chart_lv = params.get('NoteAnalyzer', {}).get('chart_lv', None)
         base_denominator = params.get('NoteAnalyzer', {}).get('base_denominator', None)
+        duration_denominator = params.get('NoteAnalyzer', {}).get('duration_denominator', None)
         # one_beat_Msec = 60 / bpm * 1000 * 4
         # base_resolution = one_beat_Msec / base_denominator
 
@@ -103,6 +104,7 @@ def main():
             print(f"  BPM: {bpm}")
             print(f"  chart_lv: {chart_lv}")
             print(f"  base_denominator: {base_denominator}")
+            print(f"  duration_denominator: {duration_denominator}")
         print("=" * 40 + "\n")
 
 
@@ -143,7 +145,8 @@ def main():
                 tracked_output_dir,
                 bpm,
                 chart_lv,
-                base_denominator
+                base_denominator,
+                duration_denominator
             )
 
     except Exception as e:
