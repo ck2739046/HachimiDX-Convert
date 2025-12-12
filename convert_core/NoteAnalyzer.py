@@ -138,13 +138,13 @@ class NoteAnalyzer:
             if len(set(positions)) != 1:
                 print(f"preprocess_tap_data: positions not consistent for track_id {track_id}")
                 continue
-            # 检查dist是否递增 (允许微小回退 -0.5* start_tolerance)
+            # 检查dist是否递增 (允许微小回退5%总距离)
             dists = [x[6] for x in valid_track_path]
-            if not all(later - earlier > -0.5 * start_tolerance for earlier, later in zip(dists, dists[1:])):
+            if not all(later - earlier > - 0.5 * start_tolerance for earlier, later in zip(dists, dists[1:])):
                 print(f"preprocess_tap_data: dist not increasing for track_id {track_id}")
                 continue
             # 检查dist是否在头尾 (20%-80%)
-            if dists[0] > valid_judgeline_start + start_tolerance or dists[-1] < valid_judgeline_end - end_tolerance:
+            if dists[0] > valid_judgeline_start + 2*start_tolerance or dists[-1] < valid_judgeline_end - 2*end_tolerance:
                 print(f"preprocess_tap_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}")
                 continue
             # 添加到tap_data
@@ -990,6 +990,15 @@ class NoteAnalyzer:
             positions = [x[5] for x in valid_track_path]
             if len(set(positions)) != 1:
                 print(f"preprocess_hold_data: positions not consistent for track_id {track_id}")
+                continue
+            # 检查dist是否递增 (允许微小回退15%总距离)
+            dists = [(x[6] + x[7]) / 2 for x in valid_track_path]
+            if not all(later - earlier > - 3*start_tolerance for earlier, later in zip(dists, dists[1:])):
+                print(f"preprocess_hold_data: dist not increasing for track_id {track_id}")
+                continue
+            # 检查dist是否在头尾 (20%-80%)
+            if dists[0] > valid_judgeline_start + 4*start_tolerance or dists[-1] < valid_judgeline_end - 4*end_tolerance:
+                print(f"preprocess_hold_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}")
                 continue
             # 添加到hold_data
             path = []
@@ -2489,9 +2498,27 @@ class NoteAnalyzer:
                 # 根据class_id设置position后缀
                 position = f"{position}{position_suffix.get(class_id, '')}"
 
-                if isinstance(time, float) or isinstance(time, int):
+                if isinstance(time, (float, int)):
+                    # check time
+                    if math.isnan(time) or time < 0:
+                        print(f"analyze_all_notes_info: invalid time value for track_id {track_id}, time: {time}")
+                        continue
+                    # 赋值
                     note_time = time
                 elif isinstance(time, tuple):
+                    # check time tuple
+                    if len(time) == 0:
+                        print(f"analyze_all_notes_info: empty time tuple for track_id {track_id}")
+                        continue
+                    valid = True
+                    for i, t in enumerate(time):
+                        if not (isinstance(t, (float, int)) and not math.isnan(t) and t >= 0):
+                            print(f"analyze_all_notes_info: invalid time tuple element at index {i} for track_id {track_id}, value: {t}")
+                            valid = False
+                            break
+                    if not valid:
+                        continue
+                    # 赋值
                     note_time = time[0]
                 else:
                     print(f"analyze_all_notes_info: invalid time format for track_id {track_id}, time: {time}")
@@ -2584,7 +2611,7 @@ class NoteAnalyzer:
         # 添加结尾E
         print(f'{last_position}-E')
         with open(txt_path, 'a', encoding='utf-8') as f:
-            f.write(f'{last_position},E\n')
+            f.write(f'{last_position},\n' + '{1},E\n')
 
         # 打印offset统计信息
         length = len(time_deviations)
