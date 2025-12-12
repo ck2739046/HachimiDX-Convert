@@ -370,7 +370,7 @@ class NoteDetector:
                 track_high_thresh=0.25, # 默认，宽容
                 track_low_thresh=0.1,   # 默认，宽容
                 new_track_thresh=0.25,  # 默认，高敏感度，容易视为新的轨迹ID
-                track_buffer=2,         # real buffer = fps / 30 * track_buffer
+                track_buffer=10,        # real buffer = fps / 30 * track_buffer
                 match_thresh=0.85,      # 高iou，允许音符移动较大距离后还能匹配上
                 fuse_score=True,        # 默认，综合考虑conf和iou
                 gmc_method='none',      # 画面十分稳定，不需要gmc
@@ -581,6 +581,8 @@ class NoteDetector:
             print("开始分类模块...")
             start_time = time.time()
 
+            cap = cv2.VideoCapture(std_video_path)
+
             # 构建采样计划，这样后续读取视频时，就知道当前帧要裁剪哪些图像
             sampling_plan, total_cls_quantity = self._build_sampling_plan(track_results)
             if not sampling_plan:
@@ -599,7 +601,6 @@ class NoteDetector:
             cls_break_model = YOLO(cls_break_model_path)
             imgsz = self.get_imgsz('cls')
 
-            cap = cv2.VideoCapture(std_video_path)
             total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.003)
 
@@ -677,9 +678,11 @@ class NoteDetector:
             # 从一个音符的轨迹中选取采样点
             path_length = len(track_data['path'])
             if self.is_obb(class_id):
-                sample_positions = [10, 15, 20] # 尽量选择早期的点，避免在后续长条hold时被闪烁特效干扰
+                # 尽量选择早期的点，避免在后续长条hold时被闪烁特效干扰
+                # 间距也不同，防止周期性闪烁全部采样到同一位置
+                sample_positions = [10, 12, 19, 24, 30]
             else:
-                sample_positions = [25, 50, 75] # detect
+                sample_positions = [20, 35, 50, 65, 80] # detect
 
             for sample_position in sample_positions:
                 sample_idx = int(path_length * sample_position / 100.0)
@@ -691,7 +694,7 @@ class NoteDetector:
                 # 写入采样计划
                 sampling_plan[frame_number].append({
                     'track_id': track_id,
-                    'sample_position': sample_position,  # 25/50/75
+                    'sample_position': sample_position,
                     'box': box,
                     'class_id': class_id
                 })
