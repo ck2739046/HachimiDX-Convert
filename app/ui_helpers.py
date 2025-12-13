@@ -3,7 +3,7 @@ UI Helper Functions and Shared Resources
 提供统一的UI组件创建函数和配色方案
 """
 
-from PyQt6.QtWidgets import QLabel, QComboBox, QLineEdit, QCheckBox, QWidget, QHBoxLayout, QFrame, QStyle, QStyleOptionButton
+from PyQt6.QtWidgets import QLabel, QComboBox, QLineEdit, QCheckBox, QWidget, QHBoxLayout, QFrame, QStyle, QStyleOptionButton, QPushButton, QPushButton
 from PyQt6.QtCore import Qt, QRectF, QEvent, QPoint
 from PyQt6.QtGui import QCursor, QPainter, QColor, QPen, QPainterPath, QFont
 from PyQt6.QtWidgets import QToolTip
@@ -27,6 +27,47 @@ COLORS = {
     'stop': "#DC3545",
     'stop_hover': "#E04A5A",
 }
+
+def create_file_selection_row(button_text: str, help_text: str = None):
+    """
+    创建文件选择行UI组件
+    
+    Args:
+        button_text: 按钮显示文本（如"选择基准文件"）
+        help_text: 帮助图标提示文本，为None时不创建帮助图标
+    
+    Returns:
+        tuple: (row_widget, button_widget, line_edit_widget, help_label_widget)
+        其中help_label_widget可能为None
+    """
+
+    # 创建文件选择按钮
+    button = QPushButton(button_text)
+    button.setStyleSheet(f'''
+        QPushButton {{
+            background-color: {COLORS['accent']};
+        }}
+        QPushButton:hover {{
+            background-color: {COLORS['accent_hover']};
+        }}
+    ''')
+    button.setFixedSize(120, 25)
+    
+    # 创建可选的帮助图标
+    help_label = None
+    if help_text:
+        help_label = create_help_icon(help_text)
+    
+    # 创建路径显示LineEdit
+    line_edit = QLineEdit("")
+    line_edit.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+    line_edit.setReadOnly(True)
+    line_edit.setFixedHeight(25)
+    line_edit.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
+    line_edit.setFrame(False)
+    
+    return button, line_edit, help_label
+
 
 def create_help_icon(text):
     """

@@ -224,27 +224,16 @@ class AutoConvertPage(QWidget):
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(5)
 
-        # 按钮: "选择谱面确认视频"
-        select_video_button = QPushButton("选择谱面确认视频")
-        select_video_button.setStyleSheet(f'''
-            QPushButton {{
-                background-color: {self.colors['accent']};
-            }}QPushButton:hover {{
-                background-color: {self.colors['accent_hover']};
-            }}''')
-        select_video_button.setFixedSize(120, 25)
-        select_video_button.clicked.connect(self._on_select_video)
-        row_layout.addWidget(select_video_button)
-
-        # LineEdit: 显示选择的视频路径
-        self.video_path_label = QLineEdit("")
-        self.video_path_label.setStyleSheet(f"color: {self.colors['text_secondary']}; font-size: 13px;")
-        self.video_path_label.setReadOnly(True)  # 只读
-        self.video_path_label.setFixedHeight(25) # 非固定宽度
-        self.video_path_label.setCursor(QCursor(Qt.CursorShape.IBeamCursor)) # 设置为 I-beam 光标
-        self.video_path_label.setFrame(False)    # 移除默认边框
-        row_layout.addWidget(self.video_path_label)
-
+        button, line_edit, help_icon = ui_helpers.create_file_selection_row(
+            button_text="选择谱面确认视频",
+            help_text=None
+        )
+        row_layout.addWidget(button)
+        # row_layout.addWidget(help_icon)
+        row_layout.addWidget(line_edit)
+        button.clicked.connect(self._on_select_video)
+        self.video_path_label = line_edit
+        
         # row_layout.addStretch()  # 添加弹性空间
         return row
 

@@ -115,32 +115,18 @@ class AudioPvAlignPage(QWidget):
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(5)
+
+        button, line_edit, help_icon = ui_helpers.create_file_selection_row(
+            button_text="选择基准文件",
+            help_text="可以是音频或视频，需要包含完整的几声启动拍"
+        )
+        row_layout.addWidget(button)
+        row_layout.addWidget(help_icon)
+        row_layout.addWidget(line_edit)
+        button.clicked.connect(self._on_select_file_1)
+        self.file_path_label_1 = line_edit
         
-        # 按钮: "选择基准文件"
-        select_file_button_1 = QPushButton("选择基准文件")
-        select_file_button_1.setStyleSheet(f'''
-            QPushButton {{
-                background-color: {self.colors['accent']};
-            }}QPushButton:hover {{
-                background-color: {self.colors['accent_hover']};
-            }}''')
-        select_file_button_1.setFixedSize(120, 25)
-        select_file_button_1.clicked.connect(self._on_select_file_1)
-        row_layout.addWidget(select_file_button_1)
-        
-        # Helper: 基准文件说明
-        file_1_help = ui_helpers.create_help_icon("可以是音频或视频，需要包含完整的几声启动拍")
-        row_layout.addWidget(file_1_help)
-        
-        # LineEdit: 显示选择的文件路径
-        self.file_path_label_1 = QLineEdit("")
-        self.file_path_label_1.setStyleSheet(f"color: {self.colors['text_secondary']}; font-size: 13px;")
-        self.file_path_label_1.setReadOnly(True)
-        self.file_path_label_1.setFixedHeight(25)
-        self.file_path_label_1.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
-        self.file_path_label_1.setFrame(False)
-        row_layout.addWidget(self.file_path_label_1)
-        
+        # row_layout.addStretch()  # 添加弹性空间
         return row
     
     
@@ -162,32 +148,18 @@ class AudioPvAlignPage(QWidget):
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(5)
+
+        button, line_edit, help_icon = ui_helpers.create_file_selection_row(
+            button_text="选择目标文件",
+            help_text="可以是音频或视频"
+        )
+        row_layout.addWidget(button)
+        row_layout.addWidget(help_icon)
+        row_layout.addWidget(line_edit)
+        button.clicked.connect(self._on_select_file_2)
+        self.file_path_label_2 = line_edit
         
-        # 按钮: "选择目标文件"
-        select_file_button_2 = QPushButton("选择目标文件")
-        select_file_button_2.setStyleSheet(f'''
-            QPushButton {{
-                background-color: {self.colors['accent']};
-            }}QPushButton:hover {{
-                background-color: {self.colors['accent_hover']};
-            }}''')
-        select_file_button_2.setFixedSize(120, 25)
-        select_file_button_2.clicked.connect(self._on_select_file_2)
-        row_layout.addWidget(select_file_button_2)
-        
-        # Helper: 目标文件说明
-        file_2_help = ui_helpers.create_help_icon("可以是音频或视频")
-        row_layout.addWidget(file_2_help)
-        
-        # LineEdit: 显示选择的文件路径
-        self.file_path_label_2 = QLineEdit("")
-        self.file_path_label_2.setStyleSheet(f"color: {self.colors['text_secondary']}; font-size: 13px;")
-        self.file_path_label_2.setReadOnly(True)
-        self.file_path_label_2.setFixedHeight(25)
-        self.file_path_label_2.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
-        self.file_path_label_2.setFrame(False)
-        row_layout.addWidget(self.file_path_label_2)
-        
+        # row_layout.addStretch()  # 添加弹性空间
         return row
     
 
