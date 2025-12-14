@@ -2357,12 +2357,12 @@ class NoteAnalyzer:
     def analyze_all_notes_info(self, bpm, chart_lv, base_denominator, duration_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
 
 
-        def get_best_numerator_denominator(diff_beat, input_denominator):
+        def get_best_numerator_denominator(diff_beat, input_denominator, enable_12):
             """在12和输入分母中选择误差最小的分母"""
 
             # 如果输入的分母 >=16，启用12作为备选分母
             candidates = [input_denominator]
-            if input_denominator >= 16:
+            if input_denominator >= 16 and enable_12:
                 candidates.append(12)
             
             # 选择误差最小的分母
@@ -2391,13 +2391,13 @@ class NoteAnalyzer:
             return best_total_numerator, best_denominator
             
 
-        def get_fraction(diff_beat, input_denominator):
+        def get_fraction(diff_beat, input_denominator, enable_12=True):
             # 返回格式：分子，分母，整数
             # 0.5  -> 1/2 + 0 -> 1, 2, 0
             # 1.0  -> 0/1 + 1 -> 0, 1, 1
             # 2.25 -> 1/4 + 2 -> 1, 4, 2
             
-            raw_numerator, raw_denominator = get_best_numerator_denominator(diff_beat, input_denominator)
+            raw_numerator, raw_denominator = get_best_numerator_denominator(diff_beat, input_denominator, enable_12)
             if raw_numerator == 0: return 0, 1, 0 # 零间隔直接返回
             # 获取整数和余数部分
             one = raw_numerator // raw_denominator
@@ -2532,7 +2532,7 @@ class NoteAnalyzer:
                     denominator_to_use = duration_denominator \
                         if self.noteDetector.get_main_class_id(class_id) in [2, 5] \
                         else base_denominator
-                    numerator, denominator, one = get_fraction(length_beat, denominator_to_use)
+                    numerator, denominator, one = get_fraction(length_beat, denominator_to_use, enable_12=False)
                     # 将整数部分加入分子
                     if one > 0:
                         numerator = numerator + one * denominator
@@ -2553,7 +2553,7 @@ class NoteAnalyzer:
                 
                 diff_Msec = note_time - last_time
                 diff_beat = diff_Msec / one_beat_Msec
-                numerator, denominator, one = get_fraction(diff_beat, base_denominator)
+                numerator, denominator, one = get_fraction(diff_beat, base_denominator, enable_12=True)
 
                 # update last_time
                 # 使用最小公倍数分母进行累加 (为了兼容1/12)
