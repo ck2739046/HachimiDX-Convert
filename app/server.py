@@ -152,10 +152,10 @@ class VideoSyncServer:
                     if self.last_position is None or abs(self.last_position - start_time) > 0.01:
                         self.media_player.setPosition(int(start_time * 1000))
                         self.last_position = start_time
-                        print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video set position: {start_time:.3f}s")
+                        # print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video set position: {start_time:.3f}s")
                     # Play video
                     self.media_player.play()
-                    print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video play: {start_time:.3f}s (delay {delay_seconds:.3f}s)")
+                    # print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video play: {start_time:.3f}s (delay {delay_seconds:.3f}s)")
 
                 self.main_thread_callback(play_action)
             
@@ -182,8 +182,8 @@ class VideoSyncServer:
                     
                     self.media_player.pause()
                     self.media_player.setPosition(int(start_time * 1000))
-                    self.last_position = start_time + 0.05 # 补偿50ms暂停延时 (实测结果，不知道这50ms哪儿来的)
-                    print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video pause: {self.last_position:.3f}s")
+                    self.last_position = start_time
+                    # print(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] video pause: {self.last_position:.3f}s")
                 
                 self.main_thread_callback(pause_action)
             
