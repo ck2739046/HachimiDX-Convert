@@ -32,7 +32,7 @@ class MediaToolsPage(QWidget):
         self.duration_input = None
         self.modify_target_label = None
 
-        # detect_align_all_in_one 返回的时间偏移量会赋值到这里
+        # detect_align_&first_all_in_one 返回的时间偏移量会赋值到这里
         # 或者单纯仅 allign_audio 返回的时间偏移量
         self.trim_offset_time_label = None
         self.trim_offset_time = None  
@@ -369,7 +369,7 @@ class MediaToolsPage(QWidget):
         # 创建临时 JSON 文件保存参数
         if not os.path.exists(tools.path_config.temp_dir):
             os.makedirs(tools.path_config.temp_dir)
-        temp_json_path = os.path.normpath(os.path.join(tools.path_config.temp_dir, "detect_align_all_in_one_args.json"))
+        temp_json_path = os.path.normpath(os.path.join(tools.path_config.temp_dir, "detect_align_&first_all_in_one_args.json"))
         if os.path.exists(temp_json_path):
             os.remove(temp_json_path)
         with open(temp_json_path, 'w', encoding='utf-8') as temp_json:
@@ -390,7 +390,7 @@ class MediaToolsPage(QWidget):
         # 获取最近12行文本解析final_time
         recent_output = self.output_widget.get_recent_lines(12)
         
-        # 从 detect_align_all_in_one.py 输出的结果解析三个时间值
+        # 从 detect_align_&first_all_in_one.py 输出的结果解析三个时间值
         click_start_time = None
         audio_start_time = None
         final_time = None
@@ -587,7 +587,7 @@ class MediaToolsPage(QWidget):
     
     def _configure_buttons(self):
         self.analyze_button.configure(
-            script_path=os.path.join(root, "tools", "detect_align_all_in_one.py"),
+            script_path=os.path.join(root, "tools", "detect_align_&first_all_in_one.py"),
             args_generator=self._prepare_analyze_args,
             output_widget=self.output_widget,
             on_finished=self._on_analyze_finished
