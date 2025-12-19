@@ -679,10 +679,11 @@ class NoteDetector:
             path_length = len(track_data['path'])
             if self.is_obb(class_id):
                 # 尽量选择早期的点，避免在后续长条hold时被闪烁特效干扰
-                # 间距也不同，防止周期性闪烁全部采样到同一位置
-                sample_positions = [10, 12, 19, 24, 30]
+                # 间距不同(2-7)，防止周期性闪烁全部采样到同一位置
+                sample_positions = [10, 12, 15, 19, 24, 30, 37]
             else:
-                sample_positions = [20, 35, 50, 65, 80] # detect
+                # detect 模型，间距(7-12)
+                sample_positions = [20, 27, 35, 44, 54, 65, 77]
 
             for sample_position in sample_positions:
                 sample_idx = int(path_length * sample_position / 100.0)
