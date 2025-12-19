@@ -5,7 +5,7 @@ UI Helper Functions and Shared Resources
 
 from PyQt6.QtWidgets import QLabel, QComboBox, QLineEdit, QCheckBox, QWidget, QHBoxLayout, QFrame, QStyle, QStyleOptionButton, QPushButton, QPushButton
 from PyQt6.QtCore import Qt, QRectF, QEvent, QPoint
-from PyQt6.QtGui import QCursor, QPainter, QColor, QPen, QPainterPath, QFont
+from PyQt6.QtGui import QCursor, QPainter, QColor, QPen, QPainterPath, QFont, QIntValidator, QDoubleValidator
 from PyQt6.QtWidgets import QToolTip
 
 
@@ -149,32 +149,105 @@ def create_label(text):
     return label
 
 
-def create_line_edit(length=None, validator=None, placeholder=None):
+def create_line_edit(length=None, placeholder=None, 
+                     value_type=None, min_val=None, max_val=None, decimals=3):
     """
-    创建文本输入框
+    创建文本输入框（智能判断是否需要验证）
+    
+    两种使用模式：
+    
+    1. 普通输入框（无验证）：
+       create_line_edit(length=120, placeholder="歌曲名称")
+    
+    2. 带验证的输入框：
+       - 必需参数：value_type, min_val, max_val
+       - value_type 只能是 'int' 或 'double'
+       - decimals 仅当 value_type='double' 时有效，默认3
     
     Args:
-        length: 宽度（像素），默认为None
-        validator: 输入验证器（QValidator），默认为None
-        placeholder: 占位符文本，默认为None
+        length: 宽度（像素），可选
+        placeholder: 占位符文本，可选
+        value_type: 数值类型，'int' 或 'double'。不提供时创建普通输入框
+        min_val: 最小值（提供 value_type 时必需）
+        max_val: 最大值（提供 value_type 时必需）
+        decimals: 小数位数（仅当 value_type='double' 时有效，默认3）
     
     Returns:
-        QLineEdit: 配置好的文本输入框
+        QLineEdit 或 ValidatedLineEdit
+    
+    Raises:
+        ValueError: 当参数不满足要求时
     """
-    line_edit = QLineEdit()
-    line_edit.setStyleSheet(f"background-color: {COLORS['grey']}; padding-left: 8px;")
-    if length:
-        line_edit.setFixedSize(length, 25)
-    else:
-        line_edit.setFixedHeight(25)
+    
+    # 判断是否创建验证输入框
+    if value_type is None:
 
-    if validator:
-        line_edit.setValidator(validator)
+        # 创建普通输入框
+        line_edit = QLineEdit()
+        line_edit.setStyleSheet(f"background-color: {COLORS['grey']}; padding-left: 8px;")
+        
+        # 设置尺寸
+        if length:
+            line_edit.setFixedSize(length, 25)
+        else:
+            line_edit.setFixedHeight(25)
+        
+        # 设置占位符
+        if placeholder:
+            line_edit.setPlaceholderText(placeholder)
+
+        return line_edit
     
-    if placeholder:
-        line_edit.setPlaceholderText(placeholder)
+    else:
+
+        # 验证 value_type 的值
+        if value_type not in ('int', 'double'):
+            raise ValueError(
+                f"value_type must be 'int' or 'double', got '{value_type}'"
+            )
+        
+        # 验证 min max 参数
+        if min_val is None:
+            raise ValueError(
+                "min_val is required when value_type is provided"
+            )
+        if max_val is None:
+            raise ValueError(
+                "max_val is required when value_type is provided"
+            )
+        
+        if not isinstance(min_val, (int, float)) or not isinstance(max_val, (int, float)):
+            raise ValueError(
+                "min_val and max_val must be int or float(double)"
+            )
+        
+        if min_val >= max_val:
+            raise ValueError(
+                "min_val must be less than max_val"
+            )
+        
+        # 处理 decimals 参数
+        # 对于 int 类型，decimals 无意义，设为 0
+        # 对于 double 类型，使用用户提供的值或默认值
+        if value_type == 'int':
+            actual_decimals = 0
+        else:
+            if not isinstance(decimals, int) or decimals <= 0:
+                raise ValueError(
+                    "decimals must be a positive integer when value_type is 'double'")
+            actual_decimals = decimals
+        
+        # 创建验证输入框（所有参数都传递，包括可能为None的length和placeholder）
+        return ValidatedLineEdit(
+            value_type=value_type,
+            min_val=min_val,
+            max_val=max_val,
+            decimals=actual_decimals,
+            length=length,
+            placeholder=placeholder
+        )
     
-    return line_edit
+    
 
 
 def create_check_box():
@@ -235,6 +308,115 @@ def create_divider(text, up_margin=5, down_margin=5, width=None):
         #divider_layout.addStretch()  # 添加弹性空间
 
     return divider_container
+
+
+
+
+
+
+
+
+
+
+# debug
+class ValidatedLineEdit(QLineEdit):
+    """带验证功能的输入框（所有参数必需，无默认值）"""
+    
+    def __init__(self, value_type, min_val, max_val, decimals, length, placeholder):
+        """
+        初始化验证输入框
+        
+        Args:
+            value_type: 'int' 或 'double'
+            min_val: 最小值
+            max_val: 最大值
+            decimals: 小数位数（int类型时此值被忽略，但仍需传入）
+            length: 宽度（可以是None）
+            placeholder: 占位符（可以是None）
+        """
+        super().__init__()
+        
+        # 存储验证参数
+        self.value_type = value_type
+        self.min_val = min_val
+        self.max_val = max_val
+        self.decimals = decimals
+        
+        # 设置样式
+        self.setStyleSheet(f"background-color: {COLORS['grey']}; padding-left: 8px;")
+        
+        # 设置尺寸
+        if length:
+            self.setFixedSize(length, 25)
+        else:
+            self.setFixedHeight(25)
+        
+        # 设置Qt内置验证器
+        if value_type == 'int':
+            self.setValidator(QIntValidator(min_val, max_val, self))
+        else:  # double
+            self.setValidator(QDoubleValidator(min_val, max_val, decimals, self))
+        
+        # 设置占位符
+        if placeholder:
+            self.setPlaceholderText(placeholder)
+    
+
+    # def focusOutEvent(self, event):
+    #     """焦点丢失时触发验证"""
+    #     super().focusOutEvent(event)
+
+    
+    def get_value(self):
+        """
+        获取并验证输入值
+        
+        Returns:
+            tuple: (value, error_msg)
+                - value: 验证通过返回转换后的值，失败返回None
+                - error_msg: 验证失败时的错误信息，成功返回None
+        """
+        text = self.text().strip()
+
+        if self.value_type == 'int':
+            type_desc = "integer"
+        elif self.value_type == 'double':
+            type_desc = f"double (decimals: {self.decimals})"
+        else:
+            type_desc = "unknown"
+        
+        # 空值检查
+        if not text:
+            error_msg = (
+                f"Invalid value: input is empty.\n"
+                f"Expected {type_desc} in range [{self.min_val}, {self.max_val}]."
+            )
+            return None, error_msg
+        
+        # 类型转换和范围检查
+        try:
+            if self.value_type == 'int':
+                value = int(text)
+            else:  # double
+                value = float(text)
+                value = round(value, self.decimals)
+            
+            # 范围检查
+            if value < self.min_val or value > self.max_val:
+                error_msg = (
+                    f"Invalid value: out of range.\n"
+                    f"Expected {type_desc} in range [{self.min_val}, {self.max_val}]."
+                )
+                return None, error_msg
+            
+            return value, None
+        
+        except ValueError:
+            error_msg = (
+                f"Invalid value: format error.\n"
+                f"Expected {type_desc} in range [{self.min_val}, {self.max_val}]."
+            )
+            return None, error_msg
 
 
 

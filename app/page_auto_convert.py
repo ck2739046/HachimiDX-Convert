@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QLineEdit, QMessageBox)
-from PyQt6.QtGui import QDoubleValidator, QCursor
+from PyQt6.QtGui import QCursor
 from PyQt6.QtCore import Qt
 import os
 import sys
@@ -271,22 +271,32 @@ class AutoConvertPage(QWidget):
         video_range_label = ui_helpers.create_label("歌曲范围(秒):")
         row_layout.addWidget(video_range_label)
 
-        start_validator = QDoubleValidator(-1.0, 999.0, 3, self) # -1_999的浮点数
-        self.video_start_input = ui_helpers.create_line_edit(80, validator=start_validator, placeholder="0~999/-1")
+        self.video_start_input = ui_helpers.create_line_edit(
+            80, value_type='double', min_val=-999.0, max_val=999.0, decimals=3, placeholder="0")
+        self.video_start_input.setText("0") # 默认0秒
         row_layout.addWidget(self.video_start_input)
 
         arrow_label = ui_helpers.create_label("->")
         row_layout.addWidget(arrow_label)
 
-        end_validator = QDoubleValidator(-1.0, 999.0, 3, self) # -1_999的浮点数
-        self.video_end_input = ui_helpers.create_line_edit(80, validator=end_validator, placeholder="0~999/-1")
+        self.video_end_input = ui_helpers.create_line_edit(
+            80, value_type='double', min_val=-999.0, max_val=999.0, decimals=3, placeholder="0")
+        self.video_end_input.setText("0") # 默认0秒
         row_layout.addWidget(self.video_end_input)
 
         video_range_help = ui_helpers.create_help_icon(
-            "歌曲真正起始和结束的时间(秒)\n"
-            "-1 表示视频开头第 0 秒或结尾最后 1 秒\n"
-            "正确的歌曲起始应该是游戏走转场刚刚进入黑屏，并且乐曲启动拍还没响的时间"
-            "\n正确的歌曲结束应该是歌曲最后一个音符消失后的时间")
+            "歌曲真正起始和结束的时间(秒)\n" \
+            "正确的歌曲起始应该是游戏走转场刚刚进入黑屏，并且乐曲启动拍还没响的时间\n" \
+            "正确的歌曲结束应该是歌曲最后一个音符消失后的时间\n" \
+            "\n" \
+            "虽然理论上支持范围 -999 ~ +999，但实际有效范围受视频长度限制\n" \
+            "例如视频总长为 120 秒，则有效范围为 -120 ~ +120\n"
+            "\n" \
+            "对于 video_start，0 表示视频的第 0 秒\n" \
+            "对于 video_end， 0 表示视频的最后一秒\n" \
+            "\n" \
+            "正数表示从前往后计时的秒数，例如 10 表示视频第 10 秒\n" \
+            "负数表示从后往前计时的秒数。例如视频总长为 120 秒，输入 -10 则代表 120 - 10 = 110 秒")
         row_layout.addWidget(video_range_help)
 
         # Label_CheckBox_Helper skip_detect_circle
@@ -389,11 +399,11 @@ class AutoConvertPage(QWidget):
         # Label_LineEdit_Helper 歌曲BPM
         bpm_label = ui_helpers.create_label("歌曲BPM:")
         row_layout.addWidget(bpm_label)
-        bpm_validator = QDoubleValidator(10.0, 999.0, 3, self) # 10_999的浮点数
-        self.bpm_input = ui_helpers.create_line_edit(70, validator=bpm_validator, placeholder="10~999")
+        self.bpm_input = ui_helpers.create_line_edit(
+            70, value_type='double', min_val=10.0, max_val=999.0, decimals=3, placeholder="10~999")
         row_layout.addWidget(self.bpm_input)
         bpm_help = ui_helpers.create_help_icon(
-            "仅支持静态 BPM (全程不变速)")
+            "仅支持静态 BPM (全程不变速)\n范围 10~999，最多三位小数")
         row_layout.addWidget(bpm_help)
 
         # Label_ComboBox_Helper 谱面难度
@@ -684,29 +694,15 @@ class AutoConvertPage(QWidget):
                 QMessageBox.warning(self, "参数错误", "请先选择谱面确认视频文件")
                 return None
             
-            video_start = self.video_start_input.text().strip()
-            if not video_start:
-                QMessageBox.warning(self, "参数错误", "请输入歌曲起始时间")
+            video_start, error_msg = self.video_start_input.get_value()
+            if error_msg:
+                QMessageBox.warning(self, "参数错误", f"歌曲起始时间: {error_msg}")
                 return None
             
-            video_end = self.video_end_input.text().strip()
-            if not video_end:
-                QMessageBox.warning(self, "参数错误", "请输入歌曲结束时间")
+            video_end, error_msg = self.video_end_input.get_value()
+            if error_msg:
+                QMessageBox.warning(self, "参数错误", f"歌曲结束时间: {error_msg}")
                 return None
-            
-            # 检查参数范围
-            video_start = float(video_start)
-            video_end = float(video_end)
-            if video_start != -1:
-                video_start = round(video_start, 3)
-                if video_start < 0 or video_start > 999:
-                    QMessageBox.warning(self, "参数错误", "歌曲起始时间应在 0~999 秒范围内，或为 -1")
-                    return None
-            if video_end != -1:
-                video_end = round(video_end, 3)
-                if video_end < 0 or video_end > 999:
-                    QMessageBox.warning(self, "参数错误", "歌曲结束时间应在 0~999 秒范围内，或为 -1")
-                    return None
                 
             # 使用 OpenCV 获取视频的实际 FPS，将 start/end 转为帧数
             try:
@@ -791,14 +787,9 @@ class AutoConvertPage(QWidget):
                                                          "请先启用并运行音符识别模块")
                     return None
 
-            bpm = self.bpm_input.text().strip()
-            if not bpm:
-                QMessageBox.warning(self, "参数错误", "请输入歌曲 BPM")
-                return None
-
-            bpm = round(float(bpm), 3)    
-            if bpm < 10 or bpm > 999:
-                QMessageBox.warning(self, "参数错误", "歌曲 BPM 应在 10~999 范围内")
+            bpm, error_msg = self.bpm_input.get_value()
+            if error_msg:
+                QMessageBox.warning(self, "参数错误", f"歌曲BPM: {error_msg}")
                 return None
             
             chart_lv = int(self.chart_lv_combo.currentText())

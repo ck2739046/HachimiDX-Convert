@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QLineEdit, QMessageBox, QLabel)
-from PyQt6.QtGui import QDoubleValidator, QIntValidator, QCursor, QPixmap
+from PyQt6.QtGui import QCursor, QPixmap
 from PyQt6.QtCore import Qt
 import os
 import sys
@@ -196,24 +196,25 @@ class AudioPvAlignPage(QWidget):
         # Label_LineEdit_Helper Duration
         duration_label = ui_helpers.create_label("搜索范围(秒):")
         row_layout.addWidget(duration_label)
-        duration_validator = QIntValidator(5, 999, self)  # 最少5秒
-        self.duration_input = ui_helpers.create_line_edit(70, validator=duration_validator, placeholder="5~999")
+        self.duration_input = ui_helpers.create_line_edit(
+            70, value_type='int', min_val=5, max_val=999, placeholder="5~999")
         self.duration_input.setText("10") # 默认10秒
         row_layout.addWidget(self.duration_input)
         duration_help = ui_helpers.create_help_icon(
             "仅加载基准音频的前多少秒进行分析\n" \
-            "这个时间段应该包含所有启动拍")
+            "这个时间段应该包含所有启动拍\n" \
+            "范围 5~999，整数，默认为 10")
         row_layout.addWidget(duration_help)
 
         # Label_LineEdit_Helper Initial BPM
         initial_bpm_label = ui_helpers.create_label("Initial BPM:")
         row_layout.addWidget(initial_bpm_label)
         
-        bpm_validator = QDoubleValidator(10.0, 999.0, 3, self)  # 10-999 的浮点数
-        self.initial_bpm_input = ui_helpers.create_line_edit(70, validator=bpm_validator, placeholder="10~999")
+        self.initial_bpm_input = ui_helpers.create_line_edit(
+            70, value_type='double', min_val=10.0, max_val=999.0, decimals=3, placeholder="10~999")
         row_layout.addWidget(self.initial_bpm_input)
         
-        bpm_help = ui_helpers.create_help_icon("启动拍的 BPM 数值")
+        bpm_help = ui_helpers.create_help_icon("启动拍的 BPM 数值\n范围 10~999，最多三位小数")
         row_layout.addWidget(bpm_help)
         
         row_layout.addStretch()  # 添加弹性空间
@@ -323,25 +324,15 @@ class AudioPvAlignPage(QWidget):
         start_beat_count = int(self.start_beat_count_combo.currentText())
         
         # 验证 BPM 输入
-        initial_bpm = self.initial_bpm_input.text().strip()
-        if not initial_bpm:
-            QMessageBox.warning(self, "参数错误", "请输入 Initial BPM")
-            return None
-        
-        initial_bpm = round(float(initial_bpm), 3)
-        if initial_bpm < 10 or initial_bpm > 999:
-            QMessageBox.warning(self, "参数错误", "Initial BPM 应在 10~999 范围内")
+        initial_bpm, error_msg = self.initial_bpm_input.get_value()
+        if error_msg:
+            QMessageBox.warning(self, "参数错误", f"Initial BPM: {error_msg}")
             return None
         
         # 验证 duration 输入
-        duration_text = self.duration_input.text().strip()
-        if not duration_text:
-            QMessageBox.warning(self, "参数错误", "请输入 Duration")
-            return None
-        
-        duration = round(int(duration_text), 3)
-        if duration < 5 or duration > 999:
-            QMessageBox.warning(self, "参数错误", "Duration 应为至少 5 秒")
+        duration, error_msg = self.duration_input.get_value()
+        if error_msg:
+            QMessageBox.warning(self, "参数错误", f"搜索范围: {error_msg}")
             return None
         
         # 隐藏结果 label
