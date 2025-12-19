@@ -38,3 +38,6 @@ app_icon = os.path.join(root_dir, 'src', 'icon.ico')
 
 # click_template路径
 click_template = os.path.join(root_dir, 'src', 'click_template.aac')
+
+# 配置文件路径
+_config_file = os.path.join(root_dir, 'src', 'HachimiDX-Settings.json')

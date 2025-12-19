@@ -19,6 +19,7 @@ import tools.path_config
 from page_majdata import MajdataPage
 from page_auto_convert import AutoConvertPage
 from page_media_tools import MediaToolsPage
+from page_settings import SettingsPage
 import ui_helpers
 
 
@@ -249,7 +250,7 @@ class MainWindow(QMainWindow):
         self.callback_emitter.callback_signal.connect(self._execute_callback)
         
         # 导航栏变量
-        self.nav_titles = ["MajdataEdit", "Auto Convert", "Media Tools", "Others"] # 总配置项
+        self.nav_titles = ["MajdataEdit", "Auto Convert", "Media Tools", "Settings"] # 总配置项
         self.current_tab_index = 0     # 当前标签页索引
         self.tab_stacked_widget = None # 内容区堆叠widget
         self.nav_buttons = []          # 4个导航按钮列表
@@ -442,6 +443,13 @@ class MainWindow(QMainWindow):
         # Media Tools 页面
         elif title == "Media Tools":
             page = MediaToolsPage(
+                parent=self
+            )
+            return page
+        
+        # Settings 页面
+        elif title == "Settings":
+            page = SettingsPage(
                 parent=self
             )
             return page
