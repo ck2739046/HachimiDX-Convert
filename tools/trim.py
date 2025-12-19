@@ -12,6 +12,7 @@ root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.
 if root not in sys.path:
     sys.path.insert(0, root)
 import tools.path_config
+import tools.ffmpeg_utils as ffmpeg_utils
 
 
 # 解决 Windows 控制台 Unicode 编码问题
@@ -19,9 +20,9 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 
-def detect_video_params_cv2(input_file: str) -> Optional[Dict[str, Any]]:
+def detect_video_params(input_file: str) -> Optional[Dict[str, Any]]:
     """
-    使用 OpenCV 检测视频参数
+    使用 ffprobe 检测视频参数
     
     Args:
         input_file: 输入文件路径
@@ -29,32 +30,46 @@ def detect_video_params_cv2(input_file: str) -> Optional[Dict[str, Any]]:
     Returns:
         视频参数字典，如果不是视频则返回 None
     """
-    cap = cv2.VideoCapture(input_file)
-    if not cap.isOpened():
-        cap.release()
-        return None
+    try:
+        file_type, streams = ffmpeg_utils.get_file_info(input_file)
+        
+        if file_type not in ['video', 'video_muted']:
+            return None
+        
+        # 查找视频流
+        video_stream = next((s for s in streams if s.get('codec_type') == 'video'), None)
+        if not video_stream:
+            return None
+        
+        # 解析 FPS
+        fps_str = video_stream.get('avg_frame_rate', '0/0')
+        if '/' in fps_str:
+            num, den = map(int, fps_str.split('/'))
+            fps = num / den if den != 0 else 0
+        else:
+            fps = float(fps_str)
+        
+        if fps <= 0:
+            raise Exception("Cannot determine FPS of the video")
+        
+        duration = float(video_stream.get('duration', 0))
+        width = int(video_stream.get('width', 0))
+        height = int(video_stream.get('height', 0))
+        
+        if width > 0 and height > 0:
+            return {
+                'width': width,
+                'height': height,
+                'fps': fps,
+                'duration': duration
+            }
+    except Exception:
+        pass
     
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if not fps or fps <= 0:
-        cap.release()
-        raise Exception("Cannot determine FPS of the video")
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    duration = frame_count / fps
-    cap.release()
-    
-    if width > 0 and height > 0:
-        return {
-            'width': width,
-            'height': height,
-            'fps': fps,
-            'duration': duration
-        }
     return None
 
 
-def detect_audio_params_ffprobe(input_file: str) -> Optional[Dict[str, Any]]:
+def detect_audio_params(input_file: str) -> Optional[Dict[str, Any]]:
     """
     使用 ffprobe 检测音频参数
     
@@ -64,25 +79,14 @@ def detect_audio_params_ffprobe(input_file: str) -> Optional[Dict[str, Any]]:
     Returns:
         音频参数字典，如果没有音频则返回 None
     """
-    ffprobe_path = os.path.normpath(os.path.abspath(tools.path_config.ffprobe_exe))
-    cmd = [
-        ffprobe_path,
-        '-v', 'quiet',
-        '-print_format', 'json',
-        '-show_streams',
-        '-select_streams', 'a:0',
-        input_file
-    ]
-    
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', timeout=5)
-    if result.returncode != 0:
-        return None
-    
-    data = json.loads(result.stdout)
-    streams = data.get('streams', [])
-    
-    if streams and streams[0].get('codec_type') == 'audio':
-        audio_stream = streams[0]
+    try:
+        file_type, streams = ffmpeg_utils.get_file_info(input_file)
+        
+        # 查找音频流
+        audio_stream = next((s for s in streams if s.get('codec_type') == 'audio'), None)
+        if not audio_stream:
+            return None
+        
         channel_layout = audio_stream.get('channel_layout', '')
         if not channel_layout:
             channels = audio_stream.get('channels', 2)
@@ -93,7 +97,8 @@ def detect_audio_params_ffprobe(input_file: str) -> Optional[Dict[str, Any]]:
             'channels': channel_layout,
             'duration': float(audio_stream.get('duration', 0))
         }
-    return None
+    except Exception:
+        return None
 
 
 def detect_media_info(input_file: str) -> Tuple[str, Dict[str, Any]]:
@@ -110,10 +115,10 @@ def detect_media_info(input_file: str) -> Tuple[str, Dict[str, Any]]:
     """
     try:
         # 尝试检测视频
-        video_params = detect_video_params_cv2(input_file)
+        video_params = detect_video_params(input_file)
         if video_params:
             # 是视频文件，补充音频信息
-            audio_params = detect_audio_params_ffprobe(input_file)
+            audio_params = detect_audio_params(input_file)
             if audio_params:
                 video_params['has_audio'] = True
                 video_params['sample_rate'] = audio_params['sample_rate']
@@ -124,7 +129,7 @@ def detect_media_info(input_file: str) -> Tuple[str, Dict[str, Any]]:
             return 'video', video_params
         
         # 不是视频，检测音频
-        audio_params = detect_audio_params_ffprobe(input_file)
+        audio_params = detect_audio_params(input_file)
         if audio_params:
             return 'audio', audio_params
         
@@ -176,7 +181,7 @@ def generate_output_path(input_file: str, offset_ms: float) -> str:
 def build_trim_command(file_type: str, params: Dict[str, Any], offset_ms: float, 
                        input_file: str, output_file: str) -> list:
     """
-    构建 FFmpeg 修剪命令
+    构建 FFmpeg 修剪命令参数
     
     Args:
         file_type: 文件类型 ('audio' 或 'video')
@@ -186,10 +191,9 @@ def build_trim_command(file_type: str, params: Dict[str, Any], offset_ms: float,
         output_file: 输出文件路径
         
     Returns:
-        FFmpeg 命令列表
+        FFmpeg 命令参数列表（不包含 ffmpeg 可执行文件路径）
     """
-    ffmpeg_path = os.path.normpath(os.path.abspath(tools.path_config.ffmpeg_exe))
-    cmd = [ffmpeg_path, '-y', '-hide_banner', '-stats', '-loglevel', 'error']
+    cmd = ['-y', '-hide_banner', '-stats', '-loglevel', 'error']
     
     if offset_ms >= 0:
         # 正偏移：裁剪开头
@@ -285,10 +289,10 @@ def trim_media(input_file: str, offset_ms: float, output_file: str = None) -> st
             return
         
         cmd = build_trim_command(file_type, params, offset_ms, input_file, output_file)
-        print(f"Using FFmpeg command: {' '.join(cmd)}")
+        print(f"Using FFmpeg command: ffmpeg {' '.join(cmd)}")
         
         # 执行命令
-        result = subprocess.run(cmd, capture_output=False, text=True, encoding='utf-8')
+        result = ffmpeg_utils.run_ffmpeg(cmd)
         if result.returncode != 0:
             raise Exception(f"FFmpeg processing failed with return code {result.returncode}")
         

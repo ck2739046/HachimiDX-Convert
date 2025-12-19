@@ -18,6 +18,7 @@ import sys
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
+import tools.ffmpeg_utils as ffmpeg_utils
 
 
 
@@ -1090,9 +1091,8 @@ class NoteDetector:
             if os.path.exists(final_track_video_path):
                 os.remove(final_track_video_path)
             # 构建ffmpeg命令来合并视频和音频
-            ffmpeg_path = os.path.normpath(os.path.abspath(tools.path_config.ffmpeg_exe))
-            ffmpeg_cmd = [
-                ffmpeg_path, '-y', '-hide_banner', '-stats', '-loglevel', 'error',
+            ffmpeg_args = [
+                '-y', '-hide_banner', '-stats', '-loglevel', 'error',
                 '-i', temp_track_video_path, # 无声的跟踪视频
                 '-i', std_video_path,  # 原始视频（有音频）
                 '-c:v', 'libx264',  '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
@@ -1104,11 +1104,11 @@ class NoteDetector:
             ]
             
             try:
-                result = subprocess.run(ffmpeg_cmd, capture_output=False, text=True, encoding='utf-8')
+                result = ffmpeg_utils.run_ffmpeg(ffmpeg_args)
                 if result.returncode == 0:
                     os.remove(temp_track_video_path)
                 else:
-                    raise Exception(result.stderr)
+                    raise Exception("FFmpeg processing failed")
             except Exception as e:
                 print(f"Warning: Error adding audio to temp_track_video - {e}")
                 os.rename(temp_track_video_path, final_track_video_path)
