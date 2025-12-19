@@ -62,27 +62,23 @@ class MajdataPage(QWidget):
         self.majdata_song_input = self.FolderComboBox(self.all_songs_folder)
         self.majdata_song_input.setStyleSheet(f"background-color: {self.colors['grey']};")
         self.majdata_song_input.setEditable(True)
-        self.majdata_song_input.setFixedSize(200, 25)
+        self.majdata_song_input.setFixedSize(230, 25)
         self.majdata_song_input.currentTextChanged.connect(self.on_song_changed)
         layout.addWidget(self.majdata_song_input)
         
         # Maidata choose
-        self.majdata_maidata_choose = ui_helpers.create_combo_box(132, show_tooltip=True)
+        self.majdata_maidata_choose = ui_helpers.create_combo_box(150, show_tooltip=True)
         layout.addWidget(self.majdata_maidata_choose)
         
         # Track choose
-        self.majdata_track_choose = ui_helpers.create_combo_box(132, show_tooltip=True)
+        self.majdata_track_choose = ui_helpers.create_combo_box(150, show_tooltip=True)
         layout.addWidget(self.majdata_track_choose)
         
         # Video choose
-        self.majdata_video_choose = ui_helpers.create_combo_box(132, show_tooltip=True)
+        self.majdata_video_choose = ui_helpers.create_combo_box(150, show_tooltip=True)
         layout.addWidget(self.majdata_video_choose)
 
-        # Label_CheckBox_Helper is_majdataview_play_video
-        is_majdataview_play_video_label = ui_helpers.create_label("MajdataView:")
-        is_majdataview_play_video_label.setStyleSheet(f"color: {ui_helpers.COLORS['grey']};" \
-                                                       "font-size: 13px; font-weight: bold;")
-        layout.addWidget(is_majdataview_play_video_label)
+        # CheckBox_Helper is_majdataview_play_video
         self.is_majdataview_play_video_checkbox = ui_helpers.create_check_box()
         self.is_majdataview_play_video_checkbox.setChecked(True)  # 默认启用
         layout.addWidget(self.is_majdataview_play_video_checkbox)
@@ -94,7 +90,7 @@ class MajdataPage(QWidget):
         # Load button
         load_button = QPushButton("Load")
         load_button.setStyleSheet(f"background-color: {self.colors['grey']};")
-        load_button.setFixedSize(50, 25)
+        load_button.setFixedSize(60, 25)
         load_button.clicked.connect(self.on_load_clicked)
         layout.addWidget(load_button)
         
