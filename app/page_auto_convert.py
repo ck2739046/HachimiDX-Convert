@@ -704,20 +704,52 @@ class AutoConvertPage(QWidget):
                 QMessageBox.warning(self, "参数错误", f"歌曲结束时间: {error_msg}")
                 return None
                 
-            # 使用 OpenCV 获取视频的实际 FPS，将 start/end 转为帧数
+            # 使用 OpenCV 获取视频的实际 FPS 和总帧数，将 start/end 转为帧数
             try:
                 cap = cv2.VideoCapture(self.selected_video_path)
                 if not cap.isOpened():
                     QMessageBox.warning(self, "\n视频错误", f"无法打开视频文件: {self.selected_video_path}")
                     return None
                 video_fps = cap.get(cv2.CAP_PROP_FPS)
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 cap.release()
+                
                 if video_fps <= 0:
                     QMessageBox.warning(self, "\n视频错误", f"无法获取视频 FPS 信息: {self.selected_video_path}")
                     return None
-                self.output_widget.append_text(f"\n检测到谱面确认视频 FPS: {video_fps:.2f}")
+                
+                video_duration = total_frames / video_fps
+                self.output_widget.append_text(f"\n检测到谱面确认视频 FPS: {video_fps:.2f}, 总帧数: {total_frames}, 时长: {video_duration:.2f}s")
+
+                # 计算 start_frame
+                if video_start >= 0:
+                    start_frame = round(video_start * video_fps)
+                else:
+                    start_frame = round((video_duration + video_start) * video_fps)
+                
+                # 计算 end_frame
+                if video_end == 0:
+                    end_frame = total_frames
+                elif video_end > 0:
+                    end_frame = round(video_end * video_fps)
+                else:
+                    end_frame = round((video_duration + video_end) * video_fps)
+
+                # 验证帧数范围
+                if not (0 <= start_frame < total_frames):
+                    QMessageBox.warning(self, "参数错误", f"计算得到的起始帧 {start_frame} 超出视频范围 [0, {total_frames})")
+                    return None
+                
+                if not (0 < end_frame <= total_frames):
+                     QMessageBox.warning(self, "参数错误", f"计算得到的结束帧 {end_frame} 超出视频范围 (0, {total_frames}]")
+                     return None
+
+                if start_frame >= end_frame:
+                    QMessageBox.warning(self, "参数错误", f"起始时间必须小于结束时间\nStart Frame: {start_frame}\nEnd Frame: {end_frame}")
+                    return None
+
             except Exception as e:
-                QMessageBox.warning(self, "\n视频错误", f"尝试读取视频 FPS 失败: (self.selected_video_path)\n" \
+                QMessageBox.warning(self, "\n视频错误", f"尝试读取视频信息失败: {self.selected_video_path}\n" \
                                                        f"错误信息: {str(e)}")
                 return None
 
@@ -725,8 +757,6 @@ class AutoConvertPage(QWidget):
             video_mode = self.video_type_combo.currentText()
             target_res = 1080
             skip_detect_circle = self.skip_detect_circle_checkbox.isChecked()
-            start_frame = round(video_start * video_fps) if video_start >= 0 else -1
-            end_frame = round(video_end * video_fps) if video_end >= 0 else -1
 
 
         # 准备 note_detector 参数
