@@ -149,6 +149,31 @@ class MajdataPage(QWidget):
     def on_load_clicked(self):
         # Get selected items
         selected_song = self.majdata_song_input.currentText()
+        
+        # Special case for "---"
+        if selected_song == "---":
+            # 1. Reset video player
+            self.media_player.stop()
+            self.media_player.setSource(QUrl())
+            
+            # 2. Create a control txt with "---"
+            control_txt = "folder: ---\nmaidata: ---\ntrack: ---"
+            try:
+                with open(self.majdata_control_txt, 'w', encoding='utf-8') as f:
+                    f.write(control_txt)
+                print("Wrote MajdataEdit control file (reset):")
+                print(control_txt)
+            except Exception as e:
+                print(f"Error writing to MajdataEdit control file: {e}")
+            
+            # 3. Clear comboboxes
+            self.majdata_maidata_choose.clear()
+            self.majdata_track_choose.clear()
+            self.majdata_video_choose.clear()
+            return
+        
+        
+
         selected_maidata = self.majdata_maidata_choose.currentText()
         selected_track = self.majdata_track_choose.currentText()
         selected_video = self.majdata_video_choose.currentText()
