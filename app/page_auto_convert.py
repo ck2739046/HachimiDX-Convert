@@ -263,7 +263,9 @@ class AutoConvertPage(QWidget):
         batch_help = ui_helpers.create_help_icon(
             "batch_detect_obb: 用于目标检测模型运行时的批处理大小\n" \
             "batch_classify: 用于图像分类模型运行时的批处理大小\n" \
-            "如果推理后端是 TensorRT, batch_classify 不能超过转换模型时选择的 batch 数值")
+            "\n" \
+            "如果推理后端是 TensorRT, batch_detect_obb 不能超过转换模型时选择的 batch 数值\n" \
+            "可以前往 Settings 页面查看当前配置的 TensorRT batch_size")
         row_layout.addWidget(batch_help)
         
         # Label_CheckBox_Helper skip_detect
@@ -552,6 +554,20 @@ class AutoConvertPage(QWidget):
             
             # 根据后端选择模型路径和推理设备
             if backend == "TensorRT":
+                # 验证 TensorRT batch_size 配置
+                tensorRT_batch_size, error_msg = tools.config_manager.get_config("tensorRT_batch_size", valid_values=["1", "2", "3", "4", "5", "6", "7", "8"])
+                if tensorRT_batch_size is None:
+                    QMessageBox.warning(self, "配置错误", f"{error_msg}\n\n请先前往 Settings 页面检查或设置 [模型推理后端]")
+                    return None
+                
+                # 检查 batch_cdetect_obb 是否超过 TensorRT 转换时的 batch_size
+                batch_detect_obb = int(self.batch_detect_obb_combo.currentText())
+                if batch_detect_obb > int(tensorRT_batch_size):
+                    QMessageBox.warning(self, "参数错误", 
+                        f"batch_detect_obb ({batch_detect_obb}) 不能超过 TensorRT 转换模型时的 batch_size ({tensorRT_batch_size})\n\n" \
+                        f"请调整 batch_detect_obb 参数，或前往 Settings 页面重新转换模型")
+                    return None
+                
                 model_paths = {
                     "detect": os.path.normpath(os.path.abspath(tools.path_config.detect_engine)),
                     "obb": os.path.normpath(os.path.abspath(tools.path_config.obb_pt)),

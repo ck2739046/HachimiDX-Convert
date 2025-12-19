@@ -28,8 +28,10 @@ class SettingsPage(QWidget):
         self.model_status_label = None
         self.batch_size_label = None
         self.batch_size_combo = None
+        self.batch_size_help = None
         self.workspace_label = None
         self.workspace_combo = None
+        self.workspace_help = None
         
         # 进程控制按钮
         self.check_availability_button = None  # 第一行
@@ -128,9 +130,15 @@ class SettingsPage(QWidget):
         self.batch_size_label.hide()
         row_layout.addWidget(self.batch_size_label)
         self.batch_size_combo = ui_helpers.create_combo_box(
-            35, ["1", "2", "3", "4", "5", "6", "7", "8"])
+            45, ["1", "2", "3", "4", "5", "6", "7", "8"])
         self.batch_size_combo.hide()
         row_layout.addWidget(self.batch_size_combo)
+        self.batch_size_help = ui_helpers.create_help_icon(
+            "TensorRT 模型转换时的批处理大小\n" \
+            "较大的 batch 可以提高推理效率，但会占用更多显存\n" \
+            "转换后，batch_detect_obb 不能超过此数值")
+        self.batch_size_help.hide()
+        row_layout.addWidget(self.batch_size_help)
 
         # Label_ComboBox: Workspace（默认隐藏）
         self.workspace_label = ui_helpers.create_label("workspace:")
@@ -140,6 +148,12 @@ class SettingsPage(QWidget):
             65, ["auto", "1", "2", "3", "4", "5", "6", "7", "8"])
         self.workspace_combo.hide()
         row_layout.addWidget(self.workspace_combo)
+        self.workspace_help = ui_helpers.create_help_icon(
+            "TensorRT 引擎构建时的工作空间大小 (GB)\n" \
+            "较大的 workspace 可以让 TensorRT 尝试更多优化策略\n" \
+            "auto: 自动选择合适的 workspace 大小")
+        self.workspace_help.hide()
+        row_layout.addWidget(self.workspace_help)
 
         row_layout.addStretch()  # 添加弹性空间
         return row
@@ -155,8 +169,10 @@ class SettingsPage(QWidget):
         self.convert_model_button.hide()
         self.batch_size_label.hide()
         self.batch_size_combo.hide()
+        self.batch_size_help.hide()
         self.workspace_label.hide()
         self.workspace_combo.hide()
+        self.workspace_help.hide()
         
         # 开始环境检查
         self.current_selected_backend = self.backend_combo.currentText()
@@ -209,9 +225,9 @@ class SettingsPage(QWidget):
             # 保存配置
             error_msg = tools.config_manager.set_config("model_backend_selection", self.current_selected_backend)
             if error_msg:
-                self.output_widget.append_text(f"\n✗ 配置保存失败: {error_msg}")
+                self.output_widget.append_text(f"\n✗ model_backend_selection 配置保存失败: {error_msg}")
             else:
-                self.output_widget.append_text(f"\n✓ 配置已保存：模型推理后端 = {self.current_selected_backend}")
+                self.output_widget.append_text(f"\n✓ 配置已保存：model_backend_selection = {self.current_selected_backend}")
             return
         
         # 如果没有找到转换后的模型，则检查原始模型文件
@@ -238,8 +254,10 @@ class SettingsPage(QWidget):
             if self.current_selected_backend == "TensorRT":
                 self.batch_size_label.show()
                 self.batch_size_combo.show()
+                self.batch_size_help.show()
                 self.workspace_label.show()
                 self.workspace_combo.show()
+                self.workspace_help.show()
             return
         
         # 如果连原始模型都缺失
@@ -276,16 +294,27 @@ class SettingsPage(QWidget):
             self.convert_model_button.hide()
             self.batch_size_label.hide()
             self.batch_size_combo.hide()
+            self.batch_size_help.hide()
             self.workspace_label.hide()
             self.workspace_combo.hide()
+            self.workspace_help.hide()
             # 更新模型状态
             self.model_status_label.setText("模型文件正常🟢")
             # 保存配置
             error_msg = tools.config_manager.set_config("model_backend_selection", self.current_selected_backend)
             if error_msg:
-                self.output_widget.append_text(f"\n✗ 配置保存失败: {error_msg}")
+                self.output_widget.append_text(f"\n✗ model_backend_selection 配置保存失败: {error_msg}")
             else:
-                self.output_widget.append_text(f"\n✓ 配置已保存：模型推理后端 = {self.current_selected_backend}")
+                self.output_widget.append_text(f"\n✓ 配置已保存：model_backend_selection = {self.current_selected_backend}")
+            
+            # 如果是 TensorRT，还要保存 batch_size 配置
+            if self.current_selected_backend == "TensorRT":
+                batch_size = self.batch_size_combo.currentText()
+                error_msg = tools.config_manager.set_config("tensorRT_batch_size", batch_size)
+                if error_msg:
+                    self.output_widget.append_text(f"\n✗ tensorRT_batch_size 配置保存失败: {error_msg}")
+                else:
+                    self.output_widget.append_text(f"\n✓ 配置已保存：tensorRT_batch_size = {batch_size}")
         else:
             self.output_widget.append_text("\n✗ 模型转换失败")
             self.output_widget.append_text("=" * 20)
