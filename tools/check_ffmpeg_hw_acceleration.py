@@ -21,6 +21,26 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='repla
 
 # 配置列表
 TEST_CASES = {
+    "vp9_decode_cpu": {
+        "args_template": [
+            '-i', '{input}', 
+            '-f', 'null', '-'
+        ],
+        "input_key": "vp9_test_video",
+        "desc": "Software VP9 Decode (CPU)"
+    },
+
+    "h264_cpu": {
+        "args_template": [
+            '-i', '{input}', 
+            '-t', '1', 
+            '-c:v', 'libx264', 
+            '-f', 'null', '-'
+        ],
+        "input_key": "h264_test_video",
+        "desc": "Software H.264 Transcode (CPU Decode + CPU Encode)"
+    },
+
     "vp9_decode_nvidia": {
         "args_template": [
             '-hwaccel', 'cuda', 
@@ -191,6 +211,10 @@ def check_all_hardware_acceleration():
         except Exception as e:
             print(f"\n保存错误日志失败: {e}")
 
+
+    # 如果为空，返回 "None"
+    if len(supported_ids) == 0: supported_ids.append("None")
+    
     return supported_ids
 
 
