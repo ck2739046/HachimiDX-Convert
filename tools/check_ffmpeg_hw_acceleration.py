@@ -65,55 +65,54 @@ TEST_CASES = {
         "desc": "Nvidia H.264 Transcode (NVDEC + NVENC)"
     },
 
-    "vp9_decode_intel": {
-        "args_template": [
-            '-init_hw_device', 'qsv=qsv:hw_any',
-            '-hwaccel', 'qsv', 
-            '-hwaccel_output_format', 'qsv',
-            '-i', '{input}', 
-            '-f', 'null', '-'
-        ],
-        "input_key": "vp9_test_video",
-        "desc": "Intel VP9 Decode (QSV)"
-    },
+    # "vp9_decode_intel": {
+    #     "args_template": [
+    #         '-init_hw_device', 'qsv=qsv:hw_any',
+    #         '-hwaccel', 'qsv', 
+    #         '-hwaccel_output_format', 'qsv',
+    #         '-i', '{input}', 
+    #         '-f', 'null', '-'
+    #     ],
+    #     "input_key": "vp9_test_video",
+    #     "desc": "Intel VP9 Decode (QSV)"
+    # },
 
-    "h264_intel": {
-        "args_template": [
-            # 原理同上
-            '-init_hw_device', 'qsv=qsv:hw_any',
-            '-hwaccel', 'qsv', 
-            '-hwaccel_output_format', 'qsv',
-            '-i', '{input}', 
-            '-t', '1', 
-            '-c:v', 'h264_qsv', 
-            '-f', 'null', '-'
-        ],
-        "input_key": "h264_test_video",
-        "desc": "Intel H.264 Transcode (QSV Decode + QSV Encode)"
-    },
+    # "h264_intel": {
+    #     "args_template": [
+    #         '-init_hw_device', 'qsv=qsv:hw_any',
+    #         '-hwaccel', 'qsv', 
+    #         '-hwaccel_output_format', 'qsv',
+    #         '-i', '{input}', 
+    #         '-t', '1', 
+    #         '-c:v', 'h264_qsv', 
+    #         '-f', 'null', '-'
+    #     ],
+    #     "input_key": "h264_test_video",
+    #     "desc": "Intel H.264 Transcode (QSV Decode + QSV Encode)"
+    # },
 
-    "vp9_decode_universal": {
-        "args_template": [
-            '-hwaccel', 'd3d11va', 
-            '-hwaccel_output_format', 'd3d11', 
-            '-i', '{input}', 
-            '-f', 'null', '-'
-        ],
-        "input_key": "vp9_test_video",
-        "desc": "Windows Universal VP9 Decode (D3D11VA)"
-    },
+    # "vp9_decode_universal": {
+    #     "args_template": [
+    #         '-hwaccel', 'd3d11va', 
+    #         '-hwaccel_output_format', 'd3d11', 
+    #         '-i', '{input}', 
+    #         '-f', 'null', '-'
+    #     ],
+    #     "input_key": "vp9_test_video",
+    #     "desc": "Windows Universal VP9 Decode (D3D11VA)"
+    # },
     
-    "h264_universal": {
-        "args_template": [
-            '-hwaccel', 'd3d11va', 
-            '-i', '{input}', 
-            '-t', '1', 
-            '-c:v', 'h264_mf', 
-            '-f', 'null', '-'
-        ],
-        "input_key": "h264_test_video",
-        "desc": "Windows Universal H.264 Transcode (D3D11VA Decode + MediaFoundation Encode)"
-    }
+    # "h264_universal": {
+    #     "args_template": [
+    #         '-hwaccel', 'd3d11va', 
+    #         '-i', '{input}', 
+    #         '-t', '1', 
+    #         '-c:v', 'h264_mf', 
+    #         '-f', 'null', '-'
+    #     ],
+    #     "input_key": "h264_test_video",
+    #     "desc": "Windows Universal H.264 Transcode (D3D11VA Decode + MediaFoundation Encode)"
+    # }
 }
 
 

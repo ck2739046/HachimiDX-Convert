@@ -209,7 +209,7 @@ class SettingsPage(QWidget):
         # helper
         vp9_help = ui_helpers.create_help_icon(
             "选择 ffmpeg 解码 VP9 视频的方案\n" \
-            "推荐: Nvidia > Intel > Universal > CPU\n" \
+            "推荐: Nvidia > CPU\n" \
             "\n" \
             "如果选项为 None, 表示当前 FFmpeg 不支持 VP9 解码\n" \
             "Media tools [Extract pv from game] 功能将无法使用")
@@ -233,7 +233,7 @@ class SettingsPage(QWidget):
         # helper
         h264_help = ui_helpers.create_help_icon(
             "选择 ffmpeg 编解码 H.264 视频的方案\n" \
-            "推荐: Nvidia > Intel > Universal > CPU\n" \
+            "推荐: Nvidia > CPU\n" \
             "\n" \
             "如果选项为 None, 表示当前 FFmpeg 不支持 H.264 编解码\n" \
             "本程序绝大多数功能将无法使用")
