@@ -655,7 +655,7 @@ class Standardizer:
             # 视频编解码器
             cmd.extend(['-c:v', 'libx264',  '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'])
             # 确保音视频同步
-            cmd.extend(['-async', '1'])
+            cmd.extend(['-af', 'aresample=async=1'])
             # 输出文件
             cmd.append(output_path)
             

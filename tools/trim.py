@@ -199,7 +199,6 @@ def build_trim_command(file_type: str, params: Dict[str, Any], offset_ms: float,
         # 正偏移：裁剪开头
         cmd.extend(['-ss', f'{offset_ms}ms'])
         cmd.extend(['-i', input_file])
-        cmd.extend(['-c', 'copy'])
     else:
         # 负偏移：添加静音/黑屏
         abs_offset = abs(offset_ms)
@@ -222,7 +221,7 @@ def build_trim_command(file_type: str, params: Dict[str, Any], offset_ms: float,
                 cmd.extend(['-filter_complex', '[0:v][2:v]concat=n=2:v=1:a=0[v];[1:a][2:a]concat=n=2:v=0:a=1[a]'])
                 cmd.extend(['-map', '[v]', '-map', '[a]'])
                 cmd.extend(['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'])
-                cmd.extend(['-async', '1']) # 确保音视频同步
+                cmd.extend(['-af', 'aresample=async=1']) # 确保音视频同步
                 cmd.extend(['-c:a', 'aac', '-b:a', '192k'])
             else:
                 # 仅视频
