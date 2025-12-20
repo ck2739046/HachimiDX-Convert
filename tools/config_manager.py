@@ -17,36 +17,37 @@ def get_config(key, valid_values=None):
         valid_values: 可选的有效值列表，如果提供，会验证读取的值是否在列表中
     
     Returns:
-        (value, error_msg): 
+        (value, error_msg, success_msg): 
             - value: 配置项的值，如果出错则为 None
             - error_msg: 错误信息，如果成功则为 None
+            - success_msg: 成功信息，如果失败则为 None
     """
     config_file_path = os.path.normpath(os.path.abspath(tools.path_config._config_file))
     
     # 检查配置文件是否存在
     if not os.path.exists(config_file_path):
-        return None, "配置文件不存在"
+        return None, "配置文件不存在", None
     
     # 读取配置文件
     try:
         with open(config_file_path, 'r', encoding='utf-8') as f:
             config_data = json.load(f)
     except json.JSONDecodeError:
-        return None, "配置文件格式错误"
+        return None, "配置文件格式错误", None
     except Exception as e:
-        return None, f"读取配置文件失败: {str(e)}"
+        return None, f"读取配置文件失败: {str(e)}", None
     
     # 检查键是否存在
     if key not in config_data:
-        return None, f"配置项 [{key}] 未设置"
+        return None, f"配置项 [{key}] 未设置", None
     
     value = config_data[key]
     
     # 如果提供了有效值列表，验证值是否有效
     if valid_values is not None and value not in valid_values:
-        return None, f"配置项 [{key}] 的值无效"
+        return None, f"配置项 [{key}] 的值无效", None
     
-    return value, None
+    return value, None, f"成功读取配置项 {key} = {value}"
 
 
 def set_config(key, value):
@@ -58,7 +59,9 @@ def set_config(key, value):
         value: 配置项的值
     
     Returns:
-        error_msg: 错误信息，如果成功则为 None
+        (error_msg, success_msg): 
+            - error_msg: 错误信息，如果成功则为 None
+            - success_msg: 成功信息，如果失败则为 None
     """
     config_file_path = os.path.normpath(os.path.abspath(tools.path_config._config_file))
     
@@ -70,7 +73,7 @@ def set_config(key, value):
         except json.JSONDecodeError:
             config_data = {}
         except Exception as e:
-            return f"读取配置文件失败: {str(e)}"
+            return f"读取配置文件失败: {str(e)}", None
     else:
         config_data = {}
         # 确保目录存在
@@ -79,7 +82,7 @@ def set_config(key, value):
             try:
                 os.makedirs(config_dir)
             except Exception as e:
-                return f"创建配置目录失败: {str(e)}"
+                return f"创建配置目录失败: {str(e)}", None
     
     # 更新配置
     config_data[key] = value
@@ -89,6 +92,6 @@ def set_config(key, value):
         with open(config_file_path, 'w', encoding='utf-8') as f:
             json.dump(config_data, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        return f"写入配置文件失败: {str(e)}"
+        return f"写入配置文件失败: {str(e)}", None
     
-    return None
+    return None, f"成功保存配置项 {key} = {value}"

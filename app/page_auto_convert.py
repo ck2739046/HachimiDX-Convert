@@ -547,18 +547,22 @@ class AutoConvertPage(QWidget):
                     return None
             
             # 从配置文件读取后端选择
-            backend, error_msg = tools.config_manager.get_config("model_backend_selection", ["TensorRT", "DirectML"])
+            backend, error_msg, success_msg = tools.config_manager.get_config("model_backend_selection", ["TensorRT", "DirectML"])
             if backend is None:
                 QMessageBox.warning(self, "配置错误", f"{error_msg}\n\n请先前往 Settings 页面检查或设置 [模型推理后端]")
                 return None
+            elif success_msg:
+                self.output_widget.append_text(success_msg)
             
             # 根据后端选择模型路径和推理设备
             if backend == "TensorRT":
                 # 验证 TensorRT batch_size 配置
-                tensorRT_batch_size, error_msg = tools.config_manager.get_config("tensorRT_batch_size", valid_values=["1", "2", "3", "4", "5", "6", "7", "8"])
+                tensorRT_batch_size, error_msg, success_msg = tools.config_manager.get_config("tensorRT_batch_size", valid_values=["1", "2", "3", "4", "5", "6", "7", "8"])
                 if tensorRT_batch_size is None:
                     QMessageBox.warning(self, "配置错误", f"{error_msg}\n\n请先前往 Settings 页面检查或设置 [模型推理后端]")
                     return None
+                elif success_msg:
+                    self.output_widget.append_text(success_msg)
                 
                 # 检查 batch_cdetect_obb 是否超过 TensorRT 转换时的 batch_size
                 batch_detect_obb = int(self.batch_detect_obb_combo.currentText())

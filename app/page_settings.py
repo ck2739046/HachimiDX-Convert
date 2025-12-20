@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton
 from PyQt6.QtCore import Qt
 import os
 import sys
@@ -38,6 +38,7 @@ class SettingsPage(QWidget):
         # FFmpeg 硬件加速配置
         self.vp9_combo = None
         self.h264_combo = None
+        self.ffmpeg_save_button = None
         
         # 进程控制按钮
         self.check_availability_button = None  # 第一行
@@ -56,12 +57,13 @@ class SettingsPage(QWidget):
         page_layout.setContentsMargins(0, 0, 0, 0)
         page_layout.setSpacing(0)
         
+        self.output_widget = OutputTextWidget(max_lines=400)
+        
         # 上半部分：配置区
         config_widget = self.create_config_area()
         page_layout.addWidget(config_widget)
         
         # 下半部分：输出区
-        self.output_widget = OutputTextWidget(max_lines=400)
         page_layout.addWidget(self.output_widget)
         
         # 配置所有进程控制按钮
@@ -189,27 +191,46 @@ class SettingsPage(QWidget):
         row_layout.addWidget(ui_helpers.create_label("VP9:"))
         self.vp9_combo = ui_helpers.create_combo_box(120, items=["cpu"])
         # 读取配置
-        vp9_config, _ = tools.config_manager.get_config("ffmpeg_hw_acceleration_vp9")
+        vp9_config, _, success_msg = tools.config_manager.get_config("ffmpeg_hw_acceleration_vp9")
+        if success_msg:
+            self.output_widget.append_text(success_msg)
         if vp9_config and vp9_config != "cpu":
             self.vp9_combo.addItem(vp9_config)
             self.vp9_combo.setCurrentText(vp9_config)
         else:
             self.vp9_combo.setCurrentText("cpu")
-        self.vp9_combo.currentTextChanged.connect(self._on_ffmpeg_config_changed)
+        self.vp9_combo.currentTextChanged.connect(self._on_ffmpeg_combo_changed)
         row_layout.addWidget(self.vp9_combo)
 
         # H.264 编码配置
         row_layout.addWidget(ui_helpers.create_label("H.264:"))
         self.h264_combo = ui_helpers.create_combo_box(120, items=["cpu"])
         # 读取配置
-        h264_config, _ = tools.config_manager.get_config("ffmpeg_hw_acceleration_h264")
+        h264_config, _, success_msg = tools.config_manager.get_config("ffmpeg_hw_acceleration_h264")
+        if success_msg:
+            self.output_widget.append_text(success_msg)
         if h264_config and h264_config != "cpu":
             self.h264_combo.addItem(h264_config)
             self.h264_combo.setCurrentText(h264_config)
         else:
             self.h264_combo.setCurrentText("cpu")
-        self.h264_combo.currentTextChanged.connect(self._on_ffmpeg_config_changed)
+        self.h264_combo.currentTextChanged.connect(self._on_ffmpeg_combo_changed)
         row_layout.addWidget(self.h264_combo)
+
+        # 保存按钮
+        self.ffmpeg_save_button = QPushButton("Save")
+        self.ffmpeg_save_button.setStyleSheet(f'''
+            QPushButton {{
+                background-color: {ui_helpers.COLORS['accent']};
+            }}
+            QPushButton:hover {{
+                background-color: {ui_helpers.COLORS['accent_hover']};
+            }}
+        ''')
+        self.ffmpeg_save_button.setFixedSize(60, 25)
+        self.ffmpeg_save_button.hide()
+        self.ffmpeg_save_button.clicked.connect(self._on_ffmpeg_save_clicked)
+        row_layout.addWidget(self.ffmpeg_save_button)
 
         row_layout.addStretch()
         return row
@@ -284,11 +305,11 @@ class SettingsPage(QWidget):
             self.output_widget.append_text("\n✓ 模型文件检查通过")
             self.output_widget.append_text("=" * 20)
             # 保存配置
-            error_msg = tools.config_manager.set_config("model_backend_selection", self.current_selected_backend)
+            error_msg, success_msg = tools.config_manager.set_config("model_backend_selection", self.current_selected_backend)
             if error_msg:
                 self.output_widget.append_text(f"\n✗ model_backend_selection 配置保存失败: {error_msg}")
             else:
-                self.output_widget.append_text(f"\n✓ 配置已保存：model_backend_selection = {self.current_selected_backend}")
+                self.output_widget.append_text(f"\n✓ {success_msg}")
             return
         
         # 如果没有找到转换后的模型，则检查原始模型文件
@@ -366,20 +387,20 @@ class SettingsPage(QWidget):
             # 更新模型状态
             self.model_status_label.setText("模型文件正常🟢")
             # 保存配置
-            error_msg = tools.config_manager.set_config("model_backend_selection", self.current_selected_backend)
+            error_msg, success_msg = tools.config_manager.set_config("model_backend_selection", self.current_selected_backend)
             if error_msg:
                 self.output_widget.append_text(f"\n✗ model_backend_selection 配置保存失败: {error_msg}")
             else:
-                self.output_widget.append_text(f"\n✓ 配置已保存：model_backend_selection = {self.current_selected_backend}")
+                self.output_widget.append_text(f"\n✓ {success_msg}")
             
             # 如果是 TensorRT，还要保存 batch_size 配置
             if self.current_selected_backend == "TensorRT":
                 batch_size = self.batch_size_combo.currentText()
-                error_msg = tools.config_manager.set_config("tensorRT_batch_size", batch_size)
+                error_msg, success_msg = tools.config_manager.set_config("tensorRT_batch_size", batch_size)
                 if error_msg:
                     self.output_widget.append_text(f"\n✗ tensorRT_batch_size 配置保存失败: {error_msg}")
                 else:
-                    self.output_widget.append_text(f"\n✓ 配置已保存：tensorRT_batch_size = {batch_size}")
+                    self.output_widget.append_text(f"\n✓ {success_msg}")
         else:
             self.output_widget.append_text("\n✗ 模型转换失败")
             self.output_widget.append_text("=" * 20)
@@ -435,11 +456,8 @@ class SettingsPage(QWidget):
                         self.h264_combo.setCurrentText('cpu')
                     self.h264_combo.blockSignals(False)
                     
-                    self.output_widget.append_text("\n✓ 检测完成，已更新选项")
+                    self.output_widget.append_text("\n✓ 检测完成")
                     self.output_widget.append_text("=" * 20)
-                    
-                    # 触发一次保存，确保当前选中的值被记录（如果之前是无效值被重置为cpu的情况）
-                    self._on_ffmpeg_config_changed(None)
                     
                 except Exception as e:
                     self.output_widget.append_text(f"\n✗ 解析结果失败: {e}")
@@ -452,13 +470,35 @@ class SettingsPage(QWidget):
             self.output_widget.append_text("=" * 20)
 
 
-    def _on_ffmpeg_config_changed(self, text):
+    def _on_ffmpeg_combo_changed(self, text):
+        """当 FFmpeg 下拉框文本改变时显示保存按钮"""
+        self.ffmpeg_save_button.show()
+
+
+    def _on_ffmpeg_save_clicked(self):
+        """保存 FFmpeg 配置并根据结果隐藏按钮"""
+        all_success = True
+        
         # 保存 VP9 配置
         vp9_val = self.vp9_combo.currentText()
-        tools.config_manager.set_config("ffmpeg_hw_acceleration_vp9", vp9_val)
+        error_msg, success_msg = tools.config_manager.set_config("ffmpeg_hw_acceleration_vp9", vp9_val)
+        if success_msg:
+            self.output_widget.append_text(success_msg)
+        elif error_msg:
+            self.output_widget.append_text(f"✗ {error_msg}")
+            all_success = False
+
         # 保存 H.264 配置
         h264_val = self.h264_combo.currentText()
-        tools.config_manager.set_config("ffmpeg_hw_acceleration_h264", h264_val)
+        error_msg, success_msg = tools.config_manager.set_config("ffmpeg_hw_acceleration_h264", h264_val)
+        if success_msg:
+            self.output_widget.append_text(success_msg)
+        elif error_msg:
+            self.output_widget.append_text(f"✗ {error_msg}")
+            all_success = False
+            
+        if all_success and hasattr(self, 'ffmpeg_save_button'):
+            self.ffmpeg_save_button.hide()
 
 
 
