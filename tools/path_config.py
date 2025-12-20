@@ -30,6 +30,11 @@ cls_ex_onnx = os.path.join(models_dir, 'cls-ex.onnx')
 ffmpeg_exe = os.path.join(root_dir, 'src', 'ffmpeg-8.0-essentials_build', 'bin', 'ffmpeg.exe')
 ffprobe_exe = os.path.join(root_dir, 'src', 'ffmpeg-8.0-essentials_build', 'bin', 'ffprobe.exe')
 
+# https://test-videos.co.uk/vids/bigbuckbunny/webm/vp9/1080/Big_Buck_Bunny_1080_10s_1MB.webm
+vp9_test_video = os.path.join(root_dir, 'src', 'vp9_test.webm')
+# https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4
+h264_test_video = os.path.join(root_dir, 'src', 'h264_test.mp4')
+
 # 最终数据输出文件夹 (歌曲)
 all_songs_dir = os.path.join(root_dir, 'aaa-result')
 
