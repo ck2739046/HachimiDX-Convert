@@ -3,6 +3,8 @@ from PyQt6.QtCore import Qt
 import os
 import sys
 import time
+import re
+import ast
 
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path: sys.path.insert(0, root)
@@ -33,9 +35,14 @@ class SettingsPage(QWidget):
         self.workspace_combo = None
         self.workspace_help = None
         
+        # FFmpeg 硬件加速配置
+        self.vp9_combo = None
+        self.h264_combo = None
+        
         # 进程控制按钮
         self.check_availability_button = None  # 第一行
         self.convert_model_button = None       # 第二行
+        self.ffmpeg_hw_button = None           # 第三行
         
         # 输出区组件
         self.output_widget = None
@@ -68,13 +75,21 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         
         # 标题分隔线：模型管理
-        layout.addWidget(ui_helpers.create_divider("模型管理", 0, 0))
+        layout.addWidget(ui_helpers.create_divider("模型管理", down_margin=0))
+                                                    # 分割线文字下方是文字，比按钮矮一些
+                                                    # 需要删除down_margin以保证视觉上间距相等
         # 第一行：模型推理后端选择
         first_row = self.setup_1st_row()
         layout.addWidget(first_row)
         # 第二行：模型推理后端状态显示
         second_row = self.setup_2nd_row()
         layout.addWidget(second_row)
+
+        # 标题分隔线：FFmpeg 硬件加速
+        layout.addWidget(ui_helpers.create_divider("FFmpeg 硬件加速", width=114))
+        # 第三行: FFmpeg 硬件加速配置行
+        ffmpeg_row = self.setup_ffmpeg_hw_row()
+        layout.addWidget(ffmpeg_row)
         
         layout.addSpacing(5)
         layout.addStretch()  # 添加弹性空间
@@ -157,8 +172,54 @@ class SettingsPage(QWidget):
 
         row_layout.addStretch()  # 添加弹性空间
         return row
+
+
+    def setup_ffmpeg_hw_row(self):
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(5)
+
+        # 检测按钮
+        self.ffmpeg_hw_button = ProcessControlButton("检测硬件加速")
+        self.ffmpeg_hw_button.setFixedSize(100, 25)
+        row_layout.addWidget(self.ffmpeg_hw_button)
+
+        # VP9 解码配置
+        row_layout.addWidget(ui_helpers.create_label("VP9:"))
+        self.vp9_combo = ui_helpers.create_combo_box(120, items=["cpu"])
+        # 读取配置
+        vp9_config, _ = tools.config_manager.get_config("ffmpeg_hw_acceleration_vp9")
+        if vp9_config and vp9_config != "cpu":
+            self.vp9_combo.addItem(vp9_config)
+            self.vp9_combo.setCurrentText(vp9_config)
+        else:
+            self.vp9_combo.setCurrentText("cpu")
+        self.vp9_combo.currentTextChanged.connect(self._on_ffmpeg_config_changed)
+        row_layout.addWidget(self.vp9_combo)
+
+        # H.264 编码配置
+        row_layout.addWidget(ui_helpers.create_label("H.264:"))
+        self.h264_combo = ui_helpers.create_combo_box(120, items=["cpu"])
+        # 读取配置
+        h264_config, _ = tools.config_manager.get_config("ffmpeg_hw_acceleration_h264")
+        if h264_config and h264_config != "cpu":
+            self.h264_combo.addItem(h264_config)
+            self.h264_combo.setCurrentText(h264_config)
+        else:
+            self.h264_combo.setCurrentText("cpu")
+        self.h264_combo.currentTextChanged.connect(self._on_ffmpeg_config_changed)
+        row_layout.addWidget(self.h264_combo)
+
+        row_layout.addStretch()
+        return row
     
     
+        
+    
+
+
+    # debug
     # ----------------------------------------------------------------------
     # check_availability
     
@@ -265,7 +326,11 @@ class SettingsPage(QWidget):
         self.output_widget.append_text("\n✗ 模型文件检查未通过，文件缺失")
         self.output_widget.append_text("=" * 20)
     
-    
+
+
+
+
+    # debug
     # ----------------------------------------------------------------------
     # convert_model
     
@@ -320,6 +385,87 @@ class SettingsPage(QWidget):
             self.output_widget.append_text("=" * 20)
     
     
+
+
+
+
+
+
+
+    # debug
+    # ----------------------------------------------------------------------
+    # FFmpeg 硬件加速检测逻辑
+    
+    def _prepare_check_ffmpeg_hw_args(self):
+        self.output_widget.append_text(f'\n{"=" * 20}')
+        self.output_widget.append_text(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        self.output_widget.append_text(f"\n开始检测 FFmpeg 硬件加速支持...\n")
+        return []
+    
+
+    def _on_check_ffmpeg_hw_finished(self, exit_code):
+        if exit_code == 0:
+            # 获取最近10行文本解析支持的硬件加速方案 ID
+            recent_output = self.output_widget.get_recent_lines(10)
+            match = re.search(r"支持的硬件加速方案ID: (\[.*?\])", recent_output)
+            if match:
+                try:
+                    supported_ids = ast.literal_eval(match.group(1))
+                    new_items = ['cpu'] + supported_ids
+                    
+                    # 更新 VP9 下拉框
+                    current_vp9 = self.vp9_combo.currentText()
+                    self.vp9_combo.blockSignals(True)
+                    self.vp9_combo.clear()
+                    self.vp9_combo.addItems(new_items)
+                    if current_vp9 in new_items:
+                        self.vp9_combo.setCurrentText(current_vp9)
+                    else:
+                        self.vp9_combo.setCurrentText('cpu')
+                    self.vp9_combo.blockSignals(False)
+                    
+                    # 更新 H.264 下拉框
+                    current_h264 = self.h264_combo.currentText()
+                    self.h264_combo.blockSignals(True)
+                    self.h264_combo.clear()
+                    self.h264_combo.addItems(new_items)
+                    if current_h264 in new_items:
+                        self.h264_combo.setCurrentText(current_h264)
+                    else:
+                        self.h264_combo.setCurrentText('cpu')
+                    self.h264_combo.blockSignals(False)
+                    
+                    self.output_widget.append_text("\n✓ 检测完成，已更新选项")
+                    self.output_widget.append_text("=" * 20)
+                    
+                    # 触发一次保存，确保当前选中的值被记录（如果之前是无效值被重置为cpu的情况）
+                    self._on_ffmpeg_config_changed(None)
+                    
+                except Exception as e:
+                    self.output_widget.append_text(f"\n✗ 解析结果失败: {e}")
+                    self.output_widget.append_text("=" * 20)
+            else:
+                self.output_widget.append_text("\n✗ 未能从输出中找到支持列表")
+                self.output_widget.append_text("=" * 20)
+        else:
+            self.output_widget.append_text("\n✗ 检测失败")
+            self.output_widget.append_text("=" * 20)
+
+
+    def _on_ffmpeg_config_changed(self, text):
+        # 保存 VP9 配置
+        vp9_val = self.vp9_combo.currentText()
+        tools.config_manager.set_config("ffmpeg_hw_acceleration_vp9", vp9_val)
+        # 保存 H.264 配置
+        h264_val = self.h264_combo.currentText()
+        tools.config_manager.set_config("ffmpeg_hw_acceleration_h264", h264_val)
+
+
+
+
+
+
+
     # ----------------------------------------------------------------------
     # 按钮配置
     
@@ -335,4 +481,10 @@ class SettingsPage(QWidget):
             args_generator=self._prepare_convert_model_args,
             output_widget=self.output_widget,
             on_finished=self._on_convert_model_finished
+        )
+        self.ffmpeg_hw_button.configure(
+            script_path=os.path.join(root, "tools", "check_ffmpeg_hw_acceleration.py"),
+            args_generator=self._prepare_check_ffmpeg_hw_args,
+            output_widget=self.output_widget,
+            on_finished=self._on_check_ffmpeg_hw_finished
         )

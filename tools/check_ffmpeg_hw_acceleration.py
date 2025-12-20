@@ -6,11 +6,17 @@ import os
 import sys
 import subprocess
 import datetime
+import io
 
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path:
     sys.path.insert(0, root)
 import tools.path_config
+
+
+# 解决 Windows 控制台 Unicode 编码问题
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 
 # 配置列表
