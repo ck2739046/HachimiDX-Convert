@@ -88,7 +88,7 @@ class SettingsPage(QWidget):
         layout.addWidget(second_row)
 
         # 标题分隔线：FFmpeg 硬件加速
-        layout.addWidget(ui_helpers.create_divider("FFmpeg 硬件加速", width=114))
+        layout.addWidget(ui_helpers.create_divider("FFmpeg 编解码", width=103))
         # 第三行: FFmpeg 硬件加速配置行
         ffmpeg_row = self.setup_ffmpeg_hw_row()
         layout.addWidget(ffmpeg_row)
@@ -108,6 +108,15 @@ class SettingsPage(QWidget):
         backend_label = ui_helpers.create_label("模型推理后端:")
         row_layout.addWidget(backend_label)
         self.backend_combo = ui_helpers.create_combo_box(90, ["TensorRT", "DirectML"])
+        
+        # 读取配置
+        backend_config, _, success_msg = tools.config_manager.get_config("model_backend_selection", ["TensorRT", "DirectML"])
+        if backend_config and success_msg:
+            self.output_widget.append_text(success_msg)
+            self.backend_combo.setCurrentText(backend_config)
+        else:
+            self.backend_combo.setCurrentIndex(-1)
+
         row_layout.addWidget(self.backend_combo)
         help_label = ui_helpers.create_help_icon(
             "TensorRT: 适用于 NVIDIA GPU (推荐)\nDirectML: 适用于 AMD/Intel/Other GPU")
@@ -182,40 +191,64 @@ class SettingsPage(QWidget):
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(5)
 
+
         # 检测按钮
-        self.ffmpeg_hw_button = ProcessControlButton("检测硬件加速")
-        self.ffmpeg_hw_button.setFixedSize(100, 25)
+        self.ffmpeg_hw_button = ProcessControlButton("检测 ffmpeg")
+        self.ffmpeg_hw_button.setFixedSize(120, 25)
         row_layout.addWidget(self.ffmpeg_hw_button)
+        # helper
+        ffmpeg_help = ui_helpers.create_help_icon(
+            "检测当前 FFmpeg 可用的编解码方案")
+        row_layout.addWidget(ffmpeg_help)
+
 
         # VP9 解码配置
         row_layout.addWidget(ui_helpers.create_label("VP9:"))
-        self.vp9_combo = ui_helpers.create_combo_box(120, items=["cpu"])
+        self.vp9_combo = ui_helpers.create_combo_box(170)
+        row_layout.addWidget(self.vp9_combo)
+        # helper
+        vp9_help = ui_helpers.create_help_icon(
+            "选择 ffmpeg 解码 VP9 视频的方案\n" \
+            "推荐: Nvidia > Intel > Universal > CPU\n" \
+            "\n" \
+            "如果选项为 None, 表示当前 FFmpeg 不支持 VP9 解码\n" \
+            "Media tools [Extract pv from game] 功能将无法使用")
+        row_layout.addWidget(vp9_help)
         # 读取配置
         vp9_config, _, success_msg = tools.config_manager.get_config("ffmpeg_hw_acceleration_vp9")
-        if success_msg:
+        if vp9_config and success_msg:
             self.output_widget.append_text(success_msg)
-        if vp9_config and vp9_config != "cpu":
             self.vp9_combo.addItem(vp9_config)
             self.vp9_combo.setCurrentText(vp9_config)
         else:
-            self.vp9_combo.setCurrentText("cpu")
+            self.vp9_combo.setCurrentIndex(-1)
+        # 先读取配置后绑定信号，避免初始化时触发显示保存按钮
         self.vp9_combo.currentTextChanged.connect(self._on_ffmpeg_combo_changed)
-        row_layout.addWidget(self.vp9_combo)
+
 
         # H.264 编码配置
         row_layout.addWidget(ui_helpers.create_label("H.264:"))
-        self.h264_combo = ui_helpers.create_combo_box(120, items=["cpu"])
+        self.h264_combo = ui_helpers.create_combo_box(170, items=[])
+        row_layout.addWidget(self.h264_combo)
+        # helper
+        h264_help = ui_helpers.create_help_icon(
+            "选择 ffmpeg 编解码 H.264 视频的方案\n" \
+            "推荐: Nvidia > Intel > Universal > CPU\n" \
+            "\n" \
+            "如果选项为 None, 表示当前 FFmpeg 不支持 H.264 编解码\n" \
+            "本程序绝大多数功能将无法使用")
+        row_layout.addWidget(h264_help)
         # 读取配置
         h264_config, _, success_msg = tools.config_manager.get_config("ffmpeg_hw_acceleration_h264")
-        if success_msg:
+        if h264_config and success_msg:
             self.output_widget.append_text(success_msg)
-        if h264_config and h264_config != "cpu":
             self.h264_combo.addItem(h264_config)
             self.h264_combo.setCurrentText(h264_config)
         else:
-            self.h264_combo.setCurrentText("cpu")
+            self.h264_combo.setCurrentIndex(-1)
+        # 先读取配置后绑定信号，避免初始化时触发显示保存按钮
         self.h264_combo.currentTextChanged.connect(self._on_ffmpeg_combo_changed)
-        row_layout.addWidget(self.h264_combo)
+
 
         # 保存按钮
         self.ffmpeg_save_button = QPushButton("Save")
@@ -432,31 +465,32 @@ class SettingsPage(QWidget):
             if match:
                 try:
                     supported_ids = ast.literal_eval(match.group(1))
-                    new_items = ['cpu'] + supported_ids
+
+                    if "none" in supported_ids:
+                        vp9_supported_ids = ["None"]
+                        h264_supported_ids = ["None"]
+                    else:
+                        vp9_supported_ids = [sid for sid in supported_ids if "vp9" in sid]
+                        h264_supported_ids = [sid for sid in supported_ids if "h264" in sid]
                     
                     # 更新 VP9 下拉框
-                    current_vp9 = self.vp9_combo.currentText()
                     self.vp9_combo.blockSignals(True)
                     self.vp9_combo.clear()
-                    self.vp9_combo.addItems(new_items)
-                    if current_vp9 in new_items:
-                        self.vp9_combo.setCurrentText(current_vp9)
-                    else:
-                        self.vp9_combo.setCurrentText('cpu')
+                    self.vp9_combo.addItems(vp9_supported_ids)
+                    self.vp9_combo.setCurrentIndex(-1)
                     self.vp9_combo.blockSignals(False)
                     
                     # 更新 H.264 下拉框
-                    current_h264 = self.h264_combo.currentText()
                     self.h264_combo.blockSignals(True)
                     self.h264_combo.clear()
-                    self.h264_combo.addItems(new_items)
-                    if current_h264 in new_items:
-                        self.h264_combo.setCurrentText(current_h264)
-                    else:
-                        self.h264_combo.setCurrentText('cpu')
+                    self.h264_combo.addItems(h264_supported_ids)
+                    self.h264_combo.setCurrentIndex(-1)
                     self.h264_combo.blockSignals(False)
                     
-                    self.output_widget.append_text("\n✓ 检测完成")
+                    # 显示保存按钮，因为选项已更新且当前选择为空
+                    self.ffmpeg_save_button.show()
+                    
+                    self.output_widget.append_text("\n✓ 检测完成，请重新选择并保存")
                     self.output_widget.append_text("=" * 20)
                     
                 except Exception as e:
