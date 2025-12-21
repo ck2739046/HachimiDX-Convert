@@ -10,6 +10,7 @@ from tkinter import ttk, messagebox
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 if root not in sys.path: sys.path.insert(0, root)
 import tools.path_config
+import tools.ffmpeg_utils
 
 class Standardizer:
     def __init__(self):
@@ -620,56 +621,44 @@ class Standardizer:
             
             print(f"Standardizing video...")
             
-            # 构建ffmpeg命令
-            ffmpeg_path = os.path.normpath(os.path.abspath(tools.path_config.ffmpeg_exe))
-            cmd = [ffmpeg_path, '-y', '-hide_banner', '-stats', '-loglevel', 'error']
-            # -y: 覆盖文件 -hide_banner: 隐藏FFmpeg的版本信息和配置信息
-            # -loglevel error: 只显示错误信息（不显示流信息）
-            # -stats: 显示编码统计信息
-            
-            # 输入文件
-            cmd.extend(['-i', input_video])
-            
-            # Trim参数 (帧数转为时间值)
-            if need_trim_ss:
-                cmd.extend(['-ss', str(start_frame / fps)])
-            if need_trim_to:
-                cmd.extend(['-to', str(end_frame / fps)])
-            
-            # Crop/Resize参数
-            if need_crop:
-                crop_cmd = f'crop={crop_size}:{crop_size}:{crop_x}:{crop_y}'
-            if need_resize:
-                resize_cmd = f'scale={target_res}:{target_res}'
-            
-            if need_crop and need_resize:
-                cmd.extend(['-vf', f'{crop_cmd},{resize_cmd}'])
-            elif need_crop:
-                cmd.extend(['-vf', crop_cmd])
-            elif need_resize:
-                cmd.extend(['-vf', resize_cmd])
+            # Check file type (video or video_muted)
+            file_type, _ = tools.ffmpeg_utils.get_file_info(input_video)
+            if file_type != 'video' and file_type != 'video_muted':
+                raise Exception(f"Input file is not a video: {input_video}")
 
-            # 音频编解码器
-            cmd.extend(['-c:a', 'aac'])  # 使用AAC重新编码
-            cmd.extend(['-b:a', '192k'])  # 统一码率192k
-            # 视频编解码器
-            cmd.extend(['-c:v', 'libx264',  '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p'])
-            # 确保音视频同步
-            cmd.extend(['-af', 'aresample=async=1'])
-            # 输出文件
-            cmd.append(output_path)
-            
-            # 执行ffmpeg命令
+            # Prepare parameters for ffmpeg_utils
+            params = {
+                'type': file_type,
+                'input_file': input_video,
+                'output_file': output_path,
+                # Convert seconds to milliseconds
+                'start_time': (start_frame / fps * 1000) if need_trim_ss else 0,
+                'end_time': (end_frame / fps * 1000) if need_trim_to else 0,
+                'clear_metadata': True,
+                'video_quality': 23,
+                'fps': fps,
+                'optimize_GOP': False,
+                'resolution': target_res,
+                'crop': {
+                    'x': crop_x,
+                    'y': crop_y,
+                    'width': crop_size,
+                    'height': crop_size
+                } if need_crop else None,
+
+                # 如果是静音视频 这三个参数会自动被忽略
+                'sample_rate': 44100,
+                'audio_quality': 1, # 192k
+                'volume': 100
+            }
+
             print(f"trim {start_frame}-{end_frame}")
             if need_crop:
                 print(f"crop source video to {crop_size}x{crop_size} from ({crop_x},{crop_y})")
             if need_resize:
                 print(f"resize to {target_res}x{target_res}")
-            print(f"Using FFmpeg command: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=False, text=True, encoding='utf-8')
             
-            if result.returncode != 0:
-                raise Exception(f"FFmpeg error: {result.stderr}")
+            tools.ffmpeg_utils.construct_args_and_run_ffmpeg(params)
             
             return output_path
             
