@@ -284,9 +284,18 @@ def _get_video_encoder_args(hw_accel: str, quality: int, fps: float, optimize_go
     return args
 
 
-def _construct_video_filter_chain(resolution: int, need_start_padding: bool, padding_duration_ms: float) -> str:
+def _construct_video_filter_chain(resolution: int, need_start_padding: bool, padding_duration_ms: float, crop_params: Optional[Dict[str, int]] = None) -> str:
     filters = []
     
+    # Crop (if provided)
+    # crop_params: {'x': int, 'y': int, 'width': int, 'height': int}
+    if crop_params:
+        crop_w = crop_params['width']
+        crop_h = crop_params['height']
+        crop_x = crop_params['x']
+        crop_y = crop_params['y']
+        filters.append(f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y}")
+
     # Scale and Pad to square resolution
     # Scale: maintain aspect ratio, fit within resolution x resolution
     # Pad: center the result in resolution x resolution black box
@@ -379,11 +388,15 @@ def _construct_video_args(params: Dict[str, Any]) -> List[str]:
     fps = params['fps']
     optimize_gop = params['optimize_GOP']
     resolution = params['resolution']
+    crop_params = params.get('crop') # Optional: {'x': int, 'y': int, 'width': int, 'height': int}
+
     # Audio-specific params
     sample_rate = params['sample_rate']
     audio_quality = params['audio_quality']
     volume = params['volume']
 
+    if sample_rate not in [44100, 48000]:
+        raise ValueError(f"Invalid sample_rate: {sample_rate}. Must be 44100 or 48000.")
 
     # Get HW acceleration config
     hw_accel = _get_h264_hw_accel_config()
@@ -402,8 +415,8 @@ def _construct_video_args(params: Dict[str, Any]) -> List[str]:
     if timing['need_trim_end']:
         args.extend(["-to", f"{timing['trim_end_ms']/1000.0}"])
 
-    # Video Filters (scale/pad + optional tpad)
-    filter_chain = _construct_video_filter_chain(resolution, timing['need_start_padding'], timing['padding_duration_ms'])
+    # Video Filters (crop + scale/pad + optional tpad)
+    filter_chain = _construct_video_filter_chain(resolution, timing['need_start_padding'], timing['padding_duration_ms'], crop_params)
     args.extend(["-vf", filter_chain])
 
     # Audio: force AAC, sample rate, stereo, quality (bitrate)
@@ -412,10 +425,18 @@ def _construct_video_args(params: Dict[str, Any]) -> List[str]:
     args.extend(["-ar", str(sample_rate)])
     args.extend(["-ac", "2"])
 
-    # Audio filters (volume / adelay)
-    audio_filter = _construct_audio_filter_chain(volume, timing['need_start_padding'], timing['padding_duration_ms'])
-    if audio_filter:
-        args.extend(["-af", audio_filter])
+    # Audio filters (volume / adelay / aresample)
+    audio_filters = []
+    
+    # Volume / Adelay
+    base_audio_filter = _construct_audio_filter_chain(volume, timing['need_start_padding'], timing['padding_duration_ms'])
+    if base_audio_filter:
+        audio_filters.append(base_audio_filter)
+        
+    # Force async resample
+    audio_filters.append("aresample=async=1")
+    
+    args.extend(["-af", ",".join(audio_filters)])
 
     # Video encoder args
     encoder_args = _get_video_encoder_args(hw_accel, video_quality, fps, optimize_gop, resolution)
@@ -443,6 +464,7 @@ def _construct_video_muted_args(params: Dict[str, Any]) -> List[str]:
     fps = params['fps']
     optimize_gop = params['optimize_GOP']
     resolution = params['resolution']
+    crop_params = params.get('crop') # Optional: {'x': int, 'y': int, 'width': int, 'height': int}
     
     # Get HW acceleration config
     hw_accel = _get_h264_hw_accel_config()
@@ -464,8 +486,8 @@ def _construct_video_muted_args(params: Dict[str, Any]) -> List[str]:
     # Mute audio
     args.append("-an")
     
-    # Filters (Scale, Pad, Tpad)
-    filter_chain = _construct_video_filter_chain(resolution, timing['need_start_padding'], timing['padding_duration_ms'])
+    # Filters (Crop, Scale, Pad, Tpad)
+    filter_chain = _construct_video_filter_chain(resolution, timing['need_start_padding'], timing['padding_duration_ms'], crop_params)
     args.extend(["-vf", filter_chain])
     
     # Video Encoder Args
