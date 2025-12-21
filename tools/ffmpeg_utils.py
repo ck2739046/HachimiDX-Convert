@@ -31,12 +31,11 @@ def run_ffmpeg(args: List[str]) -> subprocess.CompletedProcess:
         
     Returns:
         subprocess.CompletedProcess 对象
-        
-    Example:
-        result = run_ffmpeg(['-i', 'input.mp4', '-c:v', 'copy', 'output.mp4'])
     """
     ffmpeg_path = os.path.normpath(os.path.abspath(tools.path_config.ffmpeg_exe))
     cmd = [ffmpeg_path] + args
+
+    print("Running FFmpeg command:", " ".join(cmd))
     
     result = subprocess.run(
         cmd,
@@ -511,7 +510,8 @@ def _construct_video_muted_args(params: Dict[str, Any]) -> List[str]:
 # debug
 # ========== 统一入口 ==========
 
-def construct_args_and_run_ffmpeg(json_path: str):
+
+def _handle_json(json_path: str):
     try:
         if not os.path.exists(json_path):
             print(f"Error: JSON file does not exist: {json_path}")
@@ -524,7 +524,16 @@ def construct_args_and_run_ffmpeg(json_path: str):
             os.remove(json_path)
         except:
             pass
-            
+
+        construct_args_and_run_ffmpeg(params)
+    
+    except Exception:
+        traceback.print_exc()
+        sys.exit(1)
+
+
+def construct_args_and_run_ffmpeg(params: Dict[str, Any]):
+    try:
         media_type = params.get('type')
         
         if media_type == 'audio':
@@ -561,4 +570,4 @@ if __name__ == "__main__":
         print("Error: No JSON file provided")
         sys.exit(1)
     
-    construct_args_and_run_ffmpeg(sys.argv[1])
+    _handle_json(sys.argv[1])
