@@ -7,6 +7,7 @@ import sys
 import subprocess
 import json
 import traceback
+import io
 from typing import List, Dict, Any, Tuple, Optional
 
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -14,6 +15,11 @@ if root not in sys.path:
     sys.path.insert(0, root)
 import tools.path_config
 import tools.config_manager
+
+# 解决 Windows 控制台 Unicode 编码问题
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 
 
 def run_ffmpeg(args: List[str]) -> subprocess.CompletedProcess:
@@ -169,6 +175,12 @@ def _get_audio_quality_args(format_str: str, audio_quality: int) -> List[str]:
         # 2 -> vbr -q:a 6 (192)
         mapping = {0: '8', 1: '7', 2: '6'}
         return ['-q:a', mapping[audio_quality]]
+    elif format_str == 'aac':
+        # 0 -> cbr 224k
+        # 1 -> cbr 192k
+        # 2 -> cbr 160k
+        mapping = {0: '224k', 1: '192k', 2: '160k'}
+        return ['-b:a', mapping[audio_quality]]
     
     raise ValueError(f"Unsupported audio format for audio_quality args: {format_str}")
 
@@ -193,6 +205,10 @@ def _handle_audio_timing(start_time: float, end_time: float) -> Dict[str, Any]:
     if end_time > 0:
         result['need_trim_end'] = True
         result['trim_end_ms'] = end_time
+    elif end_time < 0:
+        raise ValueError("end_time cannot be negative")
+
+    # start_time == 0 and end_time == 0 means no trimming or padding
         
     return result
 
@@ -207,12 +223,15 @@ def _construct_audio_filter_chain(volume: int, need_start_padding: bool, padding
         filters.append(f"adelay={delay_val}|{delay_val}")
         
     # Volume
+    if volume < 0 or volume > 200:
+        raise ValueError(f"Invalid volume: {volume}. Must be between 0 and 200.")
     if volume != 100:
         vol_val = volume / 100.0
         filters.append(f"volume={vol_val:.2f}")
         
     if not filters:
         return None
+    
     return ",".join(filters)
 
 
@@ -350,8 +369,66 @@ def _construct_audio_args(params: Dict[str, Any]) -> List[str]:
 
 
 def _construct_video_args(params: Dict[str, Any]) -> List[str]:
-    # TODO: Implement video args construction
-    return []
+    # Extract params
+    input_file = params['input_file']
+    output_file = params['output_file']
+    start_time = params['start_time']
+    end_time = params['end_time']
+    clear_metadata = params['clear_metadata']
+    video_quality = params['video_quality']
+    fps = params['fps']
+    optimize_gop = params['optimize_GOP']
+    resolution = params['resolution']
+    # Audio-specific params
+    sample_rate = params['sample_rate']
+    audio_quality = params['audio_quality']
+    volume = params['volume']
+
+
+    # Get HW acceleration config
+    hw_accel = _get_h264_hw_accel_config()
+
+    args = ["-y", "-hide_banner", "-stats", "-loglevel", "error"]
+
+    timing = _handle_audio_timing(start_time, end_time)
+
+    args.extend(["-i", input_file])
+
+    # Input seeking (-ss)
+    if timing['need_trim_start']:
+        args.extend(["-ss", f"{timing['trim_start_ms']/1000.0}"])
+
+    # Output seeking (-to)
+    if timing['need_trim_end']:
+        args.extend(["-to", f"{timing['trim_end_ms']/1000.0}"])
+
+    # Video Filters (scale/pad + optional tpad)
+    filter_chain = _construct_video_filter_chain(resolution, timing['need_start_padding'], timing['padding_duration_ms'])
+    args.extend(["-vf", filter_chain])
+
+    # Audio: force AAC, sample rate, stereo, quality (bitrate)
+    args.extend(["-c:a", "aac"])
+    args.extend(_get_audio_quality_args('aac', audio_quality))
+    args.extend(["-ar", str(sample_rate)])
+    args.extend(["-ac", "2"])
+
+    # Audio filters (volume / adelay)
+    audio_filter = _construct_audio_filter_chain(volume, timing['need_start_padding'], timing['padding_duration_ms'])
+    if audio_filter:
+        args.extend(["-af", audio_filter])
+
+    # Video encoder args
+    encoder_args = _get_video_encoder_args(hw_accel, video_quality, fps, optimize_gop, resolution)
+    args.extend(encoder_args)
+
+    # Metadata
+    if clear_metadata:
+        args.extend(["-map_metadata", "-1"])
+
+    # Output
+    args.append(output_file)
+
+    return args
 
 
 
@@ -437,6 +514,12 @@ def construct_args_and_run_ffmpeg(json_path: str):
         else:
             print(f"Error: Unknown media type: {media_type}")
             sys.exit(1)
+
+        # 等参数构建完成后，检查如果output_file存在，删除
+        output_file = params.get('output_file')
+        if os.path.exists(output_file):
+            os.remove(output_file)
+            print(f"Existing output file removed: {output_file}")
             
         result = run_ffmpeg(args)
         
