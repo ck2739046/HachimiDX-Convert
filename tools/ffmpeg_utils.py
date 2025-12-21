@@ -13,6 +13,7 @@ root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.
 if root not in sys.path:
     sys.path.insert(0, root)
 import tools.path_config
+import tools.config_manager
 
 
 def run_ffmpeg(args: List[str]) -> subprocess.CompletedProcess:
@@ -215,6 +216,74 @@ def _construct_audio_filter_chain(volume: int, need_start_padding: bool, padding
     return ",".join(filters)
 
 
+def _get_h264_hw_accel_config() -> str:
+    try:
+        # call config manager
+        hw_accel = tools.config_manager.get_config("ffmpeg_hw_acceleration_h264")
+        if not hw_accel:
+            raise ValueError("ffmpeg_hw_acceleration_h264 config not found")
+        if hw_accel not in ['h264_cpu', 'h264_nvidia']:
+            raise ValueError(f"Invalid hw_acceleration config: {hw_accel}, must be 'h264_cpu' or 'h264_nvidia'")
+        
+        return hw_accel
+    except Exception as e:
+        raise RuntimeError(f"Failed to get H264 HW acceleration config: {e}")
+
+
+def _get_video_encoder_args(hw_accel: str, quality: int, fps: float, optimize_gop: bool, resolution: int) -> List[str]:
+    args = ["-pix_fmt", "yuv420p"]
+    
+    # GOP optimization
+    if optimize_gop:
+        args.extend(["-g", str(int(fps))])
+        
+    # Frame rate
+    args.extend(["-r", str(fps)])
+
+    if hw_accel == 'h264_cpu':
+        args.extend(["-c:v", "libx264"])
+        args.extend(["-crf", str(quality)])
+        
+    elif hw_accel == 'h264_nvidia':
+        # Dynamic bitrate calculation
+        # Formula: resolution * resolution * fps * 0.3 (bits)
+        # Example: 1080 * 1080 * 60 * 0.3 = ~21 Mbps
+        bitrate_bits = resolution * resolution * fps * 0.3
+        maxrate_mb = int(bitrate_bits / 1_000_000)
+        bufsize_mb = maxrate_mb * 2
+        
+        args.extend(["-c:v", "h264_nvenc"])
+        args.extend(["-rc", "vbr"])
+        args.extend(["-cq", str(quality - 1)]) # User requested -1
+        args.extend(["-b:v", "0"])
+        args.extend(["-maxrate", f"{maxrate_mb}M"])
+        args.extend(["-bufsize", f"{bufsize_mb}M"])
+        
+    else:
+        raise ValueError(f"Unsupported hw_acceleration: {hw_accel}")
+        
+    return args
+
+
+def _construct_video_filter_chain(resolution: int, need_start_padding: bool, padding_duration_ms: float) -> str:
+    filters = []
+    
+    # Scale and Pad to square resolution
+    # Scale: maintain aspect ratio, fit within resolution x resolution
+    # Pad: center the result in resolution x resolution black box
+
+    scale_expr = f"if(gt(iw,ih),{resolution},-1):if(gt(iw,ih),-1,{resolution})"
+    pad_expr = f"{resolution}:{resolution}:(ow-iw)/2:(oh-ih)/2:black"
+    
+    filters.append(f"scale={scale_expr},pad={pad_expr}")
+    
+    # Start padding (tpad)
+    if need_start_padding:
+        filters.append(f"tpad=start_duration={padding_duration_ms}ms:color=black")
+        
+    return ",".join(filters)
+
+
 
 
 
@@ -278,13 +347,65 @@ def _construct_audio_args(params: Dict[str, Any]) -> List[str]:
     
     return args
 
+
+
 def _construct_video_args(params: Dict[str, Any]) -> List[str]:
     # TODO: Implement video args construction
     return []
 
+
+
 def _construct_video_muted_args(params: Dict[str, Any]) -> List[str]:
-    # TODO: Implement muted video args construction
-    return []
+    # Extract params
+    input_file = params['input_file']
+    output_file = params['output_file']
+    start_time = params['start_time']
+    end_time = params['end_time']
+    clear_metadata = params['clear_metadata']
+    video_quality = params['video_quality']
+    fps = params['fps']
+    optimize_gop = params['optimize_GOP']
+    resolution = params['resolution']
+    
+    # Get HW acceleration config
+    hw_accel = _get_h264_hw_accel_config()
+    
+    args = ["-y", "-hide_banner", "-stats", "-loglevel", "error"]
+    
+    timing = _handle_audio_timing(start_time, end_time)
+    
+    args.extend(["-i", input_file])
+
+    # Input seeking (-ss)
+    if timing['need_trim_start']:
+        args.extend(["-ss", f"{timing['trim_start_ms']/1000.0}"])
+    
+    # Output seeking (-to)
+    if timing['need_trim_end']:
+        args.extend(["-to", f"{timing['trim_end_ms']/1000.0}"])
+        
+    # Mute audio
+    args.append("-an")
+    
+    # Filters (Scale, Pad, Tpad)
+    filter_chain = _construct_video_filter_chain(resolution, timing['need_start_padding'], timing['padding_duration_ms'])
+    args.extend(["-vf", filter_chain])
+    
+    # Video Encoder Args
+    encoder_args = _get_video_encoder_args(hw_accel, video_quality, fps, optimize_gop, resolution)
+    args.extend(encoder_args)
+    
+    # Metadata
+    if clear_metadata:
+        args.extend(["-map_metadata", "-1"])
+        
+    # Output
+    args.append(output_file)
+    
+    return args
+
+
+
 
 
 
