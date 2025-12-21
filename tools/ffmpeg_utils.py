@@ -8,6 +8,8 @@ import subprocess
 import json
 import traceback
 import io
+import tkinter as tk
+from tkinter import messagebox
 from typing import List, Dict, Any, Tuple, Optional
 
 root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -182,6 +184,56 @@ def _get_audio_quality_args(format_str: str, audio_quality: int) -> List[str]:
         return ['-b:a', mapping[audio_quality]]
     
     raise ValueError(f"Unsupported audio format for audio_quality args: {format_str}")
+
+
+def _confirm_trim_operation(media_type: str, start_time: float) -> bool:
+    """
+    显示trim操作确认弹窗
+    
+    Args:
+        media_type: 'audio' / 'video' / 'video_muted'
+        start_time: 开始时间（毫秒），正数=裁剪，负数=填充
+        
+    Returns:
+        用户确认返回True，取消返回False
+    """
+    # 如果start_time为0，无需trim操作，直接返回True
+    if start_time == 0:
+        return True
+    
+    # 根据文件类型和偏移量生成确认消息
+    abs_time = abs(start_time)
+    
+    if media_type == 'video':
+        if start_time > 0:
+            message = f"确认裁剪视频开头 {abs_time:.2f} ms ?"
+        else:
+            message = f"确认为视频开头添加 {abs_time:.2f} ms 黑屏片段？"
+    elif media_type == 'video_muted':
+        if start_time > 0:
+            message = f"确认裁剪视频（静音）开头 {abs_time:.2f} ms ?"
+        else:
+            message = f"确认为视频（静音）开头添加 {abs_time:.2f} ms 黑屏片段？"
+    elif media_type == 'audio':
+        if start_time > 0:
+            message = f"确认裁剪音频开头 {abs_time:.2f} ms ?"
+        else:
+            message = f"确认为音频开头添加 {abs_time:.2f} ms 静音片段？"
+    else:
+        # 未知类型，不弹窗直接返回True
+        return True
+    
+    # 创建隐藏的Tk根窗口
+    root = tk.Tk()
+    root.withdraw()
+    
+    try:
+        # 显示确认对话框
+        confirmed = messagebox.askyesno("确认操作", message)
+        return confirmed
+    finally:
+        # 确保窗口被销毁
+        root.destroy()
 
 
 def _handle_audio_timing(start_time: float, end_time: float) -> Dict[str, Any]:
@@ -536,6 +588,12 @@ def construct_args_and_run_ffmpeg(params: Dict[str, Any]):
     try:
         media_type = params.get('type')
         
+        # 检查是否需要trim操作，如果需要则弹窗确认
+        start_time = params.get('start_time', 0)
+        
+        if not _confirm_trim_operation(media_type, start_time):
+            raise RuntimeError("用户取消了trim操作")
+        
         if media_type == 'audio':
             args = _construct_audio_args(params)
         elif media_type == 'video':
@@ -558,6 +616,14 @@ def construct_args_and_run_ffmpeg(params: Dict[str, Any]):
             print(result.stderr)
             sys.exit(1)
             
+    except RuntimeError as e:
+        # 区分用户取消和其他运行时错误
+        if "用户取消" in str(e):
+            print(str(e))
+            sys.exit(0)  # 用户取消，正常退出
+        else:
+            traceback.print_exc()
+            sys.exit(1)
     except Exception:
         traceback.print_exc()
         sys.exit(1)
