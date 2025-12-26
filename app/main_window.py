@@ -2,6 +2,7 @@
 Main Window - 主窗口框架
 """
 
+import sys
 from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel
 from PyQt6.QtCore import Qt, QSize
 from app.widgets import SquareWidget
@@ -37,11 +38,17 @@ class LeftPanel(QWidget):
 
 
     def sizeHint(self):
-        init_size, isSuccess, _ = SettingsManage.get_persistent_settings("main_app_init_size")
-        if init_size and isSuccess:
+        init_size, isSuccess, error_msg, default_init_size = SettingsManage.get_persistent_settings("main_app_init_size")
+        if isSuccess and init_size:
             return QSize(*init_size)
-        else:
-            return QSize(1300, 900) # 默认初始尺寸
+        elif not isSuccess:
+            print(f"Warning: {error_msg}")
+            if default_init_size:
+                print("Using default main_app_init_size value.")
+                return QSize(*default_init_size)
+            else:
+                print("Critical Error: Failed to get main_app_init_size setting and default value.")
+                sys.exit(1)
 
 
     def resizeEvent(self, event):
@@ -138,18 +145,30 @@ class MainWindow(QMainWindow):
         """设置主窗口"""
         
         # 获取窗口尺寸配置
-        init_size, isSuccess, _ = SettingsManage.get_persistent_settings("main_app_init_size")
-        min_size, isSuccess, _ = SettingsManage.get_persistent_settings("main_app_min_size")
+        init_size, isSuccess, error_msg, default_init_size = SettingsManage.get_persistent_settings("main_app_init_size")
+        min_size, isSuccess, error_msg, default_min_size = SettingsManage.get_persistent_settings("main_app_min_size")
         
-        if init_size and isSuccess:
+        if isSuccess and init_size:
             self.resize(*init_size)
-        else:
-            self.resize(1300, 900)  # 默认初始尺寸
+        elif not isSuccess:
+            print(f"Warning: {error_msg}")
+            if default_init_size:
+                print("Using default main_app_init_size value.")
+                self.resize(*default_init_size)
+            else:
+                print("Critical Error: Failed to get main_app_init_size setting and default value.")
+                sys.exit(1)
         
-        if min_size and isSuccess:
+        if isSuccess and min_size:
             self.setMinimumSize(*min_size)
-        else:
-            self.setMinimumSize(800, 600)  # 默认最小尺寸
+        elif not isSuccess:
+            print(f"Warning: {error_msg}")
+            if default_min_size:
+                print("Using default main_app_min_size value.")
+                self.setMinimumSize(*default_min_size)
+            else:
+                print("Critical Error: Failed to get main_app_min_size setting and default value.")
+                sys.exit(1)
 
         # 设置背景色
         self.setStyleSheet(f"background-color: {ui_style.COLORS['bg']};")

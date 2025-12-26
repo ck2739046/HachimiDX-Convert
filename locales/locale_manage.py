@@ -4,6 +4,7 @@
 """
 
 import json
+import sys
 import os
 from pathlib import Path
 from threading import Lock
@@ -19,12 +20,13 @@ def _initialize_locale() -> tuple[dict, str]:
         (texts_dict, language_code)
     """
     # 获取语言设置
-    try:
-        lang, success, _ = SettingsManage.get_persistent_settings('language')
-        if not success:
-            lang = 'zh-cn'
-    except Exception:
-        lang = 'zh-cn'
+    lang, success, error_msg, default_lang = SettingsManage.get_persistent_settings('language')
+    if not success:
+        if default_lang:
+            lang = default_lang
+        else:
+            print("Critical Error: Failed to get language setting and default value.")
+            sys.exit(1)
     
     # 加载对应的 JSON 文件
     locale_dir = Path(__file__).parent

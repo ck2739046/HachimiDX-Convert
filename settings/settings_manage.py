@@ -84,7 +84,7 @@ class SettingsManage:
     # ===== Persistent Settings 接口 =====
     
     @classmethod
-    def get_persistent_settings(cls, key: str) -> tuple[Any, bool, str]:
+    def get_persistent_settings(cls, key: str) -> tuple[Any, bool, str, Any]:
         """
         获取持久化配置项
         
@@ -92,20 +92,27 @@ class SettingsManage:
             key: 配置项名称
         
         Returns:
-            (value, success, message)
+            (value, success, message, default_value)
             - value: 配置值，失败时为 None
             - success: 是否成功
             - message: 错误信息，成功时为空字符串
+            - default_value: 默认值
         """
+        default_value = None
         try:
-            if not hasattr(cls._persistent, key):
-                return None, False, f"配置项 '{key}' 不存在"
-            
+            # 校验 key 是否为有效配置项 (必须在 model_fields 中定义)
+            if key not in PersistentSettings.model_fields:
+                return None, False, f"配置项 '{key}' 不存在", None
+
+            # 获取默认值
+            default_value = PersistentSettings.model_fields[key].default
+
             value = getattr(cls._persistent, key)
-            return value, True, ""
+            
+            return value, True, "", default_value
             
         except Exception as e:
-            return None, False, f"获取配置失败: {str(e)}"
+            return None, False, f"获取配置失败: {str(e)}", default_value
     
 
     @classmethod
@@ -124,7 +131,8 @@ class SettingsManage:
         """
         with cls._lock:  # 加锁保护写操作
             try:
-                if not hasattr(cls._persistent, key):
+                # 校验 key 是否为有效配置项
+                if key not in PersistentSettings.model_fields:
                     return False, f"配置项 '{key}' 不存在"
                 
                 # 构造新的配置字典

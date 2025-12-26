@@ -4,7 +4,7 @@
 """
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Literal
+from typing import Literal, Annotated
 import re
 
 
@@ -21,6 +21,7 @@ class PersistentSettings(BaseModel):
         default=2,
         ge=1,
         le=8,
+        strict=True,
         description="TensorRT 批处理大小，范围 1-8，默认 2"
     )
     
@@ -46,12 +47,20 @@ class PersistentSettings(BaseModel):
         description="主要输出文件夹名称，默认 aaa-result"
     )
     
-    main_app_init_size: tuple[int, int] = Field(
+    main_app_init_size: tuple[Annotated[
+                                int, Field(ge=100, le=9999, strict=True)],
+                              Annotated[
+                                int, Field(ge=100, le=9999, strict=True)]
+                             ] = Field(
         default=(1300, 900),
         description="应用初始窗口大小 (w, h)"
     )
     
-    main_app_min_size: tuple[int, int] = Field(
+    main_app_min_size: tuple[Annotated[
+                                int, Field(ge=100, le=9999, strict=True)],
+                             Annotated[
+                                int, Field(ge=100, le=9999, strict=True)]
+                            ] = Field(
         default=(800, 600),
         description="应用最小窗口大小 (w, h)"
     )
