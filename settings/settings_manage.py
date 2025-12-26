@@ -20,13 +20,9 @@ def _initialize_settings() -> tuple[PersistentSettings, PathSettings]:
     root_path = os.path.normpath(os.path.abspath(Path(__file__).parent.parent))
     root = Path(root_path)
     
-    # 构建路径配置
-    # 先使用 placeholder 作为参数临时构建，获取 settings_json 路径
-    # 后续根据持久化配置中的 main_output_dir_name 重新构建路径配置
-    path_settings = PathSettings.from_root(root, "placeholder")
-    path_settings.ensure_dirs_exist()
-    
-    settings_file = path_settings.settings_json
+    # 手动构建 settings.json 路径，避免 PathSettings 的二次初始化
+    # settings.json 位于 src/settings.json
+    settings_file = root / 'src' / 'settings.json'
     
     # 加载持久化配置
     if settings_file.exists():
@@ -50,10 +46,9 @@ def _initialize_settings() -> tuple[PersistentSettings, PathSettings]:
                 indent=2
             )
     
-    # 如果输出目录名称与默认值不同，重新构建路径配置
-    if persistent_settings.main_output_dir_name != "placeholder":
-        path_settings = PathSettings.from_root(root, persistent_settings.main_output_dir_name)
-        path_settings.ensure_dirs_exist()
+    # 构建路径配置
+    path_settings = PathSettings.from_root(root, persistent_settings.main_output_dir_name)
+    path_settings.ensure_dirs_exist()
     
     return persistent_settings, path_settings
 
