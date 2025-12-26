@@ -7,7 +7,8 @@ from PyQt6.QtCore import Qt, QSize
 from app.widgets import SquareWidget
 from app.widgets.nav_bar import SegmentedNavBar
 from app.pages.media_tools_page import MediaToolsPage
-from app import ui_style, settings
+from app import ui_style
+from settings import SettingsManage
 
 
 class LeftPanel(QWidget):
@@ -36,9 +37,11 @@ class LeftPanel(QWidget):
 
 
     def sizeHint(self):
-        # 提供初始尺寸建议，防止布局初始化时宽度为 0
-        x, y = settings.main_app_init_size
-        return QSize(x, y)
+        init_size, isSuccess, _ = SettingsManage.get_persistent_settings("main_app_init_size")
+        if init_size and isSuccess:
+            return QSize(*init_size)
+        else:
+            return QSize(1300, 900) # 默认初始尺寸
 
 
     def resizeEvent(self, event):
@@ -133,13 +136,21 @@ class MainWindow(QMainWindow):
     
     def setup_ui(self):
         """设置主窗口"""
-        # 窗口基本属性
-        self.setWindowTitle("HachimiDX-Convert")
-        x, y = settings.main_app_init_size
-        self.resize(x, y)  # 初始尺寸
-        x, y = settings.main_app_min_size
-        self.setMinimumSize(x, y)  # 最小尺寸
         
+        # 获取窗口尺寸配置
+        init_size, isSuccess, _ = SettingsManage.get_persistent_settings("main_app_init_size")
+        min_size, isSuccess, _ = SettingsManage.get_persistent_settings("main_app_min_size")
+        
+        if init_size and isSuccess:
+            self.resize(*init_size)
+        else:
+            self.resize(1300, 900)  # 默认初始尺寸
+        
+        if min_size and isSuccess:
+            self.setMinimumSize(*min_size)
+        else:
+            self.setMinimumSize(800, 600)  # 默认最小尺寸
+
         # 设置背景色
         self.setStyleSheet(f"background-color: {ui_style.COLORS['bg']};")
         

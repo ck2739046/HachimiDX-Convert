@@ -94,4 +94,4 @@
 
 ### 5. 安装其他的库
 
-`pip install PyQt6 pywin32 librosa soundfile`
+`pip install PyQt6 pywin32 librosa soundfile pydantic`

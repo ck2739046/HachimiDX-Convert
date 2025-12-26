@@ -4,8 +4,8 @@
 .venv_main
 
 legacy/aaa-result
-legacy/src/Majdata/
-legacy/src/temp/
-legacy/src/ffmpeg*
-legacy/src/models/
-legacy/src/HachimiDX-Settings.json
+src/Majdata/
+src/temp/
+src/ffmpeg*
+src/models/
+src/settings.json
