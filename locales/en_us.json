@@ -1,8 +1,42 @@
 {
   "app": {
-    "title": "HachimiDX"
+    "title": "HachimiDX",
+    "main_window": {
+      "init_size_warning": "Warning: {error}",
+      "using_default_init_size": "Using default main_app_init_size value.",
+      "init_size_critical_error": "Critical Error: Failed to get main_app_init_size setting and default value.",
+      "min_size_warning": "Warning: {error}",
+      "using_default_min_size": "Using default main_app_min_size value.",
+      "min_size_critical_error": "Critical Error: Failed to get main_app_min_size setting and default value."
+    }
   },
   "settings": {
-    "language": "Language"
+    "language": "Language",
+    "settings_manage": {
+      "initialize_settings": {
+        "config_corrupt": "Warning: Configuration file corrupted, using default settings. Error: {error}"
+      },
+      "get_persistent_settings": {
+        "item_not_found": "Configuration item '{key}' does not exist",
+        "failed": "Failed to get configuration: {error}"
+      },
+      "set_persistent_settings": {
+        "item_not_found": "Configuration item '{key}' does not exist",
+        "saved": "Configuration item '{key}' saved",
+        "validation_failed": "Parameter validation failed: {error}",
+        "failed": "Failed to save configuration: {error}"
+      },
+      "get_path": {
+        "item_not_found": "Path configuration item '{key}' does not exist",
+        "failed": "Failed to get path: {error}"
+      }
+    },
+    "persistent_settings": {
+      "validate_windows_filename": {
+        "empty_name": "Output directory name cannot be empty",
+        "invalid_chars": "Folder name cannot contain the following characters: \\ / : * ? \" < > |",
+        "reserved_name": "Cannot use Windows reserved name: {name}"
+      }
+    }
   }
 }

@@ -1,8 +1,42 @@
 {
   "app": {
-    "title": "HachimiDX"
+    "title": "HachimiDX",
+    "main_window": {
+      "init_size_warning": "警告: {error}",
+      "using_default_init_size": "使用默认app初始窗口大小",
+      "init_size_critical_error": "致命错误: 无法获取app初始窗口大小配置及默认值",
+      "min_size_warning": "警告: {error}",
+      "using_default_min_size": "使用默认app最小窗口大小",
+      "min_size_critical_error": "致命错误: 无法获取app最小窗口大小配置及默认值"
+    }
   },
   "settings": {
-    "language": "语言"
+    "language": "语言",
+    "settings_manage": {
+      "initialize_settings": {
+        "config_corrupt": "警告: 配置文件损坏，使用默认配置。错误: {error}"
+      },
+      "get_persistent_settings": {
+        "item_not_found": "配置项 '{key}' 不存在",
+        "failed": "获取配置失败: {error}"
+      },
+      "set_persistent_settings": {
+        "item_not_found": "配置项 '{key}' 不存在",
+        "saved": "配置项 '{key}' 已保存",
+        "validation_failed": "参数校验失败: {error}",
+        "failed": "保存配置失败: {error}"
+      },
+      "get_path": {
+        "item_not_found": "路径配置项 '{key}' 不存在",
+        "failed": "获取路径失败: {error}"
+      }
+    },
+    "persistent_settings": {
+      "validate_windows_filename": {
+        "empty_name": "输出目录名称不能为空",
+        "invalid_chars": "文件夹名称不能包含以下字符: \\ / : * ? \" < > |",
+        "reserved_name": "不能使用 Windows 保留名称: {name}"
+      }
+    }
   }
 }

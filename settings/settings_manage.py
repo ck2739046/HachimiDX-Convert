@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import ValidationError
 from threading import Lock
 
+from locales.locale_manage import LocaleManage
 from .persistent_settings import PersistentSettings
 from .path_settings import PathSettings
 
@@ -32,7 +33,7 @@ def _initialize_settings() -> tuple[PersistentSettings, PathSettings]:
             persistent_settings = PersistentSettings(**data)
         except (json.JSONDecodeError, ValidationError) as e:
             # 配置文件损坏，使用默认配置
-            print(f"警告: 配置文件损坏，使用默认配置。错误: {e}")
+            print(LocaleManage.get("settings.settings_manage.initialize_settings.config_corrupt", error=str(e)))
             persistent_settings = PersistentSettings()
     else:
         # 配置文件不存在，使用默认配置并保存
@@ -102,7 +103,7 @@ class SettingsManage:
         try:
             # 校验 key 是否为有效配置项 (必须在 model_fields 中定义)
             if key not in PersistentSettings.model_fields:
-                return None, False, f"配置项 '{key}' 不存在", None
+                return None, False, LocaleManage.get("settings.settings_manage.get_persistent_settings.item_not_found", key=key), None
 
             # 获取默认值
             default_value = PersistentSettings.model_fields[key].default
@@ -112,7 +113,7 @@ class SettingsManage:
             return value, True, "", default_value
             
         except Exception as e:
-            return None, False, f"获取配置失败: {str(e)}", default_value
+            return None, False, LocaleManage.get("settings.settings_manage.get_persistent_settings.failed", error=str(e)), default_value
     
 
     @classmethod
@@ -133,7 +134,7 @@ class SettingsManage:
             try:
                 # 校验 key 是否为有效配置项
                 if key not in PersistentSettings.model_fields:
-                    return False, f"配置项 '{key}' 不存在"
+                    return False, LocaleManage.get("settings.settings_manage.set_persistent_settings.item_not_found", key=key)
                 
                 # 构造新的配置字典
                 new_data = cls._persistent.model_dump()
@@ -146,15 +147,15 @@ class SettingsManage:
                 cls._persistent = new_settings
                 cls._save_persistent()
                 
-                return True, f"配置项 '{key}' 已保存"
+                return True, LocaleManage.get("settings.settings_manage.set_persistent_settings.saved", key=key)
                 
             except ValidationError as e:
                 # 提取第一个错误信息
                 error_msg = e.errors()[0]['msg']
-                return False, f"参数校验失败: {error_msg}"
+                return False, LocaleManage.get("settings.settings_manage.set_persistent_settings.validation_failed", error=error_msg)
                 
             except Exception as e:
-                return False, f"保存配置失败: {str(e)}"
+                return False, LocaleManage.get("settings.settings_manage.set_persistent_settings.failed", error=str(e))
     
 
     @classmethod
@@ -181,7 +182,7 @@ class SettingsManage:
         """
         try:
             if not hasattr(cls._path, key):
-                return None, False, f"路径配置项 '{key}' 不存在"
+                return None, False, LocaleManage.get("settings.settings_manage.get_path.item_not_found", key=key)
             
             path_obj = getattr(cls._path, key)
             # 标准化路径
@@ -190,7 +191,7 @@ class SettingsManage:
             return path_str, True, ""
             
         except Exception as e:
-            return None, False, f"获取路径失败: {str(e)}"
+            return None, False, LocaleManage.get("settings.settings_manage.get_path.failed", error=str(e))
     
 
     @classmethod

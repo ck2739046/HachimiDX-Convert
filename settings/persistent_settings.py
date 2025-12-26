@@ -6,6 +6,7 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Literal, Annotated
 import re
+from locales.locale_manage import LocaleManage
 
 
 class PersistentSettings(BaseModel):
@@ -72,13 +73,13 @@ class PersistentSettings(BaseModel):
     def validate_windows_filename(cls, v: str) -> str:
         """校验 Windows 文件/文件夹名称"""
         if not v or not v.strip():
-            raise ValueError("输出目录名称不能为空")
+            raise ValueError(LocaleManage.get("settings.persistent_settings.validate_windows_filename.empty_name"))
         
         # Windows 文件名禁止字符
         invalid_chars = r'[\\/:*?"<>|]'
         if re.search(invalid_chars, v):
             raise ValueError(
-                '文件夹名称不能包含以下字符: \\ / : * ? " < > |'
+                LocaleManage.get("settings.persistent_settings.validate_windows_filename.invalid_chars")
             )
         
         # 禁止保留名称
@@ -88,7 +89,7 @@ class PersistentSettings(BaseModel):
             'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
         }
         if v.upper() in reserved_names:
-            raise ValueError(f"不能使用 Windows 保留名称: {v}")
+            raise ValueError(LocaleManage.get("settings.persistent_settings.validate_windows_filename.reserved_name", name=v))
         
         return v.strip()
     

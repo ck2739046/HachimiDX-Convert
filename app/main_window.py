@@ -10,6 +10,7 @@ from app.widgets.nav_bar import SegmentedNavBar
 from app.pages.media_tools_page import MediaToolsPage
 from app import ui_style
 from settings import SettingsManage
+from locales.locale_manage import LocaleManage
 
 
 class LeftPanel(QWidget):
@@ -42,12 +43,12 @@ class LeftPanel(QWidget):
         if isSuccess and init_size:
             return QSize(*init_size)
         elif not isSuccess:
-            print(f"Warning: {error_msg}")
+            print(LocaleManage.get("app.main_window.init_size_warning", error=error_msg))
             if default_init_size:
-                print("Using default main_app_init_size value.")
+                print(LocaleManage.get("app.main_window.using_default_init_size"))
                 return QSize(*default_init_size)
             else:
-                print("Critical Error: Failed to get main_app_init_size setting and default value.")
+                print(LocaleManage.get("app.main_window.init_size_critical_error"))
                 sys.exit(1)
 
 
@@ -151,23 +152,23 @@ class MainWindow(QMainWindow):
         if isSuccess and init_size:
             self.resize(*init_size)
         elif not isSuccess:
-            print(f"Warning: {error_msg}")
+            print(LocaleManage.get("app.main_window.init_size_warning", error=error_msg))
             if default_init_size:
-                print("Using default main_app_init_size value.")
+                print(LocaleManage.get("app.main_window.using_default_init_size"))
                 self.resize(*default_init_size)
             else:
-                print("Critical Error: Failed to get main_app_init_size setting and default value.")
+                print(LocaleManage.get("app.main_window.init_size_critical_error"))
                 sys.exit(1)
         
         if isSuccess and min_size:
             self.setMinimumSize(*min_size)
         elif not isSuccess:
-            print(f"Warning: {error_msg}")
+            print(LocaleManage.get("app.main_window.min_size_warning", error=error_msg))
             if default_min_size:
-                print("Using default main_app_min_size value.")
+                print(LocaleManage.get("app.main_window.using_default_min_size"))
                 self.setMinimumSize(*default_min_size)
             else:
-                print("Critical Error: Failed to get main_app_min_size setting and default value.")
+                print(LocaleManage.get("app.main_window.min_size_critical_error"))
                 sys.exit(1)
 
         # 设置背景色
