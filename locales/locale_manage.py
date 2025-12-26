@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 from threading import Lock
 from typing import Any
-from settings.settings_manage import SettingsManage
 
 
 def _initialize_locale() -> tuple[dict, str]:
@@ -19,14 +18,26 @@ def _initialize_locale() -> tuple[dict, str]:
     Returns:
         (texts_dict, language_code)
     """
-    # 获取语言设置
-    lang, success, error_msg, default_lang = SettingsManage.get_persistent_settings('language')
-    if not success:
-        if default_lang:
-            lang = default_lang
-        else:
-            print("Critical Error: Failed to get language setting and default value.")
-            sys.exit(1)
+
+    # 获取项目根目录
+    root = Path(__file__).parent.parent
+    settings_file = root / 'src' / 'settings.json'
+    
+    lang = 'zh-cn'  # 默认值
+    
+    # 直接读取配置文件，避免循环引用 SettingsManage
+    if settings_file.exists():
+        try:
+            with open(settings_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if 'language' in data:
+                    lang = data['language']
+                else:
+                    print(f"Warning: 'language' key not found in {settings_file}. Using default: {lang}")
+        except Exception as e:
+            print(f"Warning: Failed to read or parse {settings_file}. Error: {e}. Using default: {lang}")
+    else:
+        print(f"Warning: Settings file not found at {settings_file}. Using default: {lang}")
     
     # 加载对应的 JSON 文件
     locale_dir = Path(__file__).parent
@@ -38,8 +49,8 @@ def _initialize_locale() -> tuple[dict, str]:
         return texts, lang
     except Exception as e:
         # 文件不存在或损坏
-        print(f"错误: 无法加载默认语言文件，错误: {e}")
-        return {}, 'zh-cn'
+        print(f"Critical Error: Failed to load locale file {json_file}. Error: {e}")
+        sys.exit(1)
 
 
 class LocaleManage:
