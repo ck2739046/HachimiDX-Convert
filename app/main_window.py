@@ -5,6 +5,7 @@ Main Window - 主窗口框架
 import sys
 from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel
 from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QIcon
 from app.widgets import SquareWidget
 from app.widgets.nav_bar import SegmentedNavBar
 from app.pages.media_tools_page import MediaToolsPage
@@ -145,6 +146,14 @@ class MainWindow(QMainWindow):
     def setup_ui(self):
         """设置主窗口"""
         
+        # 设置窗口标题和图标
+        self.setWindowTitle("Hachimi DX")
+        icon_path, isSuccess, error_msg = SettingsManage.get_path("app_icon")
+        if isSuccess and icon_path:
+            self.setWindowIcon(QIcon(icon_path))
+        if not isSuccess:
+            print(LocaleManage.get("app.main_window.set_icon_failed", error=error_msg))
+
         # 获取窗口尺寸配置
         init_size, isSuccess, error_msg, default_init_size = SettingsManage.get_persistent_settings("main_app_init_size")
         min_size, isSuccess, error_msg, default_min_size = SettingsManage.get_persistent_settings("main_app_min_size")

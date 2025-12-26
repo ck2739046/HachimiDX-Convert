@@ -1,20 +1,19 @@
 {
   "app": {
-    "title": "HachimiDX",
     "main_window": {
       "init_size_warning": "Warning: {error}",
       "using_default_init_size": "Using default main_app_init_size value.",
       "init_size_critical_error": "Critical Error: Failed to get main_app_init_size setting and default value.",
       "min_size_warning": "Warning: {error}",
       "using_default_min_size": "Using default main_app_min_size value.",
-      "min_size_critical_error": "Critical Error: Failed to get main_app_min_size setting and default value."
+      "min_size_critical_error": "Critical Error: Failed to get main_app_min_size setting and default value.",
+      "set_icon_failed": "Warning: Failed to set application icon.\nError: {error}"
     }
   },
   "settings": {
-    "language": "Language",
     "settings_manage": {
       "initialize_settings": {
-        "read_settings_failed": "Warning: Failed to read settings file, using default settings. Error: {error}",
+        "read_settings_failed": "Warning: Failed to read settings file, using default settings.\nError: {error}",
         "path_validation_failed": "Critical Error: Path validation failed. Missing required files or directories.\nError: {error}"
       },
       "get_persistent_settings": {

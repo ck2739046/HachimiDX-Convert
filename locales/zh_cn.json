@@ -1,20 +1,19 @@
 {
   "app": {
-    "title": "HachimiDX",
     "main_window": {
       "init_size_warning": "警告: {error}",
       "using_default_init_size": "使用默认app初始窗口大小",
       "init_size_critical_error": "致命错误: 无法获取app初始窗口大小配置及默认值",
       "min_size_warning": "警告: {error}",
       "using_default_min_size": "使用默认app最小窗口大小",
-      "min_size_critical_error": "致命错误: 无法获取app最小窗口大小配置及默认值"
+      "min_size_critical_error": "致命错误: 无法获取app最小窗口大小配置及默认值",
+      "set_icon_failed": "警告: 设置应用图标失败。\n错误: {error}"
     }
   },
   "settings": {
-    "language": "语言",
     "settings_manage": {
       "initialize_settings": {
-        "read_settings_failed": "警告: 读取设置文件失败，使用默认设置。错误: {error}",
+        "read_settings_failed": "警告: 读取设置文件失败，使用默认设置。\n错误: {error}",
         "path_validation_failed": "致命错误: 路径校验失败。缺少必要的文件或目录。\n错误: {error}"
       },
       "get_persistent_settings": {
