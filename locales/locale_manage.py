@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from threading import Lock
 from typing import Any
-from ..settings_manage import SettingsManage
+from settings.settings_manage import SettingsManage
 
 
 def _initialize_locale() -> tuple[dict, str]:
