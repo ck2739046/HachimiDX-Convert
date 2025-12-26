@@ -289,7 +289,7 @@ def _construct_audio_filter_chain(volume: int, need_start_padding: bool, padding
 def _get_h264_hw_accel_config() -> str:
     try:
         # call config manager
-        hw_accel = tools.config_manager.get_config("ffmpeg_hw_acceleration_h264")
+        hw_accel, error_msg, success_msg = tools.config_manager.get_config("ffmpeg_hw_acceleration_h264")
         if not hw_accel:
             raise ValueError("ffmpeg_hw_acceleration_h264 config not found")
         if hw_accel not in ['h264_cpu', 'h264_nvidia']:
@@ -305,10 +305,10 @@ def _get_video_encoder_args(hw_accel: str, quality: int, fps: float, optimize_go
     
     # GOP optimization
     if optimize_gop:
-        args.extend(["-g", str(int(fps))])
+        args.extend(["-g", str(round(fps))])
         
     # Frame rate
-    args.extend(["-r", str(fps)])
+    args.extend(["-r", str(round(fps))])
 
     if hw_accel == 'h264_cpu':
         args.extend(["-c:v", "libx264"])
@@ -351,7 +351,7 @@ def _construct_video_filter_chain(resolution: int, need_start_padding: bool, pad
     # Scale: maintain aspect ratio, fit within resolution x resolution
     # Pad: center the result in resolution x resolution black box
 
-    scale_expr = f"if(gt(iw,ih),{resolution},-1):if(gt(iw,ih),-1,{resolution})"
+    scale_expr = f"if(gt(iw,ih),{resolution},-1):if(gt(iw,ih),-1,{resolution})".replace(",", r"\,") # 对逗号转义
     pad_expr = f"{resolution}:{resolution}:(ow-iw)/2:(oh-ih)/2:black"
     
     filters.append(f"scale={scale_expr},pad={pad_expr}")

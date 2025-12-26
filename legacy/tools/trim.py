@@ -16,8 +16,8 @@ import tools.ffmpeg_utils as ffmpeg_utils
 
 
 # 解决 Windows 控制台 Unicode 编码问题
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+# sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+# sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 
 def detect_video_params(input_file: str) -> Optional[Dict[str, Any]]:
