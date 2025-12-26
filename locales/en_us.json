@@ -14,7 +14,8 @@
     "language": "Language",
     "settings_manage": {
       "initialize_settings": {
-        "config_corrupt": "Warning: Configuration file corrupted, using default settings. Error: {error}"
+        "read_settings_failed": "Warning: Failed to read settings file, using default settings. Error: {error}",
+        "path_validation_failed": "Critical Error: Path validation failed. Missing required files or directories.\nError: {error}"
       },
       "get_persistent_settings": {
         "item_not_found": "Configuration item '{key}' does not exist",

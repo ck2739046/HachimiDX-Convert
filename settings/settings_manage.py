@@ -5,6 +5,7 @@
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 from pydantic import ValidationError
@@ -31,9 +32,9 @@ def _initialize_settings() -> tuple[PersistentSettings, PathSettings]:
             with open(settings_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             persistent_settings = PersistentSettings(**data)
-        except (json.JSONDecodeError, ValidationError) as e:
-            # 配置文件损坏，使用默认配置
-            print(LocaleManage.get("settings.settings_manage.initialize_settings.config_corrupt", error=str(e)))
+        except Exception as e:
+            # 设置文件读取失败，使用默认设置
+            print(LocaleManage.get("settings.settings_manage.initialize_settings.read_settings_failed", error=str(e)))
             persistent_settings = PersistentSettings()
     else:
         # 配置文件不存在，使用默认配置并保存
@@ -48,8 +49,12 @@ def _initialize_settings() -> tuple[PersistentSettings, PathSettings]:
             )
     
     # 构建路径配置
-    path_settings = PathSettings.from_root(root, persistent_settings.main_output_dir_name)
-    path_settings.ensure_dirs_exist()
+    try:
+        path_settings = PathSettings.from_root(root, persistent_settings.main_output_dir_name)
+        path_settings.ensure_dirs_exist()
+    except ValidationError as e:
+        print(LocaleManage.get("settings.settings_manage.initialize_settings.path_validation_failed", error=str(e)))
+        sys.exit(1)
     
     return persistent_settings, path_settings
 

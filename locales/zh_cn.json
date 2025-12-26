@@ -14,7 +14,8 @@
     "language": "语言",
     "settings_manage": {
       "initialize_settings": {
-        "config_corrupt": "警告: 配置文件损坏，使用默认配置。错误: {error}"
+        "read_settings_failed": "警告: 读取设置文件失败，使用默认设置。错误: {error}",
+        "path_validation_failed": "致命错误: 路径校验失败。缺少必要的文件或目录。\n错误: {error}"
       },
       "get_persistent_settings": {
         "item_not_found": "配置项 '{key}' 不存在",
