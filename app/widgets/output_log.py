@@ -107,7 +107,7 @@ class OutputLogWidget(QWidget):
         
         # 智能滚动：仅当用户之前在底部时才自动滚动
         if was_at_bottom:
-            self.scroll_to_bottom()
+            self.text_edit.moveCursor(QTextCursor.MoveOperation.End)
         else:
             # 如果用户不在底部，恢复原来的滚动位置
             scrollbar.setValue(old_scroll_value)
