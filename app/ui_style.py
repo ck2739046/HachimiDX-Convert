@@ -24,3 +24,7 @@ COLORS = {
 
 widget_spacing = 10
 element_height = 25
+
+output_log_widget_height = 300
+main_navbar_height = 50
+sub_navbar_height = 35

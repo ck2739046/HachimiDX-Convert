@@ -62,7 +62,7 @@ class LeftPanel(QWidget):
         """
         
         # 计算目标宽度
-        spacing = 10
+        spacing = ui_style.widget_spacing
         target_width = (self.height() - spacing) // 2
 
         # 设置宽度
@@ -92,7 +92,7 @@ class RightPanel(QWidget):
 
         # 1. 主导航栏
         nav_items = ["Majdata", "Auto Convert", "Media Tools", "Tasks", "Settings"]
-        self.nav_bar = SegmentedNavBar(nav_items, height=50)
+        self.nav_bar = SegmentedNavBar(nav_items, height=ui_style.main_navbar_height)
         layout.addWidget(self.nav_bar)
 
         # 2. 主内容 Stack

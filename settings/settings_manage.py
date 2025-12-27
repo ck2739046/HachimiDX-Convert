@@ -164,7 +164,7 @@ class SettingsManage:
     
 
     @classmethod
-    def get_all_persistent_setttings(cls) -> dict:
+    def get_all_persistent_settings(cls) -> dict:
         """获取所有持久化配置"""
         return cls._persistent.model_dump()
     

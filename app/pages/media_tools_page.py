@@ -1,4 +1,5 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
+from app import ui_style
 from app.widgets.nav_bar import SegmentedNavBar
 from app.pages.media_subpages.match_first import MatchFirstPage
 from app.pages.media_subpages.simple_align import SimpleAlignPage
@@ -26,7 +27,7 @@ class MediaToolsPage(QWidget):
                      "Extract Game",
                      "Run FFmpeg",
                      "Others"]
-        self.nav_bar = SegmentedNavBar(nav_items, height=36)
+        self.nav_bar = SegmentedNavBar(nav_items, height=ui_style.sub_navbar_height)
         layout.addWidget(self.nav_bar)
 
         # 2. 内容 Stack

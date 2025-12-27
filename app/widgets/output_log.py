@@ -21,7 +21,7 @@ class OutputLogWidget(QWidget):
         # 创建文本输出控件
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)  # 只读模式
-        self.text_edit.setFixedHeight(300)
+        self.text_edit.setFixedHeight(ui_style.output_log_widget_height)
         self.text_edit.setStyleSheet(f"""
             QTextEdit {{
                 background-color: {ui_style.COLORS['grey']};
