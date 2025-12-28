@@ -38,5 +38,19 @@
         "reserved_name": "不能使用 Windows 保留名称: {name}"
       }
     }
+  },
+  "core": {
+    "ffmpeg_launcher": {
+      "unsupported_audio_format": "不支持的音频格式: {format}",
+      "invalid_quality": "无效的质量值: {quality}。必须是 0, 1 或 2.",
+      "unsupported_format_for_quality": "不支持的音频格式用于音频质量参数: {format}",
+      "unsupported_media_task_config": "不支持的任务配置",
+      "ffmpeg_path_not_available": "ffmpeg_exe 路径不可用: {error}",
+      "output_path_missing": "缺少 output_path（配置验证未生成）",
+      "failed_create_output_dir": "创建输出目录失败: {error}",
+      "failed_remove_existing_output": "删除已存在的输出文件失败: {error}",
+      "invalid_audio_config": "音频配置无效: {error}",
+      "ffmpeg_started": "ffmpeg 已启动"
+    }
   }
 }

@@ -38,5 +38,19 @@
         "reserved_name": "Cannot use Windows reserved name: {name}"
       }
     }
+  },
+  "core": {
+    "ffmpeg_launcher": {
+      "unsupported_audio_format": "Unsupported audio format: {format}",
+      "invalid_quality": "Invalid quality: {quality}. Must be 0, 1, or 2.",
+      "unsupported_format_for_quality": "Unsupported audio format for audio_quality args: {format}",
+      "unsupported_media_task_config": "Unsupported media task config",
+      "ffmpeg_path_not_available": "ffmpeg_exe path not available: {error}",
+      "output_path_missing": "output_path is missing (config validation did not derive it)",
+      "failed_create_output_dir": "Failed to create output directory: {error}",
+      "failed_remove_existing_output": "Failed to remove existing output: {error}",
+      "invalid_audio_config": "Invalid audio config: {error}",
+      "ffmpeg_started": "ffmpeg started"
+    }
   }
 }
