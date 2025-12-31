@@ -21,13 +21,18 @@ class OutputLogWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # 保存的最大行数
         self.max_output_lines = 400
-
-        self._last_line_is_progress = False
-        self._text_buffer = ""
+        # 标记最后一行是否可被替换 (用于处理 \r)
+        self._is_last_line_replaceable = False
+        # ANSI 转义序列的正则表达式
         self._ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        # 文本缓冲区（用于处理 \r）
+        self.text_buffer = ""
 
         self._setup_ui()
+
+
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -35,7 +40,7 @@ class OutputLogWidget(QWidget):
         layout.setSpacing(0)
 
         self.text_edit = QTextEdit()
-        self.text_edit.setReadOnly(True)
+        self.text_edit.setReadOnly(True)  # 只读模式
         self.text_edit.setFixedHeight(ui_style.output_log_widget_height)
         self.text_edit.setStyleSheet(
             f"""
@@ -71,22 +76,23 @@ class OutputLogWidget(QWidget):
 
         layout.addWidget(self.text_edit)
 
-    def _is_at_bottom(self) -> bool:
-        scrollbar = self.text_edit.verticalScrollBar()
-        return scrollbar.value() >= scrollbar.maximum() - 5
+
 
     def _limit_output_lines(self) -> None:
         document = self.text_edit.document()
         if document.blockCount() <= self.max_output_lines:
             return
-
+        # 删除旧的行，仅保留最近的 400 行
         cursor = QTextCursor(document)
         cursor.movePosition(QTextCursor.MoveOperation.Start)
+        # 计算需要删除的行数
         lines_to_remove = document.blockCount() - self.max_output_lines
         for _ in range(lines_to_remove):
             cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
             cursor.removeSelectedText()
-            cursor.deleteChar()
+            cursor.deleteChar()  # 删除换行符
+
+
 
     def _append_output(self, text: str, replace_last: bool = False) -> None:
         """
@@ -95,16 +101,20 @@ class OutputLogWidget(QWidget):
         :param text: 要添加的文本
         :param replace_last: 是否替换最后一行（用于进度条更新，处理 \\r）
         """
-        # 在添加内容前检查是否在底部
-        was_at_bottom = self._is_at_bottom()
         
         # 保存当前滚动条位置
         scrollbar = self.text_edit.verticalScrollBar()
         old_scroll_value = scrollbar.value()
+
+        # 在添加内容前检查是否在底部
+        if scrollbar.value() >= scrollbar.maximum() - 5:
+            was_at_bottom = True
+        else:
+            was_at_bottom = False
         
         if replace_last:
             # 只在上一行是进度行时才替换
-            if self._last_line_is_progress:
+            if self._is_last_line_replaceable:
                 # 替换最后一行：移动到文档末尾，选择当前行，删除并插入新文本
                 cursor = self.text_edit.textCursor()
                 cursor.movePosition(QTextCursor.MoveOperation.End)
@@ -116,12 +126,12 @@ class OutputLogWidget(QWidget):
                 # 如果上一行不是进度行，则追加新行
                 self.text_edit.append(text)
             # 标记这一行是进度行
-            self._last_line_is_progress = True
+            self._is_last_line_replaceable = True
         else:
             # 追加新行
             self.text_edit.append(text)
             # 标记这一行不是进度行
-            self._last_line_is_progress = False
+            self._is_last_line_replaceable = False
         
         # 限制最大行数
         self._limit_output_lines()
@@ -133,35 +143,40 @@ class OutputLogWidget(QWidget):
             # 如果用户不在底部，恢复原来的滚动位置
             scrollbar.setValue(old_scroll_value)
 
-    def append_text(self, text: str) -> None:
+
+
+    def append_text(self, text):
         """
         手动添加文本（用于非进程输出的日志）
-        安全假设：手动添加的文本不包含 \\r
+        安全假设：手动添加的文本不包含 \r
+        
+        :param text: 要添加的文本
         """
         self._append_output(text, replace_last=False)
+
+
+
 
     # ===== QProcess raw output handling =====
 
     def handle_raw_output(self):
-        """Slot for QProcess.readyReadStandardOutput.
-
-        Works best when the QProcess is configured with
-        QProcess.ProcessChannelMode.MergedChannels.
         """
+        处理来自 QProcess 的原始输出（槽函数）
+        直接连接到 QProcess.readyReadStandardOutput 信号
+        """
+        # 获取发送者（QProcess）
         process = self.sender()
-        if process is None:
+        if not process:
             return
-
-        out = process.readAllStandardOutput()
-        text = self._decode_output(out)
-        if text:
-            self._process_text_buffer(text)
-
-        # If channels are not merged, also drain stderr.
-        err = process.readAllStandardError()
-        err_text = self._decode_output(err)
-        if err_text:
-            self._process_text_buffer(err_text)
+        
+        # 读取原始字节
+        output = process.readAllStandardOutput()
+        
+        # 解码
+        text = self._decode_output(output)
+        
+        # 处理 \r 和 \n
+        self._process_text_buffer(text)
 
 
 
@@ -172,9 +187,13 @@ class OutputLogWidget(QWidget):
             self._append_output(clean_line, replace_last=False)
             self._text_buffer = ""
 
+
+
     def _strip_ansi(self, text: str) -> str:
         """移除 ANSI 转义序列"""
         return self._ansi_escape.sub('', text)
+
+
 
     def _decode_output(self, byte_array) -> str:
         """解码字节流"""
@@ -188,6 +207,8 @@ class OutputLogWidget(QWidget):
             except:
                 # 最后使用 UTF-8 with replace（兜底）
                 return bytes(byte_array).decode('utf-8', errors='replace')
+
+
 
     def _process_text_buffer(self, text: str) -> None:
         """处理文本缓冲区中的 \\r 和 \\n"""

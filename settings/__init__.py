@@ -6,6 +6,5 @@ Settings 系统
 from .settings_manage import SettingsManage
 from .persistent_settings import PersistentSettings
 from .path_settings import PathSettings
-from locales import LocaleManage
 
-__all__ = ['SettingsManage', 'PersistentSettings', 'PathSettings', 'LocaleManage']
+__all__ = ['SettingsManage', 'PersistentSettings', 'PathSettings']

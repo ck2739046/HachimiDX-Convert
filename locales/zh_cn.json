@@ -50,6 +50,7 @@
       "failed_create_output_dir": "创建输出目录失败: {error}",
       "failed_remove_existing_output": "删除已存在的输出文件失败: {error}",
       "invalid_audio_config": "音频配置无效: {error}",
+      "invalid_video_config": "视频配置无效: {error}",
       "ffmpeg_started": "ffmpeg 已启动"
     }
   }

@@ -50,6 +50,7 @@
       "failed_create_output_dir": "Failed to create output directory: {error}",
       "failed_remove_existing_output": "Failed to remove existing output: {error}",
       "invalid_audio_config": "Invalid audio config: {error}",
+      "invalid_video_config": "Invalid video config: {error}",
       "ffmpeg_started": "ffmpeg started"
     }
   }
