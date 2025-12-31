@@ -4,8 +4,6 @@
 .venv_main
 
 legacy/aaa-result
-src/Majdata/
-src/temp/
-src/ffmpeg*
-src/models/
-src/settings.json
+src/resource/Majdata/
+src/resource/ffmpeg*
+src/resource/models/
