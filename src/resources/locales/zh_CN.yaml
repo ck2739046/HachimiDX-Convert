@@ -1,3 +1,7 @@
 zh_CN:
-  i18n_init:
-    init_complete: "I18n 初始化完成。"
+  general:
+    init_complete: "%{name} 初始化完成。"
+
+  path_manage:
+    error_missing_directory: "致命错误：PathManage.init：未找到所需目录：'%{dir}'。"
+    error_missing_file: "致命错误：PathManage.init：未找到所需文件：'%{file}'。"

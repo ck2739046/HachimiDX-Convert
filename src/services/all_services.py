@@ -1,5 +1,7 @@
 # 导入实例
-from .i18n_init import I18nInit
+from .i18n_manage import I18nManage
+from .path_manage import PathManage
+import i18n
 
 
 class AllServices:
@@ -15,8 +17,10 @@ class AllServices:
         
         print("Initializing all services...")
 
-        # xxx.get_instance()
-        I18nInit.init()
+        I18nManage.init()
+        PathManage.init()
+
+        
 
         print("All services initialized.")
         cls._is_initialized = True
@@ -29,8 +33,6 @@ class AllServices:
             return
         
         print("Shutting down all services...")
-
-        # xxx.shutdown_instance()
 
         print("All services shut down.")
         cls._is_initialized = False

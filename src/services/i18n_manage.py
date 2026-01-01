@@ -1,9 +1,9 @@
 import json
 import os
-from .path_manager import SETTINGS_PATH, LOCALES_DIR
+from .path_manage import SETTINGS_PATH, LOCALES_DIR
 import i18n
 
-class I18nInit:
+class I18nManage:
 
     @staticmethod
     def init() -> None:
@@ -18,7 +18,7 @@ class I18nInit:
                 settings_data = json.load(f)
                 language = settings_data.get("language", fallback_language)
         except Exception:
-            print(f"Warning: I18nInit: Failed to get language setting from settings.json, defaulting to '{fallback_language}'.")
+            print(f"--Warning: I18nInit: Failed to get language setting from settings.json, defaulting to '{fallback_language}'.")
             language = fallback_language
 
         # 检查语言文件是否存在
@@ -27,7 +27,7 @@ class I18nInit:
 
         if language != fallback_language:
             if not os.path.isfile(selected_file):
-                print(f"Warning: I18nInit: Language file for '{language}' not found, falling back to '{fallback_language}'.")
+                print(f"--Warning: I18nInit: Language file for '{language}' not found, falling back to '{fallback_language}'.")
         
         if not os.path.isfile(fallback_file):
             raise Exception(f"Critical Error: I18nInit: Fallback language file not found: '{fallback_file}'.")
@@ -38,5 +38,4 @@ class I18nInit:
         i18n.set('locale', language)
         i18n.set('fallback', 'en_US') # fallback
 
-        # 测试
-        print(i18n.t("i18n_init.init_complete"))
+        print("--" + i18n.t("general.init_complete", name="I18nManage"))

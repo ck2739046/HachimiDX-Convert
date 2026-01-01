@@ -1,3 +1,7 @@
 en_US:
-  i18n_init:
-    init_complete: "I18n initialization completed."
+  general:
+    init_complete: "%{name} initialization completed."
+
+  path_manage:
+    error_missing_directory: "Critical Error: PathManage.init: Required directory not found: '%{dir}'."
+    error_missing_file: "Critical Error: PathManage.init: Required file not found: '%{file}'."
