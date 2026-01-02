@@ -1,4 +1,4 @@
-class XxxManager:
+class Xxx:
 
     _instance = None
 

@@ -5,7 +5,13 @@ import threading
 from typing import Literal, Annotated
 from pydantic import BaseModel, Field, field_validator, ValidationError
 import i18n
-from .path_manage import SETTINGS_PATH, TEMP_DIR, validate_windows_filename
+from .path_manage import PathManage
+from .validation_manage import ValidationManage
+
+# 创建本地别名，避免每次都写 PathManage.xxx
+SETTINGS_PATH = PathManage.SETTINGS_PATH
+TEMP_DIR = PathManage.TEMP_DIR
+LOCALES_DIR = PathManage.LOCALES_DIR
 
 
 
@@ -31,8 +37,8 @@ class SettingsModel(BaseModel):
     @field_validator('main_output_dir_name')
     @classmethod
     def check_filename(cls, v):
-        if not validate_windows_filename(v):
-            raise ValidationError(i18n.t('settings_manager.error_invalid_filename', value=v))
+        if not PathManage.validate_windows_filename(v):
+            raise ValueError(i18n.t('settings_manager.error_invalid_filename', value=v))
         return v
 
 
@@ -76,6 +82,10 @@ class SettingsManager:
                         with open(SETTINGS_PATH, 'r', encoding='utf-8') as f:
                             data = json.load(f)
                         return SettingsModel(**data)
+                    except ValidationError as e:
+                        # 提取方便阅读的错误信息
+                        formatted_error = ValidationManage.format_validation_error(e)
+                        print(i18n.t('settings_manager.warning_load_json_failed', error=formatted_error))
                     except Exception as e:
                         print(i18n.t('settings_manager.warning_load_json_failed', error=str(e)))
 

@@ -1,7 +1,10 @@
 import json
 import os
-from .path_manage import SETTINGS_PATH, LOCALES_DIR
+from .path_manage import PathManage
 import i18n
+
+SETTINGS_PATH = PathManage.SETTINGS_PATH
+LOCALES_DIR = PathManage.LOCALES_DIR
 
 class I18nManage:
 

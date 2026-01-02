@@ -9,15 +9,15 @@ en_US:
     notice_init_complete: "%{name} initialization completed."
 
   path_manage:
-    critical_error_missing_directory: "Critical Error: PathManage.init: Required directory not found: '%{dir}'."
-    critical_error_missing_file: "Critical Error: PathManage.init: Required file not found: '%{file}'."
+    critical_error_missing_directory: "Critical Error: PathManage.init: Required directory not found: '%{dir}'"
+    critical_error_missing_file: "Critical Error: PathManage.init: Required file not found: '%{file}'"
 
   settings_manager:
-    error_invalid_filename: 'Invalid filename (contains [\\/:*?\"<>|]): "%{value}".'
+    error_invalid_filename: 'Invalid filename, contains \/:*?"<>| : "%{value}"'
     critical_error_init_failed: "Critical Error: SettingsManager initialization failed."
     notice_create_new_json: "--Configuration file invalid or not found, create default configuration: %{filepath}"
-    warning_load_json_failed: "--Warning: Load configuration file failed, using default configuration. Error: %{error}"
-    warning_save_json_failed: "--Warning: Save configuration file failed. Error: %{error}"
+    warning_load_json_failed: "--Warning: Load configuration file failed, using default configuration. Error: \n%{error}"
+    warning_save_json_failed: "--Warning: Save configuration file failed. Error: \n%{error}"
 
   all_services:
     notice_all_initialized: "All services initialized."
