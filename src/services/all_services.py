@@ -2,6 +2,7 @@
 from .i18n_manage import I18nManage
 from .path_manage import PathManage
 from .settings_manager import SettingsManager
+# from .validation_manage import ValidationManage
 import i18n
 
 
@@ -21,6 +22,7 @@ class AllServices:
         I18nManage.init()
         PathManage.init()
         SettingsManager.get_instance()
+        # ValidationManage.init()
 
         print(i18n.t("all_services.notice_all_initialized"))
         cls._is_initialized = True
