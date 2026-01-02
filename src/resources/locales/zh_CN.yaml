@@ -1,7 +1,25 @@
+# 四个层级:
+# 1. notice: 普通信息
+# 2. warning: 警告信息，程序可继续运行
+# 3. error: 待处理错误，抛出给调用方，由调用方决定是降级处理（warning）还是终止（critical）
+# 4. critical: 致命错误，程序无法继续运行
+
 zh_CN:
   general:
-    init_complete: "%{name} 初始化完成。"
+    notice_init_complete: "%{name} 初始化完成。"
 
   path_manage:
-    error_missing_directory: "致命错误：PathManage.init：未找到所需目录：'%{dir}'。"
-    error_missing_file: "致命错误：PathManage.init：未找到所需文件：'%{file}'。"
+    critical_error_missing_directory: "致命错误：PathManage.init：未找到所需目录：'%{dir}'。"
+    critical_error_missing_file: "致命错误：PathManage.init：未找到所需文件：'%{file}'。"
+
+  settings_manager:
+    error_invalid_filename: '无效的文件名 (包含[\\/:*?"<>|])："%{value}"。'
+    critical_error_init_failed: "致命错误：SettingsManager 初始化失败。"
+    notice_create_new_json: "--配置文件异常或未找到，创建默认配置文件: %{filepath}"
+    warning_load_json_failed: "--警告：加载配置文件失败，使用默认配置。错误：%{error}"
+    warning_save_json_failed: "--警告：保存配置文件失败。错误：%{error}"
+
+  all_services:
+    notice_all_initialized: "所有服务已初始化。"
+    notice_shutting_down_all: "正在关闭所有服务..."
+    notice_all_shutdown: "所有服务已关闭。"

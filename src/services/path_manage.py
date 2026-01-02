@@ -46,6 +46,30 @@ CLS_EX_ONNX_PATH = concat_path(MODELS_DIR, "cls-ex.onnx")
 
 
 
+
+
+
+# 校验合法的 Windows 文件名
+def validate_windows_filename(v):
+    if not v or not isinstance(v, str) or not v.strip():
+        return False
+    # Windows 文件名禁止字符
+    invalid_chars = r'\\/:*?"<>|'
+    if any(c in invalid_chars for c in v):
+        return False
+    # 禁止保留名称
+    reserved_names = {
+        'CON', 'PRN', 'AUX', 'NUL',
+        'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+        'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+    }
+    if v.upper() in reserved_names:
+        return False
+    return True
+
+
+
+
 class PathManage:
 
     @staticmethod
@@ -54,12 +78,12 @@ class PathManage:
         # 检查静态路径是否存在
         for dir in [RESOURCES_DIR, TEMP_DIR, MODELS_DIR]:
             if not os.path.isdir(dir):
-                raise FileNotFoundError(i18n.t("path_manage.error_missing_directory", dir=dir))
+                raise FileNotFoundError(i18n.t("path_manage.critical_error_missing_directory", dir=dir))
         
         for file in [APP_ICON_PATH, CLICK_TEMPLATE_PATH, TEST_H264_PATH, TEST_VP9_PATH,
                      FFMPEG_EXE_PATH, FFPROBE_EXE_PATH,
                      MajdataView_EXE_PATH, MajdataEdit_EXE_PATH]:
             if not os.path.isfile(file):
-                raise FileNotFoundError(i18n.t("path_manage.error_missing_file", file=file))
+                raise FileNotFoundError(i18n.t("path_manage.critical_error_missing_file", file=file))
 
-        print("--" + i18n.t("general.init_complete", name="PathManage"))
+        print("--" + i18n.t("general.notice_init_complete", name="PathManage"))

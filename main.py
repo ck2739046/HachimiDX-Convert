@@ -17,7 +17,7 @@ def main():
         window.show()
         sys.exit(app.exec())
 
-    except Exception as e:
+    except Exception:
         print("\n------------------------ \
               \nError caught by main.py: \
               \n------------------------\n")

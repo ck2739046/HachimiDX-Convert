@@ -17,8 +17,8 @@ class I18nManage:
             with open(settings_path, 'r', encoding='utf-8') as f:
                 settings_data = json.load(f)
                 language = settings_data.get("language", fallback_language)
-        except Exception:
-            print(f"--Warning: I18nInit: Failed to get language setting from settings.json, defaulting to '{fallback_language}'.")
+        except Exception as e:
+            print(f"--Warning: I18nInit: Failed to get language setting from settings.json, defaulting to '{fallback_language}'. Error: {e}")
             language = fallback_language
 
         # 检查语言文件是否存在
@@ -38,4 +38,4 @@ class I18nManage:
         i18n.set('locale', language)
         i18n.set('fallback', 'en_US') # fallback
 
-        print("--" + i18n.t("general.init_complete", name="I18nManage"))
+        print("--" + i18n.t("general.notice_init_complete", name="I18nManage"))

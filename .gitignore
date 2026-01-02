@@ -7,5 +7,6 @@ legacy/aaa-result
 src/resources/Majdata/
 src/resources/ffmpeg*
 src/resources/models/
+temp.py
 
 data/settings.json

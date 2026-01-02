@@ -1,7 +1,25 @@
+# 四个层级:
+# 1. notice: 普通信息
+# 2. warning: 警告信息，程序可继续运行
+# 3. error: 待处理错误，抛出给调用方，由调用方决定是降级处理（warning）还是终止（critical）
+# 4. critical: 致命错误，程序无法继续运行
+
 en_US:
   general:
-    init_complete: "%{name} initialization completed."
+    notice_init_complete: "%{name} initialization completed."
 
   path_manage:
-    error_missing_directory: "Critical Error: PathManage.init: Required directory not found: '%{dir}'."
-    error_missing_file: "Critical Error: PathManage.init: Required file not found: '%{file}'."
+    critical_error_missing_directory: "Critical Error: PathManage.init: Required directory not found: '%{dir}'."
+    critical_error_missing_file: "Critical Error: PathManage.init: Required file not found: '%{file}'."
+
+  settings_manager:
+    error_invalid_filename: 'Invalid filename (contains [\\/:*?\"<>|]): "%{value}".'
+    critical_error_init_failed: "Critical Error: SettingsManager initialization failed."
+    notice_create_new_json: "--Configuration file invalid or not found, create default configuration: %{filepath}"
+    warning_load_json_failed: "--Warning: Load configuration file failed, using default configuration. Error: %{error}"
+    warning_save_json_failed: "--Warning: Save configuration file failed. Error: %{error}"
+
+  all_services:
+    notice_all_initialized: "All services initialized."
+    notice_shutting_down_all: "Shutting down all services..."
+    notice_all_shutdown: "All services shut down."

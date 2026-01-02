@@ -1,6 +1,7 @@
 # 导入实例
 from .i18n_manage import I18nManage
 from .path_manage import PathManage
+from .settings_manager import SettingsManager
 import i18n
 
 
@@ -15,14 +16,13 @@ class AllServices:
         if cls._is_initialized:
             return
         
-        print("Initializing all services...")
+        print("Initializing all services...") # 此时i18n尚未初始化，只能英语
 
         I18nManage.init()
         PathManage.init()
+        SettingsManager.get_instance()
 
-        
-
-        print("All services initialized.")
+        print(i18n.t("all_services.notice_all_initialized"))
         cls._is_initialized = True
 
 
@@ -32,7 +32,9 @@ class AllServices:
         if not cls._is_initialized:
             return
         
-        print("Shutting down all services...")
+        print(i18n.t("all_services.notice_shutting_down_all"))
 
-        print("All services shut down.")
+        SettingsManager.shutdown_instance()
+
+        print(i18n.t("all_services.notice_all_shutdown"))
         cls._is_initialized = False
