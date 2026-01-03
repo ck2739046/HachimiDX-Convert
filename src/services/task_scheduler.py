@@ -14,6 +14,8 @@ import i18n
 
 from .task_contract import TaskInfo, TaskSignals, TaskStatus, TaskType
 
+from .media_task_launcher import start_ffmpeg_for_media_task
+
 
 
 
@@ -45,6 +47,7 @@ class TaskScheduler(QObject):
     def get_instance(cls) -> "TaskScheduler":
         if cls._instance is None:
             cls._instance = TaskScheduler()
+            cls._instance.register_runner(TaskType.MEDIA, start_ffmpeg_for_media_task)
         return cls._instance
 
     @classmethod

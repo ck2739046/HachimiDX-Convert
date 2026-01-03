@@ -26,3 +26,12 @@ zh_CN:
 
   task_scheduler:
     notice_user_terminated_task: "任务 %{task_id} 被用户中止。"
+
+  media_task_launcher:
+    error_unsupported_config: "不支持的媒体任务配置。"
+    error_ffmpeg_not_found: "未找到 FFmpeg：%{path}"
+    error_invalid_io_path: "无效的输入/输出路径：%{error}"
+    error_failed_create_output_dir: "创建输出目录失败：%{error}"
+    error_failed_remove_existing_output: "删除已存在的输出文件失败：%{error}"
+    error_invalid_media_config: "媒体任务配置无效：%{error}"
+    notice_ffmpeg_started: "FFmpeg 已启动，指令：\n%{command}"
