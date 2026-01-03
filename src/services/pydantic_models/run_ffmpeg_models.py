@@ -10,7 +10,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, FilePath, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FilePath, field_validator, model_validator
+
+from ..task_contract import MediaType
 
 
 # ===== Common primitives =====
@@ -156,7 +158,7 @@ SampleRate = Literal[44100, 48000]
 class RunFfmpegAudio(RunFfmpegBase):
     """Run FFmpeg: audio output."""
 
-    type: Literal["audio"] = "audio"
+    media_type: MediaType = Field(default=MediaType.AUDIO)
 
     format: AudioFormat = Field(default="ogg")
     sample_rate: SampleRate = Field(default=44100)
@@ -193,7 +195,7 @@ class RunFfmpegAudio(RunFfmpegBase):
 class RunFfmpegVideoWithoutAudio(RunFfmpegBase):
     """Run FFmpeg: video output without audio."""
 
-    type: Literal["video_without_audio"] = "video_without_audio"
+    media_type: MediaType = Field(default=MediaType.VIDEO_WITHOUT_AUDIO)
 
     crf: int = Field(default=23, ge=20, le=28)
     resolution: Resolution = Field(default="origin")
@@ -225,7 +227,7 @@ aac_bitrate = Literal["cbr 224k", "cbr 192k", "cbr 160k"]
 class RunFfmpegVideoWithAudio(RunFfmpegBase):
     """Run FFmpeg: video output with audio (AAC)."""
 
-    type: Literal["video_with_audio"] = "video_with_audio"
+    media_type: MediaType = Field(default=MediaType.VIDEO_WITH_AUDIO)
 
     # audio
     audio_format: Literal["aac"] = Field(default="aac")

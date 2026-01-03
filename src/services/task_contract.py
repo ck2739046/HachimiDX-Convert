@@ -11,6 +11,13 @@ class TaskType(str, Enum):
     MEDIA = "media"
 
 
+class MediaType(str, Enum):
+    AUDIO = "audio"
+    VIDEO_WITH_AUDIO = "video_with_audio"
+    VIDEO_WITHOUT_AUDIO = "video_without_audio"
+    UNKNOWN = "unknown"
+
+
 class TaskStatus(str, Enum):
     PENDING = "pending"      # accepted, waiting in queue
     RUNNING = "running"      # currently executing
