@@ -64,7 +64,7 @@ class SettingsManager:
 
 
     def __init__(self):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         # load_or_create 可能抛出critical error
         # 此处不管，由上游处理
         self._config: SettingsModel = self._load_or_create()

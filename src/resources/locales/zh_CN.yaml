@@ -23,3 +23,6 @@ zh_CN:
     notice_all_initialized: "所有服务已初始化。"
     notice_shutting_down_all: "正在关闭所有服务..."
     notice_all_shutdown: "所有服务已关闭。"
+
+  task_scheduler:
+    notice_user_terminated_task: "任务 %{task_id} 被用户中止。"
