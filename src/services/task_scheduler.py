@@ -46,8 +46,7 @@ class TaskScheduler(QObject):
     @classmethod
     def get_instance(cls) -> "TaskScheduler":
         if cls._instance is None:
-            cls._instance = TaskScheduler()
-            cls._instance.register_runner(TaskType.MEDIA, start_ffmpeg_for_media_task)
+            cls._instance = cls()
         return cls._instance
 
     @classmethod
@@ -63,6 +62,9 @@ class TaskScheduler(QObject):
         self.signals = TaskSignals()
         self._tasks: Dict[str, TaskInfo] = {}
         self._runners: Dict[TaskType, _TaskRunner] = {}
+        # 注册 task runners
+        self.register_runner(TaskType.MEDIA, start_ffmpeg_for_media_task)
+        print("--" + i18n.t("general.notice_init_complete", name="TaskScheduler"))
 
     def cleanup(self) -> None:
         """cancel running processes and stop dispatch."""
