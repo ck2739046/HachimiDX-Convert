@@ -128,12 +128,30 @@ class TaskScheduler(QObject):
     # Public API
     # -------------------
 
-    def submit(self, task_type: TaskType, config: Any, task_name: Optional[str] = None) -> tuple[str, bool]:
-        """Submit a task.
+    @classmethod
+    def submit(cls, task_type: TaskType, config: Any, task_name: Optional[str] = None) -> tuple[str, bool]:
+        """
+        Submit a task.
+
+        Args:
+            task_type: The type of task.
+            config: The validated config object (Pydantic model).
+            task_name: Optional task name for display.
 
         Returns:
-            (task_id, is_task_accepted)
+            tuple(task_id, is_task_accepted)
         """
+        return cls.get_instance()._submit(task_type, config, task_name)
+    
+
+    @classmethod
+    def cancel(cls, task_id: str) -> None:
+        """Cancel a running/non-running task from registry."""
+        cls.get_instance()._cancel_or_remove(task_id)
+
+
+    def _submit(self, task_type: TaskType, config: Any, task_name: Optional[str] = None) -> tuple[str, bool]:
+
         runner = self._runners.get(task_type)
         if runner is None:
             return "", False
@@ -160,8 +178,7 @@ class TaskScheduler(QObject):
         return task.task_id, True
 
 
-    def cancel_or_remove(self, task_id: str) -> None:
-        """Cancel a RUNNING task, or remove a non-running task from registry."""
+    def _cancel_or_remove(self, task_id: str) -> None:
 
         # 任务不存在
         task = self._tasks.get(task_id)

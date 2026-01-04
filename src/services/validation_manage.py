@@ -47,8 +47,8 @@ class ValidationManage:
         )
 
 
-    @staticmethod
-    def validate(model_class: Type[BaseModel],
+    @classmethod
+    def validate(cls, model_class: Type[BaseModel],
                  raw_data: Dict[str, Any],
                  context: Optional[Dict[str, Any]] = None
                 ) -> ValidationResult:
@@ -66,7 +66,7 @@ class ValidationManage:
             return ValidationResult(success=True, data=instance)
         except ValidationError as e:
             # Pydantic 验证错误
-            return ValidationResult(success=False, error_msg=ValidationManage.format_validation_error(e))
+            return ValidationResult(success=False, error_msg=cls.format_validation_error(e))
         except Exception as e:
             # 其他异常
             return ValidationResult(success=False, error_msg=str(e))

@@ -18,7 +18,8 @@ class PathManage:
 
     # 初始化时，这些路径必须存在
     RESOURCES_DIR = concat_path(ROOT, "src", "resources")
-    TEMP_DIR = concat_path(ROOT, "data", "temp")
+    DATA_DIR = concat_path(ROOT, "data")
+    TEMP_DIR = concat_path(DATA_DIR, "temp")
     MODELS_DIR = concat_path(RESOURCES_DIR, "models")
 
     APP_ICON_PATH = concat_path(RESOURCES_DIR, "icon.ico")
@@ -75,18 +76,29 @@ class PathManage:
         return True
 
 
-    @staticmethod
-    def init() -> None:
+    @classmethod
+    def init(cls) -> None:
 
         # 检查静态路径是否存在
-        for dir in [PathManage.RESOURCES_DIR, PathManage.TEMP_DIR, PathManage.MODELS_DIR]:
+        for dir in [cls.RESOURCES_DIR, cls.TEMP_DIR, cls.MODELS_DIR]:
             if not os.path.isdir(dir):
                 raise FileNotFoundError(i18n.t("path_manage.critical_error_missing_directory", dir=dir))
         
-        for file in [PathManage.APP_ICON_PATH, PathManage.CLICK_TEMPLATE_PATH, PathManage.TEST_H264_PATH, PathManage.TEST_VP9_PATH,
-                     PathManage.FFMPEG_EXE_PATH, PathManage.FFPROBE_EXE_PATH,
-                     PathManage.MajdataView_EXE_PATH, PathManage.MajdataEdit_EXE_PATH]:
+        for file in [cls.APP_ICON_PATH, cls.CLICK_TEMPLATE_PATH, cls.TEST_H264_PATH, cls.TEST_VP9_PATH,
+                     cls.FFMPEG_EXE_PATH, cls.FFPROBE_EXE_PATH,
+                     cls.MajdataView_EXE_PATH, cls.MajdataEdit_EXE_PATH]:
             if not os.path.isfile(file):
                 raise FileNotFoundError(i18n.t("path_manage.critical_error_missing_file", file=file))
 
         print("--" + i18n.t("general.notice_init_complete", name="PathManage"))
+
+
+    @classmethod
+    def get_main_output_dir(cls) -> str:
+        """获取主输出目录路径"""
+        
+        # 临时导入 SettingsManager 避免循环依赖
+        from .settings_manager import SettingsManager
+
+        main_output_dir_name = SettingsManager.get("main_output_dir_name")
+        return concat_path(cls.DATA_DIR, main_output_dir_name)
