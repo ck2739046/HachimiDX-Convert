@@ -26,6 +26,7 @@ class UI_Style:
 
     widget_spacing = 10
     element_height = 25
+    default_text_size = 13
 
     output_log_widget_height = 300
     main_navbar_height = 50
