@@ -127,11 +127,7 @@ class SettingsManager:
             raise
         
 
-    def reset(self):
-        """
-        重置配置到默认值：删除配置文件并重新创建
-        可能抛出异常，需要上游处理
-        """
+    def _reset(self):
         with self._lock:
             # 删除现有的配置文件
             if os.path.exists(SETTINGS_PATH):
@@ -143,17 +139,12 @@ class SettingsManager:
             self._config = default_model
 
 
-    def get(self, key: str, default=None):
-        """获取配置项"""
+    def _get(self, key: str, default=None):
         with self._lock:
             return getattr(self._config, key, default)
 
 
-    def set(self, key: str, value):
-        """
-        设置配置项（带校验和持久化）
-        可能抛出异常，需要上游处理
-        """
+    def _set(self, key: str, value):
         with self._lock:
             # 获取当前配置的副本
             current_data = self._config.model_dump()
@@ -165,3 +156,25 @@ class SettingsManager:
             self._save_to_file(new_config)
             # 更新内存中的配置
             self._config = new_config
+
+
+    @classmethod
+    def reset(cls):
+        """
+        重置配置到默认值：删除配置文件并重新创建
+        may raise
+        """
+        cls.get_instance()._reset()
+    
+    @classmethod
+    def get(cls, key: str, default=None):
+        """获取配置项"""
+        return cls.get_instance()._get(key, default)
+
+    @classmethod
+    def set(cls, key: str, value):
+        """
+        设置配置项（带校验和持久化）
+        may raise
+        """
+        cls.get_instance()._set(key, value)
