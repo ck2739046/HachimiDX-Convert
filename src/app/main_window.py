@@ -49,7 +49,7 @@ class LeftPanel(QWidget):
                 print("--Warning: MainWindow.sizeHint: " + i18n.t("general.error_SettingsManager_get_failed", keyy="main_app_init_size"))
                 self._init_size = super().sizeHint() # 默认行为
             else:
-                self._init_size = init_size
+                self._init_size = QSize(*init_size)
 
         return QSize(self._init_size)
 
