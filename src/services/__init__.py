@@ -3,5 +3,12 @@ from .all_services import AllServices
 from .path_manage import PathManage
 from .settings_manager import SettingsManager
 from .validation_manage import ValidationManage, ValidationResult
+from .task_scheduler import TaskScheduler
+from .media_ffprobe_inspect import FFprobeInspect, FFprobeInspectResult
 
-__all__ = ["AllServices", "PathManage", "SettingsManager", "ValidationManage", "ValidationResult"]
+__all__ = ["AllServices",
+           "PathManage",
+           "SettingsManager",
+           "ValidationManage", "ValidationResult",
+           "TaskScheduler", 
+           "FFprobeInspect", "FFprobeInspectResult"]

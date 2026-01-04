@@ -30,7 +30,7 @@ from PyQt6.QtCore import QProcess
 
 from .path_manage import PathManage
 import i18n
-from .pydantic_models.run_ffmpeg_models import (
+from .pydantic_models import (
     RunFfmpegAudio,
     RunFfmpegBase,
     RunFfmpegVideoWithAudio,
