@@ -7,6 +7,7 @@
 en_US:
   general:
     notice_init_complete: "%{name} initialization completed."
+    error_SettingsManager_get_failed: "Failed to get %{keyy} from SettingsManager."
 
   path_manage:
     critical_error_missing_directory: "Critical Error: PathManage.init: Required directory not found: '%{dir}'"
@@ -35,3 +36,6 @@ en_US:
     error_failed_remove_existing_output: "Failed to remove existing output file: %{error}"
     error_invalid_media_config: "Invalid media task config: %{error}"
     notice_ffmpeg_started: "FFmpeg started, command:\n%{command}"
+
+  app:
+    main_window:

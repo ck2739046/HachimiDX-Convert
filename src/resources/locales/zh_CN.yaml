@@ -7,6 +7,7 @@
 zh_CN:
   general:
     notice_init_complete: "%{name} 初始化完成。"
+    error_SettingsManager_get_failed: "从 SettingsManager 获取 %{keyy} 失败。"
 
   path_manage:
     critical_error_missing_directory: "致命错误：PathManage.init：未找到所需目录：'%{dir}'"
@@ -35,3 +36,6 @@ zh_CN:
     error_failed_remove_existing_output: "删除已存在的输出文件失败：%{error}"
     error_invalid_media_config: "媒体任务配置无效：%{error}"
     notice_ffmpeg_started: "FFmpeg 已启动，指令：\n%{command}"
+
+  app:
+    main_window:

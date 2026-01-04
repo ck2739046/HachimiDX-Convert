@@ -1,8 +1,8 @@
 import sys
 import traceback
 from PyQt6.QtWidgets import QApplication
-from src.app.main_window import MainWindow
-from src.services.all_services import AllServices
+from src.app import MainWindow
+from src.services import AllServices
 
 
 def main():
