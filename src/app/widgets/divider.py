@@ -30,7 +30,7 @@ def create_divider(text, up_margin=5, down_margin=5):
         divider_layout.addWidget(line_left)
 
         label = QLabel(text)
-        label.setStyleSheet(f"color: {colors['text_secondary']}; font-size: {UI_Style.default_text_size}px;")
+        label.setStyleSheet(f"color: {colors['grey_hover']}; font-size: {UI_Style.default_text_size}px;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         divider_layout.addWidget(label)
 

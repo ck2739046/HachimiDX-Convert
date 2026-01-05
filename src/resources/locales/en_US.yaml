@@ -62,10 +62,12 @@ en_US:
       run_ffmpeg:
         ui_select_input_file_button: "Select Media File"
         warning_ffprobe_inspect_failed: "Media inspection failed. Error:\n %{error_msg}\nRaw FFprobe Output:\n%{raw_output}"
-        ui_video_divider: "Video Stream Settings"
-        ui_audio_divider: "Audio Stream Settings"
-        ui_general_divider: "General Settings"
+        ui_select_file_divider: "File Selection"
+        ui_video_divider: "Video Stream"
+        ui_audio_divider: "Audio Stream"
+        ui_common_divider: "Common"
 
+        # ---- Video Settings ----
         ui_video_crf_label: "CRF: "
         ui_video_crf_help: |
           Control the output video quality
@@ -82,14 +84,15 @@ en_US:
           Sets output frame rate
 
           origin: keep original FPS.
-        ui_video_gop_optimize_label: "GOP Optimize: "
+        ui_video_gop_optimize_label: "GOP optimization: "
         ui_video_gop_optimize_help: |
           Toggle GOP optimization
 
           When enabled, video playback in MajdataView will be significantly smoother.
           However, it will increase the output file size.
           Recommended only for videos that need to be played in MajdataView.
-
+        
+        # ---- Audio Settings ----
         ui_audio_format_label: "Codec: "
         ui_audio_format_help: Selects the audio codec
         ui_audio_bitrate_label: "Bitrate: "
@@ -99,12 +102,48 @@ en_US:
           Higher bitrate = higher quality, larger files.
         ui_audio_sample_rate_label: "Sample Rate: "
         ui_audio_sample_rate_help: Sets output audio sampling rate
-        ui_audio_volume_label: "Volume%: "
+        ui_audio_volume_label: "Volume(%): "
         ui_audio_volume_help: |
           Adjusts output audio volume
 
           Adjust as percentage, range 0-200%,
           100% = original volume.
+
+        # ---- Common Settings ----
+        ui_pad_start_sec_label: "Pad Start: "
+        ui_pad_start_sec_help: |
+          Insert a silent/black segment of specified duration at the beginning of the file.
+
+          Unit: seconds (up to 3 decimal places)
+          Zero: No insertion
+          Positive: Insert segment of specified duration
+        ui_start_end_label: "Trim Range: "
+        ui_start_end_help: |
+          Start Time ~ End Time, only output the content in between.
+          
+          Start Time (Left): Content before this time will be discarded.
+          - Unit: seconds (up to 3 decimal places)
+          - Zero: Keep from the beginning (no start trim)
+          - Positive: Time point from the start
+          
+          End Time (Right): Content after this time will be discarded.
+          - Unit: seconds (up to 3 decimal places)
+          - Zero: Keep until the end (no end trim)
+          - Positive: Time point from the start
+          - Negative: Time point from the end
+
+          Example: If the total duration is 60s,
+          Start Time = 10, End Time = 50 (or -10),
+          It will output the content between 10s and 50s (40s total).
+
+        ui_clear_metadata_label: "Clear Metadata: "
+        ui_clear_metadata_help: Whether to clear all metadata (e.g., title, author) in the output file
+        ui_no_video_label: "Disable Video: "
+        ui_no_audio_label: "Disable Audio: "
+        ui_no_video_audio_help: |
+          Disable Video: Output file will not contain video stream
+          Disable Audio: Output file will not contain audio stream
+        ui_submit_button: "Submit"
 
         probe_result_display:
           ui_ffprobe_inspect_prefix: "Media Info"

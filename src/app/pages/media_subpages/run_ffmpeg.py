@@ -14,13 +14,13 @@ class RunFFmpegPage(BaseToolPage):
         self.selected_file_duration = None
         self.selected_file_type = MediaType.UNKNOWN
 
-        # general widgets
-        self.general_pad_start_sec_line_edit = None
-        self.general_trim_start_sec_line_edit = None
-        self.general_trim_end_sec_line_edit = None
-        self.general_clear_metadata_check_box = None
-        self.general_no_video_check_box = None
-        self.general_no_audio_check_box = None
+        # common widgets
+        self.common_pad_start_sec_line_edit = None
+        self.common_start_sec_line_edit = None
+        self.common_end_sec_line_edit = None
+        self.common_clear_metadata_check_box = None
+        self.common_no_video_check_box = None
+        self.common_no_audio_check_box = None
         # video widgets
         self.video_crf_combo_box = None
         self.video_resolution_combo_box = None
@@ -35,6 +35,8 @@ class RunFFmpegPage(BaseToolPage):
 
 
         # 第一行: 输入文件选择
+        file_select_divider = create_divider(i18n.t("app.media_subpages.run_ffmpeg.ui_select_file_divider"))
+        self.content_layout.addWidget(file_select_divider)
         input_file_select_button, self.input_file_path_display, _ = create_file_selection_row(
             button_text=i18n.t("app.media_subpages.run_ffmpeg.ui_select_input_file_button"),
             on_button_clicked_handler=self.on_input_file_selected)
@@ -92,12 +94,36 @@ class RunFFmpegPage(BaseToolPage):
                         audio_volume_label, self.audio_volume_line_edit, audio_volume_help,
                         add_stretch=True)
         
+        # 第五行: common 参数
+        common_divider = create_divider(i18n.t("app.media_subpages.run_ffmpeg.ui_common_divider"))
+        self.content_layout.addWidget(common_divider)
+        # labels
+        pad_start_sec_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_pad_start_sec_label"))
+        start_end_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_start_end_label"))
+        start_end_label_between = create_label("~")  # between start and end
+        clear_metadata_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_clear_metadata_label"))
+        # help icons
+        pad_start_sec_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_pad_start_sec_help"))
+        start_end_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_start_end_help"))
+        clear_metadata_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_clear_metadata_help"))
+        # create rows
+        self.create_row(pad_start_sec_label, self.common_pad_start_sec_line_edit, pad_start_sec_help,
+                        start_end_label, self.common_start_sec_line_edit, start_end_label_between, self.common_end_sec_line_edit, start_end_help,
+                        clear_metadata_label, self.common_clear_metadata_check_box, clear_metadata_help,
+                        add_stretch=True)
 
+        # 第六行: submit 按钮 + no_video/no_audio checkboxes
+        no_video_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_no_video_label"))
+        no_audio_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_no_audio_label"))
+        no_video_audio_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_no_video_audio_help"))
 
+        self.create_row(no_video_label, self.common_no_video_check_box,
+                        no_audio_label, self.common_no_audio_check_box, no_video_audio_help,
+                        add_stretch=True)
         
 
 
-        
+
 
     def on_input_file_selected(self, selected_file_path: str):
         """选择文件后检测媒体信息并显示结果"""
@@ -157,26 +183,26 @@ class RunFFmpegPage(BaseToolPage):
 
     def init_ffmpeg_widgets(self):
 
-        general_dict, video_dict, audio_dict = get_ffmpeg_options()
+        common_dict, video_dict, audio_dict = get_ffmpeg_options()
 
-        # general pad_start_sec line edit
-        self.general_pad_start_sec_check_box = create_line_edit(
-            default_text="0", length=80, validator='float')
-        # general trim_start_sec line edit
-        self.general_trim_start_sec_line_edit = create_line_edit(
-            default_text="0", length=80, validator='float')
-        # general trim_end_sec line edit
-        self.general_trim_end_sec_line_edit = create_line_edit(
-            length=80, validator='float')
-        # general clear_metadata check box
-        self.general_clear_metadata_check_box = self.init_ffmpeg_widget(
-            general_dict, widget_type="check_box", param_name="clear_metadata")
-        # general no_video check box
-        self.general_no_video_check_box = self.init_ffmpeg_widget(
-            general_dict, widget_type="check_box", param_name="no_video")
-        # general no_audio check box
-        self.general_no_audio_check_box = self.init_ffmpeg_widget(
-            general_dict, widget_type="check_box", param_name="no_audio")
+        # common pad_start_sec line edit
+        self.common_pad_start_sec_line_edit = create_line_edit(
+            length=70, validator='float')
+        # common start_sec line edit
+        self.common_start_sec_line_edit = create_line_edit(
+            length=70, validator='float')
+        # common end_sec line edit
+        self.common_end_sec_line_edit = create_line_edit(
+            length=70, validator='float')
+        # common clear_metadata check box
+        self.common_clear_metadata_check_box = self.init_ffmpeg_widget(
+            common_dict, widget_type="check_box", param_name="clear_metadata")
+        # common no_video check box
+        self.common_no_video_check_box = self.init_ffmpeg_widget(
+            common_dict, widget_type="check_box", param_name="no_video")
+        # common no_audio check box
+        self.common_no_audio_check_box = self.init_ffmpeg_widget(
+            common_dict, widget_type="check_box", param_name="no_audio")
         
         # video crf combo box
         self.video_crf_combo_box = self.init_ffmpeg_widget(

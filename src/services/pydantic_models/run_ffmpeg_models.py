@@ -17,7 +17,7 @@ from ..task_contract import MediaType
 
 
 
-# general
+# common
 Clear_Metadata = "bool"
 Clear_Metadata_Default = True
 
@@ -89,13 +89,16 @@ class RunFFmpegBase(BaseModel):
         media_type          MediaType Enum，后续子类会覆此字段
         input_duration_sec  输入文件时长(秒)，最多三位小数float，≥0
         pad_start_sec       开头填充时长(秒)，最多三位小数float，≥0
-        trim_start_sec      裁剪起始时间(秒)，最多三位小数float，≥0
-        trim_end_sec        裁剪结束时间(秒)，最多三位小数float，可为负数
+        start_sec           起始时间(秒)，最多三位小数float，≥0
+                            该时间点之前的内容将被丢弃
+        end_sec             结束时间(秒)，最多三位小数float，可为负数
+                            该时间点之后的内容将被丢弃
 
     说明:
-        - pad_start_sec 与 trim_start_sec 互斥，不能同时设置
-        - 如果设置了 trim_start_sec 或 trim_end_sec，则必须提供 input_duration_sec
-        - trim_end_sec 为负数时，表示从文件结尾向前计算 -> input_duration_sec + trim_end_sec
+        - pad_start_sec 与 start_sec 互斥，不能同时设置
+        - 如果设置了 start_sec 或 end_sec，则必须提供 input_duration_sec
+        - end_sec 为负数时，表示从文件结尾向前计算 -> input_duration_sec + end_sec
+        - pad_start_sec/start_sec/end_sec/input_duration_sec = 0 视为未设置 (None)
     """
 
     # Required
@@ -106,73 +109,77 @@ class RunFFmpegBase(BaseModel):
     # Optional
     input_duration_sec: Optional[float] = Field(default=None, gt=0)
     pad_start_sec: Optional[float] = Field(default=None, gt=0)
-    trim_start_sec: Optional[float] = Field(default=None, gt=0)
-    trim_end_sec: Optional[float] = Field(default=None)
+    start_sec: Optional[float] = Field(default=None, gt=0)
+    end_sec: Optional[float] = Field(default=None)
 
     # 基础校验，三位小数
     @field_validator("pad_start_sec")
     @classmethod
     def _validate_pad_start_precision(cls, v: Optional[float]) -> Optional[float]:
-        if v is None:
-            return v
+        if v is None or v == 0:
+            return None
         return _ensure_max_3_decimals(float(v), "pad_start_sec")
 
     # 基础校验，三位小数
-    @field_validator("trim_start_sec")
+    @field_validator("start_sec")
     @classmethod
-    def _validate_trim_start_precision(cls, v: Optional[float]) -> Optional[float]:
-        if v is None:
-            return v
-        return _ensure_max_3_decimals(float(v), "trim_start_sec")
+    def _validate_start_precision(cls, v: Optional[float]) -> Optional[float]:
+        if v is None or v == 0:
+            return None
+        return _ensure_max_3_decimals(float(v), "start_sec")
 
     # 基础校验，三位小数
-    @field_validator("trim_end_sec")
+    @field_validator("end_sec")
     @classmethod
-    def _validate_trim_end_precision(cls, v: Optional[float]) -> Optional[float]:
-        if v is None:
-            return v
-        return _ensure_max_3_decimals(float(v), "trim_end_sec")
+    def _validate_end_precision(cls, v: Optional[float]) -> Optional[float]:
+        if v is None or v == 0:
+            return None
+        return _ensure_max_3_decimals(float(v), "end_sec")
 
-    # 后校验，互斥，检查取值范围，trim_end_sec变正数
+    # 后校验，互斥，检查取值范围，end_sec变正数
     @model_validator(mode="after")
     def _validate_times_constraints(self) -> "RunFFmpegBase":
 
-        def resolved_trim_end_sec(self) -> Optional[float]:
+        def resolved_end_sec(self) -> Optional[float]:
             """
             Positive: use as-is.
-            Negative: input_duration_sec + trim_end_sec.
+            Negative: input_duration_sec + end_sec.
             """
             # 检查 input_duration_sec 存在
-            if self.input_duration_sec is None:
-                raise ValueError("input_duration_sec is required when trim_end_sec is set")
+            if self.input_duration_sec is None or self.input_duration_sec == 0:
+                raise ValueError("input_duration_sec is required when end_sec is set")
             # resolve negative
-            end_f = float(self.trim_end_sec)
+            end_f = float(self.end_sec)
             duration_f = float(self.input_duration_sec)
             end_resolved = duration_f + end_f if end_f < 0 else end_f
             # 检查 end > duration
             if end_resolved > duration_f:
-                raise ValueError("Must not trim_end_sec > input_duration_sec")
+                raise ValueError("Must not end_sec > input_duration_sec")
             return end_resolved
 
-        # Mutual exclusion: pad_start_sec vs trim_start_sec
-        if self.pad_start_sec is not None and self.trim_start_sec is not None:
-            raise ValueError("pad_start_sec and trim_start_sec cannot be both set")
+        set_start = self.start_sec is not None and self.start_sec != 0
+        set_end = self.end_sec is not None and self.end_sec != 0
+        set_pad = self.pad_start_sec is not None and self.pad_start_sec != 0
+        set_duration = self.input_duration_sec is not None and self.input_duration_sec != 0
+
+        # Mutual exclusion: pad_start_sec vs start_sec
+        if set_pad and set_start:
+            raise ValueError("pad_start_sec and start_sec cannot be both set")
         
-        # Validata trim_start_sec < input_duration_sec
-        if self.trim_start_sec is not None:
-            if self.input_duration_sec is None:
-                raise ValueError("input_duration_sec is required when trim_start_sec is set")
-            if float(self.trim_start_sec) >= float(self.input_duration_sec):
-                raise ValueError("Must not trim_start_sec ≥ input_duration_sec")
-
+        # Validata start_sec < input_duration_sec
+        if set_start:
+            if not set_duration:
+                raise ValueError("input_duration_sec is required when start_sec is set")
+            if float(self.start_sec) >= float(self.input_duration_sec):
+                raise ValueError("Must not start_sec ≥ input_duration_sec")     
         # Validate trim_end_sec < input_duration_sec
-        if self.trim_end_sec is not None:
-            _ = resolved_trim_end_sec(self) # check included, may raise
+        if set_end:
+            _ = resolved_end_sec(self) # check included, may raise
 
-        # Ensure trim_start < trim_end if both are set
-        if self.trim_start_sec is not None and self.trim_end_sec is not None:
-            if float(self.trim_start_sec) >= resolved_trim_end_sec(self):
-                raise ValueError("Must not trim_start_sec ≥ trim_end_sec")
+        # Ensure start_sec < end_sec if both are set
+        if set_start and set_end:
+            if float(self.start_sec) >= resolved_end_sec(self):
+                raise ValueError("Must not start_sec ≥ end_sec")
 
         return self
 
@@ -355,13 +362,13 @@ class RunFFmpegVideoWithAudio(RunFFmpegVideoWithoutAudio):
 
 def get_ffmpeg_options() -> tuple[dict, dict, dict]:
     """
-    返回三个字典: tuple(general_opts, video_opts, audio_opts)
+    返回三个字典: tuple(common_opts, video_opts, audio_opts)
     
     combobox: dict{opts: list, default: value}
     checkbox: bool_default_value
     lineEdit: min_int, max_int, default_int
 
-    general:
+    common:
         clear_metadata: bool_default_value
         no_video: bool_default_value
         no_audio: bool_default_value
@@ -382,7 +389,7 @@ def get_ffmpeg_options() -> tuple[dict, dict, dict]:
         volume: tuple(min_int, max_int, default_int)
     """
 
-    general_opts = {
+    common_opts = {
         "clear_metadata": Clear_Metadata_Default,
         "no_video": No_Video_Default,
         "no_audio": No_Audio_Default 
@@ -416,4 +423,4 @@ def get_ffmpeg_options() -> tuple[dict, dict, dict]:
                          Audio_Volume_Default)
     }
 
-    return general_opts, video_opts, audio_opts
+    return common_opts, video_opts, audio_opts

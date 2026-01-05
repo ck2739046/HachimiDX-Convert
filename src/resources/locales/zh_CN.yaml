@@ -62,10 +62,12 @@ zh_CN:
       run_ffmpeg:
         ui_select_input_file_button: "选择媒体文件"
         warning_ffprobe_inspect_failed: "媒体检测失败。错误信息：\n %{error_msg}\n原始 FFprobe 输出：\n%{raw_output}"
-        ui_video_divider: "视频流设置"
-        ui_audio_divider: "音频流设置"
-        ui_general_divider: "通用设置"
+        ui_select_file_divider: "文件选择"
+        ui_video_divider: "视频设置"
+        ui_audio_divider: "音频设置"
+        ui_common_divider: "通用设置"
 
+        # ---- 视频设置 ----
         ui_video_crf_label: "CRF: "
         ui_video_crf_help: |
           控制输出视频的质量
@@ -90,6 +92,7 @@ zh_CN:
           代价是会增加输出文件大小。
           建议仅用于 MajdataView 播放的视频。
 
+        # ---- 音频设置 ----
         ui_audio_format_label: "编码: "
         ui_audio_format_help: 选择输出音频的编码格式
         ui_audio_bitrate_label: "码率: "
@@ -99,12 +102,48 @@ zh_CN:
           码率越高，质量越高，文件越大
         ui_audio_sample_rate_label: "采样率: "
         ui_audio_sample_rate_help: 设置输出音频的采样率
-        ui_audio_volume_label: "音量%: "
+        ui_audio_volume_label: "音量(%): "
         ui_audio_volume_help: |
           调整输出音频的音量
 
           单位是百分比，支持范围0-200%，
           100% = 原始音量。
+
+        # ---- 通用设置 ----
+        ui_pad_start_sec_label: "片头留空: "
+        ui_pad_start_sec_help: |
+          在文件起始处插入指定时长的静音/黑屏片段
+
+          单位：秒（最多保留三位小数）
+          零：不插入
+          正数：插入指定时长的静音/黑屏片段
+        ui_start_end_label: "截取范围: "
+        ui_start_end_help: |
+          起始时间 ~ 结束时间，只输出中间的这部分
+          
+          起始时间(左): 该时间点之前的内容将被丢弃。
+          - 单位: 秒（最多保留三位小数）
+          - 零: 保留至文件起始 (不裁剪开头)
+          - 正数: 从前往后的时间点
+          
+          结束时间(右): 该时间点之后的内容将被丢弃。
+          - 单位: 秒（最多保留三位小数）
+          - 零: 保留至文件末尾 (不裁剪结尾)
+          - 正数: 从前往后的时间点
+          - 负数: 从后往前的时间点
+
+          例: 假如视频总时长 60 秒，
+          起始时间 = 10，结束时间 = 50(或-10)，
+          将会输出 10 秒到 50 秒之间的内容 (共 40 秒)。
+
+        ui_clear_metadata_label: "清除元数据: "
+        ui_clear_metadata_help: 是否清除输出文件的附加信息 (例如标题、作者等)
+        ui_no_video_label: "禁用视频: "
+        ui_no_audio_label: "禁用音频: "
+        ui_no_video_audio_help: |
+          禁用视频：输出文件将不包含视频流
+          禁用音频：输出文件将不包含音频流
+        ui_submit_button: "提交"
         
         probe_result_display:
           ui_ffprobe_inspect_prefix: "媒体信息"
