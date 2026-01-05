@@ -24,6 +24,7 @@ class StyledCheckBox(QCheckBox):
             QCheckBox::indicator {{
                 width: {self.size}px;
                 height: {self.size}px;
+                border: none;
             }}
         """)
 

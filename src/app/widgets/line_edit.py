@@ -1,16 +1,16 @@
 from PyQt6.QtWidgets import QLineEdit
-from PyQt6.QtGui import QDoubleValidator
+from PyQt6.QtGui import QDoubleValidator, QIntValidator
 from ..ui_style import UI_Style
 
 
-def create_line_edit(default_text=None, placeholder=None, length=None, is_number=False):
+def create_line_edit(default_text=None, placeholder=None, length=None, validator=None):
     """
     创建文本输入框
     Args:
         default_text: str，可选，默认None
         placeholder: str，可选，默认None
         length: int，可选，默认None
-        is_number: bool，可选，默认False，不设置QDoubleValidator
+        validator: str，可选，默认None，取值可以是 int 或 float/double
 
     Returns:
         QLineEdit: 配置好的文本输入框
@@ -27,7 +27,9 @@ def create_line_edit(default_text=None, placeholder=None, length=None, is_number
     if placeholder:
         line_edit.setPlaceholderText(placeholder)
 
-    if is_number:
+    if validator == 'int':
+        line_edit.setValidator(QIntValidator())
+    elif validator in ('float', 'double'):
         line_edit.setValidator(QDoubleValidator())
 
     if default_text:

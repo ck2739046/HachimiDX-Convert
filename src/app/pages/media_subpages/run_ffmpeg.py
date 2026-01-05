@@ -72,6 +72,26 @@ class RunFFmpegPage(BaseToolPage):
                         video_gop_optimize_label, self.video_gop_optimize_check_box, video_gop_optimize_help,
                         add_stretch=True)
         
+        # 第四行: audio 参数
+        audio_divider = create_divider(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_divider"))
+        self.content_layout.addWidget(audio_divider)
+        # labels
+        audio_format_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_format_label"))
+        audio_bitrate_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_bitrate_label"))
+        audio_sample_rate_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_sample_rate_label"))
+        audio_volume_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_volume_label"))
+        # help icons
+        audio_format_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_format_help"))
+        audio_bitrate_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_bitrate_help"))
+        audio_sample_rate_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_sample_rate_help"))
+        audio_volume_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_volume_help"))
+        # create rows
+        self.create_row(audio_format_label, self.audio_format_combo_box, audio_format_help,
+                        audio_bitrate_label, self.audio_bitrate_combo_box, audio_bitrate_help,
+                        audio_sample_rate_label, self.audio_sample_rate_combo_box, audio_sample_rate_help,
+                        audio_volume_label, self.audio_volume_line_edit, audio_volume_help,
+                        add_stretch=True)
+        
 
 
         
@@ -131,14 +151,6 @@ class RunFFmpegPage(BaseToolPage):
             check_box = create_check_box(default_checked=default)
             return check_box
         
-        elif widget_type == "line_edit":
-            min, max, default = dictt[param_name]
-            line_edit = create_line_edit(default_text=str(default),
-                                         placeholder=f"{min}~{max}",
-                                         length=length,
-                                         is_number=True)
-            return line_edit
-        
         return None # 不应该发生
             
 
@@ -149,13 +161,13 @@ class RunFFmpegPage(BaseToolPage):
 
         # general pad_start_sec line edit
         self.general_pad_start_sec_check_box = create_line_edit(
-            default_text="0", length=80, is_number=True)
+            default_text="0", length=80, validator='float')
         # general trim_start_sec line edit
         self.general_trim_start_sec_line_edit = create_line_edit(
-            default_text="0", length=80, is_number=True)
+            default_text="0", length=80, validator='float')
         # general trim_end_sec line edit
         self.general_trim_end_sec_line_edit = create_line_edit(
-            length=80, is_number=True)
+            length=80, validator='float')
         # general clear_metadata check box
         self.general_clear_metadata_check_box = self.init_ffmpeg_widget(
             general_dict, widget_type="check_box", param_name="clear_metadata")
@@ -185,8 +197,8 @@ class RunFFmpegPage(BaseToolPage):
         self.audio_bitrate_combo_box = create_combo_box(length=100)
         # audio sample_rate combo box
         self.audio_sample_rate_combo_box = self.init_ffmpeg_widget(
-            audio_dict, widget_type="combo_box", param_name="audio_sample_rate", length=100)
+            audio_dict, widget_type="combo_box", param_name="audio_sample_rate", length=70)
         # audio volume line edit
-        self.audio_volume_line_edit = self.init_ffmpeg_widget(
-            audio_dict, widget_type="line_edit", param_name="audio_volume", length=80)
-        
+        min, max, default = audio_dict["audio_volume"]
+        self.audio_volume_line_edit = create_line_edit(
+            default_text=str(default), placeholder=f"{min}~{max}", length=60, validator='int')

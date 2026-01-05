@@ -90,6 +90,22 @@ en_US:
           However, it will increase the output file size.
           Recommended only for videos that need to be played in MajdataView.
 
+        ui_audio_format_label: "Codec: "
+        ui_audio_format_help: Selects the audio codec
+        ui_audio_bitrate_label: "Bitrate: "
+        ui_audio_bitrate_help: |
+          Controls the output audio quality
+
+          Higher bitrate = higher quality, larger files.
+        ui_audio_sample_rate_label: "Sample Rate: "
+        ui_audio_sample_rate_help: Sets output audio sampling rate
+        ui_audio_volume_label: "Volume%: "
+        ui_audio_volume_help: |
+          Adjusts output audio volume
+
+          Adjust as percentage, range 0-200%,
+          100% = original volume.
+
         probe_result_display:
           ui_ffprobe_inspect_prefix: "Media Info"
           ui_ffprobe_inspect_help: |
