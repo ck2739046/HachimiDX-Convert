@@ -11,10 +11,11 @@ Rules implemented (per requirements):
   - Video builder (shared for video_with_audio and video_without_audio)
 - Audio always forces stereo: -ac 2
 - video_without_audio always uses -an
-- video_with_audio with mute=True is treated as video_without_audio (-an)
+- video_with_audio with no_audio=True is treated as video_without_audio (-an)
+- video_with_audio with no_video=True is treated as audio-only (-vn)
 - Video always uses: -pix_fmt yuv420p and libx264
 - If resolution/fps is "origin", do not add related args
-- Common pad/trim follow legacy patterns:
+- Handle pad/trim args:
   - trim_start_sec -> -ss
   - trim_end_sec (resolved) -> -to
   - pad_start_sec -> audio: adelay, video: tpad start_duration
@@ -31,10 +32,10 @@ from PyQt6.QtCore import QProcess
 from .path_manage import PathManage
 import i18n
 from .pydantic_models import (
-    RunFfmpegAudio,
-    RunFfmpegBase,
-    RunFfmpegVideoWithAudio,
-    RunFfmpegVideoWithoutAudio,
+    RunFFmpegAudio,
+    RunFFmpegBase,
+    RunFFmpegVideoWithAudio,
+    RunFFmpegVideoWithoutAudio,
 )
 
 
@@ -50,7 +51,7 @@ def start_ffmpeg_for_media_task(process: QProcess, config: Any) -> tuple[bool, s
     """
     if not isinstance(
         config,
-        (RunFfmpegAudio, RunFfmpegVideoWithAudio, RunFfmpegVideoWithoutAudio),
+        (RunFFmpegAudio, RunFFmpegVideoWithAudio, RunFFmpegVideoWithoutAudio),
     ):
         return False, i18n.t("media_task_launcher.error_unsupported_config")
 
@@ -84,7 +85,7 @@ def start_ffmpeg_for_media_task(process: QProcess, config: Any) -> tuple[bool, s
         args = _build_common_base_args(input_path)
         _apply_common_timing_args(args, config)
 
-        if isinstance(config, RunFfmpegAudio):
+        if isinstance(config, RunFFmpegAudio):
             _apply_audio_args(args, config)
         else:
             _apply_video_args(args, config)
@@ -119,7 +120,7 @@ def _build_common_base_args(input_path: str) -> list[str]:
     ]
 
 
-def _apply_common_timing_args(args: list[str], cfg: RunFfmpegBase) -> None:
+def _apply_common_timing_args(args: list[str], cfg: RunFFmpegBase) -> None:
     # Trim start/end (legacy style: after -i)
     if cfg.trim_start_sec is not None:
         args.extend(["-ss", f"{float(cfg.trim_start_sec)}"])
@@ -152,24 +153,25 @@ def _build_audio_filters(*, volume: int, pad_start_sec: Optional[float]) -> Opti
     return ",".join(filters)
 
 
-def _build_video_filters(
-    *,
-    resolution: str,
-    crop: Optional[str],
-    pad_start_sec: Optional[float],
-) -> Optional[str]:
+def _build_video_filters(*,
+                         resolution: str,
+                         crop: Optional[tuple[int, int, int, int]],
+                         pad_start_sec: Optional[float],
+                        ) -> Optional[str]:
+    
     filters: list[str] = []
 
-    # Crop first (if any): expects "w:h:x:y"
+    # Crop first (if any): expects tuple(w, h, x, y)
     if crop:
-        filters.append(f"crop={crop}")
+        w, h, x, y = crop
+        filters.append(f"crop={w}:{h}:{x}:{y}")
 
     if resolution != "origin":
         # Scale while keeping aspect ratio, then pad to square with black borders.
         # Reference:
         #   scale_expr = if(gt(iw,ih),R,-1):if(gt(iw,ih),-1,R)
         #   pad_expr   = R:R:(ow-iw)/2:(oh-ih)/2:black
-        size_str = resolution.split("x", 1)[0]
+        size_str = resolution.split("×", 1)[0]
         size = int(size_str)
         scale_expr = f"if(gt(iw,ih),{size},-1):if(gt(iw,ih),-1,{size})".replace(",", r"\,") # 对逗号转义
         pad_expr = f"{size}:{size}:(ow-iw)/2:(oh-ih)/2:black"
@@ -191,7 +193,7 @@ def _build_video_filters(
 
 # ===== Audio =====
 
-def _apply_audio_args(args: list[str], cfg: RunFfmpegAudio) -> None:
+def _apply_audio_args(args: list[str], cfg: RunFFmpegAudio) -> None:
     # codec
     if cfg.format == "mp3":
         args.extend(["-c:a", "libmp3lame"])
@@ -248,38 +250,44 @@ def _map_mp3_vbr_to_q(bitrate_label: Optional[str]) -> int:
 
 # ===== Video (shared) =====
 
-def _apply_video_args(args: list[str], cfg: RunFfmpegVideoWithAudio | RunFfmpegVideoWithoutAudio) -> None:
-    treat_as_muted = isinstance(cfg, RunFfmpegVideoWithoutAudio) or (
-        isinstance(cfg, RunFfmpegVideoWithAudio) and bool(cfg.mute)
-    )
+def _apply_video_args(args: list[str], cfg: RunFFmpegVideoWithAudio | RunFFmpegVideoWithoutAudio) -> None:
 
-    vf = _build_video_filters(
-        resolution=str(cfg.resolution),
-        crop=getattr(cfg, "crop", None),
-        pad_start_sec=cfg.pad_start_sec,
-    )
-    if vf:
-        args.extend(["-vf", vf])
+    no_audio = isinstance(cfg, RunFFmpegVideoWithAudio) and bool(cfg.no_audio)
+    no_video = isinstance(cfg, RunFFmpegVideoWithAudio) and bool(cfg.no_video)
 
-    # Video encoder (fixed)
-    args.extend(["-pix_fmt", "yuv420p"])
-    args.extend(["-c:v", "libx264"])
-    args.extend(["-crf", str(int(cfg.crf))])
+    # 1. Video part
+    if no_video:
+        args.append("-vn")
+    else:
+        vf = _build_video_filters(
+            resolution=str(cfg.resolution),
+            crop=getattr(cfg, "crop", None),
+            pad_start_sec=cfg.pad_start_sec,
+        )
+        if vf:
+            args.extend(["-vf", vf])
 
-    if str(cfg.fps) != "origin":
-        args.extend(["-r", str(cfg.fps)])
+        # Video encoder (fixed)
+        args.extend(["-pix_fmt", "yuv420p"])
+        args.extend(["-c:v", "libx264"])
+        args.extend(["-crf", str(int(cfg.crf))])
 
-    if bool(cfg.gop_optimize):
-        args.extend(["-g", "30"])
+        if str(cfg.fps) != "origin":
+            args.extend(["-r", str(cfg.fps)])
 
-    if treat_as_muted:
+        if bool(cfg.gop_optimize):
+            args.extend(["-g", "30"])
+
+    # 2. Audio part
+    if no_audio:
         args.append("-an")
         return
 
     # Audio for video_with_audio
-    if not isinstance(cfg, RunFfmpegVideoWithAudio):
-        # Should not happen due to treat_as_muted logic.
-        args.append("-an")
+    if not isinstance(cfg, RunFFmpegVideoWithAudio):
+        # Should not happen due to no_audio logic.
+        if "-an" not in args:
+            args.append("-an")
         return
 
     args.extend(["-c:a", "aac"])
@@ -288,7 +296,7 @@ def _apply_video_args(args: list[str], cfg: RunFfmpegVideoWithAudio | RunFfmpegV
 
     af = _build_audio_filters(volume=int(cfg.volume), pad_start_sec=cfg.pad_start_sec)
 
-    # Keep A/V stable on some inputs (legacy behavior)
+    # Keep A/V stable on some inputs
     if af:
         af = af + ",aresample=async=1"
     else:

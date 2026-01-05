@@ -1,13 +1,15 @@
 from .run_ffmpeg_models import (
-    RunFfmpegAudio,
-    RunFfmpegBase,
-    RunFfmpegVideoWithAudio,
-    RunFfmpegVideoWithoutAudio,
+    RunFFmpegAudio,
+    RunFFmpegBase,
+    RunFFmpegVideoWithAudio,
+    RunFFmpegVideoWithoutAudio,
+    get_ffmpeg_options
 )
 
 __all__ = [
-    "RunFfmpegBase",
-    "RunFfmpegAudio",
-    "RunFfmpegVideoWithAudio",
-    "RunFfmpegVideoWithoutAudio",
+    "RunFFmpegBase",
+    "RunFFmpegAudio",
+    "RunFFmpegVideoWithAudio",
+    "RunFFmpegVideoWithoutAudio",
+    "get_ffmpeg_options",
 ]

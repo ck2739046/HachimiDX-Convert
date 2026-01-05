@@ -4,7 +4,7 @@ from ..widgets import SegmentedNavBar
 from .media_subpages.match_first import MatchFirstPage
 from .media_subpages.simple_align import SimpleAlignPage
 from .media_subpages.extract_game import ExtractGamePage
-from .media_subpages.run_ffmpeg import RunFfmpegPage
+from .media_subpages.run_ffmpeg import RunFFmpegPage
 from .media_subpages.others import OthersPage
 
 class MediaToolsPage(QWidget):
@@ -38,7 +38,7 @@ class MediaToolsPage(QWidget):
         self.stack.addWidget(MatchFirstPage())
         self.stack.addWidget(SimpleAlignPage())
         self.stack.addWidget(ExtractGamePage())
-        self.stack.addWidget(RunFfmpegPage())
+        self.stack.addWidget(RunFFmpegPage())
         self.stack.addWidget(OthersPage())
 
         # 连接信号
