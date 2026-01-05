@@ -62,6 +62,8 @@ en_US:
       run_ffmpeg:
         ui_select_input_file_button: "Select Media File"
         warning_ffprobe_inspect_failed: "Media inspection failed. Error:\n %{error_msg}\nRaw FFprobe Output:\n%{raw_output}"
+        ui_video_divider: "Video Stream"
+        ui_audio_divider: "Audio Stream"
 
         probe_result_display:
           ui_ffprobe_inspect_prefix: "Media Info"

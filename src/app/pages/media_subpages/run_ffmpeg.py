@@ -27,6 +27,12 @@ class RunFfmpegPage(BaseToolPage):
         self.create_row(probe_result_display_prefix,
                         probe_result_display_help,
                         self.probe_result_display)
+        
+        # 第三行: video 参数
+        video_divider = create_divider(i18n.t("app.media_subpages.run_ffmpeg.ui_video_divider"))
+        self.content_layout.addWidget(video_divider)
+        
+
 
         
 
