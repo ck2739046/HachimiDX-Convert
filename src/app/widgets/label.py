@@ -1,7 +1,7 @@
-from PyQt6.QtWidgets import QLabel
+from PyQt6.QtWidgets import QLabel, QSizePolicy
 from ..ui_style import UI_Style
 
-def create_label(text=None, color=None, size=None, bold=False):
+def create_label(text=None, color=None, size=None, bold=False, expand=False):
     """
     创建文本标签
     
@@ -10,6 +10,7 @@ def create_label(text=None, color=None, size=None, bold=False):
         color: #xxx，可选，默认 UI_Style.COLORS['text_primary']
         size: int，可选，默认 UI_Style.default_text_size
         bold: bool，可选，默认False
+        expand: bool，可选，默认False，是否在水平方向上扩展以利用可用空间
     
     Returns:
         QLabel: 配置好的文本标签
@@ -25,6 +26,11 @@ def create_label(text=None, color=None, size=None, bold=False):
         size = UI_Style.default_text_size
 
     label = QLabel(text)
+    label.setWordWrap(True)  # 支持自动换行和多行文本
+    
+    # 设置大小策略，让 QLabel 能够充分利用水平方向上的可用空间
+    if expand:
+        label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
     if bold:
         label.setStyleSheet(f"color: {color}; font-size: {size}px; font-weight: bold;")

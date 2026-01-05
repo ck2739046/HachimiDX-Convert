@@ -2,7 +2,6 @@
 
 Public API:
 - inspect_media(input_path) -> FFprobeInspectResult
-- print_ffprobe_result(result)
 
 Notes:
 - Uses subprocess.run (not QProcess).
@@ -17,8 +16,9 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict
+
+import i18n
 
 from .path_manage import PathManage
 from .task_contract import MediaType
@@ -26,25 +26,38 @@ from .task_contract import MediaType
 
 _STREAM_ENTRIES = (
     "stream=index,codec_type,codec_name,width,height,avg_frame_rate, \
-     duration,bit_rate,nb_frames,sample_rate,channels,channel_layout"
+            duration,bit_rate,nb_frames,sample_rate,channels,channel_layout \
+     :stream_tags=DURATION \
+     :format=duration"
 )
 
 
 @dataclass(slots=True)
 class FFprobeInspectResult:
+    """
+    FFprobeInspect.inspect_media() 返回的结果对象
+    Args:
+        ok: 是否成功
+        media_type: 媒体类型 (TaskContract.MediaType)
+        video_stream: 视频流信息字典 (Dict)
+        audio_stream: 音频流信息字典 (Dict)
+        duration: 总时长 (float)
+        error_msg: 错误信息 (str)
+        raw: 原始ffprobe输出结果 (已转换成str)
+    """
     ok: bool
     media_type: MediaType
     video_stream: Dict[str, Any]
     audio_stream: Dict[str, Any]
     duration: str
     error_msg: str
-    raw: Dict[str, Any]
+    raw: str
 
 
 class FFprobeInspect:
 
     @classmethod
-    def inspect_media(cls, input_path: Union[str, Path]) -> FFprobeInspectResult:
+    def inspect_media(cls, input_path: str) -> FFprobeInspectResult:
         """Inspect one media file using ffprobe.
 
         Args:
@@ -53,103 +66,40 @@ class FFprobeInspect:
         Returns:
             FFprobeInspectResult
         """
-        file_path = os.path.normpath(os.path.abspath(str(input_path)))
 
-        if not os.path.exists(file_path):
-            return FFprobeInspectResult(
-                ok=False,
-                media_type=MediaType.UNKNOWN,
-                video_stream={},
-                audio_stream={},
-                duration="",
-                error_msg=f"File not found: {file_path}",
-                raw={},
-            )
-
+        # pre check
+        input_path = os.path.normpath(os.path.abspath(str(input_path)))
         ffprobe_exe = str(PathManage.FFPROBE_EXE_PATH)
+        if not os.path.exists(input_path):
+            error_msg = f"File not found: {input_path}"
+            return cls._build_error_result(error_msg)
         if not os.path.isfile(ffprobe_exe):
-            return FFprobeInspectResult(
-                ok=False,
-                media_type=MediaType.UNKNOWN,
-                video_stream={},
-                audio_stream={},
-                duration="",
-                error_msg=f"ffprobe not found: {ffprobe_exe}",
-                raw={},
-            )
+            error_msg=f"ffprobe.exe not found: {ffprobe_exe}"
+            return cls._build_error_result(error_msg)
 
-        args = [
-            "-v",
-            "error",
-            "-show_entries",
-            _STREAM_ENTRIES,
-            "-of",
-            "json",
-            file_path,
-        ]
+        
+        # run ffprobe
+        ok, raw, error_result = cls._run_ffprobe(ffprobe_exe, input_path)
+        if not ok:
+            return error_result
 
-        try:
-            result = subprocess.run(
-                [ffprobe_exe] + args,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-        except Exception as e:
-            return FFprobeInspectResult(
-                ok=False,
-                media_type=MediaType.UNKNOWN,
-                video_stream={},
-                audio_stream={},
-                duration="",
-                error_msg=f"ffprobe launch failed: {e}",
-                raw={},
-            )
 
-        if result.returncode != 0:
-            err = (result.stderr or "").strip()
-            msg = f"ffprobe failed: {err}" if err else f"ffprobe failed: exit_code={result.returncode}"
-            return FFprobeInspectResult(
-                ok=False,
-                media_type=MediaType.UNKNOWN,
-                video_stream={},
-                audio_stream={},
-                duration="",
-                error_msg=msg,
-                raw={},
-            )
+        # parse ffprobe output
+        ok, duration_format, streams, error_result = cls._filter_valid_streams(raw)
+        if not ok:
+            return error_result
 
-        try:
-            raw = json.loads(result.stdout)
-        except Exception as e:
-            return FFprobeInspectResult(
-                ok=False,
-                media_type=MediaType.UNKNOWN,
-                video_stream={},
-                audio_stream={},
-                duration="",
-                error_msg=f"ffprobe JSON parse failed: {e}",
-                raw={},
-            )
+        has_video, first_video_stream, error_result = cls._select_first_stream(streams, "video")
+        if not has_video:
+            first_video_stream = {}
+            
+        has_audio, first_audio_stream, error_result = cls._select_first_stream(streams, "audio")
+        if not has_audio:
+            first_audio_stream = {}
 
-        streams = raw.get("streams", [])
-        if not isinstance(streams, list):
-            return FFprobeInspectResult(
-                ok=False,
-                media_type=MediaType.UNKNOWN,
-                video_stream={},
-                audio_stream={},
-                duration="",
-                error_msg="ffprobe JSON missing 'streams' list",
-                raw={},
-            )
-
-        video_stream = cls._first_stream_of_type(streams, "video") or {}
-        audio_stream = cls._first_stream_of_type(streams, "audio") or {}
-
-        has_video = bool(video_stream)
-        has_audio = bool(audio_stream)
+        duration, error_msg = cls._pick_duration(duration_format, first_video_stream, first_audio_stream)
+        if duration == "N/A":
+            return cls._build_error_result(f"failed to pick duration: \n{error_msg}", raw)
 
         if has_video and has_audio:
             media_type = MediaType.VIDEO_WITH_AUDIO
@@ -159,86 +109,340 @@ class FFprobeInspect:
             media_type = MediaType.AUDIO
         else:
             media_type = MediaType.UNKNOWN
+            return cls._build_error_result("no video or audio streams after select first", raw)
 
-        duration = cls._pick_duration(video_stream, audio_stream)
+        if has_video:
+            first_video_stream["final_duration"] = duration
+            stream_info = cls._build_stream_info_str(first_video_stream)
+            first_video_stream["info_str"] = stream_info
+            
+        if has_audio:
+            first_audio_stream["final_duration"] = duration
+            stream_info = cls._build_stream_info_str(first_audio_stream)
+            first_audio_stream["info_str"] = stream_info
 
         return FFprobeInspectResult(
             ok=True,
             media_type=media_type,
-            video_stream=video_stream,
-            audio_stream=audio_stream,
+            video_stream=first_video_stream,
+            audio_stream=first_audio_stream,
             duration=duration,
             error_msg="",
             raw=raw,
         )
+    
 
+    @classmethod
+    def _run_ffprobe(cls, ffprobe_exe: str, input_path: str) -> tuple[bool, any, FFprobeInspectResult]:
+        """
+        Returns
+            ok: bool,
+            raw: any(dict),
+            error_result: FFprobeInspectResult
+        """
+        
+        args = ["-v", "error",
+                "-show_entries", _STREAM_ENTRIES,
+                "-of", "json",
+                input_path]
+        try:
+            result = subprocess.run([ffprobe_exe] + args,
+                                    capture_output=True,
+                                    text=True,
+                                    encoding="utf-8",
+                                    errors="replace",)
+        except Exception as e:
+            return False, {}, cls._build_error_result(str(e))
+
+        if result.returncode != 0:
+            error_msg = f"ffprobe failed: exit_code={result.returncode}"
+            raw = ""
+            stderr = (result.stderr or "").strip()
+            stdout = (result.stdout or "").strip()
+            if stderr:
+                raw += f"stderr=\n{stderr}"
+            if stdout:
+                raw += f"\nstdout=\n{stdout}"
+            return False, {}, cls._build_error_result(error_msg, raw)
+        
+        try:
+            raw = json.loads(result.stdout)
+            return True, raw, None # success
+        except Exception as e:
+            error_msg = f"ffprobe output parse failed: {str(e)}"
+            raw = ""
+            stderr = (result.stderr or "").strip()
+            stdout = (result.stdout or "").strip()
+            if stderr:
+                raw += f"stderr=\n{stderr}"
+            if stdout:
+                raw += f"\nstdout=\n{stdout}"
+            return False, {}, cls._build_error_result(error_msg, raw)
+    
 
     @staticmethod
-    def _first_stream_of_type(streams: list[dict], codec_type: str) -> Optional[dict]:
+    def _build_error_result(error_msg: str, raw: str = "") -> FFprobeInspectResult:
+        return FFprobeInspectResult(
+            ok=False,
+            media_type=MediaType.UNKNOWN,
+            video_stream={},
+            audio_stream={},
+            duration="",
+            error_msg=error_msg,
+            raw=raw
+        )
+    
+
+    @classmethod
+    def _filter_valid_streams(cls, raw: any) -> tuple[bool, list[dict], FFprobeInspectResult]:
+        """
+        Returns
+            ok: bool,
+            duration_format: str,
+            valid_streams: list[dict],
+            error_result: FFprobeInspectResult
+        """
+
+        streams = raw.get("streams", [])
+        if not isinstance(streams, list) or len(streams) == 0:
+            error_msg="ffprobe output missing 'streams' list"
+            return False, "N/A", [], cls._build_error_result(error_msg, raw)
+        
+        try:
+            duration_format = raw["format"]["duration"]
+        except Exception:
+            duration_format = "N/A"
+        
+        valid_streams = []
+        for s in streams:
+            if not isinstance(s, dict):
+                continue
+            codec_type = s.get("codec_type", 'N/A')
+
+            if codec_type == "video":
+                index = s.get("index", 'N/A')
+                codec_name = s.get("codec_name", 'N/A')
+                w = s.get("width", 'N/A')
+                h = s.get("height", 'N/A')
+                fps = s.get("avg_frame_rate", 'N/A')
+                duration_stream = s.get("duration", 'N/A')
+                bit_rate = s.get("bit_rate", 'N/A')
+                frames = s.get("nb_frames", 'N/A')
+                duration_tag = s.get("tags").get("DURATION", 'N/A') if s.get("tags") else 'N/A'
+
+                # 如果duration_stream, duration_tag, duration_format全部为 N/A，视为 invalid
+                if duration_stream == 'N/A' and duration_tag == 'N/A' and duration_format == 'N/A':
+                    print(i18n.t("media_ffprobe_inspect.notice_ignore_invalid_video_stream_no_duration", stream_info=str(s)))
+                    continue  # invalid
+                # 允许 bit_rate/frames 缺失
+                if 'N/A' in [index, codec_name, w, h, fps]:
+                    na_fields = ",".join([f for f in [index, codec_name, w, h, fps] if f == 'N/A'])
+                    print(i18n.t("media_ffprobe_inspect.notice_ignore_invalid_video_stream", na_fields=na_fields, stream_info=str(s)))
+                    continue  # invalid
+                # 有时候 mp3 封面会被识别为视频流
+                if codec_name == "png":
+                    print(i18n.t("media_ffprobe_inspect.notice_ignore_invalid_video_stream_png", stream_info=str(s)))
+                    continue  # invalid
+
+            if codec_type == "audio":
+                index = s.get("index", 'N/A')
+                codec_name = s.get("codec_name", 'N/A')
+                sample_rate = s.get("sample_rate", 'N/A')
+                channels = s.get("channels", 'N/A')
+                channel_layout = s.get("channel_layout", 'N/A')
+                duration_stream = s.get("duration", 'N/A')
+                bit_rate = s.get("bit_rate", 'N/A')
+                duration_tag = s.get("tags").get("DURATION", 'N/A') if s.get("tags") else 'N/A'
+
+                # 如果duration_stream, duration_tag, duration_format全部为 N/A，视为 invalid
+                if duration_stream == 'N/A' and duration_tag == 'N/A' and duration_format == 'N/A':
+                    print(i18n.t("media_ffprobe_inspect.notice_ignore_invalid_audio_stream_no_duration", stream_info=str(s)))
+                    continue  # invalid
+                # 允许 bit_rate 缺失
+                if 'N/A' in [index, codec_name, sample_rate, channels, channel_layout]:
+                    na_fields = ",".join([f for f in [index, codec_name, sample_rate, channels, channel_layout] if f == 'N/A'])
+                    print(i18n.t("media_ffprobe_inspect.notice_ignore_invalid_audio_stream", na_fields=na_fields, stream_info=str(s)))
+                    continue  # invalid
+
+            valid_streams.append(s)
+
+        if len(valid_streams) == 0:
+            error_msg="no valid streams"
+            return False, "N/A", [], cls._build_error_result(error_msg, raw)
+        
+        return True, duration_format, valid_streams, None
+    
+
+    @classmethod
+    def _select_first_stream(cls, streams: list[dict], codec_type: str) -> tuple[bool, dict, FFprobeInspectResult]:
+        """
+        Returns
+            ok: bool,
+            first_stream: dict,
+            error_result: FFprobeInspectResult
+        """
+
+        target_streams = {}
         for s in streams:
             if isinstance(s, dict) and s.get("codec_type") == codec_type:
-                return s
-        return None
+                try:
+                    index = int(s.get("index"))
+                    target_streams[index] = s
+                except:
+                    pass
+
+        if len(target_streams) == 0:
+            error_msg = f"failed to select the first {codec_type} stream"
+            return False, None, cls._build_error_result(error_msg)
+        
+        selected_index = min(target_streams.keys()) 
+        if len(target_streams) != 1:
+            print(i18n.t("media_ffprobe_inspect.notice_multiple_streams_detected", codec_type=codec_type, selected_index=selected_index)) 
+
+        return True, target_streams[selected_index], None
+    
+
+    @staticmethod
+    def _build_stream_info_str(stream: Dict[str, Any]) -> str:
+
+        def try_round(value: any, decimal: int) -> str:
+            try:
+                if "/" in str(value):
+                    num, denom = str(value).split("/")
+                    return str(round(float(num) / float(denom), decimal))
+                return str(round(float(value), decimal))
+            except Exception:
+                return "N/A"
+            
+        def try_divide(value: any, divider: any) -> str:
+            try:
+                if "/" in str(value):
+                    num, denom = str(value).split("/")
+                    return str(round((float(num) / float(denom)) / divider))
+                return str(round(float(value) / divider))
+            except Exception:
+                return "N/A"
+            
+        if stream.get("codec_type") == "video":
+            video_codec = stream.get("codec_name", "N/A")
+            video_bit_rate = stream.get("bit_rate", "N/A")
+            if video_bit_rate != "N/A":
+                video_bit_rate = try_divide(video_bit_rate, 1000) + "kbps"
+            duration = stream.get("final_duration", "N/A")
+            if duration != "N/A":
+                duration = try_round(duration, 3) + "s"
+            resolution = f"{stream.get('width', 'N/A')}x{stream.get('height', 'N/A')}"
+            fps = stream.get("avg_frame_rate", "N/A")
+            if fps != "N/A":
+                fps = try_round(fps, 2)
+
+            stream_info = i18n.t("media_ffprobe_inspect.ui_video_stream_info",
+                                 codec = video_codec,
+                                 bit_rate = video_bit_rate,
+                                 duration = duration,
+                                 resolution = resolution,
+                                 fps = fps)
+        
+        if stream.get("codec_type") == "audio":
+            audio_codec = stream.get("codec_name", "N/A")
+            audio_bit_rate = stream.get("bit_rate", "N/A")
+            if audio_bit_rate != "N/A":
+                audio_bit_rate = try_divide(audio_bit_rate, 1000) + "kbps"
+            duration = stream.get("final_duration", "N/A")
+            if duration != "N/A":
+                duration = try_round(duration, 3) + "s"
+            sample_rate = stream.get("sample_rate", "N/A")
+            if sample_rate != "N/A":
+                sample_rate = sample_rate + "Hz"
+
+            stream_info = i18n.t("media_ffprobe_inspect.ui_audio_stream_info",
+                                 codec = audio_codec,
+                                 bit_rate = audio_bit_rate,
+                                 duration = duration,
+                                 sample_rate = sample_rate)
+            
+        return stream_info
 
 
     @staticmethod
-    def _pick_duration(video_stream: Dict[str, Any], audio_stream: Dict[str, Any]) -> str:
-        # Prefer video duration, fallback to audio.
-        v = video_stream.get("duration")
-        if isinstance(v, str) and v.strip():
-            return v.strip()
-        a = audio_stream.get("duration")
-        if isinstance(a, str) and a.strip():
-            return a.strip()
-        return ""
-
-
-    @staticmethod
-    def print_ffprobe_result(result):
+    def _pick_duration(duration_format: str, video_stream: Dict[str, Any], audio_stream: Dict[str, Any]) -> tuple[str, str]:
         """
-        格式化打印FFprobeInspectResult数据
-        Args: FFprobeInspectResult对象
+        优先级: format > max(stream) > max(tag)
         """
 
-        if not result.ok:
-            print("❌ FFprobe检查失败:")
-            print(f"   错误信息: {result.error_msg}")
-            return
+        error_msg = []
+
+        # 1. 尝试 format duration
+        try:
+            return str(float(duration_format)), ""
+        except Exception:
+            error_msg.append(f"format duration parse failed: {duration_format}")
+
+        # 2. 尝试 video/audio stream duration
+        v_raw = video_stream.get("duration", "N/A")
+        a_raw = audio_stream.get("duration", "N/A")
+
+        try:
+            v = float(v_raw)
+        except Exception:
+            v = None
+
+        try:
+            a = float(a_raw)
+        except Exception:
+            a = None
+
+        has_v = v is not None
+        has_a = a is not None
+
+        if has_v and has_a: return str(max(v, a)), ""
+        if has_v and not has_a: return str(v), ""
+        if not has_v and has_a: return str(a), ""
         
-        print("✅ FFprobe检查结果:")
-        print(f"   媒体类型: {result.media_type.value}")
-        print(f"   总时长: {result.duration}秒")
+        error_msg.append(f"stream duration parse failed, v={v_raw}, a={a_raw}")
+
+        # 3. 尝试 video/audio tag duration
+        v_tag_raw = video_stream.get("tags").get("DURATION", "N/A") if video_stream.get("tags") else "N/A"
+        a_tag_raw = audio_stream.get("tags").get("DURATION", "N/A") if audio_stream.get("tags") else "N/A"
+
+        try:
+            try:
+                # 先尝试直接转float
+                v_tag = float(v_tag_raw)
+            except Exception:
+                # 再尝试 hh:mm:ss.micro -> float seconds
+                hms = v_tag_raw.split(":")
+                hours = float(hms[0])
+                minutes = float(hms[1])
+                seconds = float(hms[2])
+                v_tag = float(hours * 3600 + minutes * 60 + seconds)
+                if v_tag <= 0: v_tag = None
+        except Exception:
+            v_tag = None
         
-        # 视频流信息
-        if result.video_stream:
-            print("\n视频流信息:")
-            video = result.video_stream
-            print(f"   索引: {video.get('index', 'N/A')}")
-            print(f"   编码: {video.get('codec_name', 'N/A')}")
-            print(f"   分辨率: {video.get('width', 'N/A')}x{video.get('height', 'N/A')}")
-            print(f"   帧率: {video.get('avg_frame_rate', 'N/A')}")
-            print(f"   时长: {video.get('duration', 'N/A')}秒")
-            print(f"   比特率: {video.get('bit_rate', 'N/A')} bps")
-            print(f"   总帧数: {video.get('nb_frames', 'N/A')}")
+        try:
+            try:
+                # 先尝试直接转float
+                a_tag = float(a_tag_raw)
+            except Exception:
+                # hh:mm:ss.micro -> float seconds
+                hms = a_tag_raw.split(":")
+                hours = float(hms[0])
+                minutes = float(hms[1])
+                seconds = float(hms[2])
+                a_tag = float(hours * 3600 + minutes * 60 + seconds)
+                if a_tag <= 0: a_tag = None
+        except Exception:
+            a_tag = None
         
-        # 音频流信息
-        if result.audio_stream:
-            print("\n音频流信息:")
-            audio = result.audio_stream
-            print(f"   索引: {audio.get('index', 'N/A')}")
-            print(f"   编码: {audio.get('codec_name', 'N/A')}")
-            print(f"   采样率: {audio.get('sample_rate', 'N/A')} Hz")
-            print(f"   声道: {audio.get('channels', 'N/A')}")
-            print(f"   声道布局: {audio.get('channel_layout', 'N/A')}")
-            print(f"   时长: {audio.get('duration', 'N/A')}秒")
-            print(f"   比特率: {audio.get('bit_rate', 'N/A')} bps")
-            print(f"   总帧数: {audio.get('nb_frames', 'N/A')}")
-        
-        # 原始数据信息
-        print(f"\n原始数据包含:")
-        if 'streams' in result.raw:
-            print(f"   流数量: {len(result.raw.get('streams', []))}")
-        if 'programs' in result.raw:
-            print(f"   节目数量: {len(result.raw.get('programs', []))}")
-        if 'stream_groups' in result.raw:
-            print(f"   流组数量: {len(result.raw.get('stream_groups', []))}")
+        has_v_tag = v_tag is not None
+        has_a_tag = a_tag is not None
+
+        if has_v_tag and has_a_tag: return str(max(v_tag, a_tag)), ""
+        if has_v_tag and not has_a_tag: return str(v_tag), ""
+        if not has_v_tag and has_a_tag: return str(a_tag), ""
+
+        error_msg.append(f"tag duration parse failed, v={v_tag_raw}, a={a_tag_raw}")
+
+        # 全部失败了
+        return "N/A", "\n".join(error_msg)
