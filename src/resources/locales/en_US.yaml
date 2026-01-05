@@ -62,8 +62,33 @@ en_US:
       run_ffmpeg:
         ui_select_input_file_button: "Select Media File"
         warning_ffprobe_inspect_failed: "Media inspection failed. Error:\n %{error_msg}\nRaw FFprobe Output:\n%{raw_output}"
-        ui_video_divider: "Video Stream"
-        ui_audio_divider: "Audio Stream"
+        ui_video_divider: "Video Stream Settings"
+        ui_audio_divider: "Audio Stream Settings"
+        ui_general_divider: "General Settings"
+
+        ui_video_crf_label: "CRF: "
+        ui_video_crf_help: |
+          Control the output video quality
+
+          Lower values = higher quality, larger files.
+        ui_video_resolution_label: "Resolution: "
+        ui_video_resolution_help: |
+          Sets output resolution
+
+          origin: keep original resolution.
+          others: scale to fit while preserving aspect ratio, pad remaining space with black pixels.
+        ui_video_fps_label: "FPS: "
+        ui_video_fps_help: |
+          Sets output frame rate
+
+          origin: keep original FPS.
+        ui_video_gop_optimize_label: "GOP Optimize: "
+        ui_video_gop_optimize_help: |
+          Toggle GOP optimization
+
+          When enabled, video playback in MajdataView will be significantly smoother.
+          However, it will increase the output file size.
+          Recommended only for videos that need to be played in MajdataView.
 
         probe_result_display:
           ui_ffprobe_inspect_prefix: "Media Info"

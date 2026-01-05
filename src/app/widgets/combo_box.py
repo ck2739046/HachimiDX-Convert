@@ -175,8 +175,9 @@ def create_combo_box(length, items=None, default_index=0, show_tooltip=False):
     combo.setFixedSize(length, UI_Style.element_height)
     
     if items:
-        combo.addItems(items)
-        if 0 <= default_index < len(items):
+        str_items = [str(item) for item in items]
+        combo.addItems(str_items)
+        if 0 <= default_index < len(str_items):
             combo.setCurrentIndex(default_index)
     
     return combo

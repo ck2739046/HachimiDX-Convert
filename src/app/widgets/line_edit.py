@@ -3,12 +3,13 @@ from PyQt6.QtGui import QDoubleValidator
 from ..ui_style import UI_Style
 
 
-def create_line_edit(placeholder=None, length=None, is_number=False):
+def create_line_edit(default_text=None, placeholder=None, length=None, is_number=False):
     """
     创建文本输入框
     Args:
-        length: int，可选，默认None
+        default_text: str，可选，默认None
         placeholder: str，可选，默认None
+        length: int，可选，默认None
         is_number: bool，可选，默认False，不设置QDoubleValidator
 
     Returns:
@@ -28,5 +29,8 @@ def create_line_edit(placeholder=None, length=None, is_number=False):
 
     if is_number:
         line_edit.setValidator(QDoubleValidator())
+
+    if default_text:
+        line_edit.setText(default_text)
 
     return line_edit

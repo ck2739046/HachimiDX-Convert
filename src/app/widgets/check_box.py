@@ -82,12 +82,16 @@ class StyledCheckBox(QCheckBox):
             painter.drawPath(path)
 
 
-def create_check_box():
+def create_check_box(default_checked=False) -> QCheckBox:
     """
     创建复选框
+
+    Args:
+        default_checked: bool，是否默认选中，默认False
     
     Returns:
         QCheckBox: 配置好的复选框
     """
     checkbox = StyledCheckBox(colors=UI_Style.COLORS, size=20, border_width=1)
+    checkbox.setChecked(default_checked)
     return checkbox

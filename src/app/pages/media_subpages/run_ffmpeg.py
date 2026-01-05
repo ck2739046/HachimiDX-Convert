@@ -1,9 +1,10 @@
 from ..base_tool_page import BaseToolPage
 from ...widgets import *
 from src.services import FFprobeInspect, FFprobeInspectResult, MediaType
+from src.services.pydantic_models import get_ffmpeg_options, RunFFmpegBase, RunFFmpegAudio, RunFFmpegVideoWithAudio, RunFFmpegVideoWithoutAudio
 import i18n
 
-class RunFfmpegPage(BaseToolPage):
+class RunFFmpegPage(BaseToolPage):
 
     def setup_content(self):
 
@@ -12,6 +13,26 @@ class RunFfmpegPage(BaseToolPage):
         self.probe_result_display = None
         self.selected_file_duration = None
         self.selected_file_type = MediaType.UNKNOWN
+
+        # general widgets
+        self.general_pad_start_sec_line_edit = None
+        self.general_trim_start_sec_line_edit = None
+        self.general_trim_end_sec_line_edit = None
+        self.general_clear_metadata_check_box = None
+        self.general_no_video_check_box = None
+        self.general_no_audio_check_box = None
+        # video widgets
+        self.video_crf_combo_box = None
+        self.video_resolution_combo_box = None
+        self.video_fps_combo_box = None
+        self.video_gop_optimize_check_box = None
+        # audio widgets
+        self.audio_format_combo_box = None
+        self.audio_bitrate_combo_box = None
+        self.audio_sample_rate_combo_box = None
+        self.audio_volume_line_edit = None
+
+
 
         # 第一行: 输入文件选择
         input_file_select_button, self.input_file_path_display, _ = create_file_selection_row(
@@ -28,9 +49,31 @@ class RunFfmpegPage(BaseToolPage):
                         probe_result_display_help,
                         self.probe_result_display)
         
+        # 参数调整区域
+        self.init_ffmpeg_widgets()
+
         # 第三行: video 参数
         video_divider = create_divider(i18n.t("app.media_subpages.run_ffmpeg.ui_video_divider"))
         self.content_layout.addWidget(video_divider)
+        # labels
+        video_crf_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_crf_label"))
+        video_resolution_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_resolution_label"))
+        video_fps_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_fps_label"))
+        video_gop_optimize_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_gop_optimize_label"))
+        # help icons
+        video_crf_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_crf_help"))
+        video_resolution_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_resolution_help"))
+        video_fps_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_fps_help"))
+        video_gop_optimize_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_gop_optimize_help"))
+        # create rows
+        self.create_row(video_crf_label, self.video_crf_combo_box, video_crf_help,
+                        video_resolution_label, self.video_resolution_combo_box, video_resolution_help,
+                        video_fps_label, self.video_fps_combo_box, video_fps_help,
+                        video_gop_optimize_label, self.video_gop_optimize_check_box, video_gop_optimize_help,
+                        add_stretch=True)
+        
+
+
         
 
 
@@ -44,6 +87,9 @@ class RunFfmpegPage(BaseToolPage):
             self.output_widget.append_text(error_msg)
             self.probe_result_display.setText(result.media_type.name)
             return
+        # 更新公共变量
+        self.selected_file_duration = result.duration
+        self.selected_file_type = result.media_type
         # 显示检测结果
         display_text = self.build_probe_result_text(result)
         self.probe_result_display.setText(display_text)
@@ -67,3 +113,80 @@ class RunFfmpegPage(BaseToolPage):
             audio_line = i18n.t("app.media_subpages.run_ffmpeg.probe_result_display.ui_no_audio_stream_info")
 
         return "\n".join([video_line, audio_line])
+
+
+
+    def init_ffmpeg_widget(self, dictt: dict, widget_type: str, param_name: str, length: int = None):
+        if widget_type == "combo_box":
+            opts = dictt[param_name]["opts"]
+            default = dictt[param_name]["default"]
+            default_index = opts.index(default)
+            combo_box = create_combo_box(length = length,
+                                         items = opts,
+                                         default_index = default_index)
+            return combo_box
+        
+        elif widget_type == "check_box":
+            default = dictt[param_name]
+            check_box = create_check_box(default_checked=default)
+            return check_box
+        
+        elif widget_type == "line_edit":
+            min, max, default = dictt[param_name]
+            line_edit = create_line_edit(default_text=str(default),
+                                         placeholder=f"{min}~{max}",
+                                         length=length,
+                                         is_number=True)
+            return line_edit
+        
+        return None # 不应该发生
+            
+
+
+    def init_ffmpeg_widgets(self):
+
+        general_dict, video_dict, audio_dict = get_ffmpeg_options()
+
+        # general pad_start_sec line edit
+        self.general_pad_start_sec_check_box = create_line_edit(
+            default_text="0", length=80, is_number=True)
+        # general trim_start_sec line edit
+        self.general_trim_start_sec_line_edit = create_line_edit(
+            default_text="0", length=80, is_number=True)
+        # general trim_end_sec line edit
+        self.general_trim_end_sec_line_edit = create_line_edit(
+            length=80, is_number=True)
+        # general clear_metadata check box
+        self.general_clear_metadata_check_box = self.init_ffmpeg_widget(
+            general_dict, widget_type="check_box", param_name="clear_metadata")
+        # general no_video check box
+        self.general_no_video_check_box = self.init_ffmpeg_widget(
+            general_dict, widget_type="check_box", param_name="no_video")
+        # general no_audio check box
+        self.general_no_audio_check_box = self.init_ffmpeg_widget(
+            general_dict, widget_type="check_box", param_name="no_audio")
+        
+        # video crf combo box
+        self.video_crf_combo_box = self.init_ffmpeg_widget(
+            video_dict, widget_type="combo_box", param_name="video_crf", length=50)
+        # video resolution combo box
+        self.video_resolution_combo_box = self.init_ffmpeg_widget(
+            video_dict, widget_type="combo_box", param_name="video_resolution", length=102)
+        # video fps combo box
+        self.video_fps_combo_box = self.init_ffmpeg_widget(
+            video_dict, widget_type="combo_box", param_name="video_fps", length=70)
+        # gop_optimize check box
+        self.video_gop_optimize_check_box = self.init_ffmpeg_widget(
+            video_dict, widget_type="check_box", param_name="video_gop_optimize")
+        
+        # audio format combo box
+        self.audio_format_combo_box = create_combo_box(length=100)
+        # audio bitrate combo box
+        self.audio_bitrate_combo_box = create_combo_box(length=100)
+        # audio sample_rate combo box
+        self.audio_sample_rate_combo_box = self.init_ffmpeg_widget(
+            audio_dict, widget_type="combo_box", param_name="audio_sample_rate", length=100)
+        # audio volume line edit
+        self.audio_volume_line_edit = self.init_ffmpeg_widget(
+            audio_dict, widget_type="line_edit", param_name="audio_volume", length=80)
+        
