@@ -28,6 +28,11 @@ en_US:
   task_scheduler:
     notice_user_terminated_task: "Task %{task_id} terminated by user."
 
+  popup_dialog:
+    ui_confirm: "Confirm"
+    ui_cancel: "Cancel"
+    ui_timeout_hint: "\n\nAuto-cancel in %{seconds} seconds if no action."
+
   media_task_launcher:
     error_unsupported_config: "Unsupported media task config."
     error_ffmpeg_not_found: "FFmpeg not found: %{path}"
