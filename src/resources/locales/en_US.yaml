@@ -84,13 +84,15 @@ en_US:
           Sets output frame rate
 
           origin: keep original FPS.
-        ui_video_gop_optimize_label: "GOP optimization: "
+        ui_video_gop_optimize_label: "Optimize GOP: "
         ui_video_gop_optimize_help: |
           Toggle GOP optimization
 
           When enabled, video playback in MajdataView will be significantly smoother.
           However, it will increase the output file size.
           Recommended only for videos that need to be played in MajdataView.
+        ui_video_mute_label: "Mute: "
+        ui_video_mute_help: "If Enabled, the output file will not contain audio stream."
         
         # ---- Audio Settings ----
         ui_audio_format_label: "Codec: "
@@ -138,11 +140,7 @@ en_US:
 
         ui_clear_metadata_label: "Clear Metadata: "
         ui_clear_metadata_help: Whether to clear all metadata (e.g., title, author) in the output file
-        ui_no_video_label: "Disable Video: "
-        ui_no_audio_label: "Disable Audio: "
-        ui_no_video_audio_help: |
-          Disable Video: Output file will not contain video stream
-          Disable Audio: Output file will not contain audio stream
+        
         ui_submit_button: "Submit"
 
         probe_result_display:

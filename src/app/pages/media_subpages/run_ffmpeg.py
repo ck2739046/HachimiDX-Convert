@@ -19,13 +19,12 @@ class RunFFmpegPage(BaseToolPage):
         self.common_start_sec_line_edit = None
         self.common_end_sec_line_edit = None
         self.common_clear_metadata_check_box = None
-        self.common_no_video_check_box = None
-        self.common_no_audio_check_box = None
         # video widgets
         self.video_crf_combo_box = None
         self.video_resolution_combo_box = None
         self.video_fps_combo_box = None
         self.video_gop_optimize_check_box = None
+        self.video_mute_check_box = None
         # audio widgets
         self.audio_format_combo_box = None
         self.audio_bitrate_combo_box = None
@@ -62,16 +61,19 @@ class RunFFmpegPage(BaseToolPage):
         video_resolution_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_resolution_label"))
         video_fps_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_fps_label"))
         video_gop_optimize_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_gop_optimize_label"))
+        video_mute_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_mute_label"))
         # help icons
         video_crf_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_crf_help"))
         video_resolution_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_resolution_help"))
         video_fps_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_fps_help"))
         video_gop_optimize_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_gop_optimize_help"))
+        video_mute_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_mute_help"))
         # create rows
         self.create_row(video_crf_label, self.video_crf_combo_box, video_crf_help,
                         video_resolution_label, self.video_resolution_combo_box, video_resolution_help,
                         video_fps_label, self.video_fps_combo_box, video_fps_help,
                         video_gop_optimize_label, self.video_gop_optimize_check_box, video_gop_optimize_help,
+                        video_mute_label, self.video_mute_check_box, video_mute_help,
                         add_stretch=True)
         
         # 第四行: audio 参数
@@ -112,14 +114,8 @@ class RunFFmpegPage(BaseToolPage):
                         clear_metadata_label, self.common_clear_metadata_check_box, clear_metadata_help,
                         add_stretch=True)
 
-        # 第六行: submit 按钮 + no_video/no_audio checkboxes
-        no_video_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_no_video_label"))
-        no_audio_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_no_audio_label"))
-        no_video_audio_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_no_video_audio_help"))
+        # 第六行: submit 按钮
 
-        self.create_row(no_video_label, self.common_no_video_check_box,
-                        no_audio_label, self.common_no_audio_check_box, no_video_audio_help,
-                        add_stretch=True)
         
 
 
@@ -197,12 +193,6 @@ class RunFFmpegPage(BaseToolPage):
         # common clear_metadata check box
         self.common_clear_metadata_check_box = self.init_ffmpeg_widget(
             common_dict, widget_type="check_box", param_name="clear_metadata")
-        # common no_video check box
-        self.common_no_video_check_box = self.init_ffmpeg_widget(
-            common_dict, widget_type="check_box", param_name="no_video")
-        # common no_audio check box
-        self.common_no_audio_check_box = self.init_ffmpeg_widget(
-            common_dict, widget_type="check_box", param_name="no_audio")
         
         # video crf combo box
         self.video_crf_combo_box = self.init_ffmpeg_widget(
@@ -216,6 +206,9 @@ class RunFFmpegPage(BaseToolPage):
         # gop_optimize check box
         self.video_gop_optimize_check_box = self.init_ffmpeg_widget(
             video_dict, widget_type="check_box", param_name="video_gop_optimize")
+        # video mute check box
+        self.video_mute_check_box = self.init_ffmpeg_widget(
+            video_dict, widget_type="check_box", param_name="video_mute")
         
         # audio format combo box
         self.audio_format_combo_box = create_combo_box(length=100)

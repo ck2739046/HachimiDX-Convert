@@ -84,13 +84,15 @@ zh_CN:
           设置输出视频的帧率
 
           origin：保持原始帧率。
-        ui_video_gop_optimize_label: "GOP 优化: "
+        ui_video_gop_optimize_label: "优化GOP: "
         ui_video_gop_optimize_help: |
           是否启用 GOP 优化
 
           启用后，视频在 MajdataView 中播放会显著更流畅。
           代价是会增加输出文件大小。
           建议仅用于 MajdataView 播放的视频。
+        ui_video_mute_label: "静音: "
+        ui_video_mute_help: "如果启用，输出文件将不包含音频流。"
 
         # ---- 音频设置 ----
         ui_audio_format_label: "编码: "
@@ -138,11 +140,7 @@ zh_CN:
 
         ui_clear_metadata_label: "清除元数据: "
         ui_clear_metadata_help: 是否清除输出文件的附加信息 (例如标题、作者等)
-        ui_no_video_label: "禁用视频: "
-        ui_no_audio_label: "禁用音频: "
-        ui_no_video_audio_help: |
-          禁用视频：输出文件将不包含视频流
-          禁用音频：输出文件将不包含音频流
+
         ui_submit_button: "提交"
         
         probe_result_display:

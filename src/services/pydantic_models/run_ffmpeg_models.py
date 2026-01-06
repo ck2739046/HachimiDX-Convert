@@ -21,11 +21,6 @@ from ..task_contract import MediaType
 Clear_Metadata = "bool"
 Clear_Metadata_Default = True
 
-No_Video = "bool"
-No_Video_Default = False
-No_Audio = "bool"
-No_Audio_Default = False
-
 
 # video
 Video_Resolution_Options = Literal["origin", "540×540",
@@ -41,6 +36,9 @@ Video_CRF_Default = 23
 
 Video_GOP_Optimize = "bool"
 Video_GOP_Optimize_Default = False
+
+Video_Mute = "bool"
+Video_Mute_Default = False
 
 
 # audio
@@ -305,33 +303,31 @@ class RunFFmpegVideoWithAudio(RunFFmpegVideoWithoutAudio):
 
     必需:
         media_type        MediaType.VIDEO_WITH_AUDIO
+        video_mute        是否静音，bool，默认False
+
+    可选 (仅 video_mute=False 才需要):
         audio_format      音频格式，str(aac)，默认 aac
         audio_sample_rate 音频采样率，int(44100/48000)，默认 44100
         audio_volume      音频音量，int(0-200)，默认 100
-
-    可选:
         audio_bitrate     音频码率，str，未设置时根据 format 自动选择默认值
-        no_video          是否不输出视频流，bool，默认False
-        no_audio          是否不输出音频流，bool，默认False
 
     说明:
-        - no_video / no_audio 互斥，不能同时为 True
+        - 如果 video_mute=True，音频相关的参数将被后端忽略。
     """
 
     media_type: MediaType = Field(default=MediaType.VIDEO_WITH_AUDIO)
 
-    # 新增音频字段
-    audio_format: Audio_Format_Options_Video = Field(default = Audio_Format_Default_Video)
-    audio_bitrate: Optional[str] = Field(default=None) # 可选，如果 None，根据 format 自动选择默认
-    audio_sample_rate: Audio_SampleRate_Options = Field(default = Audio_SampleRate_Default)
-    audio_volume: int = Field(default = Audio_Volume_Default,
-                              ge = Audio_Volume_Range[0],
-                              le = Audio_Volume_Range[1],
-                              description=f"{Audio_Volume_Range[0]}-{Audio_Volume_Range[1]} means {Audio_Volume_Range[0]}%-{Audio_Volume_Range[1]}%")
+    # 必需字段
+    video_mute: bool
 
-    no_video: bool = Field(default=No_Video_Default)
-    no_audio: bool = Field(default=No_Audio_Default)
-
+    # 音频参数可选，保留默认值
+    audio_format: Optional[Audio_Format_Options_Video] = Field(default = Audio_Format_Default_Video)
+    audio_bitrate: Optional[str] = Field(default=None) # 如果 None，根据 format 自动选择默认
+    audio_sample_rate: Optional[Audio_SampleRate_Options] = Field(default = Audio_SampleRate_Default)
+    audio_volume: Optional[int] = Field(default = Audio_Volume_Default,
+                                        ge = Audio_Volume_Range[0],
+                                        le = Audio_Volume_Range[1],
+                                        description=f"{Audio_Volume_Range[0]}-{Audio_Volume_Range[1]} means {Audio_Volume_Range[0]}%-{Audio_Volume_Range[1]}%")
 
     @model_validator(mode="after")
     def _validate_audio_bitrate(self) -> "RunFFmpegVideoWithAudio":
@@ -345,13 +341,6 @@ class RunFFmpegVideoWithAudio(RunFFmpegVideoWithoutAudio):
             raise ValueError(f"Invalid bitrate for format={self.audio_format}: {self.audio_bitrate}")
         return self
   
-  
-    @model_validator(mode="after")
-    def _validate_no_video_audio_constraints(self) -> "RunFFmpegVideoWithAudio":
-        # no_video / no_audio 互斥
-        if self.no_video and self.no_audio:
-            raise ValueError("no_video and no_audio cananot be both True")
-        return self
 
 
 
@@ -370,14 +359,13 @@ def get_ffmpeg_options() -> tuple[dict, dict, dict]:
 
     common:
         clear_metadata: bool_default_value
-        no_video: bool_default_value
-        no_audio: bool_default_value
 
     video:
         video_crf: dict(str_list, default_int)
         video_resolution: dict(str_list, default_str)
         video_fps: dict(str_list, default_str)
         video_gop_optimize: bool_default_value
+        video_mute: bool_default_value
 
     audio:
         audio_format_audio: dict(str_list, default_str)
@@ -391,8 +379,6 @@ def get_ffmpeg_options() -> tuple[dict, dict, dict]:
 
     common_opts = {
         "clear_metadata": Clear_Metadata_Default,
-        "no_video": No_Video_Default,
-        "no_audio": No_Audio_Default 
     }
     
     video_opts = {
@@ -403,6 +389,7 @@ def get_ffmpeg_options() -> tuple[dict, dict, dict]:
         "video_fps": {"opts": list(get_args(Video_FPS_Options)),
                       "default": Video_FPS_Default},
         "video_gop_optimize": Video_GOP_Optimize_Default,
+        "video_mute": Video_Mute_Default,
     }
 
     audio_opts = {
