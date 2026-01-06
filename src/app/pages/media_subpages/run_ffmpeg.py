@@ -1,6 +1,7 @@
 from ..base_tool_page import BaseToolPage
 from ...widgets import *
-from src.services import FFprobeInspect, FFprobeInspectResult, MediaType
+from src.services import MediaType
+from src.core.tools import FFprobeInspect, FFprobeInspectResult
 from src.services.pydantic_models import get_ffmpeg_options, RunFFmpegBase, RunFFmpegAudio, RunFFmpegVideoWithAudio, RunFFmpegVideoWithoutAudio
 import i18n
 

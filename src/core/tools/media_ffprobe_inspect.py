@@ -20,8 +20,7 @@ from typing import Any, Dict
 
 import i18n
 
-from .path_manage import PathManage
-from .task_contract import MediaType
+from src.services import PathManage, MediaType
 
 
 _STREAM_ENTRIES = (
