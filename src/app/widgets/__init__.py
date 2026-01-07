@@ -12,6 +12,7 @@ from .line_edit import create_line_edit
 from .check_box import create_check_box, StyledCheckBox
 from .divider import create_divider
 from .file_selection_row import create_file_selection_row
+from .path_display import create_path_display
 
 __all__ = [
 	'SquareWidget',
@@ -23,5 +24,6 @@ __all__ = [
 	'create_line_edit',
 	'create_check_box', 'StyledCheckBox',
 	'create_divider',
-	'create_file_selection_row'
+	'create_file_selection_row',
+	'create_path_display',
 ]

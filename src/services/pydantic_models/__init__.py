@@ -3,7 +3,8 @@ from .run_ffmpeg_models import (
     RunFFmpegBase,
     RunFFmpegVideoWithAudio,
     RunFFmpegVideoWithoutAudio,
-    get_ffmpeg_options
+    get_ffmpeg_options,
+    build_full_output_path
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "RunFFmpegVideoWithAudio",
     "RunFFmpegVideoWithoutAudio",
     "get_ffmpeg_options",
+    "build_full_output_path",
 ]

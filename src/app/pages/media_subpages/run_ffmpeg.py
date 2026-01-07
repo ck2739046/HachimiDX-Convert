@@ -1,8 +1,10 @@
+import os
 from ..base_tool_page import BaseToolPage
 from ...widgets import *
 from src.services import MediaType
 from src.core.tools import FFprobeInspect, FFprobeInspectResult
-from src.services.pydantic_models import get_ffmpeg_options, RunFFmpegBase, RunFFmpegAudio, RunFFmpegVideoWithAudio, RunFFmpegVideoWithoutAudio
+from src.core.tools import show_confirm_dialog, show_notify_dialog
+from src.services.pydantic_models import get_ffmpeg_options, build_full_output_path, RunFFmpegBase, RunFFmpegAudio, RunFFmpegVideoWithAudio, RunFFmpegVideoWithoutAudio
 import i18n
 
 class RunFFmpegPage(BaseToolPage):
@@ -21,6 +23,9 @@ class RunFFmpegPage(BaseToolPage):
         self.common_start_sec_line_edit = None
         self.common_end_sec_line_edit = None
         self.common_clear_metadata_check_box = None
+        self.output_filename_line_edit = None
+        self.output_full_path_display = None
+        #self.taskname_line_edit = None
         # video widgets
         self.video_crf_combo_box = None
         self.video_resolution_combo_box = None
@@ -104,7 +109,7 @@ class RunFFmpegPage(BaseToolPage):
         # labels
         pad_start_sec_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_pad_start_sec_label"))
         start_end_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_start_end_label"))
-        start_end_label_between = create_label("~")  # between start and end
+        start_end_label_between = create_label("→")  # between start and end
         clear_metadata_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_clear_metadata_label"))
         # help icons
         pad_start_sec_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_pad_start_sec_help"))
@@ -116,9 +121,18 @@ class RunFFmpegPage(BaseToolPage):
                         clear_metadata_label, self.common_clear_metadata_check_box, clear_metadata_help,
                         add_stretch=True)
 
-        # 第六行: submit 按钮
-
+        # 第六行: 输出文件名+完整输出路径显示
+        output_filename_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_output_filename_label"))
+        self.output_filename_line_edit = create_line_edit(length=280)
+        self.output_filename_line_edit.textChanged.connect(self.on_output_filename_changed)
+        output_filename_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_output_filename_help"))
+        self.output_full_path_display = create_path_display()
+        self.create_row(output_filename_label,
+                        self.output_filename_line_edit,
+                        output_filename_help,
+                        self.output_full_path_display)
         
+        # 第七行：submit按钮 + taskname输入框
 
 
 
@@ -258,8 +272,10 @@ class RunFFmpegPage(BaseToolPage):
     def on_audio_format_changed(self):
         """当音频格式改变时，同步更新码率可选项"""
         current_format = self.audio_format_combo_box.currentText()
+
+        self.audio_bitrate_combo_box.clear()
+
         if not current_format:
-            self.audio_bitrate_combo_box.clear()
             return
 
         audio_dict = self.audio_options_dict
@@ -277,3 +293,39 @@ class RunFFmpegPage(BaseToolPage):
             if default in opts:
                 self.audio_bitrate_combo_box.setCurrentText(default)
             self.audio_bitrate_combo_box.blockSignals(False)
+
+        self.on_output_filename_changed() # 触发输出路径更新
+
+
+
+    def on_output_filename_changed(self):
+        """当输出文件名改变时，更新完整输出路径显示"""
+        # 默认清空完整输出路径显示
+        self.output_full_path_display.setText("")
+
+        input_path = self.input_file_path_display.text().strip()
+        input_path = os.path.normpath(os.path.abspath(input_path))
+        if not input_path:
+            return
+        
+        output_filename = self.output_filename_line_edit.text().strip()
+        if not output_filename:
+            output_filename = None  # 空文件名视为 None
+
+        if (self.selected_file_type == MediaType.VIDEO_WITH_AUDIO or
+            self.selected_file_type == MediaType.VIDEO_WITHOUT_AUDIO):
+            output_extension = ".mp4"
+        elif self.selected_file_type == MediaType.AUDIO:
+            format = self.audio_format_combo_box.currentText().strip()
+            if not format: return
+            output_extension = f".{format}"
+        else: 
+            return
+        
+        ok, output_path, error_msg = build_full_output_path(input_path, output_filename, output_extension)
+        if not ok:
+            show_notify_dialog("app.media_subpages.run_ffmpeg", error_msg)
+            return
+
+        # 更新完整输出路径显示
+        self.output_full_path_display.setText(os.path.normpath(os.path.abspath(str(output_path))))

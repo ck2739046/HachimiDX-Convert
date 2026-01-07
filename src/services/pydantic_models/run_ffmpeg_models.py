@@ -12,7 +12,11 @@ from typing import Literal, Optional, get_args
 
 from pydantic import BaseModel, Field, FilePath, field_validator, model_validator
 
+from ..path_manage import PathManage
+
 from ..task_contract import MediaType
+
+import i18n
 
 
 
@@ -180,7 +184,27 @@ class RunFFmpegBase(BaseModel):
                 raise ValueError("Must not start_sec ≥ end_sec")
 
         return self
-
+    
+    # 后校验，确保 output_path 不存在
+    @model_validator(mode="after")
+    def _validate_output_path_not_exists(self) -> "RunFFmpegBase":
+        if not self.output_path.exists:
+            return self
+        # 已存在，询问用户是否删除
+        from src.core.tools import show_confirm_dialog # 避免循环依赖
+        user_confirmed = show_confirm_dialog(
+            title = "",
+            prompt_text = i18n.t("pydantic_models.run_ffmpeg.ui_prompt_delete_existing_output_file", file_path=str(self.output_path))
+        )
+        if user_confirmed:
+            # 用户同意删除文件
+            try:
+                self.output_path.unlink()
+            except Exception as e:
+                raise ValueError(f"Failed to delete existing output file: {e}")
+        else:
+            # 用户不同意，抛出错误
+            raise ValueError("Output file already exists and user declined to delete it.")
 
 
 
@@ -412,3 +436,52 @@ def get_ffmpeg_options() -> tuple[dict, dict, dict]:
     }
 
     return common_opts, video_opts, audio_opts
+
+
+
+def build_full_output_path(input_path: str, output_filename: str, output_extension: str) -> tuple[bool, Optional[Path], Optional[str]]:
+
+    """
+    构建完整的输出文件路径
+
+    Args:
+        input_path: Path，输入文件路径
+        output_filename: str，输出文件名，仅文件名，不包含路径和扩展名
+        output_extension: str，输出文件扩展名，包含点号，例如 ".mp4"
+
+    Returns:
+        ok: bool
+        output_path: Optional[Path]
+        error_msg: Optional[str])
+
+    说明:
+        - 首先检查 output_filename 是否符合 windows 标准
+        - 如果 output_filename 为空，默认使用 input_filename_modified
+        - 输出文件与输入文件在同一目录下
+    """
+
+    # 校验输出文件名 (如果有提供)
+    if output_filename:
+        is_valid = PathManage.validate_windows_filename(output_filename)
+        if not is_valid:
+            error_msg = i18n.t("pydantic_models.run_ffmpeg.error_invalid_output_filename")
+            return False, None, error_msg
+        
+    # 校验输出拓展名
+    if not output_extension:
+        error_msg = i18n.t("pydantic_models.run_ffmpeg.error_empty_output_extension")
+        return False, None, error_msg
+    if not output_extension.startswith("."):
+        error_msg = i18n.t("pydantic_models.run_ffmpeg.error_invalid_output_extension")
+        return False, None, error_msg
+        
+    # 构建最终输出文件路径
+    input_dir = Path(input_path).parent
+
+    if not output_filename:
+        input_stem = Path(input_path).stem # 如果空文件名，使用默认文件名
+        final_output_path = input_dir / f"{input_stem}_modified{output_extension}"
+    else:
+        final_output_path = input_dir / f"{output_filename}{output_extension}"
+
+    return True, final_output_path, None

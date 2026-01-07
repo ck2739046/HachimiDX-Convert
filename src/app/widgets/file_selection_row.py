@@ -4,6 +4,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QCursor
 from ..ui_style import UI_Style
 from .help_icon import create_help_icon
+from .path_display import create_path_display
 
 def create_file_selection_row(button_text: str, help_text: str = None, on_button_clicked_handler=None):
     """
@@ -37,12 +38,7 @@ def create_file_selection_row(button_text: str, help_text: str = None, on_button
         help_label = create_help_icon(help_text)
 
     # 创建路径显示LineEdit
-    line_edit = QLineEdit("")
-    line_edit.setStyleSheet(f"color: {colors['text_secondary']}; font-size: {UI_Style.default_text_size}px;")
-    line_edit.setReadOnly(True)
-    line_edit.setFixedHeight(UI_Style.element_height)
-    line_edit.setCursor(QCursor(Qt.CursorShape.IBeamCursor))
-    line_edit.setFrame(False)
+    line_edit = create_path_display()
 
     # 默认的文件选择处理函数
     def _default_file_select_handler():
