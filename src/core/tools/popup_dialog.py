@@ -6,9 +6,8 @@ import threading
 
 import i18n
 from PyQt6.QtCore import QEventLoop, QTimer, Qt
-from PyQt6.QtGui import QGuiApplication
-from PyQt6.QtGui import QCloseEvent
-from PyQt6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PyQt6.QtGui import QCloseEvent, QGuiApplication, QTextOption
+from PyQt6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QSizePolicy
 
 
 class _PopupConfirmDialog(QDialog):
@@ -30,16 +29,59 @@ class _PopupConfirmDialog(QDialog):
         if self._mode not in ("confirm", "notify"):
             self._mode = "confirm"
 
+        # 插入零宽空格，让 QLabel 自动换行
+        self._display_text = "\u200B".join(list(self._prompt_text)).strip()
+
         self.setWindowTitle(title)
         self.setModal(False)
         self.setWindowFlag(Qt.WindowType.Window, True)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setFixedSize(330, 180)
+        
+        # --- Size Logic (User Req 3 & 4) ---
+        W_SMALL = 330
+        W_MEDIUM = 500
+        W_LARGE = 700
+        
+        lines = self._prompt_text.splitlines()
+        max_line_len = max(len(line) for line in lines) if lines else 0
+            
+        if max_line_len <= 50:
+            target_width = W_SMALL
+        elif max_line_len <= 100:
+            target_width = W_MEDIUM
+        else:
+            target_width = W_LARGE
 
-        self._label = QLabel()
-        self._label.setWordWrap(True)
-        self._label.setTextFormat(Qt.TextFormat.PlainText)
-        self._label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        # Constraints (User Req 3)
+        try:
+            screen = QGuiApplication.primaryScreen()
+            if screen:
+                geo = screen.availableGeometry()
+                max_w = int(geo.width() * 0.9)
+                max_h = int(geo.height() * 0.8)
+                final_width = min(target_width, max_w)
+                self.setFixedWidth(final_width)
+                self.setMaximumHeight(max_h)
+            else:
+                self.setFixedWidth(target_width)
+        except Exception:
+            self.setFixedWidth(target_width)
+
+        # Text area: QLabel (User Req 1, 2, 5)
+        self._text_label = QLabel(self._display_text)
+        self._text_label.setWordWrap(True)
+        self._text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self._text_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+            | Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+
+        # Countdown hint
+        self._hint_label = QLabel()
+        self._hint_label.setWordWrap(True)
+        self._hint_label.setTextFormat(Qt.TextFormat.PlainText)
+        self._hint_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
@@ -61,8 +103,11 @@ class _PopupConfirmDialog(QDialog):
         btn_row.addStretch(1)
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(20, 10, 20, 15)
-        layout.addWidget(self._label, 1)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(0)
+        layout.addWidget(self._text_label, 0)
+        layout.addWidget(self._hint_label, 0)
+        layout.addSpacing(15)
         layout.addLayout(btn_row)
         self.setLayout(layout)
 
@@ -80,6 +125,11 @@ class _PopupConfirmDialog(QDialog):
 
         self._refresh_text()
         self._timer.start()
+
+        try:
+            self.adjustSize()
+        except Exception:
+            pass
 
         self._center_on_primary_screen()
 
@@ -101,8 +151,8 @@ class _PopupConfirmDialog(QDialog):
             hint_key = "popup_dialog.ui_timeout_hint_close"
         else:
             hint_key = "popup_dialog.ui_timeout_hint"
-        hint = i18n.t(hint_key, seconds=self._seconds_left)
-        self._label.setText(f"{self._prompt_text}{hint}")
+        hint = i18n.t(hint_key, seconds=self._seconds_left).strip()
+        self._hint_label.setText(hint)
 
     def _finish(self, value: bool) -> None:
         if self._completed:
@@ -288,7 +338,7 @@ if __name__ == "__main__":
     app = QApplication.instance() or QApplication([])
 
     test_configs = [
-        ("Confirm 1", "这是第一个 Confirm 弹窗\n2\n3\n4\n5", "confirm"),
+        ("Confirm 1", f"这是第一个 Confirm 弹窗\n2\n3\n4\n5{"5" * 1000}", "confirm"),
         ("Confirm 2", "这是第二个 Confirm 弹窗", "confirm"),
         ("Notify 1", "这是第一个 Notify 弹窗", "notify"),
         ("Notify 2", "这是第二个 Notify 弹窗", "notify"),
@@ -307,7 +357,9 @@ if __name__ == "__main__":
         
         d = _PopupConfirmDialog(title, text, mode=mode)
         key = f"win_{index}_{mode}"
-        d.finished.connect(lambda: results.__setitem__(key, d.result_value()))
+        d.finished.connect(
+            lambda _code, d=d, key=key: results.__setitem__(key, d.result_value())
+        )
         
         d.show()
         active_dialogs.append(d)
