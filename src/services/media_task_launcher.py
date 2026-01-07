@@ -4,21 +4,39 @@ This module is designed to work in two modes:
 - TaskScheduler mode: scheduler passes in its managed QProcess.
 - Standalone mode: caller creates its own QProcess (allowing parallel runs).
 
-Rules implemented (per requirements):
+IMPORTANT CONTRACT (no defensive programming by design)
+=====================================================
+This launcher assumes the caller has already validated and normalized the
+config using the pydantic models in src.services.pydantic_models.run_ffmpeg_models.
+In particular:
+- Field names and semantics follow run_ffmpeg_models strictly (no legacy fields).
+- Timing fields are already normalized: 0 -> None, max 3 decimals.
+- If end_sec was provided, it has already been resolved to a positive timestamp
+    by the model validator, so this launcher does NOT need input_duration_sec.
+- Optional bitrate fields have already been filled with defaults by validators.
+
+Output overwrite behavior
+------------------------
+This launcher ALWAYS overwrites the output file:
+- Uses "-y".
+- Removes existing output_path before starting ffmpeg.
+This means any output-path confirmation logic must be handled before calling
+this launcher.
+
+Rules implemented:
 - Output channel is merged (stdout/stderr), so QProcess uses MergedChannels.
 - Two arg builders:
-  - Audio builder
-  - Video builder (shared for video_with_audio and video_without_audio)
+    - Audio builder
+    - Video builder (shared for video_with_audio and video_without_audio)
 - Audio always forces stereo: -ac 2
 - video_without_audio always uses -an
-- video_with_audio with no_audio=True is treated as video_without_audio (-an)
-- video_with_audio with no_video=True is treated as audio-only (-vn)
+- video_with_audio with video_mute=True uses -an
 - Video always uses: -pix_fmt yuv420p and libx264
-- If resolution/fps is "origin", do not add related args
+- If video_resolution/video_fps is "origin", do not add related args
 - Handle pad/trim args:
-  - trim_start_sec -> -ss
-  - trim_end_sec (resolved) -> -to
-  - pad_start_sec -> audio: adelay, video: tpad start_duration
+    - start_sec -> -ss
+    - end_sec (already resolved) -> -to
+    - pad_start_sec -> audio: adelay, video: tpad start_duration
 """
 
 from __future__ import annotations
@@ -122,12 +140,11 @@ def _build_common_base_args(input_path: str) -> list[str]:
 
 def _apply_common_timing_args(args: list[str], cfg: RunFFmpegBase) -> None:
     # Trim start/end (legacy style: after -i)
-    if cfg.trim_start_sec is not None:
-        args.extend(["-ss", f"{float(cfg.trim_start_sec)}"])
+    if cfg.start_sec is not None:
+        args.extend(["-ss", f"{float(cfg.start_sec)}"])
 
-    to_sec = cfg.resolved_trim_end_sec()
-    if to_sec is not None:
-        args.extend(["-to", f"{float(to_sec)}"])
+    if cfg.end_sec is not None:
+        args.extend(["-to", f"{float(cfg.end_sec)}"])
 
 
 def _get_volume_filter(volume_percent: int) -> Optional[str]:
@@ -195,23 +212,23 @@ def _build_video_filters(*,
 
 def _apply_audio_args(args: list[str], cfg: RunFFmpegAudio) -> None:
     # codec
-    if cfg.format == "mp3":
+    if cfg.audio_format == "mp3":
         args.extend(["-c:a", "libmp3lame"])
-        q = _map_mp3_vbr_to_q(cfg.bitrate)
+        q = _map_mp3_vbr_to_q(cfg.audio_bitrate)
         args.extend(["-q:a", str(q)])
-    elif cfg.format == "ogg":
+    elif cfg.audio_format == "ogg":
         args.extend(["-c:a", "libvorbis"])
-        q = _map_ogg_vbr_to_q(cfg.bitrate)
+        q = _map_ogg_vbr_to_q(cfg.audio_bitrate)
         args.extend(["-q:a", str(q)])
     else:
-        raise ValueError(f"unsupported audio format: {cfg.format}")
+        raise ValueError(f"unsupported audio format: {cfg.audio_format}")
 
-    args.extend(["-ar", str(cfg.sample_rate)])
+    args.extend(["-ar", str(cfg.audio_sample_rate)])
 
     # Always force stereo
     args.extend(["-ac", "2"])
 
-    af = _build_audio_filters(volume=int(cfg.volume), pad_start_sec=cfg.pad_start_sec)
+    af = _build_audio_filters(volume=int(cfg.audio_volume), pad_start_sec=cfg.pad_start_sec)
     if af:
         args.extend(["-af", af])
 
@@ -251,50 +268,40 @@ def _map_mp3_vbr_to_q(bitrate_label: Optional[str]) -> int:
 # ===== Video (shared) =====
 
 def _apply_video_args(args: list[str], cfg: RunFFmpegVideoWithAudio | RunFFmpegVideoWithoutAudio) -> None:
-
-    no_audio = isinstance(cfg, RunFFmpegVideoWithAudio) and bool(cfg.no_audio)
-    no_video = isinstance(cfg, RunFFmpegVideoWithAudio) and bool(cfg.no_video)
-
     # 1. Video part
-    if no_video:
-        args.append("-vn")
-    else:
-        vf = _build_video_filters(
-            resolution=str(cfg.resolution),
-            crop=getattr(cfg, "crop", None),
-            pad_start_sec=cfg.pad_start_sec,
-        )
-        if vf:
-            args.extend(["-vf", vf])
+    vf = _build_video_filters(
+        resolution=str(cfg.video_resolution),
+        crop=getattr(cfg, "video_crop", None),
+        pad_start_sec=cfg.pad_start_sec,
+    )
+    if vf:
+        args.extend(["-vf", vf])
 
-        # Video encoder (fixed)
-        args.extend(["-pix_fmt", "yuv420p"])
-        args.extend(["-c:v", "libx264"])
-        args.extend(["-crf", str(int(cfg.crf))])
+    # Video encoder (fixed)
+    args.extend(["-pix_fmt", "yuv420p"])
+    args.extend(["-c:v", "libx264"])
+    args.extend(["-crf", str(int(cfg.video_crf))])
 
-        if str(cfg.fps) != "origin":
-            args.extend(["-r", str(cfg.fps)])
+    if str(cfg.video_fps) != "origin":
+        args.extend(["-r", str(cfg.video_fps)])
 
-        if bool(cfg.gop_optimize):
-            args.extend(["-g", "30"])
+    if bool(cfg.video_gop_optimize):
+        args.extend(["-g", "30"])
 
     # 2. Audio part
-    if no_audio:
+    if isinstance(cfg, RunFFmpegVideoWithoutAudio):
         args.append("-an")
         return
 
-    # Audio for video_with_audio
-    if not isinstance(cfg, RunFFmpegVideoWithAudio):
-        # Should not happen due to no_audio logic.
-        if "-an" not in args:
-            args.append("-an")
+    if bool(cfg.video_mute):
+        args.append("-an")
         return
 
     args.extend(["-c:a", "aac"])
     args.extend(["-b:a", _map_aac_bitrate(cfg.audio_bitrate)])
     args.extend(["-ar", str(cfg.audio_sample_rate)])
 
-    af = _build_audio_filters(volume=int(cfg.volume), pad_start_sec=cfg.pad_start_sec)
+    af = _build_audio_filters(volume=int(cfg.audio_volume), pad_start_sec=cfg.pad_start_sec)
 
     # Keep A/V stable on some inputs
     if af:

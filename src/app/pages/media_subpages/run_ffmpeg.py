@@ -25,7 +25,7 @@ class RunFFmpegPage(BaseToolPage):
         self.common_clear_metadata_check_box = None
         self.output_filename_line_edit = None
         self.output_full_path_display = None
-        #self.taskname_line_edit = None
+        self.taskname_line_edit = None
         # video widgets
         self.video_crf_combo_box = None
         self.video_resolution_combo_box = None
@@ -133,6 +133,8 @@ class RunFFmpegPage(BaseToolPage):
                         self.output_full_path_display)
         
         # 第七行：submit按钮 + taskname输入框
+        self.taskname_line_edit = create_line_edit(length=200)
+        
 
 
 
@@ -311,6 +313,10 @@ class RunFFmpegPage(BaseToolPage):
         output_filename = self.output_filename_line_edit.text().strip()
         if not output_filename:
             output_filename = None  # 空文件名视为 None
+        input_filename = os.path.splitext(os.path.basename(input_path))[0]
+        if output_filename == input_filename:
+            show_notify_dialog("app.media_subpages.run_ffmpeg", i18n.t("app.media_subpages.run_ffmpeg.warning_output_filename_same_as_input"))
+            return  # 与输入文件名相同则不更新显示
 
         if (self.selected_file_type == MediaType.VIDEO_WITH_AUDIO or
             self.selected_file_type == MediaType.VIDEO_WITHOUT_AUDIO):

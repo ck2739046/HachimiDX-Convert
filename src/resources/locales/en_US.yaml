@@ -171,6 +171,9 @@ en_US:
           Filename only, do not include full file path or file extension.
         ui_submit_button: "Submit"
 
+        # ---- Params Warning ----
+        warning_output_filename_same_as_input: "Warning: Output filename cannot be the same as input filename."
+
         # other
         probe_result_display:
           ui_ffprobe_inspect_prefix: "Media Info"

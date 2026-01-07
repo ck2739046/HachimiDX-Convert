@@ -97,7 +97,6 @@ class RunFFmpegBase(BaseModel):
                             该时间点之后的内容将被丢弃
 
     说明:
-        - pad_start_sec 与 start_sec 互斥，不能同时设置
         - 如果设置了 start_sec 或 end_sec，则必须提供 input_duration_sec
         - end_sec 为负数时，表示从文件结尾向前计算 -> input_duration_sec + end_sec
         - pad_start_sec/start_sec/end_sec/input_duration_sec = 0 视为未设置 (None)
@@ -138,7 +137,7 @@ class RunFFmpegBase(BaseModel):
             return None
         return _ensure_max_3_decimals(float(v), "end_sec")
 
-    # 后校验，互斥，检查取值范围，end_sec变正数
+    # 后校验，检查取值范围，end_sec变正数
     @model_validator(mode="after")
     def _validate_times_constraints(self) -> "RunFFmpegBase":
 
@@ -164,10 +163,6 @@ class RunFFmpegBase(BaseModel):
         set_pad = self.pad_start_sec is not None and self.pad_start_sec != 0
         set_duration = self.input_duration_sec is not None and self.input_duration_sec != 0
 
-        # Mutual exclusion: pad_start_sec vs start_sec
-        if set_pad and set_start:
-            raise ValueError("pad_start_sec and start_sec cannot be both set")
-        
         # Validata start_sec < input_duration_sec
         if set_start:
             if not set_duration:
@@ -177,18 +172,19 @@ class RunFFmpegBase(BaseModel):
         # Validate trim_end_sec < input_duration_sec
         if set_end:
             _ = resolved_end_sec(self) # check included, may raise
-
         # Ensure start_sec < end_sec if both are set
         if set_start and set_end:
             if float(self.start_sec) >= resolved_end_sec(self):
                 raise ValueError("Must not start_sec ≥ end_sec")
-
+        # if all passed, update end_sec to resolved value
+        if set_end:
+            self.end_sec = resolved_end_sec(self)
         return self
     
     # 后校验，确保 output_path 不存在
     @model_validator(mode="after")
     def _validate_output_path_not_exists(self) -> "RunFFmpegBase":
-        if not self.output_path.exists:
+        if not self.output_path.exists():
             return self
         # 已存在，询问用户是否删除
         from src.core.tools import show_confirm_dialog # 避免循环依赖
@@ -202,6 +198,7 @@ class RunFFmpegBase(BaseModel):
                 self.output_path.unlink()
             except Exception as e:
                 raise ValueError(f"Failed to delete existing output file: {e}")
+            return self
         else:
             # 用户不同意，抛出错误
             raise ValueError("Output file already exists and user declined to delete it.")
