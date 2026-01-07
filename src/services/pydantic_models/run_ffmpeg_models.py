@@ -397,6 +397,7 @@ def get_ffmpeg_options() -> tuple[dict, dict, dict]:
                                "default": Audio_Format_Default_Video},
         "audio_format_audio": {"opts": list(get_args(Audio_Format_Options_Audio)),
                                "default": Audio_Format_Default_Audio},
+        # bitrate 命名格式: audio_bitrate_{format}
         "audio_bitrate_ogg":  {"opts": list(get_args(Audio_Bitrate_Options_ogg)),
                                "default": Audio_Bitrate_Default_ogg},
         "audio_bitrate_mp3":  {"opts": list(get_args(Audio_Bitrate_Options_mp3)),

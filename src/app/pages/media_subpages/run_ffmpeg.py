@@ -12,6 +12,7 @@ class RunFFmpegPage(BaseToolPage):
         # 需要用到的公共变量
         self.input_file_path_display = None
         self.probe_result_display = None
+        self.audio_options_dict = None
         self.selected_file_duration = None
         self.selected_file_type = MediaType.UNKNOWN
 
@@ -133,6 +134,8 @@ class RunFFmpegPage(BaseToolPage):
         # 更新公共变量
         self.selected_file_duration = result.duration
         self.selected_file_type = result.media_type
+        # 更新音频codec/bitrate可选项
+        self.update_audio_codec_bitrate_options()
         # 显示检测结果
         display_text = self.build_probe_result_text(result)
         self.probe_result_display.setText(display_text)
@@ -181,6 +184,7 @@ class RunFFmpegPage(BaseToolPage):
     def init_ffmpeg_widgets(self):
 
         common_dict, video_dict, audio_dict = get_ffmpeg_options()
+        self.audio_options_dict = audio_dict  # 保存音频参数字典以便后续使用
 
         # common pad_start_sec line edit
         self.common_pad_start_sec_line_edit = create_line_edit(
@@ -212,9 +216,10 @@ class RunFFmpegPage(BaseToolPage):
             video_dict, widget_type="check_box", param_name="video_mute")
         
         # audio format combo box
-        self.audio_format_combo_box = create_combo_box(length=100)
+        self.audio_format_combo_box = create_combo_box(length=62)
+        self.audio_format_combo_box.currentIndexChanged.connect(self.on_audio_format_changed)
         # audio bitrate combo box
-        self.audio_bitrate_combo_box = create_combo_box(length=100)
+        self.audio_bitrate_combo_box = create_combo_box(length=105)
         # audio sample_rate combo box
         self.audio_sample_rate_combo_box = self.init_ffmpeg_widget(
             audio_dict, widget_type="combo_box", param_name="audio_sample_rate", length=70)
@@ -222,3 +227,53 @@ class RunFFmpegPage(BaseToolPage):
         min, max, default = audio_dict["audio_volume"]
         self.audio_volume_line_edit = create_line_edit(
             default_text=str(default), placeholder=f"{min}~{max}", length=60, validator='int')
+
+
+    def update_audio_codec_bitrate_options(self):
+
+        media_type = self.selected_file_type
+        audio_dict = self.audio_options_dict
+
+        # 更新音频格式选项
+        self.audio_format_combo_box.blockSignals(True)
+        self.audio_format_combo_box.clear()
+
+        if media_type == MediaType.VIDEO_WITH_AUDIO or media_type == MediaType.VIDEO_WITHOUT_AUDIO:
+            opts = audio_dict["audio_format_video"]["opts"]
+            default = audio_dict["audio_format_video"]["default"]
+        elif media_type == MediaType.AUDIO:
+            opts = audio_dict["audio_format_audio"]["opts"]
+            default = audio_dict["audio_format_audio"]["default"]
+        else:
+            self.audio_format_combo_box.blockSignals(False)
+            return
+
+        self.audio_format_combo_box.addItems(opts)
+        self.audio_format_combo_box.setCurrentText(default)
+        self.on_audio_format_changed() # 触发码率更新
+        self.audio_format_combo_box.blockSignals(False)
+
+
+
+    def on_audio_format_changed(self):
+        """当音频格式改变时，同步更新码率可选项"""
+        current_format = self.audio_format_combo_box.currentText()
+        if not current_format:
+            self.audio_bitrate_combo_box.clear()
+            return
+
+        audio_dict = self.audio_options_dict
+        if not audio_dict:
+            return
+            
+        key = f"audio_bitrate_{current_format}"
+        if key in audio_dict:
+            opts = audio_dict[key]["opts"]
+            default = audio_dict[key]["default"]
+            
+            self.audio_bitrate_combo_box.blockSignals(True)
+            self.audio_bitrate_combo_box.clear()
+            self.audio_bitrate_combo_box.addItems(opts)
+            if default in opts:
+                self.audio_bitrate_combo_box.setCurrentText(default)
+            self.audio_bitrate_combo_box.blockSignals(False)

@@ -19,8 +19,8 @@ def main():
 
     except Exception:
         print("\n------------------------ \
-              \nError caught by main.py: \
-              \n------------------------\n")
+               \nError caught by main.py: \
+               \n------------------------\n")
         traceback.print_exc()
         sys.exit(1)
 
