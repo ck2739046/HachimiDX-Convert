@@ -7,36 +7,57 @@ import threading
 import i18n
 from PyQt6.QtCore import QEventLoop, QTimer, Qt
 from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 
 class _PopupConfirmDialog(QDialog):
-    def __init__(self, title: str, prompt_text: str, *, timeout_seconds: int = 30):
+    def __init__(
+        self,
+        title: str,
+        prompt_text: str,
+        *,
+        timeout_seconds: int = 30,
+        mode: str = "confirm",
+    ):
         super().__init__()
 
         self._prompt_text = prompt_text
         self._seconds_left = int(timeout_seconds)
         self._result_value = False
+        self._completed = False
+        self._mode = str(mode or "confirm").lower().strip()
+        if self._mode not in ("confirm", "notify"):
+            self._mode = "confirm"
 
         self.setWindowTitle(title)
         self.setModal(False)
         self.setWindowFlag(Qt.WindowType.Window, True)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setFixedSize(450, 200)
+        self.setFixedSize(330, 180)
 
         self._label = QLabel()
         self._label.setWordWrap(True)
         self._label.setTextFormat(Qt.TextFormat.PlainText)
         self._label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-        self._confirm_button = QPushButton(i18n.t("popup_dialog.ui_confirm"))
-        self._cancel_button = QPushButton(i18n.t("popup_dialog.ui_cancel"))
-
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
-        btn_row.addWidget(self._confirm_button)
-        btn_row.addSpacing(20)
-        btn_row.addWidget(self._cancel_button)
+
+        self._confirm_button: QPushButton | None = None
+        self._cancel_button: QPushButton | None = None
+        self._ok_button: QPushButton | None = None
+
+        if self._mode == "confirm":
+            self._confirm_button = QPushButton(i18n.t("popup_dialog.ui_confirm"))
+            self._cancel_button = QPushButton(i18n.t("popup_dialog.ui_cancel"))
+            btn_row.addWidget(self._confirm_button)
+            btn_row.addSpacing(20)
+            btn_row.addWidget(self._cancel_button)
+        else:
+            self._ok_button = QPushButton(i18n.t("popup_dialog.ui_ok"))
+            btn_row.addWidget(self._ok_button)
+
         btn_row.addStretch(1)
 
         layout = QVBoxLayout()
@@ -49,9 +70,13 @@ class _PopupConfirmDialog(QDialog):
         self._timer.setInterval(1000)
         self._timer.timeout.connect(self._tick)
 
-        self._confirm_button.clicked.connect(self._on_confirm)
-        self._cancel_button.clicked.connect(self._on_cancel)
-        self.rejected.connect(self._on_cancel)
+        if self._confirm_button is not None:
+            self._confirm_button.clicked.connect(self._on_confirm)
+        if self._cancel_button is not None:
+            self._cancel_button.clicked.connect(self._on_cancel)
+        if self._ok_button is not None:
+            self._ok_button.clicked.connect(self._on_ok)
+        self.rejected.connect(self._on_reject)
 
         self._refresh_text()
         self._timer.start()
@@ -72,30 +97,68 @@ class _PopupConfirmDialog(QDialog):
             return
 
     def _refresh_text(self) -> None:
-        hint = i18n.t("popup_dialog.ui_timeout_hint", seconds=self._seconds_left)
+        if self._mode == "notify":
+            hint_key = "popup_dialog.ui_timeout_hint_close"
+        else:
+            hint_key = "popup_dialog.ui_timeout_hint"
+        hint = i18n.t(hint_key, seconds=self._seconds_left)
         self._label.setText(f"{self._prompt_text}{hint}")
 
     def _finish(self, value: bool) -> None:
+        if self._completed:
+            return
+        self._completed = True
         self._result_value = bool(value)
+
         try:
             self._timer.stop()
         except Exception:
             pass
-        try:
-            self.close()
-        except Exception:
-            pass
+
+        # IMPORTANT:
+        # Use accept()/reject() instead of close().
+        # close() may trigger rejected() and overwrite result_value.
+        if self._result_value:
+            try:
+                self.accept()
+            except Exception:
+                try:
+                    self.done(int(QDialog.DialogCode.Accepted))
+                except Exception:
+                    pass
+        else:
+            try:
+                self.reject()
+            except Exception:
+                try:
+                    self.done(int(QDialog.DialogCode.Rejected))
+                except Exception:
+                    pass
 
     def _on_confirm(self) -> None:
+        self._finish(True)
+
+    def _on_ok(self) -> None:
         self._finish(True)
 
     def _on_cancel(self) -> None:
         self._finish(False)
 
+    def _on_reject(self) -> None:
+        self._finish(False)
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        # User clicked the window close button.
+        self._finish(False)
+        try:
+            event.accept()
+        except Exception:
+            pass
+
     def _tick(self) -> None:
         self._seconds_left -= 1
         if self._seconds_left < 0:
-            self._on_cancel()
+            self._on_reject()
             return
         self._refresh_text()
 
@@ -155,6 +218,59 @@ def show_confirm_dialog(title: str, prompt_text: str) -> bool:
         return False
 
 
+def show_notify_dialog(title: str, prompt_text: str) -> bool:
+    """A tiny blocking notify dialog.
+
+    Public API contract (keep it simple):
+    - Accepts only (title: str, prompt_text: str)
+    - Blocks until user clicks OK or 30s timeout
+    - Returns bool (OK=True, timeout/close/error=False)
+
+    Note: Windows-only behavior is acceptable for this tool.
+    """
+
+    try:
+        if os.name == "nt":
+            try:
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                    "hachimidx.converter.tools.popup_dialog"
+                )
+            except Exception:
+                pass
+
+        if threading.current_thread() is not threading.main_thread():
+            return False
+
+        app = QApplication.instance()
+        created_app = False
+        if app is None:
+            created_app = True
+            app = QApplication([])
+            app.setQuitOnLastWindowClosed(True)
+
+        dialog = _PopupConfirmDialog(
+            title,
+            prompt_text,
+            timeout_seconds=30,
+            mode="notify",
+        )
+        event_loop = QEventLoop()
+        dialog.finished.connect(lambda _code: event_loop.quit())
+        dialog.show()
+        event_loop.exec()
+
+        if created_app:
+            try:
+                app.processEvents()
+            except Exception:
+                pass
+
+        return dialog.result_value()
+
+    except Exception:
+        return False
+
+
 
 if __name__ == "__main__":
 
@@ -163,25 +279,46 @@ if __name__ == "__main__":
     locales_dir = os.path.normpath(os.path.join(tool_dir, "../../resources/locales"))
     i18n.load_path.append(locales_dir)
     i18n.set("filename_format", "{locale}.yaml")
-    i18n.set("locale", "zh_CN")
+    # i18n.set("locale", "zh_CN")
+    i18n.set("locale", "en_US")
     i18n.set("fallback", "en_US")
 
     # Multi-dialog manual test
-    # 1st dialog shows immediately, 2nd dialog shows after 2 seconds
+    # Create 4 windows (2 confirm, 2 notify) with 1s interval.
     app = QApplication.instance() or QApplication([])
 
+    test_configs = [
+        ("Confirm 1", "这是第一个 Confirm 弹窗\n2\n3\n4\n5", "confirm"),
+        ("Confirm 2", "这是第二个 Confirm 弹窗", "confirm"),
+        ("Notify 1", "这是第一个 Notify 弹窗", "notify"),
+        ("Notify 2", "这是第二个 Notify 弹窗", "notify"),
+    ]
+
     results: dict[str, bool] = {}
+    active_dialogs = []
 
-    d1 = _PopupConfirmDialog("弹窗1", "这是第一个弹窗，用于测试多弹窗同时显示。")
-    d1.finished.connect(lambda _code: results.__setitem__("d1", d1.result_value()))
-    d1.show()
+    def spawn_next(index: int) -> None:
+        if index >= len(test_configs):
+            print("All test windows spawned.")
+            return
 
-    def _show_second() -> None:
-        d2 = _PopupConfirmDialog("弹窗2", "这是第二个弹窗，应该与第一个同时存在。")
-        d2.finished.connect(lambda _code: results.__setitem__("d2", d2.result_value()))
-        d2.finished.connect(lambda _code: app.quit() if "d1" in results else None)
-        d2.show()
+        title, text, mode = test_configs[index]
+        print(f"Spawning window {index+1}/{len(test_configs)}: {title} ({mode})")
+        
+        d = _PopupConfirmDialog(title, text, mode=mode)
+        key = f"win_{index}_{mode}"
+        d.finished.connect(lambda: results.__setitem__(key, d.result_value()))
+        
+        d.show()
+        active_dialogs.append(d)
 
-    QTimer.singleShot(2000, _show_second)
+        # Schedule next spawn in 1 second
+        QTimer.singleShot(1000, lambda: spawn_next(index + 1))
+
+    # Start spawning
+    spawn_next(0)
+
     app.exec()
-    print(f"Results: {results}")
+    print("\nFinal Results Summary:")
+    for k, v in results.items():
+        print(f"  {k}: {v}")

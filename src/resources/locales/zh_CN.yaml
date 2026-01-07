@@ -31,7 +31,9 @@ zh_CN:
   popup_dialog:
     ui_confirm: "确认"
     ui_cancel: "取消"
+    ui_ok: "好的"
     ui_timeout_hint: "\n\n如果在 %{seconds} 秒内未操作将自动取消。"
+    ui_timeout_hint_close: "\n\n如果在 %{seconds} 秒内未操作将自动关闭此窗口。"
 
   media_task_launcher:
     error_unsupported_config: "不支持的媒体任务配置。"

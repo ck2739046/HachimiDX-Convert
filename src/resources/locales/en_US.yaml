@@ -31,7 +31,9 @@ en_US:
   popup_dialog:
     ui_confirm: "Confirm"
     ui_cancel: "Cancel"
+    ui_ok: "OK"
     ui_timeout_hint: "\n\nAuto-cancel in %{seconds} seconds if no action."
+    ui_timeout_hint_close: "\n\nAuto-close this window in %{seconds} seconds if no action."
 
   media_task_launcher:
     error_unsupported_config: "Unsupported media task config."
