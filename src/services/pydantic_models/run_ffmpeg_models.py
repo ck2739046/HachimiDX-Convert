@@ -108,9 +108,9 @@ class RunFFmpegBase(BaseModel):
     clear_metadata: bool = Field(default = Clear_Metadata_Default)
 
     # Optional
-    input_duration_sec: Optional[float] = Field(default=None, gt=0)
-    pad_start_sec: Optional[float] = Field(default=None, gt=0)
-    start_sec: Optional[float] = Field(default=None, gt=0)
+    input_duration_sec: Optional[float] = Field(default=None, ge=0)
+    pad_start_sec: Optional[float] = Field(default=None, ge=0)
+    start_sec: Optional[float] = Field(default=None, ge=0)
     end_sec: Optional[float] = Field(default=None)
 
     # 基础校验，三位小数
@@ -137,7 +137,7 @@ class RunFFmpegBase(BaseModel):
             return None
         return _ensure_max_3_decimals(float(v), "end_sec")
 
-    # 后校验，检查取值范围，end_sec变正数
+    # 后校验，pad_start_sec/start_sec互斥，检查取值范围，end_sec变正数
     @model_validator(mode="after")
     def _validate_times_constraints(self) -> "RunFFmpegBase":
 
@@ -163,6 +163,9 @@ class RunFFmpegBase(BaseModel):
         set_pad = self.pad_start_sec is not None and self.pad_start_sec != 0
         set_duration = self.input_duration_sec is not None and self.input_duration_sec != 0
 
+        # Validate pad_start_sec and start_sec are not both set
+        if set_pad and set_start:
+            raise ValueError("pad_start_sec and start_sec cannot both be set, only one is allowed")
         # Validata start_sec < input_duration_sec
         if set_start:
             if not set_duration:

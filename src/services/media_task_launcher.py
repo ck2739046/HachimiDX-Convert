@@ -13,6 +13,7 @@ In particular:
 - Timing fields are already normalized: 0 -> None, max 3 decimals.
 - If end_sec was provided, it has already been resolved to a positive timestamp
     by the model validator, so this launcher does NOT need input_duration_sec.
+- pad_start_sec and start_sec are mutually exclusive (not both set).
 - Optional bitrate fields have already been filled with defaults by validators.
 
 Output overwrite behavior
@@ -140,10 +141,10 @@ def _build_common_base_args(input_path: str) -> list[str]:
 
 def _apply_common_timing_args(args: list[str], cfg: RunFFmpegBase) -> None:
     # Trim start/end (legacy style: after -i)
-    if cfg.start_sec is not None:
+    if cfg.start_sec is not None and float(cfg.start_sec) > 0:
         args.extend(["-ss", f"{float(cfg.start_sec)}"])
 
-    if cfg.end_sec is not None:
+    if cfg.end_sec is not None and float(cfg.end_sec) > 0:
         args.extend(["-to", f"{float(cfg.end_sec)}"])
 
 
