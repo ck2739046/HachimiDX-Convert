@@ -121,7 +121,7 @@ def start_ffmpeg_for_media_task(process: QProcess, config: Any) -> tuple[bool, s
     process.setArguments(args)
     process.start()
 
-    full_command = f'"{ffmpeg_exe}" ' + " ".join(f'"{arg}"' for arg in args)
+    full_command = f'"{ffmpeg_exe}" ' + " ".join(f'"{arg}"' for arg in args) + '\n-\n'
     return True, i18n.t("media_task_launcher.notice_ffmpeg_started", command=full_command)
 
 

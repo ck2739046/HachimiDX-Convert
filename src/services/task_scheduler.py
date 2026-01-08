@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Deque, Dict, Optional
 
-from PyQt6.QtCore import QObject, QProcess
+from PyQt6.QtCore import QObject, QProcess, QTimer
 
 import i18n
 
@@ -250,6 +250,9 @@ class TaskScheduler(QObject):
 
         ok, msg = runner.start_fn(runner.process, task.config)
         if ok:
+            if msg:
+                # 延迟 1ms 发送 msg，避免在 started 信号前发送
+                QTimer.singleShot(1, lambda: self.signals.task_output.emit(task_id, bytes(msg, 'utf-8')))
             return
 
         # start failed synchronously
@@ -319,6 +322,9 @@ class TaskScheduler(QObject):
 
         if task:
             if task.status != TaskStatus.CANCELLED:
+
+                self.signals.task_output.emit(task_id, bytes(f'[{task_id}] Task finished.\n', 'utf-8'))
+
                 task.status = TaskStatus.ENDED
                 if exit_status == QProcess.ExitStatus.CrashExit:
                     task.error_msg = "crashed"
