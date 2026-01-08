@@ -197,10 +197,6 @@ class RunFFmpegBase(BaseModel):
         )
         if user_confirmed:
             # 用户同意删除文件
-            try:
-                self.output_path.unlink()
-            except Exception as e:
-                raise ValueError(f"Failed to delete existing output file: {e}")
             return self
         else:
             # 用户不同意，抛出错误
