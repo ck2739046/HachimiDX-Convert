@@ -1,5 +1,6 @@
 import os
 from ..base_tool_page import BaseToolPage
+from ...ui_style import UI_Style
 from ...widgets import *
 from src.services import MediaType
 from src.core.tools import FFprobeInspect, FFprobeInspectResult
@@ -133,7 +134,11 @@ class RunFFmpegPage(BaseToolPage):
                         self.output_full_path_display)
         
         # 第七行：submit按钮 + taskname输入框
-        self.taskname_line_edit = create_line_edit(length=200)
+        self.taskname_line_edit = create_line_edit(
+            length=200, placeholder=i18n.t("app.media_subpages.run_ffmpeg.ui_taskname_placeholder"))
+        submit_button = create_button(i18n.t("app.media_subpages.run_ffmpeg.ui_submit_button"), isbig=True)
+        self.content_layout.addSpacing(UI_Style.widget_spacing)
+        self.create_row(submit_button, self.taskname_line_edit, add_stretch=True)
         
 
 
