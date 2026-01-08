@@ -2,9 +2,9 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout
 from ..widgets import OutputLogWidget
 from ..ui_style import UI_Style
 
-class BaseToolPage(QWidget):
+class BaseOutputPage(QWidget):
     """
-    工具页面基类
+    页面基类
     包含：
     1. 内容区域 (self.content_area)
     2. 日志输出区域 (self.output_widget)

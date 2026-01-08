@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import QLabel
 from PyQt6.QtCore import Qt
-from ..base_tool_page import BaseToolPage
+from ..base_output_page import BaseOutputPage
 from ...ui_style import UI_Style
 
-class SimpleAlignPage(BaseToolPage):
+class SimpleAlignPage(BaseOutputPage):
     def setup_content(self):
         label = QLabel("Simple Align Page (Placeholder)")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)

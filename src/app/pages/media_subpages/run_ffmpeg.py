@@ -1,5 +1,5 @@
 import os
-from ..base_tool_page import BaseToolPage
+from ..base_output_page import BaseOutputPage
 from ...ui_style import UI_Style
 from ...widgets import *
 from src.services import MediaType, TaskScheduler, TaskType, ValidationManage
@@ -8,7 +8,7 @@ from src.core.tools import show_confirm_dialog, show_notify_dialog
 from src.services.pydantic_models import get_ffmpeg_options, build_full_output_path, RunFFmpegBase, RunFFmpegAudio, RunFFmpegVideoWithAudio, RunFFmpegVideoWithoutAudio
 import i18n
 
-class RunFFmpegPage(BaseToolPage):
+class RunFFmpegPage(BaseOutputPage):
 
     def setup_content(self):
 
@@ -250,7 +250,7 @@ class RunFFmpegPage(BaseToolPage):
                 return
 
             # Bind output widget to this task_id.
-            self.output_widget.set_current_task_id(task_id, clear=True)
+            self.output_widget.set_current_task_id(task_id, clear=False)
 
             show_notify_dialog(
                 "app.media_subpages.run_ffmpeg",
