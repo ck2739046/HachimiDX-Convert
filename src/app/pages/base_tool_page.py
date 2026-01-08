@@ -23,6 +23,8 @@ class BaseToolPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(UI_Style.widget_spacing)
 
+        self.output_widget = OutputLogWidget()
+
         # 1. 内容区域容器
         self.content_area = QWidget()
         self.content_layout = QVBoxLayout(self.content_area)
@@ -32,8 +34,9 @@ class BaseToolPage(QWidget):
         layout.addWidget(self.content_area, 1)  # 拉伸因子为1，使其扩展
 
         # 2. 日志输出区域
-        self.output_widget = OutputLogWidget()
         layout.addWidget(self.output_widget, 0)  # 拉伸因子为0，固定在底部
+
+        
         
 
     def setup_content(self):

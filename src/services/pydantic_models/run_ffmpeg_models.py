@@ -35,7 +35,7 @@ Video_Resolution_Default = "origin"
 Video_FPS_Options = Literal["origin", "30", "60"]
 Video_FPS_Default = "origin"
 
-Video_CRF_Range = (20, 28)
+Video_CRF_Range = [20, 28]
 Video_CRF_Default = 23
 
 Video_GOP_Optimize = "bool"
@@ -49,7 +49,7 @@ Video_Mute_Default = False
 Audio_SampleRate_Options = Literal[44100, 48000]
 Audio_SampleRate_Default = 44100
 
-Audio_Volume_Range = (0, 200)
+Audio_Volume_Range = [0, 200]
 Audio_Volume_Default = 100
 
 Audio_Format_Options_Audio = Literal["ogg", "mp3"]

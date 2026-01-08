@@ -130,6 +130,8 @@ zh_CN:
           控制输出音频的质量
 
           码率越高，质量越高，文件越大
+
+          注意: 括号内的码率仅仅是预估值。
         ui_audio_sample_rate_label: "采样率: "
         ui_audio_sample_rate_help: 设置输出音频的采样率
         ui_audio_volume_label: "音量(%): "
@@ -178,6 +180,11 @@ zh_CN:
         
         # ---- Params Warning ----
         warning_output_filename_same_as_input: "警告: 输出文件名不能与输入文件名相同。"
+        warning_unsupported_media_type: "不支持的媒体类型: %{media_type}。"
+        warning_validation_failed: "参数校验失败：\n%{error}"
+        warning_task_submit_failed: "任务提交失败。"
+        notice_task_submitted: "任务已提交：%{task_name}"
+        warning_unexpected_submit_error: "任务提交时发生意外错误：\n%{error}"
 
         # 其他
         probe_result_display:

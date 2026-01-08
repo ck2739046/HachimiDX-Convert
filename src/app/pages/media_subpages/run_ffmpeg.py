@@ -2,7 +2,7 @@ import os
 from ..base_tool_page import BaseToolPage
 from ...ui_style import UI_Style
 from ...widgets import *
-from src.services import MediaType
+from src.services import MediaType, TaskScheduler, TaskType, ValidationManage
 from src.core.tools import FFprobeInspect, FFprobeInspectResult
 from src.core.tools import show_confirm_dialog, show_notify_dialog
 from src.services.pydantic_models import get_ffmpeg_options, build_full_output_path, RunFFmpegBase, RunFFmpegAudio, RunFFmpegVideoWithAudio, RunFFmpegVideoWithoutAudio
@@ -27,6 +27,7 @@ class RunFFmpegPage(BaseToolPage):
         self.output_filename_line_edit = None
         self.output_full_path_display = None
         self.taskname_line_edit = None
+        self.submit_button = None
         # video widgets
         self.video_crf_combo_box = None
         self.video_resolution_combo_box = None
@@ -136,9 +137,14 @@ class RunFFmpegPage(BaseToolPage):
         # 第七行：submit按钮 + taskname输入框
         self.taskname_line_edit = create_line_edit(
             length=200, placeholder=i18n.t("app.media_subpages.run_ffmpeg.ui_taskname_placeholder"))
-        submit_button = create_button(i18n.t("app.media_subpages.run_ffmpeg.ui_submit_button"), isbig=True)
+        self.submit_button = create_button(i18n.t("app.media_subpages.run_ffmpeg.ui_submit_button"), isbig=True)
         self.content_layout.addSpacing(UI_Style.widget_spacing)
-        self.create_row(submit_button, self.taskname_line_edit, add_stretch=True)
+        self.create_row(self.submit_button, self.taskname_line_edit, add_stretch=True)
+
+        self.submit_button.clicked.connect(self.on_submit_clicked)
+        
+        # Connect scheduler output signals to our output widget.
+        TaskScheduler.get_instance().signals.task_output.connect(self.output_widget.handle_scheduler_task_output)
         
 
 
@@ -161,6 +167,106 @@ class RunFFmpegPage(BaseToolPage):
         display_text = self.build_probe_result_text(result)
         self.probe_result_display.setText(display_text)
         # self.output_widget.append_text(str(result.raw))
+
+
+
+    def on_submit_clicked(self):
+
+        def try_int(value) -> int | None:
+            try:
+                return int(round(float(value)))
+            except:
+                return None
+            
+        def try_float(value) -> float | None:
+            try:
+                return float(value)
+            except:
+                return None
+
+        try:
+            if self.submit_button is None: return
+            self.submit_button.setEnabled(False)
+
+            input_path = self.input_file_path_display.text().strip() if self.input_file_path_display else ""
+            input_path = os.path.normpath(os.path.abspath(input_path)) if input_path else ""
+        
+            output_path = self.output_full_path_display.text().strip() if self.output_full_path_display else ""
+            output_path = os.path.normpath(os.path.abspath(output_path)) if output_path else ""
+
+            mediaType = self.selected_file_type
+    
+            raw_data: dict = {
+                # file selection
+                "input_path": input_path,
+                "media_type": mediaType,
+
+                # video stream
+                "video_crf": try_int(self.video_crf_combo_box.currentText().strip()),
+                "video_resolution": self.video_resolution_combo_box.currentText().strip(),
+                "video_fps": self.video_fps_combo_box.currentText().strip(),
+                "video_gop_optimize": self.video_gop_optimize_check_box.isChecked(),
+                "video_mute": self.video_mute_check_box.isChecked(),
+
+                # audio stream
+                "audio_format": self.audio_format_combo_box.currentText().strip(),
+                "audio_bitrate": self.audio_bitrate_combo_box.currentText().strip(),
+                "audio_sample_rate": try_int(self.audio_sample_rate_combo_box.currentText().strip()),
+                "audio_volume": try_int(self.audio_volume_line_edit.text().strip()),
+
+                # common
+                "input_duration_sec": try_float(self.selected_file_duration),
+                "pad_start_sec": try_float(self.common_pad_start_sec_line_edit.text().strip()),
+                "start_sec": try_float(self.common_start_sec_line_edit.text().strip()),
+                "end_sec": try_float(self.common_end_sec_line_edit.text().strip()),
+                "clear_metadata": self.common_clear_metadata_check_box.isChecked(),
+                "output_path": output_path,
+            }
+
+            # 选择对应的 Pydantic 模型进行校验
+            if mediaType == MediaType.VIDEO_WITH_AUDIO:
+                validation_result = ValidationManage.validate(RunFFmpegVideoWithAudio, raw_data)
+            elif mediaType == MediaType.VIDEO_WITHOUT_AUDIO:
+                validation_result = ValidationManage.validate(RunFFmpegVideoWithoutAudio, raw_data)
+            elif mediaType == MediaType.AUDIO:
+                validation_result = ValidationManage.validate(RunFFmpegAudio, raw_data)
+            else:
+                msg = i18n.t("app.media_subpages.run_ffmpeg.warning_unsupported_media_type", media_type = mediaType.name)
+                show_notify_dialog("app.media_subpages.run_ffmpeg", msg)
+                return
+            
+            if not validation_result.success:
+                show_notify_dialog(
+                    "app.media_subpages.run_ffmpeg",
+                    i18n.t("app.media_subpages.run_ffmpeg.warning_validation_failed", error=validation_result.error_msg),
+                )
+                return
+
+            # 通过 pydantic 校验，提交任务
+            task_name = self.taskname_line_edit.text().strip()
+            task_id, accepted = TaskScheduler.submit(TaskType.MEDIA, validation_result.data, task_name)
+            if not accepted or not task_id:
+                show_notify_dialog("app.media_subpages.run_ffmpeg", i18n.t("app.media_subpages.run_ffmpeg.warning_task_submit_failed"))
+                return
+
+            # Bind output widget to this task_id.
+            self.output_widget.set_current_task_id(task_id, clear=True)
+
+            show_notify_dialog(
+                "app.media_subpages.run_ffmpeg",
+                i18n.t(
+                    "app.media_subpages.run_ffmpeg.notice_task_submitted",
+                    task_name=(task_name if task_name else task_id),
+                ),
+            )
+        except Exception as e:
+            show_notify_dialog(
+                "app.media_subpages.run_ffmpeg",
+                i18n.t("app.media_subpages.run_ffmpeg.warning_unexpected_submit_error", error=str(e))
+            )
+        finally:
+            # User requested immediate re-enable after submit attempt.
+            self.submit_button.setEnabled(True)
 
 
 

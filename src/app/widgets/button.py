@@ -84,8 +84,6 @@ class StatedButton(QPushButton):
         if not self.rect().contains(event.position().toPoint()):
             return
 
-        self.setEnabled(False)
-
 
 
 

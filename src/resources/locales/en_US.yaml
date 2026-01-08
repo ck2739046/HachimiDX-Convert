@@ -46,6 +46,10 @@ en_US:
       error_invalid_output_filename: "Invalid output filename: cannot contain characters: \\ / : * ? \" < > |"
       empty_output_extension: "Output file extension cannot be empty"
       invalid_output_extension: "Invalid output file extension: must start with '.'"
+      ui_prompt_delete_existing_output_file: |
+        Output file already exists: %{file_path}
+        Do you want to delete this file?
+
 
 
   # ---- core.tools ----
@@ -126,6 +130,8 @@ en_US:
           Controls the output audio quality
 
           Higher bitrate = higher quality, larger files.
+
+          Note: The bitrate in parentheses is only an estimate.
         ui_audio_sample_rate_label: "Sample Rate: "
         ui_audio_sample_rate_help: Sets output audio sampling rate
         ui_audio_volume_label: "Volume(%): "
@@ -174,6 +180,11 @@ en_US:
 
         # ---- Params Warning ----
         warning_output_filename_same_as_input: "Warning: Output filename cannot be the same as input filename."
+        warning_unsupported_media_type: "Unsupported media type: %{media_type}."
+        warning_validation_failed: "Validation failed:\n%{error}"
+        warning_task_submit_failed: "Task submit failed."
+        notice_task_submitted: "Task submitted: %{task_name}"
+        warning_unexpected_submit_error: "Unexpected error during task submission:\n%{error}"
 
         # other
         probe_result_display:
