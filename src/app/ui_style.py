@@ -22,6 +22,11 @@ class UI_Style:
 
         'stop': "#B61D2D",
         'stop_hover': "#DC3545",
+
+        # Task status colors (Tasks page)
+        'task_pending': "#005F66",   # cyan
+        'task_running': "#1F6F3D",   # green
+        'task_ended': "#3D3D3D",     # gray
     }
 
     widget_spacing = 10

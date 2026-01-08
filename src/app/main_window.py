@@ -9,6 +9,7 @@ from PyQt6.QtGui import QIcon
 from .widgets import SquareWidget
 from .widgets import SegmentedNavBar
 from .pages.media_tools_page import MediaToolsPage
+from .pages.tasks_page import TasksPage
 from .ui_style import UI_Style
 
 import i18n
@@ -108,7 +109,7 @@ class RightPanel(QWidget):
         # 2: Media Tools
         self.stack.addWidget(MediaToolsPage())
         # 3: Tasks (Placeholder)
-        self.stack.addWidget(self.create_placeholder("Tasks Page"))
+        self.stack.addWidget(TasksPage())
         # 4: Settings (Placeholder)
         self.stack.addWidget(self.create_placeholder("Settings Page"))
 
