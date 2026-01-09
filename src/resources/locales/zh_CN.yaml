@@ -184,7 +184,7 @@ zh_CN:
         warning_unsupported_media_type: "不支持的媒体类型: %{media_type}。"
         warning_validation_failed: "参数校验失败：\n%{error}"
         warning_task_submit_failed: "任务提交失败。"
-        notice_task_submitted: "任务已提交：%{task_name}"
+        notice_task_submitted: "任务已提交: %{task_info}"
         warning_unexpected_submit_error: "任务提交时发生意外错误：\n%{error}"
 
         # 其他

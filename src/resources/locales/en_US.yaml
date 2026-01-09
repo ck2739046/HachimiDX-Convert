@@ -184,7 +184,7 @@ en_US:
         warning_unsupported_media_type: "Unsupported media type: %{media_type}."
         warning_validation_failed: "Validation failed:\n%{error}"
         warning_task_submit_failed: "Task submit failed."
-        notice_task_submitted: "Task submitted: %{task_name}"
+        notice_task_submitted: "Task submitted: %{task_info}"
         warning_unexpected_submit_error: "Unexpected error during task submission:\n%{error}"
 
         # other

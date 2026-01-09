@@ -150,7 +150,7 @@ class TaskScheduler(QObject):
         cls.get_instance()._cancel_or_remove(task_id)
 
 
-    def _submit(self, task_type: TaskType, config: Any, task_name: Optional[str] = None) -> tuple[str, bool]:
+    def _submit(self, task_type: TaskType, config: Any, task_name: Optional[str] = None) -> tuple[str, str, bool]:
 
         runner = self._runners.get(task_type)
         if runner is None:
@@ -160,10 +160,15 @@ class TaskScheduler(QObject):
         # 否则生成一个新的 ID
         task_id = getattr(config, "task_id", None) or str(nanoid.generate(size=8))
 
+        if task_name:
+            task_name = str(task_name).strip()
+        else:
+            task_name = ''
+
         task = TaskInfo(
             task_id=str(task_id),
             task_type=task_type,
-            task_name=(task_name.strip() if isinstance(task_name, str) and task_name.strip() else None),
+            task_name=task_name,
             accepted_at=datetime.now(),
             status=TaskStatus.PENDING,
             config=config,
@@ -175,7 +180,7 @@ class TaskScheduler(QObject):
         self._emit_snapshot()
         self._try_dispatch(task_type)
 
-        return task.task_id, True
+        return task.task_id, task.task_name, True
 
 
     def _cancel_or_remove(self, task_id: str) -> None:
@@ -252,7 +257,8 @@ class TaskScheduler(QObject):
         if ok:
             if msg:
                 # 延迟 1ms 发送 msg，避免在 started 信号前发送
-                QTimer.singleShot(1, lambda: self.signals.task_output.emit(task_id, bytes(msg, 'utf-8')))
+                final_msg = f"\n-\n{'=' * 30}\n[{task_id}] Task start.\n-\n{msg}\n]"
+                QTimer.singleShot(1, lambda: self.signals.task_output.emit(task_id, bytes(final_msg, 'utf-8')))
             return
 
         # start failed synchronously

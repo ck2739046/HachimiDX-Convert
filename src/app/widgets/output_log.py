@@ -21,7 +21,7 @@ class OutputLogWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._current_task_id: str | None = None
+        self._current_task_id: list = []
         # 保存的最大行数
         self.max_output_lines = 400
         # 标记最后一行是否可被替换 (用于处理 \r)
@@ -160,30 +160,31 @@ class OutputLogWidget(QWidget):
 
     def set_current_task_id(self, task_id: str | None, *, clear: bool = True) -> None:
         """
-        Bind this output widget to a specific task_id. When task_id is set, handle_scheduler_task_output will only accept output
-        for the same task_id.
+        Bind this output widget to a specific task_id.
+        When task_id is set, handle_scheduler_task_output will only accept output for the same task_id.
+
+        Note: output widget holds a list of task_ids.
 
         Args:
             task_id (str | None): The task ID to bind to. If None, unbinds from any task.
             clear (bool): Whether to clear existing output when setting a new task ID.
         """
-
-        self._current_task_id = task_id
+        
+        if task_id:
+            self._current_task_id.append(task_id)
+        else:
+            self._current_task_id = []
+            
         if clear:
             self.text_edit.clear()
             self._text_buffer = ""
             self._is_last_line_replaceable = False
 
-        self._append_output("\n")
-        self._append_output(f"{'=' * 30}")
-        self._append_output(f"[OutputLogWidget] Bound to task_id: {task_id}")
-        self._append_output(f"{'=' * 30}\n")
-
 
     def handle_scheduler_task_output(self, task_id: str, payload: object) -> None:
         """Slot: consume TaskScheduler.signals.task_output(task_id, bytes)."""
 
-        if self._current_task_id is None or task_id != self._current_task_id:
+        if not self._current_task_id or task_id not in self._current_task_id:
             return
 
         if not isinstance(payload, (bytes, bytearray)):

@@ -251,7 +251,7 @@ class RunFFmpegPage(BaseOutputPage):
 
             # 通过 pydantic 校验，提交任务
             task_name = self.taskname_line_edit.text().strip()
-            task_id, accepted = TaskScheduler.submit(TaskType.MEDIA, validation_result.data, task_name)
+            task_id, task_name, accepted = TaskScheduler.submit(TaskType.MEDIA, validation_result.data, task_name)
             if not accepted or not task_id:
                 show_notify_dialog("app.media_subpages.run_ffmpeg", i18n.t("app.media_subpages.run_ffmpeg.warning_task_submit_failed"))
                 return
@@ -263,7 +263,7 @@ class RunFFmpegPage(BaseOutputPage):
                 "app.media_subpages.run_ffmpeg",
                 i18n.t(
                     "app.media_subpages.run_ffmpeg.notice_task_submitted",
-                    task_name=(task_name if task_name else task_id),
+                    task_info=f"[{task_id}] {task_name}",
                 ),
             )
         except Exception as e:
