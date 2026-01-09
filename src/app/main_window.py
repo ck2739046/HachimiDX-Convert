@@ -90,7 +90,7 @@ class RightPanel(QWidget):
     def setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(UI_Style.widget_spacing)
+        layout.setSpacing(0)
 
         # 1. 主导航栏
         nav_items = ["Majdata", "Auto Convert", "Media Tools", "Tasks", "Settings"]

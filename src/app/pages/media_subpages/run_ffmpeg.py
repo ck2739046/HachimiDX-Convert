@@ -15,7 +15,6 @@ class RunFFmpegPage(BaseOutputPage):
 
         self.content_layout = QVBoxLayout(self.content_area)
         self.content_layout.setContentsMargins(10, 10, 10, 10)
-        self.content_layout.addStretch()  # 添加弹性空间，使内容从顶部开始显示
 
         # 需要用到的公共变量
         self.input_file_path_display = None
@@ -151,6 +150,9 @@ class RunFFmpegPage(BaseOutputPage):
         # Connect scheduler output signals to our output widget.
         TaskScheduler.get_instance().signals.task_output.connect(self.output_widget.handle_scheduler_task_output)
         
+        self.content_layout.addStretch()  # 添加弹性空间，使内容从顶部开始显示
+
+
 
 
 

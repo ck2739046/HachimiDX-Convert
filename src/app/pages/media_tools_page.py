@@ -21,6 +21,9 @@ class MediaToolsPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # 0. 顶部增加空隙，让内部导航栏与整体导航栏分离
+        layout.addSpacing(UI_Style.widget_spacing)
+
         # 1. 内部导航栏
         nav_items = ["Match First",
                      "Simple Align",
