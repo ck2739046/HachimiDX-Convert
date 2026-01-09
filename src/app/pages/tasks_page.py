@@ -19,13 +19,16 @@ from src.services import TaskInfo, TaskScheduler, TaskStatus
 
 from .base_output_page import BaseOutputPage
 from ..ui_style import UI_Style
+from ..widgets import *
+
+import i18n
 
 
 class TasksPage(BaseOutputPage):
     def __init__(self, parent: Optional[QWidget] = None):
-        self._auto_scroll: Optional[QScrollArea] = None
+        self._auto_convert_scroll: Optional[QScrollArea] = None
         self._media_scroll: Optional[QScrollArea] = None
-        self._auto_list_layout: Optional[QVBoxLayout] = None
+        self._auto_convert_list_layout: Optional[QVBoxLayout] = None
         self._media_list_layout: Optional[QVBoxLayout] = None
         self._last_by_id: Dict[str, Tuple[Any, ...]] = {}
 
@@ -34,25 +37,29 @@ class TasksPage(BaseOutputPage):
         scheduler = TaskScheduler.get_instance()
         scheduler.signals.task_list_changed.connect(self._on_task_list_changed)
 
-        # Best-effort initial render.
-        if hasattr(scheduler, "_emit_snapshot"):
-            QTimer.singleShot(0, scheduler._emit_snapshot)  # type: ignore[attr-defined]
 
 
     def setup_content(self) -> None:
-        columns = QWidget()
-        columns.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        columns_layout = QHBoxLayout(columns)
-        columns_layout.setContentsMargins(0, 0, 0, 0)
-        columns_layout.setSpacing(UI_Style.widget_spacing)
 
-        auto_panel, self._auto_scroll, self._auto_list_layout = self._create_queue_panel("Auto Convert")
+        # 总体是水平布局，左右两栏
+        self.content_layout = QHBoxLayout(self.content_area)
+        self.content_layout.setContentsMargins(0, 10, 0, 10)
+        self.content_layout.setSpacing(UI_Style.widget_spacing)
+
+        # 需要用到的公共变量
+        self._auto_convert_scroll = None
+        self._auto_convert_list_layout = None
+        self._media_scroll = None
+        self._media_list_layout = None
+
+        auto_convert_panel, self._auto_convert_scroll, self._auto_convert_list_layout = self._create_queue_panel("Auto Convert")
         media_panel, self._media_scroll, self._media_list_layout = self._create_queue_panel("Media")
 
-        columns_layout.addWidget(auto_panel, 1)
-        columns_layout.addWidget(media_panel, 1)
+        self.content_layout.addWidget(auto_convert_panel)
+        self.content_layout.addWidget(media_panel)
 
-        self.content_layout.addWidget(columns, 1)
+
+
 
 
     # -------------------
@@ -60,74 +67,119 @@ class TasksPage(BaseOutputPage):
     # -------------------
 
     def _create_queue_panel(self, title: str) -> tuple[QWidget, QScrollArea, QVBoxLayout]:
+        
         panel = QWidget()
-        panel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         panel_layout = QVBoxLayout(panel)
         panel_layout.setContentsMargins(0, 0, 0, 0)
-        panel_layout.setSpacing(8)
+        panel_layout.setSpacing(UI_Style.widget_spacing)
 
-        header = QLabel(title)
-        header.setStyleSheet(
-            f"color: {UI_Style.COLORS['text_primary']}; font-size: {UI_Style.default_text_size + 1}px;"
-        )
+        header = create_label(title, font_size = UI_Style.default_text_size + 3, bold = True)
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         panel_layout.addWidget(header)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        #scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         scroll.setStyleSheet(
-            f"QScrollArea {{ background: transparent; }}"
-            f"QScrollBar:vertical {{ background-color: {UI_Style.COLORS['bg']}; width: 12px; border: none; }}"
-            f"QScrollBar::handle:vertical {{ background-color: {UI_Style.COLORS['text_secondary']}; border-radius: 6px; min-height: 20px; }}"
-            f"QScrollBar::handle:vertical:hover {{ background-color: {UI_Style.COLORS['accent']}; }}"
-            f"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}"
-            f"QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}"
+            f"""
+            QScrollBar:vertical {{
+                background-color: {UI_Style.COLORS['bg']};
+                width: 12px;
+                border: none;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {UI_Style.COLORS['text_secondary']};
+                border-radius: 6px;
+                min-height: 20px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {UI_Style.COLORS['accent']};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: none;
+            }}
+
+            QScrollBar:horizontal {{
+                background-color: {UI_Style.COLORS['bg']};
+                height: 12px;
+                border: none;
+            }}
+            QScrollBar::handle:horizontal {{
+                background-color: {UI_Style.COLORS['text_secondary']};
+                border-radius: 6px;
+                min-width: 20px;
+            }}
+            QScrollBar::handle:horizontal:hover {{
+                background-color: {UI_Style.COLORS['accent']};
+            }}
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+                width: 0px;
+            }}
+            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+                background: none;
+            }}
+            """
         )
 
+        # 一个列的内部的纵向卡片堆叠
         inner = QWidget()
         inner_layout = QVBoxLayout(inner)
         inner_layout.setContentsMargins(0, 0, 0, 0)
-        inner_layout.setSpacing(8)
-        inner_layout.addStretch()
+        inner_layout.setSpacing(4)
 
         scroll.setWidget(inner)
-        panel_layout.addWidget(scroll, 1)
+        panel_layout.addWidget(scroll)
 
         return panel, scroll, inner_layout
 
 
+
     def _create_task_card(self, task: TaskInfo) -> QWidget:
-        bg = self._status_bg(task.status)
+
+        task_bg = self._get_task_bg_color(task.status)
 
         card = QFrame()
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         card.setStyleSheet(
-            "QFrame {"
-            f"background-color: {bg};"
-            f"color: {UI_Style.COLORS['text_primary']};"
-            "border-radius: 6px;"
-            "padding: 8px;"
-            "}"
+            f"""
+            QFrame {{
+                background-color: {task_bg};
+                color: {UI_Style.COLORS['text_primary']};
+                border-radius: 16px;
+            }}
+            """
         )
 
+        # 左右布局：左边显示task信息，右边显示取消按钮
         row = QHBoxLayout(card)
-        row.setContentsMargins(8, 6, 8, 6)
-        row.setSpacing(8)
+        row.setContentsMargins(20, 10, 10, 10)
+        row.setSpacing(0)
 
+        # 左边信息区：垂直布局分三行
         left = QWidget()
+        left.setStyleSheet(f"background: {task_bg};")
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(2)
+        left_layout.setSpacing(0)
 
-        uuid_label = QLabel(str(task.task_id))
-        uuid_label.setStyleSheet(f"color: {UI_Style.COLORS['text_primary']}; font-size: 12px;")
+        uuid_label = create_path_display(
+            default_text = f"ID: {task.task_id}",
+            length = 270,
+            font_color = UI_Style.COLORS['text_primary'],
+            font_bold = True)
 
-        name_label = QLabel(task.task_name or "")
-        name_label.setStyleSheet(f"color: {UI_Style.COLORS['text_primary']}; font-size: 12px;")
+        name_label = create_path_display(
+            default_text = task.task_name or " ",
+            length = 270,
+            font_color = UI_Style.COLORS['text_primary'])
 
-        accepted_label = QLabel(self._format_accepted(task.accepted_at))
-        accepted_label.setStyleSheet(f"color: {UI_Style.COLORS['text_secondary']}; font-size: 11px;")
+        accepted_label = create_path_display(
+            default_text = self._format_accepted(task.accepted_at),
+            length = 270)
 
         left_layout.addWidget(uuid_label)
         left_layout.addWidget(name_label)
@@ -137,25 +189,26 @@ class TasksPage(BaseOutputPage):
         cancel_btn.setText("✕")
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)  # type: ignore[name-defined]
         cancel_btn.setStyleSheet(
-            "QToolButton {"
-            "background: transparent;"
-            f"color: {UI_Style.COLORS['text_primary']};"
-            "border: none;"
-            "padding: 2px 6px;"
-            "}"
-            "QToolButton:hover {"
-            f"color: {UI_Style.COLORS['stop_hover']};"
-            "}"
+            f"""
+            QToolButton {{
+                background: transparent;
+                color: {UI_Style.COLORS['text_primary']};
+                font-size: 20px;
+                border: none;
+            }}
+                QToolButton:hover {{
+                color: {UI_Style.COLORS['stop_hover']};
+            }}
+            """
         )
-        font = cancel_btn.font()
-        font.setPointSize(16)
-        cancel_btn.setFont(font)
         cancel_btn.clicked.connect(lambda _=False, tid=task.task_id: TaskScheduler.cancel(tid))
 
         row.addWidget(left, 1)
         row.addWidget(cancel_btn, 0)
 
         return card
+
+
 
 
     # -------------------
@@ -166,32 +219,34 @@ class TasksPage(BaseOutputPage):
         if not isinstance(snapshot, dict):
             return
 
-        auto_tasks = snapshot.get("auto_convert") or []
+        auto_convert_tasks = snapshot.get("auto_convert") or []
         media_tasks = snapshot.get("media") or []
 
-        if not isinstance(auto_tasks, list):
-            auto_tasks = []
+        if not isinstance(auto_convert_tasks, list):
+            auto_convert_tasks = []
         if not isinstance(media_tasks, list):
             media_tasks = []
 
-        self._log_task_list_diff(auto_tasks, media_tasks)
-        self._render_columns(auto_tasks, media_tasks)
+        self._log_task_list_diff(auto_convert_tasks, media_tasks)
+        self._render_columns(auto_convert_tasks, media_tasks)
 
 
-    def _render_columns(self, auto_tasks: list[TaskInfo], media_tasks: list[TaskInfo]) -> None:
-        if self._auto_scroll is None or self._media_scroll is None:
+
+    def _render_columns(self, auto_convert_tasks: list[TaskInfo], media_tasks: list[TaskInfo]) -> None:
+        if self._auto_convert_scroll is None or self._media_scroll is None:
             return
-        if self._auto_list_layout is None or self._media_list_layout is None:
+        if self._auto_convert_list_layout is None or self._media_list_layout is None:
             return
 
-        auto_scroll_value = self._auto_scroll.verticalScrollBar().value()
+        auto_convert_scroll_value = self._auto_convert_scroll.verticalScrollBar().value()
         media_scroll_value = self._media_scroll.verticalScrollBar().value()
 
-        self._rebuild_list(self._auto_list_layout, auto_tasks)
+        self._rebuild_list(self._auto_convert_list_layout, auto_convert_tasks)
         self._rebuild_list(self._media_list_layout, media_tasks)
 
-        self._auto_scroll.verticalScrollBar().setValue(auto_scroll_value)
+        self._auto_convert_scroll.verticalScrollBar().setValue(auto_convert_scroll_value)
         self._media_scroll.verticalScrollBar().setValue(media_scroll_value)
+
 
 
     def _rebuild_list(self, layout: QVBoxLayout, tasks: list[TaskInfo]) -> None:
@@ -205,6 +260,9 @@ class TasksPage(BaseOutputPage):
             if task.status == TaskStatus.CANCELLED:
                 continue
             layout.addWidget(self._create_task_card(task))
+        
+        layout.addStretch()
+
 
 
     def _sort_tasks_for_display(self, tasks: Iterable[TaskInfo]) -> list[TaskInfo]:
@@ -224,6 +282,9 @@ class TasksPage(BaseOutputPage):
         return running + pending + ended
 
 
+
+
+
     # -------------------
     # Diff logging
     # -------------------
@@ -240,9 +301,10 @@ class TasksPage(BaseOutputPage):
         )
 
 
-    def _log_task_list_diff(self, auto_tasks: list[TaskInfo], media_tasks: list[TaskInfo]) -> None:
+
+    def _log_task_list_diff(self, auto_convert_tasks: list[TaskInfo], media_tasks: list[TaskInfo]) -> None:
         new_by_id: Dict[str, Tuple[Any, ...]] = {}
-        for task in list(auto_tasks) + list(media_tasks):
+        for task in list(auto_convert_tasks) + list(media_tasks):
             try:
                 new_by_id[str(task.task_id)] = self._task_fingerprint(task)
             except Exception:
@@ -287,6 +349,8 @@ class TasksPage(BaseOutputPage):
         self._last_by_id = new_by_id
 
 
+
+
     # -------------------
     # Formatting / colors
     # -------------------
@@ -297,7 +361,7 @@ class TasksPage(BaseOutputPage):
         return accepted_at.isoformat(sep=" ", timespec="seconds")
 
 
-    def _status_bg(self, status: TaskStatus) -> str:
+    def _get_task_bg_color(self, status: TaskStatus) -> str:
         if status == TaskStatus.PENDING:
             return UI_Style.COLORS["task_pending"]
         if status == TaskStatus.RUNNING:

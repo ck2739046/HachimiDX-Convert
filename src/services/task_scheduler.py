@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import psutil
-import uuid
+import nanoid
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -157,8 +157,8 @@ class TaskScheduler(QObject):
             return "", False
 
         # 如果传入的 config 有 task_id 字段，就使用这个 (任务重试)
-        # 否则生成一个新的 UUID
-        task_id = getattr(config, "task_id", None) or str(uuid.uuid4())
+        # 否则生成一个新的 ID
+        task_id = getattr(config, "task_id", None) or str(nanoid.generate(size=8))
 
         task = TaskInfo(
             task_id=str(task_id),
