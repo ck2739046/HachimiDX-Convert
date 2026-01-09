@@ -1,4 +1,5 @@
 import os
+from PyQt6.QtWidgets import QVBoxLayout
 from ..base_output_page import BaseOutputPage
 from ...ui_style import UI_Style
 from ...widgets import *
@@ -11,6 +12,10 @@ import i18n
 class RunFFmpegPage(BaseOutputPage):
 
     def setup_content(self):
+
+        self.content_layout = QVBoxLayout(self.content_area)
+        self.content_layout.setContentsMargins(10, 10, 10, 10)
+        self.content_layout.addStretch()  # 添加弹性空间，使内容从顶部开始显示
 
         # 需要用到的公共变量
         self.input_file_path_display = None
