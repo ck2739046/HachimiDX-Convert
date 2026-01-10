@@ -128,7 +128,7 @@ class TasksPage(BaseOutputPage):
         # 一个列的内部的纵向卡片堆叠
         inner = QWidget()
         inner_layout = QVBoxLayout(inner)
-        inner_layout.setContentsMargins(0, 0, 0, 0)
+        inner_layout.setContentsMargins(4, 4, 4, 4)
         inner_layout.setSpacing(4)
 
         scroll.setWidget(inner)

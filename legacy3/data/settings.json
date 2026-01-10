@@ -1,0 +1,8 @@
+{
+    "model_backend": "tensorrt",
+    "tensorrt_batch_size": 2,
+    "ffmpeg_hw_accel_vp9": "cpu",
+    "ffmpeg_hw_accel_h264": "cpu",
+    "language": "en_US",
+    "main_output_dir_name": "1-output"
+}
