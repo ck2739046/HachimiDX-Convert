@@ -4,8 +4,8 @@
 .venv_main
 
 legacy/aaa-result
-src/resources/Majdata/
-src/resources/ffmpeg*
+src/resources/majdata/
+src/resources/ffmpeg/
 src/resources/models/
 temp.py
 
