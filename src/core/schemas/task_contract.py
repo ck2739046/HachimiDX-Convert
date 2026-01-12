@@ -53,3 +53,7 @@ class TaskSignals(QObject):
     # Fired when the currently RUNNING task produces output.
     # Output is merged (stdout/stderr), as raw bytes.
     task_output = pyqtSignal(str, object)
+
+    # Fired when TaskScheduler itself encounters an error (kill failures, start_fn errors, internal exceptions, etc).
+    # Payload is OpResult[str] (sent as object).
+    task_scheduler_output = pyqtSignal(object)

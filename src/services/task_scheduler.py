@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import traceback
 import psutil
 import nanoid
 from collections import deque
@@ -66,6 +67,20 @@ class TaskScheduler(QObject):
         # 注册 task runners
         # self.register_runner(TaskType.MEDIA, start_ffmpeg_for_media_task)
 
+    def _emit_scheduler_error(
+        self,
+        error_msg: str,
+        *,
+        error_raw: Any = None,
+        inner: Optional[OpResult[Any]] = None,
+    ) -> None:
+        """Emit a scheduler-level error (never raises)."""
+        try:
+            self.signals.task_scheduler_output.emit(err(error_msg=error_msg, error_raw=error_raw, inner=inner))
+        except Exception:
+            # Last resort: never let scheduler crash because UI signal handlers are broken.
+            pass
+
     def cleanup(self) -> None:
         """cancel running processes and stop dispatch."""
         for runner in self._runners.values():
@@ -75,7 +90,19 @@ class TaskScheduler(QObject):
                     task.status = TaskStatus.CANCELLED
                     task.error_msg = None
                 self._emit_snapshot()
-                self._kill_qprocess_tree(runner.process)
+                try:
+                    self._kill_qprocess_tree(runner.process)
+                except Exception as ex:
+                    self._emit_scheduler_error(
+                        "Failed to terminate process tree during scheduler cleanup.",
+                        error_raw={
+                            "phase": "cleanup",
+                            "task_type": getattr(runner.task_type, "value", str(runner.task_type)),
+                            "running_task_id": runner.running,
+                            "exception": repr(ex),
+                            "traceback": traceback.format_exc(),
+                        },
+                    )
 
    
 
@@ -93,7 +120,11 @@ class TaskScheduler(QObject):
                 Signature: (process, validated_config) -> (ok, error_msg)
         """
         if task_type in self._runners:
-            raise ValueError(f"Runner already registered for {task_type}")
+            self._emit_scheduler_error(
+                "Runner already registered; ignoring duplicate registration.",
+                error_raw={"task_type": getattr(task_type, "value", str(task_type))},
+            )
+            return
 
         process = QProcess(self)
         process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
@@ -158,6 +189,10 @@ class TaskScheduler(QObject):
 
         runner = self._runners.get(task_type)
         if runner is None:
+            self._emit_scheduler_error(
+                "Task type not registered; cannot submit task.",
+                error_raw={"task_type": getattr(task_type, "value", str(task_type))},
+            )
             return err(f"Task type {task_type} not registered")
 
         # 如果传入的 config 有 task_id 字段，就使用这个 (任务重试)
@@ -181,8 +216,24 @@ class TaskScheduler(QObject):
         self._tasks[task.task_id] = task
         runner.pending.append(task.task_id)
 
-        self._emit_snapshot()
-        self._try_dispatch(task_type)
+        try:
+            self._emit_snapshot()
+            self._try_dispatch(task_type)
+        except Exception as ex:
+            # Scheduler must not crash on submit-path failures.
+            self._emit_scheduler_error(
+                "Unhandled exception while submitting/dispatching a task.",
+                error_raw={
+                    "task_id": task.task_id,
+                    "task_type": getattr(task_type, "value", str(task_type)),
+                    "exception": repr(ex),
+                    "traceback": traceback.format_exc(),
+                },
+            )
+            # Best-effort: mark ended to avoid RUNNING/PENDING zombie tasks.
+            task.status = TaskStatus.ENDED
+            task.error_msg = "submit/dispatch failed"
+            self._emit_snapshot()
 
         return ok((task.task_id, task.task_name))
 
@@ -244,6 +295,14 @@ class TaskScheduler(QObject):
         next_id = runner.pending.popleft()
         if next_id not in self._tasks:
             # removed while queued; try next
+            self._emit_scheduler_error(
+                "Inconsistent queue state: pending task_id missing from registry.",
+                error_raw={
+                    "task_type": getattr(task_type, "value", str(task_type)),
+                    "missing_task_id": next_id,
+                    "pending_len": len(runner.pending),
+                },
+            )
             self._try_dispatch(task_type)
             return
 
@@ -259,7 +318,28 @@ class TaskScheduler(QObject):
         runner.running = task_id
         self._emit_snapshot()
 
-        result = runner.start_fn(runner.process, task.config)
+        try:
+            result = runner.start_fn(runner.process, task.config)
+        except Exception as ex:
+            # start_fn must never be allowed to crash the scheduler.
+            task.status = TaskStatus.ENDED
+            task.error_msg = "start_fn raised exception"
+            runner.done.append(task_id)
+            runner.running = None
+            self._emit_snapshot()
+            self._emit_scheduler_error(
+                "Unhandled exception thrown by start_fn.",
+                error_raw={
+                    "phase": "start_fn",
+                    "task_id": task_id,
+                    "task_type": getattr(runner.task_type, "value", str(runner.task_type)),
+                    "exception": repr(ex),
+                    "traceback": traceback.format_exc(),
+                },
+            )
+            self._try_dispatch(runner.task_type)
+            return
+
         if result.is_ok():
             msg = result.value
             if msg:
@@ -269,6 +349,15 @@ class TaskScheduler(QObject):
             return
 
         # start failed synchronously
+        self._emit_scheduler_error(
+            "Task start failed (start_fn returned err).",
+            error_raw={
+                "phase": "start_fn",
+                "task_id": task_id,
+                "task_type": getattr(runner.task_type, "value", str(runner.task_type)),
+            },
+            inner=result,
+        )
         task.status = TaskStatus.ENDED
         task.error_msg = result.error_msg
         runner.done.append(task_id)
@@ -284,75 +373,188 @@ class TaskScheduler(QObject):
     # -------------------
 
     def _on_process_ready_read(self, task_type: TaskType) -> None:
-        runner = self._runners.get(task_type)
-        if runner is None or runner.running is None:
-            # No running task to attribute output to.
-            if runner is not None:
-                runner.process.readAllStandardOutput()
-            return
+        try:
+            runner = self._runners.get(task_type)
+            if runner is None or runner.running is None:
+                # No running task to attribute output to.
+                if runner is not None:
+                    drained = runner.process.readAllStandardOutput()
+                    if drained:
+                        preview = bytes(drained)[:200]
+                        self._emit_scheduler_error(
+                            "Received process output but no running task is set; output was discarded.",
+                            error_raw={
+                                "task_type": getattr(task_type, "value", str(task_type)),
+                                "output_preview": preview,
+                            },
+                        )
+                return
 
-        data = runner.process.readAllStandardOutput()
-        if not data:
-            return
+            data = runner.process.readAllStandardOutput()
+            if not data:
+                return
 
-        # QByteArray -> bytes
-        payload = bytes(data)
-        self.signals.task_output.emit(runner.running, payload)
+            # QByteArray -> bytes
+            payload = bytes(data)
+            self.signals.task_output.emit(runner.running, payload)
+        except Exception as ex:
+            self._emit_scheduler_error(
+                "Unhandled exception while processing QProcess output.",
+                error_raw={
+                    "phase": "ready_read",
+                    "task_type": getattr(task_type, "value", str(task_type)),
+                    "exception": repr(ex),
+                    "traceback": traceback.format_exc(),
+                },
+            )
 
 
 
     def _on_process_started(self, task_type: TaskType) -> None:
         # Snapshot-driven UI; started can be used for immediate refresh.
-        self._emit_snapshot()
+        try:
+            self._emit_snapshot()
+        except Exception as ex:
+            self._emit_scheduler_error(
+                "Failed to emit task snapshot on process started.",
+                error_raw={
+                    "phase": "process_started",
+                    "task_type": getattr(task_type, "value", str(task_type)),
+                    "exception": repr(ex),
+                    "traceback": traceback.format_exc(),
+                },
+            )
 
 
 
     def _on_process_error(self, task_type: TaskType, err: QProcess.ProcessError) -> None:
-        runner = self._runners.get(task_type)
-        if runner is None or runner.running is None:
+        try:
+            runner = self._runners.get(task_type)
+            if runner is None or runner.running is None:
+                self._emit_snapshot()
+                return
+
+            task_id = runner.running
+            task = self._tasks.get(task_id)
+
+            if task and task.status != TaskStatus.CANCELLED:
+                task.status = TaskStatus.ENDED
+                task.error_msg = f"process_error={err.name}"
+                self._emit_scheduler_error(
+                    "QProcess reported an error.",
+                    error_raw={
+                        "phase": "process_error",
+                        "task_id": task_id,
+                        "task_type": getattr(task_type, "value", str(task_type)),
+                        "qprocess_error": err.name,
+                        "pid": int(runner.process.processId()) if runner.process is not None else None,
+                    },
+                )
+
+            runner.done.append(task_id)
+            runner.running = None
             self._emit_snapshot()
-            return
-
-        task_id = runner.running
-        task = self._tasks.get(task_id)
-
-        if task and task.status != TaskStatus.CANCELLED:
-            task.status = TaskStatus.ENDED
-            task.error_msg = f"process_error={err.name}"
-
-        runner.done.append(task_id)
-        runner.running = None
-        self._emit_snapshot()
-        self._try_dispatch(task_type)
+            self._try_dispatch(task_type)
+        except Exception as ex:
+            self._emit_scheduler_error(
+                "Unhandled exception in QProcess error callback.",
+                error_raw={
+                    "phase": "process_error_callback",
+                    "task_type": getattr(task_type, "value", str(task_type)),
+                    "exception": repr(ex),
+                    "traceback": traceback.format_exc(),
+                },
+            )
+            # Best-effort to keep scheduler running.
+            runner = self._runners.get(task_type)
+            if runner and runner.running:
+                task_id = runner.running
+                task = self._tasks.get(task_id)
+                if task and task.status != TaskStatus.CANCELLED:
+                    task.status = TaskStatus.ENDED
+                    task.error_msg = "internal scheduler error"
+                runner.done.append(task_id)
+                runner.running = None
+                try:
+                    self._emit_snapshot()
+                except Exception:
+                    pass
+                self._try_dispatch(task_type)
 
 
 
     def _on_process_finished(self, task_type: TaskType, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
-        runner = self._runners.get(task_type)
-        if runner is None or runner.running is None:
+        try:
+            runner = self._runners.get(task_type)
+            if runner is None or runner.running is None:
+                self._emit_snapshot()
+                return
+
+            task_id = runner.running
+            task = self._tasks.get(task_id)
+
+            if task:
+                if task.status != TaskStatus.CANCELLED:
+
+                    self.signals.task_output.emit(task_id, bytes(f'[{task_id}] Task finished.\n', 'utf-8'))
+
+                    task.status = TaskStatus.ENDED
+                    if exit_status == QProcess.ExitStatus.CrashExit:
+                        task.error_msg = "crashed"
+                        self._emit_scheduler_error(
+                            "Process crashed.",
+                            error_raw={
+                                "phase": "process_finished",
+                                "task_id": task_id,
+                                "task_type": getattr(task_type, "value", str(task_type)),
+                                "exit_status": str(exit_status),
+                                "exit_code": int(exit_code),
+                            },
+                        )
+                    elif exit_code != 0:
+                        task.error_msg = f"exit_code={exit_code}"
+                        self._emit_scheduler_error(
+                            "Process exited with non-zero code.",
+                            error_raw={
+                                "phase": "process_finished",
+                                "task_id": task_id,
+                                "task_type": getattr(task_type, "value", str(task_type)),
+                                "exit_status": str(exit_status),
+                                "exit_code": int(exit_code),
+                            },
+                        )
+                    else:
+                        task.error_msg = None
+
+            runner.done.append(task_id)
+            runner.running = None
             self._emit_snapshot()
-            return
-
-        task_id = runner.running
-        task = self._tasks.get(task_id)
-
-        if task:
-            if task.status != TaskStatus.CANCELLED:
-
-                self.signals.task_output.emit(task_id, bytes(f'[{task_id}] Task finished.\n', 'utf-8'))
-
-                task.status = TaskStatus.ENDED
-                if exit_status == QProcess.ExitStatus.CrashExit:
-                    task.error_msg = "crashed"
-                elif exit_code != 0:
-                    task.error_msg = f"exit_code={exit_code}"
-                else:
-                    task.error_msg = None
-
-        runner.done.append(task_id)
-        runner.running = None
-        self._emit_snapshot()
-        self._try_dispatch(task_type)
+            self._try_dispatch(task_type)
+        except Exception as ex:
+            self._emit_scheduler_error(
+                "Unhandled exception in QProcess finished callback.",
+                error_raw={
+                    "phase": "process_finished_callback",
+                    "task_type": getattr(task_type, "value", str(task_type)),
+                    "exit_code": int(exit_code),
+                    "exception": repr(ex),
+                    "traceback": traceback.format_exc(),
+                },
+            )
+            runner = self._runners.get(task_type)
+            if runner and runner.running:
+                task_id = runner.running
+                task = self._tasks.get(task_id)
+                if task and task.status != TaskStatus.CANCELLED:
+                    task.status = TaskStatus.ENDED
+                    task.error_msg = "internal scheduler error"
+                runner.done.append(task_id)
+                runner.running = None
+                try:
+                    self._emit_snapshot()
+                except Exception:
+                    pass
+                self._try_dispatch(task_type)
 
 
 
@@ -396,22 +598,42 @@ class TaskScheduler(QObject):
     # -------------------
 
     def _kill_qprocess_tree(self, process: QProcess) -> None:
-        if process.state() == QProcess.ProcessState.NotRunning:
-            return
-
         try:
-            pid = int(process.processId())
-        except Exception:
-            pid = 0
+            if process.state() == QProcess.ProcessState.NotRunning:
+                return
 
-        if pid > 0 and psutil is not None:
-            self._kill_process_tree(pid)
-            process.waitForFinished(500)
-            return
+            try:
+                pid = int(process.processId())
+            except Exception as ex:
+                pid = 0
+                self._emit_scheduler_error(
+                    "Failed to obtain QProcess PID.",
+                    error_raw={"phase": "kill", "exception": repr(ex), "traceback": traceback.format_exc()},
+                )
 
-        # Fallback
-        process.kill()
-        process.waitForFinished(500)
+            if pid > 0 and psutil is not None:
+                self._kill_process_tree(pid)
+                finished = process.waitForFinished(500)
+                if not finished and process.state() != QProcess.ProcessState.NotRunning:
+                    self._emit_scheduler_error(
+                        "Failed to terminate QProcess within timeout.",
+                        error_raw={"phase": "kill", "pid": pid, "timeout_ms": 500},
+                    )
+                return
+
+            # Fallback
+            process.kill()
+            finished = process.waitForFinished(500)
+            if not finished and process.state() != QProcess.ProcessState.NotRunning:
+                self._emit_scheduler_error(
+                    "Failed to kill QProcess within timeout (fallback kill).",
+                    error_raw={"phase": "kill", "pid": pid if pid > 0 else None, "timeout_ms": 500},
+                )
+        except Exception as ex:
+            self._emit_scheduler_error(
+                "Unhandled exception while terminating QProcess tree.",
+                error_raw={"phase": "kill", "exception": repr(ex), "traceback": traceback.format_exc()},
+            )
 
 
 
@@ -423,31 +645,55 @@ class TaskScheduler(QObject):
             parent = psutil.Process(pid)
             children = parent.children(recursive=True)
 
+            terminate_failures = 0
+            kill_failures = 0
+
             for child in children:
                 try:
                     child.terminate()
                 except Exception:
-                    pass
+                    terminate_failures += 1
 
             _, alive = psutil.wait_procs(children, timeout=3)
             for child in alive:
                 try:
                     child.kill()
                 except Exception:
-                    pass
+                    kill_failures += 1
+
+            if terminate_failures or kill_failures:
+                self._emit_scheduler_error(
+                    "Failed to fully terminate child processes.",
+                    error_raw={
+                        "phase": "kill",
+                        "pid": pid,
+                        "children_count": len(children),
+                        "terminate_failures": terminate_failures,
+                        "kill_failures": kill_failures,
+                    },
+                )
 
             try:
                 parent.terminate()
-            except Exception:
-                pass
+            except Exception as ex:
+                self._emit_scheduler_error(
+                    "Failed to terminate parent process.",
+                    error_raw={"phase": "kill", "pid": pid, "exception": repr(ex)},
+                )
 
             try:
                 parent.wait(timeout=3)
             except Exception:
                 try:
                     parent.kill()
-                except Exception:
-                    pass
+                except Exception as ex:
+                    self._emit_scheduler_error(
+                        "Failed to kill parent process.",
+                        error_raw={"phase": "kill", "pid": pid, "exception": repr(ex)},
+                    )
 
-        except Exception:
-            pass
+        except Exception as ex:
+            self._emit_scheduler_error(
+                "Failed to terminate process tree using psutil.",
+                error_raw={"phase": "kill", "pid": pid, "exception": repr(ex), "traceback": traceback.format_exc()},
+            )
