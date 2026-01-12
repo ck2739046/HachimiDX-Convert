@@ -6,7 +6,7 @@ from typing import Any, Optional, TypeVar, Generic
 T = TypeVar('T') # 带泛型是为了让 data 有类型提示
 
 
-@dataclass
+@dataclass(slots=True)
 class OpResult(Generic[T]):
     """
     全局结果对象，类似 rust 的 Result 类型。
