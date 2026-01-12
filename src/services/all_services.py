@@ -4,6 +4,7 @@ from src.core.schemas.op_result import OpResult, ok, err
 from .path_manage import PathManage
 from .settings_manage import SettingsManage
 from .i18n_manage import I18nManage
+from .pipeline import MediaPipeline
 import i18n
 
 
@@ -36,6 +37,12 @@ class AllServices:
             print("I18nManage initialization completed.")
         else:
             return err("Failed to initialize I18nManage.", inner=result)
+
+        result = MediaPipeline.init()
+        if result.is_ok:
+            print("MediaPipeline initialization completed.")
+        else:
+            return err("Failed to initialize MediaPipeline.", inner=result)
         
 
         print(i18n.t("all_services.notice_all_initialized"))

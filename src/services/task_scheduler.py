@@ -178,8 +178,8 @@ class TaskScheduler(QObject):
             # Build cmd first
             try:
                 cmd_res = reg.build_cmd_fn(task.config)
-            except Exception as ex:
-                cmd_res = err("build_cmd threw exception", error_raw=repr(ex))
+            except Exception as e:
+                cmd_res = err("build_cmd threw exception", error_raw = e)
             
             if not cmd_res.is_ok or not cmd_res.value:
                 task.status = TaskStatus.ENDED

@@ -115,8 +115,8 @@ class ProcessManager(QObject):
             if proc.state() != QProcess.ProcessState.NotRunning:
                 proc.terminate()
                 QTimer.singleShot(400, lambda rid=rid: self._force_kill_if_running(rid))
-        except Exception as ex:
-            return err("Failed to cancel process", error_raw=repr(ex))
+        except Exception as e:
+            return err("Failed to cancel process", error_raw = e)
 
         return ok(None)
 
