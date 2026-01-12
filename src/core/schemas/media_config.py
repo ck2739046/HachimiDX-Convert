@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Literal
+from .op_result import OpResult, ok, err
+from ..tools import validate_windows_filename
 
 
 class MediaType(str, Enum):
@@ -139,15 +142,15 @@ class MediaConfig_Definitions:
     )
 
     @staticmethod
-    def get_audio_format_by_media_type(media_type: MediaType) -> tuple[str, list[str]]:
+    def get_audio_format_by_media_type(media_type: MediaType) -> OpResult[tuple[str, list[str]]]:
         """return (default, options)"""
         if media_type == MediaType.AUDIO:
-            return "ogg", ["mp3", "aac", "ogg"]
+            return ok(("ogg", ["mp3", "ogg"]))
         elif media_type == MediaType.VIDEO_WITH_AUDIO or \
             media_type == MediaType.VIDEO_WITHOUT_AUDIO:
-            return "aac", ["aac"]
+            return ok(("aac", ["aac"]))
         else:
-            return "", [""]
+            return err(f"No valid audio_format for the given media_type: {media_type}")
 
     # see get_audio_bitrate_by_audio_format()
     audio_bitrate = MediaConfig_Definition(
@@ -158,16 +161,16 @@ class MediaConfig_Definitions:
     )
 
     @staticmethod
-    def get_audio_bitrate_by_audio_format(audio_format: str) -> tuple[str, list[str]]:
+    def get_audio_bitrate_by_audio_format(audio_format: str) -> OpResult[tuple[str, list[str]]]:
         """return (default, options)"""
         if audio_format == "mp3":
-            return "vbr_1", ["vbr_0", "vbr_1", "vbr_2"]
+            return ok(("vbr_1", ["vbr_0", "vbr_1", "vbr_2"]))
         elif audio_format == "aac":
-            return "cbr_192k", ["cbr_160k", "cbr_192k", "cbr_224k"]
+            return ok(("cbr_192k", ["cbr_160k", "cbr_192k", "cbr_224k"]))
         elif audio_format == "ogg":
-            return "vbr_7", ["vbr_6", "vbr_7", "vbr_8"]
+            return ok(("vbr_7", ["vbr_6", "vbr_7", "vbr_8"]))
         else:
-            return "", [""]
+            return err(f"No valid audio_bitrate for the given audio_format: {audio_format}")
 
     audio_sample_rate = MediaConfig_Definition(
         key="audio_sample_rate",
@@ -285,3 +288,52 @@ class MediaConfig_Definitions:
             "gt": 0
         }
     )
+
+
+
+
+    @staticmethod
+    def build_full_output_path(input_path: str, output_filename: str, audio_format: str) -> OpResult[str]:
+
+        """
+        构建完整的输出文件路径
+
+        Args:
+            input_path: str，输入文件路径
+            output_filename: str，输出文件名，仅文件名，不包含路径和扩展名
+            audio_format: str，输出音频格式
+
+        Returns:
+            OpResult[str]: 完整的输出文件路径
+
+        说明:
+            - 首先检查 output_filename 是否符合 windows 标准
+            - 如果 output_filename 为空，默认使用 input_filename_modified
+            - 根据 audio_format 确定输出文件扩展名
+            - 输出文件与输入文件在同一目录下
+        """
+
+        # 校验输出文件名 (如果有提供)
+        if output_filename:
+            result = validate_windows_filename(output_filename)
+            if not result.is_ok:
+                return err(
+                    error_msg = result.error_msg,
+                    inner = result
+                )
+            
+        # 根据 audio_format 确定输出文件扩展名
+        output_extension = {"mp3": ".mp3", "aac": ".mp4", "ogg": ".ogg"}.get(audio_format.lower())
+        if not output_extension:
+            return err(f"Unsupported audio_format for output extension: {audio_format}")
+            
+        # 构建最终输出文件路径
+        input_dir = Path(input_path).resolve().parent
+
+        if not output_filename:
+            input_stem = Path(input_path).stem # 如果空文件名，使用默认文件名
+            final_output_path = input_dir / f"{input_stem}_modified{output_extension}"
+        else:
+            final_output_path = input_dir / f"{output_filename}{output_extension}"
+
+        return ok(final_output_path)

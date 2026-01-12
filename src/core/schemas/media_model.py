@@ -179,9 +179,10 @@ class MediaModel(BaseModel):
         """根据 media_type 检验 audio_format 和 audio_bitrate"""
 
         # 获取 audio_format 的默认值和可选项
-        audio_format_default, audio_format_options = M_Defs.get_audio_format_by_media_type(self.media_type)
-        if not audio_format_default:
-            raise ValueError(f"No valid audio_format for the given media_type: {self.media_type}")
+        result = M_Defs.get_audio_format_by_media_type(self.media_type)
+        if not result.is_ok:
+            raise ValueError(result.error_msg)
+        audio_format_default, audio_format_options = result.value
         # 校验 audio_format
         if not self.audio_format:
             self.audio_format = audio_format_default
@@ -189,7 +190,10 @@ class MediaModel(BaseModel):
             raise ValueError(f"audio_format must be one of {audio_format_options}, got {self.audio_format}")
 
         # 获取 audio_bitrate 的默认值和可选项
-        audio_bitrate_default, audio_bitrate_options = M_Defs.get_audio_bitrate_by_audio_format(self.audio_format)
+        result = M_Defs.get_audio_bitrate_by_audio_format(self.audio_format)
+        if not result.is_ok:
+            raise ValueError(result.error_msg)
+        audio_bitrate_default, audio_bitrate_options = result.value
         # 校验 audio_bitrate
         if not self.audio_bitrate:
             self.audio_bitrate = audio_bitrate_default
