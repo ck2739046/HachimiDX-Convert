@@ -1,0 +1,198 @@
+# 四个层级:
+# 1. notice: 普通信息
+# 2. warning: 警告信息，程序可继续运行
+# 3. error: 待处理错误，抛出给调用方，由调用方决定是降级处理（warning）还是终止（critical）
+# 4. critical: 致命错误，程序无法继续运行
+
+zh_CN:
+
+  # ---- core.services ----
+
+  all_services:
+    notice_all_initialized: "所有服务已初始化。"
+    notice_shutting_down_all: "正在关闭所有服务..."
+    notice_all_shutdown: "所有服务已关闭。"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  task_scheduler:
+    notice_user_terminated_task: "任务 %{task_id} 被用户中止。"
+
+  media_task_launcher:
+    error_unsupported_config: "不支持的媒体任务配置。"
+    error_ffmpeg_not_found: "未找到 FFmpeg：%{path}"
+    error_invalid_io_path: "无效的输入/输出路径：%{error}"
+    error_failed_create_output_dir: "创建输出目录失败：%{error}"
+    error_failed_remove_existing_output: "删除已存在的输出文件失败：%{error}"
+    error_invalid_media_config: "媒体任务配置无效：%{error}"
+    notice_ffmpeg_started: "FFmpeg 已启动，指令：\n%{command}"
+
+  pydantic_models:
+    run_ffmpeg:
+      error_invalid_output_filename: "无效的输出文件名：不能包含字符：\\ / : * ? \" < > |"
+      empty_output_extension: "输出文件拓展名不能为空"
+      invalid_output_extension: "无效的输出文件拓展名：必须以 '.' 开头"
+      ui_prompt_delete_existing_output_file: |
+        输出文件已存在：%{file_path}
+        该文件将在任务开始时被删除。
+        是否继续？
+  
+  
+  
+  # ---- core.tools ----
+
+  popup_dialog:
+    ui_confirm: "确认"
+    ui_cancel: "取消"
+    ui_ok: "好的"
+    ui_timeout_hint: "\n\n如果在 %{seconds} 秒内未操作将自动取消。"
+    ui_timeout_hint_close: "\n\n如果在 %{seconds} 秒内未操作将自动关闭此窗口。"
+
+  media_ffprobe_inspect:
+    ui_video_stream_info:
+      "编码=%{codec},  \
+      平均码率=%{bit_rate},  \
+      时长=%{duration},  \
+      分辨率=%{resolution},  \
+      平均帧率=%{fps}"
+    ui_audio_stream_info:
+      "编码=%{codec},  \
+      平均码率=%{bit_rate},  \
+      时长=%{duration},  \
+      采样率=%{sample_rate}"
+    notice_ignore_invalid_video_stream: "--FFprobe_Inspect: 忽略无效视频流 (%{na_fields}=N/A):\n%{stream_info}"
+    notice_ignore_invalid_video_stream_png: "--FFprobe_Inspect: 忽略无效视频流（可能是 PNG 歌曲封面）:\n%{stream_info}"
+    notice_ignore_invalid_video_stream_no_duration: "--FFprobe_Inspect: 忽略无效视频流（没有时长）:\n%{stream_info}"
+    notice_ignore_invalid_audio_stream: "--FFprobe_Inspect: 忽略无效音频流 (%{na_fields}=N/A):\n%{stream_info}"
+    notice_ignore_invalid_audio_stream_no_duration: "--FFprobe_Inspect: 忽略无效音频流（没有时长）:\n%{stream_info}"
+    notice_multiple_streams_detected: "FFprobe_Inspect: 检测到多个 %{codec_type} 流，选择索引 %{selected_index}"
+
+
+
+  # ---- app ----
+
+  app:
+    main_window:
+    media_subpages:
+      run_ffmpeg:
+        ui_select_input_file_button: "选择媒体文件"
+        warning_ffprobe_inspect_failed: "媒体检测失败。错误信息：\n %{error_msg}\n原始 FFprobe 输出：\n%{raw_output}"
+        ui_select_file_divider: "文件选择"
+        ui_video_divider: "视频设置"
+        ui_audio_divider: "音频设置"
+        ui_common_divider: "通用设置"
+
+        # ---- 视频设置 ----
+        ui_video_crf_label: "CRF: "
+        ui_video_crf_help: |
+          控制输出视频的质量
+
+          数值越低，质量越高，文件越大。
+        ui_video_resolution_label: "分辨率: "
+        ui_video_resolution_help: |
+          设置输出视频的分辨率
+
+          origin：保持原始分辨率。
+          其他选项：按比例缩放至目标尺寸，剩余空间用黑色像素填充。
+        ui_video_fps_label: "帧率: "
+        ui_video_fps_help: |
+          设置输出视频的帧率
+
+          origin：保持原始帧率。
+        ui_video_gop_optimize_label: "优化GOP: "
+        ui_video_gop_optimize_help: |
+          是否启用 GOP 优化
+
+          启用后，视频在 MajdataView 中播放会显著更流畅。
+          代价是会增加输出文件大小。
+          建议仅用于 MajdataView 播放的视频。
+        ui_video_mute_label: "静音: "
+        ui_video_mute_help: "如果启用，输出文件将不包含音频流。"
+
+        # ---- 音频设置 ----
+        ui_audio_format_label: "编码: "
+        ui_audio_format_help: 选择输出音频的编码格式
+        ui_audio_bitrate_label: "码率: "
+        ui_audio_bitrate_help: |
+          控制输出音频的质量
+
+          码率越高，质量越高，文件越大
+
+          注意: 括号内的码率仅仅是预估值。
+        ui_audio_sample_rate_label: "采样率: "
+        ui_audio_sample_rate_help: 设置输出音频的采样率
+        ui_audio_volume_label: "音量(%): "
+        ui_audio_volume_help: |
+          调整输出音频的音量
+
+          单位是百分比，支持范围0-200%，
+          100% = 原始音量。
+
+        # ---- 通用设置 ----
+        ui_pad_start_sec_label: "片头留空: "
+        ui_pad_start_sec_help: |
+          在文件起始处插入指定时长的静音/黑屏片段
+
+          单位：秒（最多保留三位小数）
+          零：不插入
+          正数：插入指定时长的静音/黑屏片段
+        ui_start_end_label: "截取范围: "
+        ui_start_end_help: |
+          起始时间 ~ 结束时间，只输出中间的这部分
+          
+          起始时间(左): 该时间点之前的内容将被丢弃。
+          - 单位: 秒（最多保留三位小数）
+          - 零: 保留至文件起始 (不裁剪开头)
+          - 正数: 从前往后的时间点
+          
+          结束时间(右): 该时间点之后的内容将被丢弃。
+          - 单位: 秒（最多保留三位小数）
+          - 零: 保留至文件末尾 (不裁剪结尾)
+          - 正数: 从前往后的时间点
+          - 负数: 从后往前的时间点
+
+          例: 假如视频总时长 60 秒，
+          起始时间 = 10，结束时间 = 50(或-10)，
+          将会输出 10 秒到 50 秒之间的内容 (共 40 秒)。
+
+        ui_clear_metadata_label: "清除元数据: "
+        ui_clear_metadata_help: 是否清除输出文件的附加信息 (例如标题、作者等)
+        ui_output_filename_label: "输出文件名: "
+        ui_output_filename_help: |
+          设置输出文件的文件名
+
+          仅文件名，不要包含完整文件路径，或者文件扩展名。
+        ui_submit_button: "提交"
+        ui_taskname_placeholder: "输入任务名称 (可选)"
+        
+        # ---- Params Warning ----
+        warning_output_filename_same_as_input: "警告: 输出文件名不能与输入文件名相同。"
+        warning_unsupported_media_type: "不支持的媒体类型: %{media_type}。"
+        warning_validation_failed: "参数校验失败：\n%{error}"
+        warning_task_submit_failed: "任务提交失败。"
+        notice_task_submitted: "任务已提交: %{task_info}"
+        warning_unexpected_submit_error: "任务提交时发生意外错误：\n%{error}"
+
+        # 其他
+        probe_result_display:
+          ui_ffprobe_inspect_prefix: "媒体信息"
+          ui_ffprobe_inspect_help: |
+            程序将调用 FFprobe 检测所选择的文件，
+            在此处显示检测到的文件信息。
+          ui_no_video_stream_info: "视频流:  未检测到视频流"
+          ui_no_audio_stream_info: "音频流:  未检测到音频流"
+          ui_video_stream_info_prefix: "视频流:  "
+          ui_audio_stream_info_prefix: "音频流:  "

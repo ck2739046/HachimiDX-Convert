@@ -1,0 +1,199 @@
+# 四个层级:
+# 1. notice: 普通信息
+# 2. warning: 警告信息，程序可继续运行
+# 3. error: 待处理错误，抛出给调用方，由调用方决定是降级处理（warning）还是终止（critical）
+# 4. critical: 致命错误，程序无法继续运行
+
+en_US:
+
+  # ---- core.services ----
+
+  all_services:
+    notice_all_initialized: "All services initialized."
+    notice_shutting_down_all: "Shutting down all services..."
+    notice_all_shutdown: "All services shut down."
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  task_scheduler:
+    notice_user_terminated_task: "Task %{task_id} terminated by user."
+
+  media_task_launcher:
+    error_unsupported_config: "Unsupported media task config."
+    error_ffmpeg_not_found: "FFmpeg not found: %{path}"
+    error_invalid_io_path: "Invalid input/output path: %{error}"
+    error_failed_create_output_dir: "Failed to create output directory: %{error}"
+    error_failed_remove_existing_output: "Failed to remove existing output file: %{error}"
+    error_invalid_media_config: "Invalid media task config: %{error}"
+    notice_ffmpeg_started: "FFmpeg started, command:\n%{command}"
+
+  pydantic_models:
+    run_ffmpeg:
+      error_invalid_output_filename: "Invalid output filename: cannot contain characters: \\ / : * ? \" < > |"
+      empty_output_extension: "Output file extension cannot be empty"
+      invalid_output_extension: "Invalid output file extension: must start with '.'"
+      ui_prompt_delete_existing_output_file: |
+        Output file already exists: %{file_path}
+        It will be deleted when the task starts.
+        Continue?
+
+
+
+  # ---- core.tools ----
+
+  popup_dialog:
+    ui_confirm: "Confirm"
+    ui_cancel: "Cancel"
+    ui_ok: "OK"
+    ui_timeout_hint: "\n\nAuto-cancel in %{seconds} seconds if no action."
+    ui_timeout_hint_close: "\n\nAuto-close this window in %{seconds} seconds if no action."
+
+  media_ffprobe_inspect:
+    ui_video_stream_info:
+      "Codec=%{codec},  \
+      Avg Bitrate=%{bit_rate},  \
+      Duration=%{duration},  \
+      Resolution=%{resolution},  \
+      Avg FPS=%{fps}"
+    ui_audio_stream_info:
+      "Codec=%{codec},  \
+      Avg Bitrate=%{bit_rate},  \
+      Duration=%{duration},  \
+      Sample Rate=%{sample_rate}"
+    notice_ignore_invalid_video_stream: "--FFprobe_Inspect: ignore invalid video stream (%{na_fields}=N/A):\n%{stream_info}"
+    notice_ignore_invalid_video_stream_png: "--FFprobe_Inspect: ignore invalid video stream (likely png song cover):\n%{stream_info}"
+    notice_ignore_invalid_video_stream_no_duration: "--FFprobe_Inspect: ignore invalid video stream (no duration):\n%{stream_info}"
+    notice_ignore_invalid_audio_stream: "--FFprobe_Inspect: ignore invalid audio stream (%{na_fields}=N/A):\n%{stream_info}"
+    notice_ignore_invalid_audio_stream_no_duration: "--FFprobe_Inspect: ignore invalid audio stream (no duration):\n%{stream_info}"
+    notice_multiple_streams_detected: "FFprobe_Inspect: multiple %{codec_type} streams detected, select index %{selected_index}"
+
+
+
+  # ---- app ----
+
+  app:
+    main_window:
+    media_subpages:
+      run_ffmpeg:
+        ui_select_input_file_button: "Select Media File"
+        warning_ffprobe_inspect_failed: "Media inspection failed. Error:\n %{error_msg}\nRaw FFprobe Output:\n%{raw_output}"
+        ui_select_file_divider: "File Selection"
+        ui_video_divider: "Video Stream"
+        ui_audio_divider: "Audio Stream"
+        ui_common_divider: "Common"
+
+        # ---- Video Settings ----
+        ui_video_crf_label: "CRF: "
+        ui_video_crf_help: |
+          Control the output video quality
+
+          Lower values = higher quality, larger files.
+        ui_video_resolution_label: "Resolution: "
+        ui_video_resolution_help: |
+          Sets output resolution
+
+          origin: keep original resolution.
+          others: scale to fit while preserving aspect ratio, pad remaining space with black pixels.
+        ui_video_fps_label: "FPS: "
+        ui_video_fps_help: |
+          Sets output frame rate
+
+          origin: keep original FPS.
+        ui_video_gop_optimize_label: "Optimize GOP: "
+        ui_video_gop_optimize_help: |
+          Toggle GOP optimization
+
+          When enabled, video playback in MajdataView will be significantly smoother.
+          However, it will increase the output file size.
+          Recommended only for videos that need to be played in MajdataView.
+        ui_video_mute_label: "Mute: "
+        ui_video_mute_help: "If Enabled, the output file will not contain audio stream."
+        
+        # ---- Audio Settings ----
+        ui_audio_format_label: "Codec: "
+        ui_audio_format_help: Selects the audio codec
+        ui_audio_bitrate_label: "Bitrate: "
+        ui_audio_bitrate_help: |
+          Controls the output audio quality
+
+          Higher bitrate = higher quality, larger files.
+
+          Note: The bitrate in parentheses is only an estimate.
+        ui_audio_sample_rate_label: "Sample Rate: "
+        ui_audio_sample_rate_help: Sets output audio sampling rate
+        ui_audio_volume_label: "Volume(%): "
+        ui_audio_volume_help: |
+          Adjusts output audio volume
+
+          Adjust as percentage, range 0-200%,
+          100% = original volume.
+
+        # ---- Common Settings ----
+        ui_pad_start_sec_label: "Pad Start: "
+        ui_pad_start_sec_help: |
+          Insert a silent/black segment of specified duration at the beginning of the file.
+
+          Unit: seconds (up to 3 decimal places)
+          Zero: No insertion
+          Positive: Insert segment of specified duration
+        ui_start_end_label: "Trim Range: "
+        ui_start_end_help: |
+          Start Time ~ End Time, only output the content in between.
+          
+          Start Time (Left): Content before this time will be discarded.
+          - Unit: seconds (up to 3 decimal places)
+          - Zero: Keep from the beginning (no start trim)
+          - Positive: Time point from the start
+          
+          End Time (Right): Content after this time will be discarded.
+          - Unit: seconds (up to 3 decimal places)
+          - Zero: Keep until the end (no end trim)
+          - Positive: Time point from the start
+          - Negative: Time point from the end
+
+          Example: If the total duration is 60s,
+          Start Time = 10, End Time = 50 (or -10),
+          It will output the content between 10s and 50s (40s total).
+
+        ui_clear_metadata_label: "Clear Metadata: "
+        ui_clear_metadata_help: Whether to clear all metadata (e.g., title, author) in the output file
+        ui_output_filename_label: "Output Filename: "
+        ui_output_filename_help: |
+          Sets the output file name.
+          
+          Filename only, do not include full file path or file extension.
+        ui_submit_button: "Submit"
+        ui_taskname_placeholder: "Input the task name (Optional)"
+
+        # ---- Params Warning ----
+        warning_output_filename_same_as_input: "Warning: Output filename cannot be the same as input filename."
+        warning_unsupported_media_type: "Unsupported media type: %{media_type}."
+        warning_validation_failed: "Validation failed:\n%{error}"
+        warning_task_submit_failed: "Task submit failed."
+        notice_task_submitted: "Task submitted: %{task_info}"
+        warning_unexpected_submit_error: "Unexpected error during task submission:\n%{error}"
+
+        # other
+        probe_result_display:
+          ui_ffprobe_inspect_prefix: "Media Info"
+          ui_ffprobe_inspect_help: |
+            The program will call FFprobe to inspect the selected file,
+            and display the detected file information here.
+          ui_no_video_stream_info: "Video Stream:  No video stream detected"
+          ui_no_audio_stream_info: "Audio Stream:  No audio stream detected"
+          ui_video_stream_info_prefix: "Video Stream:  "
+          ui_audio_stream_info_prefix: "Audio Stream:  "
