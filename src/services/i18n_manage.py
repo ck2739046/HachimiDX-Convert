@@ -1,7 +1,7 @@
 import json
 import os
 
-from core.schemas.op_result import OpResult, ok, err
+from src.core.schemas.op_result import OpResult, ok, err
 from .path_manage import PathManage
 from .settings_manage import SettingsManage
 import i18n
@@ -41,5 +41,5 @@ class I18nManage:
         i18n.set('filename_format', '{locale}.yaml')
         i18n.set('locale', language)
         i18n.set('fallback', 'en_US') # fallback
-        
+
         return ok()

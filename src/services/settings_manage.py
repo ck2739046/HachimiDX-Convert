@@ -5,9 +5,9 @@ import shutil
 import threading
 from typing import Any, Optional
 
-from core.schemas.op_result import OpResult, ok, err
-from core.schemas.settings import SettingsModel
-from core.tools import validate_pydantic
+from src.core.schemas.op_result import OpResult, ok, err
+from src.core.schemas.settings import SettingsModel
+from src.core.tools import validate_pydantic
 from .path_manage import PathManage
 
 # 创建本地别名，避免每次都写 PathManage.xxx
@@ -18,7 +18,7 @@ LOCALES_DIR = PathManage.LOCALES_DIR
 
 
 # 管理器实现
-class SettingsManager:
+class SettingsManage:
 
     _lock = threading.RLock()
     _config: Optional[SettingsModel] = None

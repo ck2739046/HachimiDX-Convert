@@ -1,5 +1,5 @@
 from pathlib import Path
-from core.schemas.op_result import OpResult, ok, err
+from src.core.schemas.op_result import OpResult, ok, err
 
 
 class PathManage:
