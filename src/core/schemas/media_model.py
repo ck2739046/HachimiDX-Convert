@@ -166,9 +166,14 @@ class MediaModel(BaseModel):
         if set_start and set_end and self.start >= resolve_end(self):
             raise ValueError("'start' must be less than 'end'.")
 
-        # 如果都通过了，最后更新 end 值 (如果设置了)
+        # 最后更新 end 值 (如果设置了)
         if set_end:
             self.end = resolve_end(self)
+        # 统一设置为三位小数/None
+        self.start     = round(self.start, 3)     if set_start else None
+        self.end       = round(self.end, 3)       if set_end else None
+        self.pad_start = round(self.pad_start, 3) if set_pad else None
+        self.duration  = round(self.duration, 3)  if set_duration else None
 
         return self
 
