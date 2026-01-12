@@ -1,47 +1,60 @@
-from __future__ import annotations
-
-import threading
-import traceback
-import psutil
-import nanoid
-from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Deque, Dict, Optional
+from enum import Enum
+from typing import Any, Callable, Optional
 
-from PyQt6.QtCore import QObject, QProcess, QTimer
+from collections import deque
 
-import i18n
+from PyQt6.QtCore import QObject, pyqtSignal
 
 from src.core.schemas.op_result import OpResult, ok, err
-from src.core.schemas.task_contract import TaskInfo, TaskSignals, TaskStatus, TaskType
-
-# from .media_task_launcher import start_ffmpeg_for_media_task
+from src.services import process_manager_api
 
 
+class TaskType(str, Enum):
+    MEDIA = "media"
+    AUTO_CONVERT = "auto_convert"
 
 
-# 参数列表: QPRodess, Any(Task config)
-# 返回值: bool, str(error_msg)
-StartFn = Callable[[QProcess, Any], OpResult[str]]
+class TaskStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    ENDED = "ended"
+    CANCELLED = "cancelled"
+
 
 @dataclass(slots=True)
-class _TaskRunner:
+class TaskInfo:
+    runner_id: str
     task_type: TaskType
-    start_fn: StartFn
-    process: QProcess
-    pending: Deque[str] = field(default_factory=deque)
-    running: Optional[str] = None
-    done: Deque[str] = field(default_factory=deque)
+    task_name: str = ""
+    accepted_at: Optional[datetime] = None
+    status: TaskStatus = TaskStatus.PENDING
+    config: Any = None
+    error_msg: Optional[str] = None
 
 
-# 继承 QObject 类
-# 可以使用信号槽，处理 qt 事件
+class TaskSchedulerSignals(QObject):
+    task_list_changed = pyqtSignal(object)
+
+
+BuildCmdFn = Callable[[Any], OpResult[list[str]]]
+
+
+@dataclass(slots=True)
+class _RegisteredType:
+    build_cmd_fn: BuildCmdFn
+    concurrency: int = 1
+
+
 class TaskScheduler(QObject):
+    """Minimal scheduler.
 
-    # -------------------
-    # template
-    # -------------------
+    - Owns NO QProcess.
+    - Runs commands via ProcessManager (runner_id is used as process runner_id).
+    - Registers build_cmd_fn (provided by pipelines) per task type.
+    - Emits task_list_changed snapshots for UI.
+    """
 
     _instance: Optional["TaskScheduler"] = None
 
@@ -51,649 +64,260 @@ class TaskScheduler(QObject):
             cls._instance = cls()
         return cls._instance
 
-    @classmethod
-    def shutdown_instance(cls) -> None:
-        if cls._instance is None:
-            return
-        cls._instance.cleanup()
-        cls._instance = None
-
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
-        self._lock = threading.RLock()
-        self.signals = TaskSignals()
-        self._tasks: Dict[str, TaskInfo] = {}
-        self._runners: Dict[TaskType, _TaskRunner] = {}
-        # 注册 task runners
-        # self.register_runner(TaskType.MEDIA, start_ffmpeg_for_media_task)
+        self.signals = TaskSchedulerSignals()
+        self._registry: dict[TaskType, _RegisteredType] = {}
+        self._tasks: dict[str, TaskInfo] = {}
+        self._pending: dict[TaskType, deque[str]] = {}
+        self._running: dict[TaskType, set[str]] = {}
+        self._done: dict[TaskType, deque[str]] = {}
+        self._done_keep_limit: int = 60
 
-    def _emit_scheduler_error(
-        self,
-        error_msg: str,
-        *,
-        error_raw: Any = None,
-        inner: Optional[OpResult[Any]] = None,
-    ) -> None:
-        """Emit a scheduler-level error (never raises)."""
+        # Subscribe to process ended events.
         try:
-            self.signals.task_scheduler_output.emit(err(error_msg=error_msg, error_raw=error_raw, inner=inner))
+            process_manager_api.get_signals().runner_ended.connect(self._on_runner_ended)
         except Exception:
-            # Last resort: never let scheduler crash because UI signal handlers are broken.
+            # Never crash on init; scheduler can still function partially.
             pass
 
-    def cleanup(self) -> None:
-        """cancel running processes and stop dispatch."""
-        for runner in self._runners.values():
-            if runner.running:
-                task = self._tasks.get(runner.running)
-                if task:
-                    task.status = TaskStatus.CANCELLED
-                    task.error_msg = None
-                self._emit_snapshot()
-                try:
-                    self._kill_qprocess_tree(runner.process)
-                except Exception as ex:
-                    self._emit_scheduler_error(
-                        "Failed to terminate process tree during scheduler cleanup.",
-                        error_raw={
-                            "phase": "cleanup",
-                            "task_type": getattr(runner.task_type, "value", str(runner.task_type)),
-                            "running_task_id": runner.running,
-                            "exception": repr(ex),
-                            "traceback": traceback.format_exc(),
-                        },
-                    )
-
-   
-
-
     # -------------------
-    # Registration / Introspection
+    # Registration
     # -------------------
 
-    def register_runner(self, task_type: TaskType, start_fn: StartFn) -> None:
-        """Register a task type runner.
-
-        Args:
-            task_type: The task type to support.
-            start_fn: Callable that starts the QProcess for a task.
-                Signature: (process, validated_config) -> (ok, error_msg)
-        """
-        if task_type in self._runners:
-            self._emit_scheduler_error(
-                "Runner already registered; ignoring duplicate registration.",
-                error_raw={"task_type": getattr(task_type, "value", str(task_type))},
-            )
-            return
-
-        process = QProcess(self)
-        process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-
-        runner = _TaskRunner(task_type=task_type, start_fn=start_fn, process=process)
-        self._runners[task_type] = runner
-
-        # lifecycle
-        process.started.connect(lambda: self._on_process_started(task_type))
-        process.finished.connect(lambda code, status: self._on_process_finished(task_type, int(code), status))
-        process.errorOccurred.connect(lambda err: self._on_process_error(task_type, err))
-
-        # merged output routing
-        process.readyReadStandardOutput.connect(lambda: self._on_process_ready_read(task_type))
-
-
-
-    def get_process(self, task_type: TaskType) -> Optional[QProcess]:
-        runner = self._runners.get(task_type)
-        return runner.process if runner else None
-
-
-
-    def get_task_info(self, task_id: str) -> Optional[TaskInfo]:
-        return self._tasks.get(task_id)
-
-
-
-
-
-
+    def register(self, task_type: TaskType, build_cmd_fn: BuildCmdFn, *, concurrency: int = 1) -> None:
+        if concurrency < 1:
+            concurrency = 1
+        self._registry[task_type] = _RegisteredType(build_cmd_fn=build_cmd_fn, concurrency=int(concurrency))
+        self._pending.setdefault(task_type, deque())
+        self._running.setdefault(task_type, set())
+        self._done.setdefault(task_type, deque())
+        self._emit_snapshot()
 
     # -------------------
     # Public API
     # -------------------
 
-    @classmethod
-    def submit(cls, task_type: TaskType, config: Any, task_name: Optional[str] = None) -> OpResult[tuple[str, str]]:
-        """
-        Submit a task.
+    def submit(self, task_type: TaskType, *, runner_id: str, config: Any, task_name: str = "") -> OpResult[str]:
+        if task_type not in self._registry:
+            return err(f"Task type not registered: {task_type}")
 
-        Args:
-            task_type: The type of task.
-            config: The validated config object (Pydantic model).
-            task_name: Optional task name for display.
+        rid = str(runner_id).strip()
+        if not rid:
+            return err("runner_id is empty")
+        if rid in self._tasks:
+            return err(f"runner_id already exists: {rid}")
 
-        Returns:
-            OpResult[tuple(str, str)]: task_id, task_name
-        """
-        return cls.get_instance()._submit(task_type, config, task_name)
-    
-
-
-    @classmethod
-    def cancel(cls, task_id: str) -> None:
-        """Cancel a running/non-running task from registry."""
-        cls.get_instance()._cancel_or_remove(task_id)
-
-
-
-    def _submit(self, task_type: TaskType, config: Any, task_name: Optional[str] = None) -> OpResult[tuple[str, str]]:
-
-        runner = self._runners.get(task_type)
-        if runner is None:
-            self._emit_scheduler_error(
-                "Task type not registered; cannot submit task.",
-                error_raw={"task_type": getattr(task_type, "value", str(task_type))},
-            )
-            return err(f"Task type {task_type} not registered")
-
-        # 如果传入的 config 有 task_id 字段，就使用这个 (任务重试)
-        # 否则生成一个新的 ID
-        task_id = getattr(config, "task_id", None) or str(nanoid.generate(size=8))
-
-        if task_name:
-            task_name = str(task_name).strip()
-        else:
-            task_name = ''
-
-        task = TaskInfo(
-            task_id=str(task_id),
+        info = TaskInfo(
+            runner_id=rid,
             task_type=task_type,
-            task_name=task_name,
+            task_name=str(task_name or "").strip(),
             accepted_at=datetime.now(),
             status=TaskStatus.PENDING,
             config=config,
         )
+        self._tasks[rid] = info
+        self._pending.setdefault(task_type, deque()).append(rid)
 
-        self._tasks[task.task_id] = task
-        runner.pending.append(task.task_id)
+        self._emit_snapshot()
+        self._dispatch(task_type)
+        return ok(rid)
 
-        try:
-            self._emit_snapshot()
-            self._try_dispatch(task_type)
-        except Exception as ex:
-            # Scheduler must not crash on submit-path failures.
-            self._emit_scheduler_error(
-                "Unhandled exception while submitting/dispatching a task.",
-                error_raw={
-                    "task_id": task.task_id,
-                    "task_type": getattr(task_type, "value", str(task_type)),
-                    "exception": repr(ex),
-                    "traceback": traceback.format_exc(),
-                },
-            )
-            # Best-effort: mark ended to avoid RUNNING/PENDING zombie tasks.
-            task.status = TaskStatus.ENDED
-            task.error_msg = "submit/dispatch failed"
-            self._emit_snapshot()
-
-        return ok((task.task_id, task.task_name))
-
-
-
-    def _cancel_or_remove(self, task_id: str) -> None:
-
-        # 任务不存在
-        task = self._tasks.get(task_id)
+    def cancel(self, runner_id: str) -> None:
+        rid = str(runner_id).strip()
+        if not rid:
+            return
+        task = self._tasks.get(rid)
         if task is None:
             return
-        
-        # 这类任务的 runner 没注册
-        runner = self._runners.get(task.task_type)
-        if runner is None:
-            self._tasks.pop(task_id, None)
-            self._emit_snapshot()
-            return
 
-        # RUNNING => cancel (kill process tree)
-        if runner.running == task_id:
+        ttype = task.task_type
+        pending_list = self._pending.get(ttype, deque())
+        running_set = self._running.get(ttype, set())
+
+        if rid in pending_list:
+            self._pending[ttype] = deque(x for x in pending_list if x != rid)
             task.status = TaskStatus.CANCELLED
-            task.error_msg = i18n.t("task_scheduler.notice_user_terminated_task", task_id=task_id)
-            self._emit_snapshot()
-            self._kill_qprocess_tree(runner.process)
-            return
-
-        # PENDING => remove
-        if task_id in runner.pending:
-            runner.pending = deque(tid for tid in runner.pending if tid != task_id)
-            self._tasks.pop(task_id, None)
+            self._mark_done(ttype, rid)
             self._emit_snapshot()
             return
 
-        # DONE => remove
-        if task_id in runner.done:
-            runner.done = deque(tid for tid in runner.done if tid != task_id)
-            self._tasks.pop(task_id, None)
+        if rid in running_set:
+            task.status = TaskStatus.CANCELLED
             self._emit_snapshot()
+            # Ask ProcessManager to cancel. End event will finalize state.
+            res = process_manager_api.cancel(rid)
+            if not res.is_ok:
+                # If cancel failed (e.g. already ended or missing), clean up now.
+                running_set.discard(rid)
+                self._mark_done(ttype, rid)
+                self._emit_snapshot()
+                self._dispatch(ttype)
             return
-
-    
-
 
     # -------------------
     # Dispatch
     # -------------------
 
-    def _try_dispatch(self, task_type: TaskType) -> None:
-        runner = self._runners.get(task_type)
-        if runner is None:
+    def _dispatch(self, task_type: TaskType) -> None:
+        reg = self._registry.get(task_type)
+        if reg is None:
             return
 
-        if runner.running is not None:
-            return
-        if not runner.pending:
-            return
+        pending_list = self._pending.setdefault(task_type, deque())
+        running_set = self._running.setdefault(task_type, set())
 
-        next_id = runner.pending.popleft()
-        if next_id not in self._tasks:
-            # removed while queued; try next
-            self._emit_scheduler_error(
-                "Inconsistent queue state: pending task_id missing from registry.",
-                error_raw={
-                    "task_type": getattr(task_type, "value", str(task_type)),
-                    "missing_task_id": next_id,
-                    "pending_len": len(runner.pending),
-                },
-            )
-            self._try_dispatch(task_type)
-            return
+        while pending_list and len(running_set) < reg.concurrency:
+            rid = pending_list.popleft()
+            task = self._tasks.get(rid)
+            if task is None:
+                continue
+            if task.status == TaskStatus.CANCELLED:
+                continue
 
-        self._start_task(runner, next_id)
-
-
-
-    def _start_task(self, runner: _TaskRunner, task_id: str) -> None:
-        task = self._tasks[task_id]
-        task.status = TaskStatus.RUNNING
-        task.error_msg = None
-
-        runner.running = task_id
-        self._emit_snapshot()
-
-        try:
-            result = runner.start_fn(runner.process, task.config)
-        except Exception as ex:
-            # start_fn must never be allowed to crash the scheduler.
-            task.status = TaskStatus.ENDED
-            task.error_msg = "start_fn raised exception"
-            runner.done.append(task_id)
-            runner.running = None
-            self._emit_snapshot()
-            self._emit_scheduler_error(
-                "Unhandled exception thrown by start_fn.",
-                error_raw={
-                    "phase": "start_fn",
-                    "task_id": task_id,
-                    "task_type": getattr(runner.task_type, "value", str(runner.task_type)),
-                    "exception": repr(ex),
-                    "traceback": traceback.format_exc(),
-                },
-            )
-            self._try_dispatch(runner.task_type)
-            return
-
-        if result.is_ok():
-            msg = result.value
-            if msg:
-                # 延迟 1ms 发送 msg，避免在 started 信号前发送
-                final_msg = f"\n-\n{'=' * 30}\n[{task_id}] Task start.\n-\n{msg}\n]"
-                QTimer.singleShot(1, lambda: self.signals.task_output.emit(task_id, bytes(final_msg, 'utf-8')))
-            return
-
-        # start failed synchronously
-        self._emit_scheduler_error(
-            "Task start failed (start_fn returned err).",
-            error_raw={
-                "phase": "start_fn",
-                "task_id": task_id,
-                "task_type": getattr(runner.task_type, "value", str(runner.task_type)),
-            },
-            inner=result,
-        )
-        task.status = TaskStatus.ENDED
-        task.error_msg = result.error_msg
-        runner.done.append(task_id)
-        runner.running = None
-        self._emit_snapshot()
-        self._try_dispatch(runner.task_type)
-
-
-
-
-    # -------------------
-    # Process events
-    # -------------------
-
-    def _on_process_ready_read(self, task_type: TaskType) -> None:
-        try:
-            runner = self._runners.get(task_type)
-            if runner is None or runner.running is None:
-                # No running task to attribute output to.
-                if runner is not None:
-                    drained = runner.process.readAllStandardOutput()
-                    if drained:
-                        preview = bytes(drained)[:200]
-                        self._emit_scheduler_error(
-                            "Received process output but no running task is set; output was discarded.",
-                            error_raw={
-                                "task_type": getattr(task_type, "value", str(task_type)),
-                                "output_preview": preview,
-                            },
-                        )
-                return
-
-            data = runner.process.readAllStandardOutput()
-            if not data:
-                return
-
-            # QByteArray -> bytes
-            payload = bytes(data)
-            self.signals.task_output.emit(runner.running, payload)
-        except Exception as ex:
-            self._emit_scheduler_error(
-                "Unhandled exception while processing QProcess output.",
-                error_raw={
-                    "phase": "ready_read",
-                    "task_type": getattr(task_type, "value", str(task_type)),
-                    "exception": repr(ex),
-                    "traceback": traceback.format_exc(),
-                },
-            )
-
-
-
-    def _on_process_started(self, task_type: TaskType) -> None:
-        # Snapshot-driven UI; started can be used for immediate refresh.
-        try:
-            self._emit_snapshot()
-        except Exception as ex:
-            self._emit_scheduler_error(
-                "Failed to emit task snapshot on process started.",
-                error_raw={
-                    "phase": "process_started",
-                    "task_type": getattr(task_type, "value", str(task_type)),
-                    "exception": repr(ex),
-                    "traceback": traceback.format_exc(),
-                },
-            )
-
-
-
-    def _on_process_error(self, task_type: TaskType, err: QProcess.ProcessError) -> None:
-        try:
-            runner = self._runners.get(task_type)
-            if runner is None or runner.running is None:
-                self._emit_snapshot()
-                return
-
-            task_id = runner.running
-            task = self._tasks.get(task_id)
-
-            if task and task.status != TaskStatus.CANCELLED:
+            # Build cmd first
+            try:
+                cmd_res = reg.build_cmd_fn(task.config)
+            except Exception as ex:
+                cmd_res = err("build_cmd threw exception", error_raw=repr(ex))
+            
+            if not cmd_res.is_ok or not cmd_res.value:
                 task.status = TaskStatus.ENDED
-                task.error_msg = f"process_error={err.name}"
-                self._emit_scheduler_error(
-                    "QProcess reported an error.",
-                    error_raw={
-                        "phase": "process_error",
-                        "task_id": task_id,
-                        "task_type": getattr(task_type, "value", str(task_type)),
-                        "qprocess_error": err.name,
-                        "pid": int(runner.process.processId()) if runner.process is not None else None,
-                    },
-                )
-
-            runner.done.append(task_id)
-            runner.running = None
-            self._emit_snapshot()
-            self._try_dispatch(task_type)
-        except Exception as ex:
-            self._emit_scheduler_error(
-                "Unhandled exception in QProcess error callback.",
-                error_raw={
-                    "phase": "process_error_callback",
-                    "task_type": getattr(task_type, "value", str(task_type)),
-                    "exception": repr(ex),
-                    "traceback": traceback.format_exc(),
-                },
-            )
-            # Best-effort to keep scheduler running.
-            runner = self._runners.get(task_type)
-            if runner and runner.running:
-                task_id = runner.running
-                task = self._tasks.get(task_id)
-                if task and task.status != TaskStatus.CANCELLED:
-                    task.status = TaskStatus.ENDED
-                    task.error_msg = "internal scheduler error"
-                runner.done.append(task_id)
-                runner.running = None
-                try:
-                    self._emit_snapshot()
-                except Exception:
-                    pass
-                self._try_dispatch(task_type)
-
-
-
-    def _on_process_finished(self, task_type: TaskType, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
-        try:
-            runner = self._runners.get(task_type)
-            if runner is None or runner.running is None:
+                task.error_msg = cmd_res.error_msg or "build_cmd failed"
+                # Note: rid was already popped from pending, so it moves to done.
+                self._mark_done(task_type, rid)
                 self._emit_snapshot()
-                return
+                continue
 
-            task_id = runner.running
-            task = self._tasks.get(task_id)
+            # Start process
+            start_res = process_manager_api.start(cmd_res.value, runner_id=rid)
+            if not start_res.is_ok:
+                task.status = TaskStatus.ENDED
+                task.error_msg = start_res.error_msg or "process start failed"
+                self._mark_done(task_type, rid)
+                self._emit_snapshot()
+                continue
 
-            if task:
-                if task.status != TaskStatus.CANCELLED:
-
-                    self.signals.task_output.emit(task_id, bytes(f'[{task_id}] Task finished.\n', 'utf-8'))
-
-                    task.status = TaskStatus.ENDED
-                    if exit_status == QProcess.ExitStatus.CrashExit:
-                        task.error_msg = "crashed"
-                        self._emit_scheduler_error(
-                            "Process crashed.",
-                            error_raw={
-                                "phase": "process_finished",
-                                "task_id": task_id,
-                                "task_type": getattr(task_type, "value", str(task_type)),
-                                "exit_status": str(exit_status),
-                                "exit_code": int(exit_code),
-                            },
-                        )
-                    elif exit_code != 0:
-                        task.error_msg = f"exit_code={exit_code}"
-                        self._emit_scheduler_error(
-                            "Process exited with non-zero code.",
-                            error_raw={
-                                "phase": "process_finished",
-                                "task_id": task_id,
-                                "task_type": getattr(task_type, "value", str(task_type)),
-                                "exit_status": str(exit_status),
-                                "exit_code": int(exit_code),
-                            },
-                        )
-                    else:
-                        task.error_msg = None
-
-            runner.done.append(task_id)
-            runner.running = None
+            # Success! Now it is officially RUNNING
+            task.status = TaskStatus.RUNNING
+            running_set.add(rid)
             self._emit_snapshot()
-            self._try_dispatch(task_type)
-        except Exception as ex:
-            self._emit_scheduler_error(
-                "Unhandled exception in QProcess finished callback.",
-                error_raw={
-                    "phase": "process_finished_callback",
-                    "task_type": getattr(task_type, "value", str(task_type)),
-                    "exit_code": int(exit_code),
-                    "exception": repr(ex),
-                    "traceback": traceback.format_exc(),
-                },
-            )
-            runner = self._runners.get(task_type)
-            if runner and runner.running:
-                task_id = runner.running
-                task = self._tasks.get(task_id)
-                if task and task.status != TaskStatus.CANCELLED:
-                    task.status = TaskStatus.ENDED
-                    task.error_msg = "internal scheduler error"
-                runner.done.append(task_id)
-                runner.running = None
-                try:
-                    self._emit_snapshot()
-                except Exception:
-                    pass
-                self._try_dispatch(task_type)
-
-
-
-
 
     # -------------------
-    # Snapshot emission
+    # Process callbacks
+    # -------------------
+
+    def _on_runner_ended(self, runner_id: str, result: object) -> None:
+        rid = str(runner_id)
+        task = self._tasks.get(rid)
+        if task is None:
+            return
+
+        # finalize status
+        cancelled = False
+        crashed = False
+        exit_code: Optional[int] = None
+        error_msg: Optional[str] = None
+
+        # Best-effort inspect ProcessManager.RunnerEnded
+        try:
+            cancelled = bool(getattr(result, "cancelled", False))
+            crashed = bool(getattr(result, "crashed", False))
+            exit_code = getattr(result, "exit_code", None)
+            error_msg = getattr(result, "error_msg", None)
+        except Exception:
+            pass
+
+        if cancelled or task.status == TaskStatus.CANCELLED:
+            task.status = TaskStatus.CANCELLED
+        else:
+            task.status = TaskStatus.ENDED
+
+        # Map runner result into a readable error message for UI diagnostics.
+        if error_msg:
+            task.error_msg = str(error_msg)
+        elif task.status != TaskStatus.CANCELLED:
+            if crashed:
+                task.error_msg = "crashed"
+            elif isinstance(exit_code, int) and exit_code != 0:
+                task.error_msg = f"exit_code={exit_code}"
+            else:
+                task.error_msg = None
+
+        self._running.get(task.task_type, set()).discard(rid)
+        self._mark_done(task.task_type, rid)
+        self._emit_snapshot()
+        self._dispatch(task.task_type)
+
+    def _mark_done(self, task_type: TaskType, runner_id: str) -> None:
+        dq = self._done.setdefault(task_type, deque())
+        if dq and dq[-1] == runner_id:
+            return
+        if runner_id in dq:
+            try:
+                dq.remove(runner_id)
+            except Exception:
+                pass
+        dq.append(runner_id)
+        while len(dq) > self._done_keep_limit:
+            old_id = dq.popleft()
+            # Purge old completed task to avoid unbounded memory growth.
+            self._purge_task(old_id)
+
+    def _purge_task(self, runner_id: str) -> None:
+        """Remove a task from all scheduler registries.
+
+        This is only called for tasks that have fallen off the done-history limit.
+        """
+        rid = str(runner_id)
+        task = self._tasks.pop(rid, None)
+        if task is None:
+            return
+
+        ttype = task.task_type
+        # Ensure it is not tracked elsewhere.
+        try:
+            self._running.get(ttype, set()).discard(rid)
+        except Exception:
+            pass
+
+        try:
+            pending = self._pending.get(ttype)
+            if pending is not None and rid in pending:
+                self._pending[ttype] = deque(x for x in pending if x != rid)
+        except Exception:
+            pass
+
+    # -------------------
+    # Snapshot
     # -------------------
 
     def _emit_snapshot(self) -> None:
-        with self._lock:
-            snapshot: Dict[str, list[TaskInfo]] = {}
-            for task_type, runner in self._runners.items():
-                snapshot[task_type.value] = self._build_runner_snapshot(runner)
+        try:
+            snapshot: dict[str, list[TaskInfo]] = {}
+            for ttype in self._registry.keys():
+                # Collect running/pending/done, then stably sort by accepted_at.
+                by_id: dict[str, TaskInfo] = {}
+                for rid in self._running.get(ttype, set()):
+                    task = self._tasks.get(rid)
+                    if task is not None:
+                        by_id[rid] = task
+                for rid in self._pending.get(ttype, deque()):
+                    task = self._tasks.get(rid)
+                    if task is not None:
+                        by_id[rid] = task
+                for rid in self._done.get(ttype, deque()):
+                    task = self._tasks.get(rid)
+                    if task is not None:
+                        by_id[rid] = task
+
+                def sort_key(t: TaskInfo):
+                    # accepted_at should always exist, but keep a stable fallback.
+                    ts = t.accepted_at.timestamp() if t.accepted_at else float("inf")
+                    return (ts, t.runner_id)
+
+                items = sorted(by_id.values(), key=sort_key)
+                snapshot[ttype.value] = items
             self.signals.task_list_changed.emit(snapshot)
-
-
-
-    def _build_runner_snapshot(self, runner: _TaskRunner) -> list[TaskInfo]:
-        result: list[TaskInfo] = []
-
-        if runner.running and runner.running in self._tasks:
-            result.append(self._tasks[runner.running])
-
-        for tid in list(runner.pending):
-            task = self._tasks.get(tid)
-            if task:
-                result.append(task)
-
-        for tid in list(runner.done):
-            task = self._tasks.get(tid)
-            if task:
-                result.append(task)
-
-        return result
-
-
-
-    # -------------------
-    # Process tree kill
-    # -------------------
-
-    def _kill_qprocess_tree(self, process: QProcess) -> None:
-        try:
-            if process.state() == QProcess.ProcessState.NotRunning:
-                return
-
-            try:
-                pid = int(process.processId())
-            except Exception as ex:
-                pid = 0
-                self._emit_scheduler_error(
-                    "Failed to obtain QProcess PID.",
-                    error_raw={"phase": "kill", "exception": repr(ex), "traceback": traceback.format_exc()},
-                )
-
-            if pid > 0 and psutil is not None:
-                self._kill_process_tree(pid)
-                finished = process.waitForFinished(500)
-                if not finished and process.state() != QProcess.ProcessState.NotRunning:
-                    self._emit_scheduler_error(
-                        "Failed to terminate QProcess within timeout.",
-                        error_raw={"phase": "kill", "pid": pid, "timeout_ms": 500},
-                    )
-                return
-
-            # Fallback
-            process.kill()
-            finished = process.waitForFinished(500)
-            if not finished and process.state() != QProcess.ProcessState.NotRunning:
-                self._emit_scheduler_error(
-                    "Failed to kill QProcess within timeout (fallback kill).",
-                    error_raw={"phase": "kill", "pid": pid if pid > 0 else None, "timeout_ms": 500},
-                )
-        except Exception as ex:
-            self._emit_scheduler_error(
-                "Unhandled exception while terminating QProcess tree.",
-                error_raw={"phase": "kill", "exception": repr(ex), "traceback": traceback.format_exc()},
-            )
-
-
-
-    def _kill_process_tree(self, pid: int) -> None:
-        if psutil is None:
-            return
-
-        try:
-            parent = psutil.Process(pid)
-            children = parent.children(recursive=True)
-
-            terminate_failures = 0
-            kill_failures = 0
-
-            for child in children:
-                try:
-                    child.terminate()
-                except Exception:
-                    terminate_failures += 1
-
-            _, alive = psutil.wait_procs(children, timeout=3)
-            for child in alive:
-                try:
-                    child.kill()
-                except Exception:
-                    kill_failures += 1
-
-            if terminate_failures or kill_failures:
-                self._emit_scheduler_error(
-                    "Failed to fully terminate child processes.",
-                    error_raw={
-                        "phase": "kill",
-                        "pid": pid,
-                        "children_count": len(children),
-                        "terminate_failures": terminate_failures,
-                        "kill_failures": kill_failures,
-                    },
-                )
-
-            try:
-                parent.terminate()
-            except Exception as ex:
-                self._emit_scheduler_error(
-                    "Failed to terminate parent process.",
-                    error_raw={"phase": "kill", "pid": pid, "exception": repr(ex)},
-                )
-
-            try:
-                parent.wait(timeout=3)
-            except Exception:
-                try:
-                    parent.kill()
-                except Exception as ex:
-                    self._emit_scheduler_error(
-                        "Failed to kill parent process.",
-                        error_raw={"phase": "kill", "pid": pid, "exception": repr(ex)},
-                    )
-
-        except Exception as ex:
-            self._emit_scheduler_error(
-                "Failed to terminate process tree using psutil.",
-                error_raw={"phase": "kill", "pid": pid, "exception": repr(ex), "traceback": traceback.format_exc()},
-            )
+        except Exception:
+            pass
