@@ -6,7 +6,7 @@ import threading
 from typing import Any, Optional
 
 from src.core.schemas.op_result import OpResult, ok, err
-from src.core.schemas.settings import SettingsModel
+from src.core.schemas.settings_model import SettingsModel
 from src.core.tools import validate_pydantic
 from .path_manage import PathManage
 
