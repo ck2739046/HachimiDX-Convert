@@ -92,15 +92,9 @@ def _build_common_args(data: MediaModel) -> OpResult[list[str]]:
     if data.clear_metadata:
         args.extend(["-map_metadata", "-1"])
 
-    # start
-    if data.start:
-        args.extend(["-ss", str(data.start)])
-
-    # end
-    if data.end:
-        args.extend(["-to", str(data.end)])
-
-    # pad_start 要在音频/视频滤镜中处理
+    # start/end 在滤镜中使用 trim/atrim 处理
+    # 不知道 -ss/-to 的 seek 行为是否会有误差，反正先用滤镜处理
+    # pad_start 也在滤镜中处理
     # output_path 要加在最后
     
     return ok(args)
@@ -130,7 +124,9 @@ def _build_video_args(data: MediaModel) -> OpResult[list[str]]:
     vf = _build_video_filter(
         size = data.video_side_resolution,
         crop = (data.video_crop_w, data.video_crop_h, data.video_crop_x, data.video_crop_y),
-        pad = data.pad_start
+        pad = data.pad_start,
+        start = data.start,
+        end = data.end
     )
     if vf:
         args.extend(["-vf", vf])
@@ -143,11 +139,23 @@ def _build_video_args(data: MediaModel) -> OpResult[list[str]]:
 
 def _build_video_filter(size: Optional[int],
                         crop: tuple[Optional[int], Optional[int], Optional[int], Optional[int]],
-                        pad: Optional[float]
+                        pad: Optional[float],
+                        start: Optional[float],
+                        end: Optional[float]
                        ) -> Optional[str]:
     """构建视频滤镜"""
 
     filters = []
+
+    # trim (decode-time cut, not keyframe dependent)
+    if start is not None or end is not None:
+        trim_kv = []
+        if start is not None:
+            trim_kv.append(f"start={start}")
+        if end is not None:
+            trim_kv.append(f"end={end}")
+        filters.append(f"trim={':'.join(trim_kv)}")
+        filters.append("setpts=PTS-STARTPTS")
 
     # Crop
     if all(v is not None for v in crop):
@@ -214,9 +222,11 @@ def _build_audio_args(data: MediaModel) -> OpResult[list[str]]:
 
     # audio filter
     af = _build_audio_filters(volume=data.audio_volume,
-                              pad=data.pad_start,
                               media_type=data.media_type,
-                              mute=data.video_mute)
+                              mute=data.video_mute,
+                              pad=data.pad_start,
+                              start=data.start,
+                              end=data.end)
     if af:
         args.extend(["-af", af])
 
@@ -226,13 +236,25 @@ def _build_audio_args(data: MediaModel) -> OpResult[list[str]]:
 
 
 def _build_audio_filters(volume: Optional[int],
-                         pad: Optional[float],
                          media_type: MediaType,
-                         mute: Optional[bool]
+                         mute: Optional[bool],
+                         pad: Optional[float],
+                         start: Optional[float],
+                         end: Optional[float]
                         ) -> Optional[str]:
     """构建音频滤镜"""
 
     filters = []
+
+    # trim (decode-time cut, not keyframe dependent)
+    if start is not None or end is not None:
+        atrim_kv = []
+        if start is not None:
+            atrim_kv.append(f"start={start}")
+        if end is not None:
+            atrim_kv.append(f"end={end}")
+        filters.append(f"atrim={':'.join(atrim_kv)}")
+        filters.append("asetpts=PTS-STARTPTS")
 
     # pad start
     if pad:
