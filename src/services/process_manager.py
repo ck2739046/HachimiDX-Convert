@@ -112,6 +112,10 @@ class ProcessManager(QObject):
         process.finished.connect(lambda code, status, rid=rid: self._on_finished(rid, int(code), status))
         process.errorOccurred.connect(lambda e, rid=rid: self._on_error(rid, e))
 
+        # 延迟发送开始文本
+        start_msg = f"\n-\n{'=' * 30}\n[{rid}] Process start.\n-\n{", ".join(cmd)}\n-\n"
+        QTimer.singleShot(0, lambda rid=rid: self.signals.runner_output.emit(rid, bytes(start_msg, 'utf-8')))
+        
         process.start()
 
         return ok(rid)
@@ -263,6 +267,10 @@ class ProcessManager(QObject):
 
     def _emit_and_cleanup_ended(self, runner_id: str, ended: RunnerEnded) -> None:
         try:
+            # 先发送结束文本
+            end_msg = f"\n-\n[{runner_id}] Process ended.\n-\n"
+            self.signals.runner_output.emit(runner_id, bytes(end_msg, 'utf-8'))
+            # 然后发送 ended 信号
             self.signals.runner_ended.emit(runner_id, ended)
         except Exception:
             pass
