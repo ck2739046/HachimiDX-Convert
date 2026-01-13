@@ -157,7 +157,7 @@ class TasksPage(BaseOutputPage):
 
         # 左右布局：左边显示task信息，右边显示取消按钮
         row = QHBoxLayout(card)
-        row.setContentsMargins(20, 10, 10, 10)
+        row.setContentsMargins(20, 8, 10, 8)
         row.setSpacing(0)
 
         # 左边信息区：垂直布局分三行
@@ -169,18 +169,18 @@ class TasksPage(BaseOutputPage):
 
         uuid_label = create_path_display(
             default_text = f"ID: {task.runner_id}",
-            length = 270,
+            length = 160,
             font_color = UI_Style.COLORS['text_primary'],
             font_bold = True)
 
         name_label = create_path_display(
             default_text = task.task_name or " ",
-            length = 270,
+            length = 200,
             font_color = UI_Style.COLORS['text_primary'])
 
         accepted_label = create_path_display(
             default_text = self._format_accepted(task.accepted_at),
-            length = 270)
+            length = 160)
 
         left_layout.addWidget(uuid_label)
         left_layout.addWidget(name_label)
