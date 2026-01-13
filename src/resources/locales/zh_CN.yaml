@@ -5,6 +5,9 @@
 # 4. critical: 致命错误，程序无法继续运行
 
 zh_CN:
+  general:
+    error_SettingsManager_get_failed: "从 SettingsManager 获取 %{keyy} 失败。"
+
 
   # ---- core.services ----
 

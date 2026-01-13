@@ -5,6 +5,9 @@
 # 4. critical: 致命错误，程序无法继续运行
 
 en_US:
+  general:
+    error_SettingsManager_get_failed: "Failed to get %{keyy} from SettingsManager."
+
 
   # ---- core.services ----
 
