@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Iterable, Optional, Tuple
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, qInstallMessageHandler, QtMsgType
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -30,6 +30,9 @@ class TasksPage(BaseOutputPage):
         self._auto_convert_list_layout: Optional[QVBoxLayout] = None
         self._media_list_layout: Optional[QVBoxLayout] = None
         self._last_by_id: Dict[str, Tuple[Any, ...]] = {}
+
+        # 安装消息处理器以过滤 QFont::setPointSize 警告
+        self._old_message_handler = qInstallMessageHandler(self._qt_message_filter)
 
         super().__init__(parent)
 
@@ -194,7 +197,7 @@ class TasksPage(BaseOutputPage):
                 font-size: 20px;
                 border: none;
             }}
-                QToolButton:hover {{
+            QToolButton:hover {{
                 color: {UI_Style.COLORS['stop_hover']};
             }}
             """
@@ -372,3 +375,15 @@ class TasksPage(BaseOutputPage):
         if status == TaskStatus.RUNNING:
             return UI_Style.COLORS["task_running"]
         return UI_Style.COLORS["task_ended"]
+
+
+    def _qt_message_filter(self, msg_type: QtMsgType, msg_log_context: object, msg: str) -> None:
+        """Qt 消息过滤器，屏蔽 QFont::setPointSize 警告"""
+        # 过滤掉 QFont::setPointSize 的警告
+        # 不知道怎么回事，总是有这个警告出现，直接眼不见为净
+        if "QFont::setPointSize" in msg:
+            return
+
+        # 其他消息正常处理
+        if self._old_message_handler:
+            self._old_message_handler(msg_type, msg_log_context, msg)

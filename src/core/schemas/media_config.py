@@ -87,7 +87,7 @@ class MediaConfig_Definitions:
         key="clear_metadata",
         type="bool",
         group="common",
-        default=False
+        default=True
     )
 
     duration = MediaConfig_Definition(
