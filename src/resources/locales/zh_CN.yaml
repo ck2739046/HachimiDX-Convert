@@ -6,7 +6,7 @@
 
 zh_CN:
   general:
-    error_SettingsManager_get_failed: "从 SettingsManager 获取 %{keyy} 失败。"
+    error_SettingsManage_get_failed: "从 SettingsManager 获取 %{keyy} 失败。"
 
 
   # ---- core.services ----
@@ -19,7 +19,33 @@ zh_CN:
 
 
 
+  # ---- core.tools ----
 
+  popup_dialog:
+    ui_confirm: "确认"
+    ui_cancel: "取消"
+    ui_ok: "好的"
+    ui_timeout_hint: "\n\n如果在 %{seconds} 秒内未操作将自动取消。"
+    ui_timeout_hint_close: "\n\n如果在 %{seconds} 秒内未操作将自动关闭此窗口。"
+
+  media_ffprobe_inspect:
+    ui_video_stream_info:
+      "编码=%{codec},  \
+      平均码率=%{bit_rate},  \
+      时长=%{duration},  \
+      分辨率=%{resolution},  \
+      平均帧率=%{fps}"
+    ui_audio_stream_info:
+      "编码=%{codec},  \
+      平均码率=%{bit_rate},  \
+      时长=%{duration},  \
+      采样率=%{sample_rate}"
+    notice_ignore_invalid_video_stream: "--FFprobe_Inspect: 忽略无效视频流 (%{na_fields}=N/A):\n%{stream_info}"
+    notice_ignore_invalid_video_stream_png: "--FFprobe_Inspect: 忽略无效视频流（可能是 PNG 歌曲封面）:\n%{stream_info}"
+    notice_ignore_invalid_video_stream_no_duration: "--FFprobe_Inspect: 忽略无效视频流（没有时长）:\n%{stream_info}"
+    notice_ignore_invalid_audio_stream: "--FFprobe_Inspect: 忽略无效音频流 (%{na_fields}=N/A):\n%{stream_info}"
+    notice_ignore_invalid_audio_stream_no_duration: "--FFprobe_Inspect: 忽略无效音频流（没有时长）:\n%{stream_info}"
+    notice_multiple_streams_detected: "FFprobe_Inspect: 检测到多个 %{codec_type} 流，选择索引 %{selected_index}"
 
 
 
@@ -52,47 +78,21 @@ zh_CN:
         输出文件已存在：%{file_path}
         该文件将在任务开始时被删除。
         是否继续？
-  
-  
-  
-  # ---- core.tools ----
 
-  popup_dialog:
-    ui_confirm: "确认"
-    ui_cancel: "取消"
-    ui_ok: "好的"
-    ui_timeout_hint: "\n\n如果在 %{seconds} 秒内未操作将自动取消。"
-    ui_timeout_hint_close: "\n\n如果在 %{seconds} 秒内未操作将自动关闭此窗口。"
+  
 
-  media_ffprobe_inspect:
-    ui_video_stream_info:
-      "编码=%{codec},  \
-      平均码率=%{bit_rate},  \
-      时长=%{duration},  \
-      分辨率=%{resolution},  \
-      平均帧率=%{fps}"
-    ui_audio_stream_info:
-      "编码=%{codec},  \
-      平均码率=%{bit_rate},  \
-      时长=%{duration},  \
-      采样率=%{sample_rate}"
-    notice_ignore_invalid_video_stream: "--FFprobe_Inspect: 忽略无效视频流 (%{na_fields}=N/A):\n%{stream_info}"
-    notice_ignore_invalid_video_stream_png: "--FFprobe_Inspect: 忽略无效视频流（可能是 PNG 歌曲封面）:\n%{stream_info}"
-    notice_ignore_invalid_video_stream_no_duration: "--FFprobe_Inspect: 忽略无效视频流（没有时长）:\n%{stream_info}"
-    notice_ignore_invalid_audio_stream: "--FFprobe_Inspect: 忽略无效音频流 (%{na_fields}=N/A):\n%{stream_info}"
-    notice_ignore_invalid_audio_stream_no_duration: "--FFprobe_Inspect: 忽略无效音频流（没有时长）:\n%{stream_info}"
-    notice_multiple_streams_detected: "FFprobe_Inspect: 检测到多个 %{codec_type} 流，选择索引 %{selected_index}"
 
 
 
   # ---- app ----
 
   app:
-    main_window:
     media_subpages:
       run_ffmpeg:
+        
         ui_select_input_file_button: "选择媒体文件"
-        warning_ffprobe_inspect_failed: "媒体检测失败。错误信息：\n %{error_msg}\n原始 FFprobe 输出：\n%{raw_output}"
+        warning_ffprobe_inspect_failed: "媒体检测失败。错误信息：\n%{error_msg}"
+        
         ui_select_file_divider: "文件选择"
         ui_video_divider: "视频设置"
         ui_audio_divider: "音频设置"
@@ -181,12 +181,9 @@ zh_CN:
         ui_submit_button: "提交"
         ui_taskname_placeholder: "输入任务名称 (可选)"
         
-        # ---- Params Warning ----
-        warning_output_filename_same_as_input: "警告: 输出文件名不能与输入文件名相同。"
-        warning_unsupported_media_type: "不支持的媒体类型: %{media_type}。"
-        warning_validation_failed: "参数校验失败：\n%{error}"
-        warning_task_submit_failed: "任务提交失败。"
-        notice_task_submitted: "任务已提交: %{task_info}"
+        # ---- Submit Button ----
+        warning_task_submit_failed: "任务提交失败。\n\n%{error}"
+        notice_task_submit_success: "任务已提交: %{task_info}"
         warning_unexpected_submit_error: "任务提交时发生意外错误：\n%{error}"
 
         # 其他

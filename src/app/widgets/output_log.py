@@ -158,7 +158,7 @@ class OutputLogWidget(QWidget):
 
     # ===== Process runner_output handling (runner_id + bytes) =====
 
-    def bind_current_runner_id(self, runner_id: str | None, *, clear: bool = True) -> None:
+    def bind_current_runner_id(self, runner_id: str | None, clear: bool = False) -> None:
         """
         Bind this output widget to a specific runner_id.
         When runner_id is set, handle_process_output will only accept output for the same runner_id.
@@ -181,7 +181,7 @@ class OutputLogWidget(QWidget):
             self._is_last_line_replaceable = False
 
     
-    def unbind_runner_id(self, runner_id: str) -> None:
+    def handle_process_ended(self, runner_id: str, _: any) -> None:
         """
         Slot: consume ProcessManager.signals.runner_ended(runner_id, RunnerEnded).
         Unbinds the given runner_id from this output widget.

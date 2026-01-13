@@ -1,5 +1,5 @@
 from typing import Optional
-from src.services import PathManage
+from src.services.path_manage import PathManage
 from .schemas.media_config import MediaType
 from .schemas.media_model import MediaModel
 from src.core.schemas.op_result import OpResult, ok, err
@@ -197,7 +197,7 @@ def _build_audio_args(data: MediaModel) -> OpResult[list[str]]:
         return err(f"Unsupported audio format: {data.audio_format}")
     
     # audio_bitrate
-    mode, num = data.audio_bitrate.split("_")
+    mode, num, _ = data.audio_bitrate.split(" ")
     if mode == "vbr":
         args.extend(["-q:a", str(num)])
     elif mode == "cbr":

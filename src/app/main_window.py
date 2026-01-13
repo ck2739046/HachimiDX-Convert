@@ -14,7 +14,7 @@ from .pages.tasks_page import TasksPage
 from .ui_style import UI_Style
 
 import i18n
-from src.services import SettingsManager, PathManage
+from src.services import SettingsManage, PathManage
 
 
 class LeftPanel(QWidget):
@@ -46,11 +46,11 @@ class LeftPanel(QWidget):
     def sizeHint(self):
 
         if self._init_size is None:
-            result = SettingsManager.get("main_app_init_size")
+            result = SettingsManage.get("main_app_init_size")
             if result.is_ok:
                 self._init_size = QSize(*result.value)
             else:
-                print("--Warning: MainWindow.sizeHint: " + i18n.t("general.error_SettingsManager_get_failed", keyy="main_app_init_size"))
+                print("--Warning: MainWindow.sizeHint: " + i18n.t("general.error_SettingsManage_get_failed", keyy="main_app_init_size"))
                 self._init_size = super().sizeHint() # 默认行为
                 
         return QSize(self._init_size)
@@ -151,19 +151,19 @@ class MainWindow(QMainWindow):
         
         # 设置窗口标题和图标
         self.setWindowTitle("Hachimi DX")
-        self.setWindowIcon(QIcon(PathManage.APP_ICON_PATH))
+        self.setWindowIcon(QIcon(str(PathManage.APP_ICON_PATH)))
 
         # 获取窗口尺寸配置
-        result = SettingsManager.get("main_app_min_size")
+        result = SettingsManage.get("main_app_min_size")
         if result.is_ok:
             min_size = result.value
             self.setMinimumSize(*min_size)
         else:
-            print("--Warning: MainWindow.setup_ui: " + i18n.t("general.error_SettingsManager_get_failed", keyy="main_app_min_size"))
+            print("--Warning: MainWindow.setup_ui: " + i18n.t("general.error_SettingsManage_get_failed", keyy="main_app_min_size"))
 
-        result = SettingsManager.get("main_app_init_size")
+        result = SettingsManage.get("main_app_init_size")
         if not result.is_ok:
-            print("--Warning: MainWindow.setup_ui: " + i18n.t("general.error_SettingsManager_get_failed", keyy="main_app_init_size"))
+            print("--Warning: MainWindow.setup_ui: " + i18n.t("general.error_SettingsManage_get_failed", keyy="main_app_init_size"))
         else:
             init_size = result.value
             self.resize(*init_size)

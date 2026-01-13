@@ -109,14 +109,6 @@ class MediaModel(BaseModel):
         if v not in allowed:
             raise ValueError(f"video_fps must be one of {allowed}, got {v}")
         return v
-
-    # 检查 outputa_path 是否已存在
-    @field_validator('output_path')
-    @classmethod
-    def validate_output_path_exists(cls, v: Path):
-        if v.exists():
-            raise ValueError(f"output_path '{v}' should not exist.")
-        return v
     
     # 检查 media_type 不是 unknown
     @field_validator('media_type')
@@ -225,4 +217,22 @@ class MediaModel(BaseModel):
             raise ValueError("video_crop w/h/x/y must be all set or all unset.")
 
         # 此处不做进一步的检查，交给 ffmpeg 自行处理
+        return self
+
+
+
+    @model_validator(mode='after')
+    def validate_output_path(self):
+
+        input_resolved = self.input_path.resolve()
+        output_resolved = self.output_path.resolve()
+
+        # 输出不能和输入相同
+        if input_resolved == output_resolved:
+            raise ValueError("output_path cannot be the same as input_path.")
+
+        # 输出不能已存在
+        if self.output_path.exists():
+            raise ValueError(f"output_path '{output_resolved}' should not exist.")
+        
         return self
