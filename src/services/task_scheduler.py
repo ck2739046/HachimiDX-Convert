@@ -145,6 +145,7 @@ class TaskScheduler(QObject):
         ttype = task.task_type
         pending_list = self._pending.get(ttype, deque())
         running_set = self._running.get(ttype, set())
+        done_list = self._done.get(ttype, deque())
 
         if rid in pending_list:
             self._pending[ttype] = deque(x for x in pending_list if x != rid)
@@ -159,6 +160,14 @@ class TaskScheduler(QObject):
             res = process_manager_api.cancel(rid)
             if not res.is_ok:
                 return err(f"Failed to cancel running task: {res.error_msg}")
+            return ok()
+
+        if rid in done_list:
+            # 如果在 done 中，执行彻底删除（类似 Dismiss）
+            self._done[ttype] = deque(x for x in done_list if x != rid)
+            self._purge_task(rid)
+            self._emit_snapshot()
+            return ok()
 
         return ok()
 
