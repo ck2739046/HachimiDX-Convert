@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from src.core.schemas.op_result import OpResult, err
-from .task_scheduler import BuildCmdFn, TaskScheduler, TaskType
+from .task_scheduler import TaskScheduler, TaskType
 
 
 def get_signals():
@@ -12,28 +12,37 @@ def get_signals():
 
 
 def register(task_type: TaskType,
-             build_cmd_fn: BuildCmdFn,
              concurrency: int = 1) -> None:
-    """Register a task type with its build_cmd function and concurrency limit."""
+    """Register a task type with its concurrency limit."""
 
     if not isinstance(concurrency, int) or concurrency < 1:
         concurrency = 1
 
-    TaskScheduler.get_instance().register(task_type, build_cmd_fn, concurrency=concurrency)
+    TaskScheduler.get_instance().register(task_type, concurrency=concurrency)
 
 
-def submit(task_type: TaskType,
-           config: Any,
-           task_name: Optional[str] = "") -> OpResult[str]:
-    """
-    Submit a new task to the scheduler.
+
+def submit_task(task_type: TaskType,
+                cmd: list[str],
+                *,
+                task_name: Optional[str] = "") -> OpResult[str]:
+    """Submit a new task (pre-built cmd) to the scheduler.
 
     Args:
         task_type: TaskType
-        config: pydantic model
+        cmd: list[str] where cmd[0] is program, cmd[1:] are args.
         task_name: optional task name
+
+    Returns:
+        OpResult[str]: runner_id
     """
-    return TaskScheduler.get_instance().submit(task_type, config=config, task_name=task_name)
+    if not isinstance(cmd, list) or not cmd:
+        return err("cmd must be a non-empty list[str]")
+    if not isinstance(cmd[0], str) or not cmd[0].strip():
+        return err("cmd[0] must be program path")
+
+    return TaskScheduler.get_instance().submit_task(task_type, cmd=cmd, task_name=task_name)
+
 
 
 def cancel(runner_id: str) -> OpResult[None]:

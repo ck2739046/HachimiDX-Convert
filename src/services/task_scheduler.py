@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from collections import deque
 
@@ -31,7 +31,7 @@ class TaskInfo:
     task_name: str = ""
     accepted_at: Optional[datetime] = None
     status: TaskStatus = TaskStatus.PENDING
-    config: Any = None
+    cmd: Optional[list[str]] = None
     error_msg: Optional[str] = None
 
 
@@ -39,12 +39,8 @@ class TaskSchedulerSignals(QObject):
     task_list_changed = pyqtSignal(object)
 
 
-BuildCmdFn = Callable[[Any], OpResult[list[str]]]
-
-
 @dataclass(slots=True)
 class _RegisteredType:
-    build_cmd_fn: BuildCmdFn
     concurrency: int = 1
 
 
@@ -53,7 +49,7 @@ class TaskScheduler(QObject):
 
     - Owns NO QProcess.
     - Runs commands via ProcessManager (runner_id is used as process runner_id).
-    - Registers build_cmd_fn (provided by pipelines) per task type.
+    - Pipelines build cmd themselves and submit to scheduler.
     - Emits task_list_changed snapshots for UI.
     """
 
@@ -87,9 +83,9 @@ class TaskScheduler(QObject):
     # Registration
     # -------------------
 
-    def register(self, task_type: TaskType, build_cmd_fn: BuildCmdFn, *, concurrency: int = 1) -> None:
+    def register(self, task_type: TaskType, *, concurrency: int = 1) -> None:
 
-        self._registry[task_type] = _RegisteredType(build_cmd_fn=build_cmd_fn, concurrency=concurrency)
+        self._registry[task_type] = _RegisteredType(concurrency=concurrency)
         self._pending.setdefault(task_type, deque())
         self._running.setdefault(task_type, set())
         self._done.setdefault(task_type, deque())
@@ -102,7 +98,11 @@ class TaskScheduler(QObject):
     # Public API
     # -------------------
 
-    def submit(self, task_type: TaskType, config: Any, task_name: str = "") -> OpResult[str]:
+    def submit_task(self,
+                    task_type: TaskType,
+                    *,
+                    cmd: list[str],
+                    task_name: str = "") -> OpResult[str]:
 
         if task_type not in self._registry:
             return err(f"Task type not registered: {task_type}")
@@ -121,7 +121,7 @@ class TaskScheduler(QObject):
             task_name=str(task_name or "").strip(),
             accepted_at=datetime.now(),
             status=TaskStatus.PENDING,
-            config=config,
+            cmd=cmd,
         )
         self._tasks[rid] = info
         self._pending.setdefault(task_type, deque()).append(rid)
@@ -185,22 +185,8 @@ class TaskScheduler(QObject):
             if task.status == TaskStatus.CANCELLED:
                 continue
 
-            # Build cmd first
-            try:
-                cmd_res = reg.build_cmd_fn(task.config)
-            except Exception as e:
-                cmd_res = err("build_cmd threw exception", error_raw = e)
-            
-            if not cmd_res.is_ok or not cmd_res.value:
-                task.status = TaskStatus.ENDED
-                task.error_msg = cmd_res.error_msg or "build_cmd failed"
-                # Note: rid was already popped from pending, so it moves to done.
-                self._mark_done(task_type, rid)
-                self._emit_snapshot()
-                continue
-
             # Start process
-            start_res = process_manager_api.start(cmd_res.value, runner_id=rid)
+            start_res = process_manager_api.start(task.cmd, runner_id=rid)
             if not start_res.is_ok:
                 task.status = TaskStatus.ENDED
                 task.error_msg = start_res.error_msg or "process start failed"

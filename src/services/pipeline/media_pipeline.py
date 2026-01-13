@@ -24,12 +24,10 @@ class MediaPipeline:
 
     @classmethod
     def init(cls) -> OpResult[None]:
-        """Register MEDIA task type to scheduler."""
+        """Register MEDIA task type to scheduler (concurrency only)."""
         try:
-            # Register build_cmd for scheduler dispatch.
             task_scheduler_api.register(
                 TaskType.MEDIA,
-                cls.build_cmd,
                 concurrency = 1,
             )
             cls._is_registered = True
@@ -67,42 +65,50 @@ class MediaPipeline:
     # -------------------
 
     @classmethod
-    def submit_task(cls, raw_data: dict[str, Any], task_name: str = "") -> OpResult[str]:
+    def submit_task(cls, raw_data: dict[str, Any], task_name: str = "") -> OpResult[tuple[str, list[str]]]:
         """
-        API (scheduler-run): validate -> submit to TaskScheduler.
+        API (scheduler-run): validate -> build cmd -> submit_task to TaskScheduler.
 
         Returns:
-            OpResult[str]: runner_id
+            OpResult[]: tuple(runner_id, command list)
         """
 
         if not cls._is_registered:
             return err("MediaPipeline is not initialized (not registered)")
 
-        v = cls.validate(raw_data)
-        if not v.is_ok:
-            return err("Failed to validate media task input", inner=v)
+        v_res = cls.validate(raw_data)
+        if not v_res.is_ok:
+            return err("Failed to validate media task input", inner=v_res)
 
-        return task_scheduler_api.submit(
+        cmd_res = cls.build_cmd(v_res.value)
+        if not cmd_res.is_ok:
+            return err("Failed to build ffmpeg command", inner=cmd_res)
+
+        rid_res = task_scheduler_api.submit_task(
             TaskType.MEDIA,
-            config=v.value,
+            cmd_res.value,
             task_name=task_name,
         )
+        if not rid_res.is_ok:
+            return err("Failed to submit task to scheduler", inner=rid_res)
+
+        return ok((rid_res.value, cmd_res.value))
 
 
     @classmethod
-    def run_now(cls, raw_data: dict[str, Any]) -> OpResult[str]:
+    def run_now(cls, raw_data: dict[str, Any]) -> OpResult[tuple[str, list[str]]]:
         """
         API (direct-run): validate -> build cmd -> ProcessManager.start.
 
         Returns:
-            OpResult[str]: runner_id
+            OpResult[]: tuple(runner_id, command list)
         """
 
-        v = cls.validate(raw_data)
-        if not v.is_ok:
-            return err("Failed to validate media input", inner=v)
+        v_res = cls.validate(raw_data)
+        if not v_res.is_ok:
+            return err("Failed to validate media input", inner=v_res)
 
-        cmd_res = cls.build_cmd(v.value)
+        cmd_res = cls.build_cmd(v_res.value)
         if not cmd_res.is_ok:
             return err("Failed to build ffmpeg command", inner=cmd_res)
 
