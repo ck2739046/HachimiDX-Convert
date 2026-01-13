@@ -95,38 +95,62 @@ def err(error_msg: str = "",
 
 
 
-def print_op_result(result: OpResult[Any]) -> None:
+def print_op_result(result: OpResult[Any], only_parse_last: bool = False) -> str:
     """
-    打印 OpResult 对象的详细信息。
-    如果有嵌套的 inner result，会递归打印。
+    构造 OpResult 对象的详细信息的字符串表示。
+    如果有嵌套的 inner result，会递归构造。
 
     Args:
-        result (OpResult[Any]): 要打印的 OpResult 对象
+        result (OpResult[Any]): 要构造字符串的 OpResult 对象
+        only_parse_last (bool): 是否只解析最内层的 OpResult，默认 False
+
+    Returns:
+        str: OpResult 的详细字符串表示
     """
     
-    def _print_recursive(res: OpResult[Any], level: int):
+    def _build_recursive(res: OpResult[Any], level: int) -> str:
         # 定义缩进，每一层增加 2 个空格
         indent = " " * 2 * level
         
+        # 构建字符串
+        lines = []
+        
         # 视觉分割线，显示层级和简要状态
         status_icon = "✓" if res.is_ok else "✗"
-        print(f"{indent}{status_icon} [OpResult Level {level}]")
+        lines.append(f"{indent}{status_icon} [OpResult Level {level}]")
         
-        # 打印基础属性
-        print(f"{indent}    - source   : {res.source}")
-        print(f"{indent}    - is_ok    : {res.is_ok}")
+        # 添加基础属性
+        lines.append(f"{indent}    - source   : {res.source}")
+        lines.append(f"{indent}    - is_ok    : {res.is_ok}")
         
-        # 根据状态打印更有意义的数据，但为了满足“打印每一个参数”，这里全部打印
-        print(f"{indent}    - value    : {res.value}")
-        print(f"{indent}    - error_msg: {res.error_msg}")
-        print(f"{indent}    - error_raw: {res.error_raw}")
+        # 添加所有参数
+        lines.append(f"{indent}    - value    : {res.value}")
+        lines.append(f"{indent}    - error_msg: {res.error_msg}")
+        lines.append(f"{indent}    - error_raw: {res.error_raw}")
         
         # 处理嵌套逻辑
         if res.inner:
-            print(f"{indent}    - inner    : (Nested below)\n")
-            _print_recursive(res.inner, level + 1)
+            lines.append(f"{indent}    - inner    : (Nested below)")
+            lines.append(_build_recursive(res.inner, level + 1))
         else:
-            print(f"{indent}    - inner    : None")
+            lines.append(f"{indent}    - inner    : None")
             
-    # 开始打印，初始层级为 0
-    _print_recursive(result, 0)
+        return "\n".join(lines)
+    
+
+    def _find_deepest(res: OpResult[Any]) -> OpResult[Any]:
+        """找到最内层的 OpResult"""
+        current = res
+        while current.inner:
+            current = current.inner
+        return current
+            
+
+    # 如果 only_parse_last 为 True，只解析最内层的 OpResult
+    if only_parse_last:
+        deepest = _find_deepest(result)
+        return _build_recursive(deepest, 0)
+    
+    
+    # 开始构建字符串，初始层级为 0
+    return _build_recursive(result, 0)

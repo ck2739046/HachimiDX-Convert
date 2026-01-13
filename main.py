@@ -17,7 +17,7 @@ def main():
             print("\n------------------------ \
                    \nInitialization Error: \
                    \n------------------------\n")
-            print_op_result(result)
+            print(print_op_result(result))
             sys.exit(1)
 
         window = MainWindow()

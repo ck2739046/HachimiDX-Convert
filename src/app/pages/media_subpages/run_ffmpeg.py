@@ -1,4 +1,5 @@
 import os
+import traceback
 from PyQt6.QtWidgets import QVBoxLayout
 
 from ..base_output_page import BaseOutputPage
@@ -360,7 +361,7 @@ class RunFFmpegPage(BaseOutputPage):
         self.audio_bitrate_combo_box.blockSignals(False)
 
 
-    def update_output_full_path_display(self) -> None:
+    def update_output_full_path_display(self) -> OpResult[None]:
         """根据输出文件名，更新完整输出路径显示"""
 
         output_filename = self.output_filename_line_edit.text().strip()
@@ -373,9 +374,10 @@ class RunFFmpegPage(BaseOutputPage):
         if not result.is_ok:
             show_notify_dialog("app.media_subpages.run_ffmpeg", result.error_msg)
             self.output_full_path_display.setText("")
-            return
+            return err(result.error_msg, inner = result)
         
         self.output_full_path_display.setText(str(result.value))
+        return ok()
 
 
     def transfer_res(self, input_data):
@@ -445,7 +447,9 @@ class RunFFmpegPage(BaseOutputPage):
             self.submit_button.setEnabled(False)
 
             # 手动触发完整输出路径更新
-            self.update_output_full_path_display()
+            result = self.update_output_full_path_display()
+            if not result.is_ok:
+                return
 
             raw_data: dict = {
                 # common
@@ -474,7 +478,7 @@ class RunFFmpegPage(BaseOutputPage):
             task_name = self.taskname_line_edit.text().strip()
             result = MediaPipeline.submit_task(raw_data, task_name)
             if not result.is_ok:
-                error_msg = i18n.t("app.media_subpages.run_ffmpeg.warning_task_submit_failed", error=print_op_result(result))
+                error_msg = i18n.t("app.media_subpages.run_ffmpeg.warning_task_submit_failed", error=print_op_result(result, only_parse_last=True))
                 show_notify_dialog("app.media_subpages.run_ffmpeg", error_msg)
                 return
             
@@ -484,6 +488,6 @@ class RunFFmpegPage(BaseOutputPage):
 
         except Exception as e:
             show_notify_dialog("app.media_subpages.run_ffmpeg",
-                i18n.t("app.media_subpages.run_ffmpeg.warning_unexpected_submit_error", error=str(e)))
+                i18n.t("app.media_subpages.run_ffmpeg.warning_unexpected_submit_error", error=traceback.format_exc()))
         finally:
             self.submit_button.setEnabled(True)
