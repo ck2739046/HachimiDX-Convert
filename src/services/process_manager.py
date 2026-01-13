@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import subprocess
-import nanoid
 from dataclasses import dataclass
 from typing import Any, Optional
 
 from PyQt6.QtCore import QObject, QProcess, QTimer, pyqtSignal
 
 from src.core.schemas.op_result import OpResult, ok, err
+from src.core.tools import generate_uid
 
 
 @dataclass(slots=True)
@@ -50,13 +50,24 @@ class ProcessManager(QObject):
         super().__init__(parent)
         self.signals = ProcessManagerSignals()
 
-        self._flush_interval_ms: int = 200
+        # 每 50ms 发送一轮信号
+        self._flush_interval_ms: int = 50        
 
+        # dict: runner_id -> QProcess
         self._procs: dict[str, QProcess] = {}
+
+        # dict: runner_id -> output buffer
         self._buffers: dict[str, bytearray] = {}
+
+        # 记录有哪些 runner_id 请求取消了
+        # 临时存着，等 process 真正结束后会删掉
         self._cancel_requested: set[str] = set()
+
+        # dict: runner_id -> last error message
+        # 临时存着，等 process 结束后会删掉
         self._last_error: dict[str, str] = {}
 
+        # 启动总定时器
         self._flush_timer = QTimer(self)
         self._flush_timer.setInterval(self._flush_interval_ms)
         self._flush_timer.timeout.connect(self._flush_all_buffers)
@@ -69,17 +80,22 @@ class ProcessManager(QObject):
     # -------------------
 
     def start(self, cmd: list[str], *, runner_id: Optional[str] = None) -> OpResult[str]:
-        if not isinstance(cmd, list) or not cmd:
-            return err("cmd must be a non-empty list[str]")
-        if not cmd[0] or not isinstance(cmd[0], str):
-            return err("cmd[0] must be program path")
-
-        rid = str(runner_id or "").strip() or self._generate_runner_id()
-        if not rid:
-            return err("runner_id is empty")
-        if rid in self._procs:
-            return err(f"runner_id already exists: {rid}")
-
+        
+        if not runner_id:
+            # 尝试生成 runner_id
+            for attempt in range(3):
+                runner_id = generate_uid()
+                if runner_id not in self._procs:
+                    break
+            else:
+                return err("Failed to generate unique runner_id.")
+        else:
+            # 指定了 runner_id
+            if runner_id in self._procs:
+                return err(f"runner_id already exists: {runner_id}")
+            
+        rid = str(runner_id).strip()
+            
         process = QProcess(self)
         process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
 
@@ -100,10 +116,12 @@ class ProcessManager(QObject):
 
         return ok(rid)
 
+
+
+
     def cancel(self, runner_id: str) -> OpResult[None]:
+
         rid = str(runner_id).strip()
-        if not rid:
-            return err("runner_id is empty")
 
         proc = self._procs.get(rid)
         if proc is None:
@@ -120,14 +138,15 @@ class ProcessManager(QObject):
 
         return ok(None)
 
+
+
+
     # -------------------
     # Internal helpers
     # -------------------  
 
-    def _generate_runner_id(self) -> str:
-        return str(nanoid.generate(size=8))
-
     def _on_ready_read(self, runner_id: str) -> None:
+
         proc = self._procs.get(runner_id)
         if proc is None:
             return
@@ -143,6 +162,9 @@ class ProcessManager(QObject):
 
         buf.extend(bytes(data))
 
+
+
+
     def _flush_all_buffers(self) -> None:
         # Emit at most once per interval per runner.
         for rid, buf in list(self._buffers.items()):
@@ -153,7 +175,6 @@ class ProcessManager(QObject):
             try:
                 self.signals.runner_output.emit(rid, payload)
             except Exception:
-                # Never let UI signal handlers crash the process manager.
                 pass
 
     def _flush_one_buffer(self, runner_id: str) -> None:
@@ -166,6 +187,10 @@ class ProcessManager(QObject):
             self.signals.runner_output.emit(runner_id, payload)
         except Exception:
             pass
+
+
+
+
 
     def _on_finished(self, runner_id: str, exit_code: int, exit_status: QProcess.ExitStatus) -> None:
         if runner_id not in self._procs:
@@ -186,18 +211,22 @@ class ProcessManager(QObject):
         )
         self._emit_and_cleanup_ended(runner_id, ended)
 
+
+
+
     def _on_error(self, runner_id: str, err_type: QProcess.ProcessError) -> None:
+
         if runner_id not in self._procs:
             return
-
-        # Record error. finished() will emit ended (usually). If the process is already not running,
-        # emit ended here to avoid hanging state.
+        
+        # 从 error_type 获取错误信息
         self._last_error[runner_id] = getattr(err_type, "name", str(err_type))
 
+        # 一般情况下，finished() 会被调用，从而触发 ended 信号
+        # 但是某些错误不会触发 finished()，所以这里也做一次检查
         proc = self._procs.get(runner_id)
         if proc is None:
             return
-
         if proc.state() == QProcess.ProcessState.NotRunning:
             self._flush_one_buffer(runner_id)
             ended = RunnerEnded(
@@ -209,24 +238,28 @@ class ProcessManager(QObject):
             )
             self._emit_and_cleanup_ended(runner_id, ended)
 
+
+
+
     def _force_kill_if_running(self, runner_id: str) -> None:
+
         proc = self._procs.get(runner_id)
         if proc is None:
             return
-        if proc.state() != QProcess.ProcessState.NotRunning:
-            pid = int(proc.processId())
-            if pid > 0:
-                try:
-                    # /T: tree, /F: force
-                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                except Exception:
-                    pass
-            else:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
+        if proc.state() == QProcess.ProcessState.NotRunning:
+            return
+        
+        pid = int(proc.processId())
+        if pid <= 0:
+            proc.kill()
+            return
+
+        # /T: tree, /F: force
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+            
 
     def _emit_and_cleanup_ended(self, runner_id: str, ended: RunnerEnded) -> None:
         try:

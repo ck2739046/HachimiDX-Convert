@@ -23,10 +23,25 @@ def start(cmd: list[str], *, runner_id: Optional[str] = None) -> OpResult[str]:
         OpResult[str]: runner_id
     """
     mgr = ProcessManager.get_instance()
+
+    if not isinstance(cmd, list) or not cmd:
+        return err("cmd must be a non-empty list[str]")
+    if not cmd[0] or not isinstance(cmd[0], str):
+        return err("cmd[0] must be program path")
+
+    rid = str(runner_id or "").strip()
+    if not rid:
+        runner_id = None  # Let ProcessManager generate one
+
     return mgr.start(cmd, runner_id=runner_id)
 
 
 def cancel(runner_id: str) -> OpResult[None]:
     """Cancel a running process by runner_id."""
+
+    runner_id = str(runner_id or "").strip()
+    if not runner_id:
+        return err("runner_id is empty")
+    
     mgr = ProcessManager.get_instance()
     return mgr.cancel(runner_id)

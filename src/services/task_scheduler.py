@@ -8,7 +8,8 @@ from collections import deque
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from src.core.schemas.op_result import OpResult, ok, err
-from src.services import process_manager_api
+from src.core.tools import generate_uid
+from . import process_manager_api
 
 
 class TaskType(str, Enum):
@@ -72,41 +73,47 @@ class TaskScheduler(QObject):
         self._pending: dict[TaskType, deque[str]] = {}
         self._running: dict[TaskType, set[str]] = {}
         self._done: dict[TaskType, deque[str]] = {}
-        self._done_keep_limit: int = 60
+        self._done_keep_limit: int = 60 # 最多保留最近60个已完成任务
 
-        # Subscribe to process ended events.
         try:
             process_manager_api.get_signals().runner_ended.connect(self._on_runner_ended)
         except Exception:
-            # Never crash on init; scheduler can still function partially.
             pass
+
+
+
 
     # -------------------
     # Registration
     # -------------------
 
     def register(self, task_type: TaskType, build_cmd_fn: BuildCmdFn, *, concurrency: int = 1) -> None:
-        if concurrency < 1:
-            concurrency = 1
-        self._registry[task_type] = _RegisteredType(build_cmd_fn=build_cmd_fn, concurrency=int(concurrency))
+
+        self._registry[task_type] = _RegisteredType(build_cmd_fn=build_cmd_fn, concurrency=concurrency)
         self._pending.setdefault(task_type, deque())
         self._running.setdefault(task_type, set())
         self._done.setdefault(task_type, deque())
-        self._emit_snapshot()
+
+
+
+
 
     # -------------------
     # Public API
     # -------------------
 
-    def submit(self, task_type: TaskType, *, runner_id: str, config: Any, task_name: str = "") -> OpResult[str]:
+    def submit(self, task_type: TaskType, config: Any, task_name: str = "") -> OpResult[str]:
+
         if task_type not in self._registry:
             return err(f"Task type not registered: {task_type}")
 
-        rid = str(runner_id).strip()
-        if not rid:
-            return err("runner_id is empty")
-        if rid in self._tasks:
-            return err(f"runner_id already exists: {rid}")
+        # 尝试生成 runner_id
+        for attempt in range(3):
+            rid = generate_uid()
+            if rid not in self._tasks:
+                break
+        else:
+            return err(f"Failed to generate unique runner_id.")
 
         info = TaskInfo(
             runner_id=rid,
@@ -121,15 +128,19 @@ class TaskScheduler(QObject):
 
         self._emit_snapshot()
         self._dispatch(task_type)
+
         return ok(rid)
 
-    def cancel(self, runner_id: str) -> None:
-        rid = str(runner_id).strip()
-        if not rid:
-            return
+
+
+
+    def cancel(self, runner_id: str) -> OpResult[None]:
+
+        rid = str(runner_id)
+
         task = self._tasks.get(rid)
         if task is None:
-            return
+            return err(f"Task not found: {rid}")
 
         ttype = task.task_type
         pending_list = self._pending.get(ttype, deque())
@@ -140,20 +151,18 @@ class TaskScheduler(QObject):
             task.status = TaskStatus.CANCELLED
             self._mark_done(ttype, rid)
             self._emit_snapshot()
-            return
+            return ok()
 
         if rid in running_set:
-            task.status = TaskStatus.CANCELLED
-            self._emit_snapshot()
-            # Ask ProcessManager to cancel. End event will finalize state.
+            # 仅调用 process manager 取消
+            # 真正的 end 状态由 _on_runner_ended 处理
             res = process_manager_api.cancel(rid)
             if not res.is_ok:
-                # If cancel failed (e.g. already ended or missing), clean up now.
-                running_set.discard(rid)
-                self._mark_done(ttype, rid)
-                self._emit_snapshot()
-                self._dispatch(ttype)
-            return
+                return err(f"Failed to cancel running task: {res.error_msg}")
+
+        return ok()
+
+
 
     # -------------------
     # Dispatch
@@ -167,6 +176,7 @@ class TaskScheduler(QObject):
         pending_list = self._pending.setdefault(task_type, deque())
         running_set = self._running.setdefault(task_type, set())
 
+        # 如果有 pending 任务，且未达并发上限，则启动新任务
         while pending_list and len(running_set) < reg.concurrency:
             rid = pending_list.popleft()
             task = self._tasks.get(rid)
@@ -203,12 +213,19 @@ class TaskScheduler(QObject):
             running_set.add(rid)
             self._emit_snapshot()
 
+
+
+
+
+
+
     # -------------------
     # Process callbacks
     # -------------------
 
     def _on_runner_ended(self, runner_id: str, result: object) -> None:
-        rid = str(runner_id)
+
+        rid = str(runner_id).strip()
         task = self._tasks.get(rid)
         if task is None:
             return
@@ -249,6 +266,12 @@ class TaskScheduler(QObject):
         self._emit_snapshot()
         self._dispatch(task.task_type)
 
+
+
+
+
+
+
     def _mark_done(self, task_type: TaskType, runner_id: str) -> None:
         dq = self._done.setdefault(task_type, deque())
         if dq and dq[-1] == runner_id:
@@ -263,6 +286,11 @@ class TaskScheduler(QObject):
             old_id = dq.popleft()
             # Purge old completed task to avoid unbounded memory growth.
             self._purge_task(old_id)
+
+
+
+
+
 
     def _purge_task(self, runner_id: str) -> None:
         """Remove a task from all scheduler registries.
@@ -287,6 +315,11 @@ class TaskScheduler(QObject):
                 self._pending[ttype] = deque(x for x in pending if x != rid)
         except Exception:
             pass
+
+
+
+
+
 
     # -------------------
     # Snapshot

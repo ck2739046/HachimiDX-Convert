@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Optional
-
-import nanoid
 
 from src.core.schemas.op_result import OpResult, ok, err
 from src.core.tools import validate_pydantic
@@ -36,7 +33,7 @@ class MediaPipeline:
                 concurrency = 1,
             )
             cls._is_registered = True
-            return ok(None)
+            return ok()
         
         except Exception as e:
             return err("Failed to initialize MediaPipeline", error_raw = e)

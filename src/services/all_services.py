@@ -38,6 +38,9 @@ class AllServices:
         else:
             return err("Failed to initialize I18nManage.", inner=result)
 
+
+        # pipeline
+
         result = MediaPipeline.init()
         if result.is_ok:
             print("MediaPipeline initialization completed.")
