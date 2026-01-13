@@ -249,7 +249,7 @@ class RunFFmpegPage(BaseOutputPage):
             widget_type="combo_box", param=M_Defs.video_side_resolution, length=102, transfer_fn=self.transfer_res)
         # video fps combo box
         self.video_fps_combo_box = self._create_ffmpeg_widget(
-            widget_type="combo_box", param=M_Defs.video_fps, length=70, transfer_fn=self.transfer_fps)
+            widget_type="combo_box", param=M_Defs.video_fps, length=80, transfer_fn=self.transfer_fps)
         # gop_optimize check box
         self.video_gop_optimize_check_box = self._create_ffmpeg_widget(
             widget_type="check_box", param=M_Defs.video_gop_optimize)
@@ -266,7 +266,7 @@ class RunFFmpegPage(BaseOutputPage):
 
         # audio sample_rate combo box
         self.audio_sample_rate_combo_box = self._create_ffmpeg_widget(
-            widget_type="combo_box", param=M_Defs.audio_sample_rate, length=70)
+            widget_type="combo_box", param=M_Defs.audio_sample_rate, length=72)
         
         # audio volume line edit
         min, max, default = (
@@ -448,8 +448,8 @@ class RunFFmpegPage(BaseOutputPage):
 
             # 手动触发完整输出路径更新
             result = self.update_output_full_path_display()
-            if not result.is_ok:
-                return
+            #if not result.is_ok:
+                #return
 
             raw_data: dict = {
                 # common

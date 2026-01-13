@@ -151,7 +151,7 @@ class _PopupConfirmDialog(QDialog):
             hint_key = "popup_dialog.ui_timeout_hint_close"
         else:
             hint_key = "popup_dialog.ui_timeout_hint"
-        hint = i18n.t(hint_key, seconds=self._seconds_left).strip()
+        hint = i18n.t(hint_key, seconds=self._seconds_left)
         self._hint_label.setText(hint)
 
     def _finish(self, value: bool) -> None:

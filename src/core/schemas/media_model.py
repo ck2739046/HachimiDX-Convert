@@ -233,6 +233,6 @@ class MediaModel(BaseModel):
 
         # 输出不能已存在
         if self.output_path.exists():
-            raise ValueError(f"output_path '{output_resolved}' should not exist.")
+            raise ValueError(f"Output path already exists. Please delete it first:\n{output_resolved}")
         
         return self

@@ -25,8 +25,8 @@ zh_CN:
     ui_confirm: "确认"
     ui_cancel: "取消"
     ui_ok: "好的"
-    ui_timeout_hint: "\n\n如果在 %{seconds} 秒内未操作将自动取消。"
-    ui_timeout_hint_close: "\n\n如果在 %{seconds} 秒内未操作将自动关闭此窗口。"
+    ui_timeout_hint: "\n如果在 %{seconds} 秒内未操作将自动取消。"
+    ui_timeout_hint_close: "\n如果在 %{seconds} 秒内未操作将自动关闭此窗口。"
 
   media_ffprobe_inspect:
     ui_video_stream_info:
@@ -108,13 +108,13 @@ zh_CN:
         ui_video_resolution_help: |
           设置输出视频的分辨率
 
-          origin：保持原始分辨率。
+          original：保持原始分辨率。
           其他选项：按比例缩放至目标尺寸，剩余空间用黑色像素填充。
         ui_video_fps_label: "帧率: "
         ui_video_fps_help: |
           设置输出视频的帧率
 
-          origin：保持原始帧率。
+          original：保持原始帧率。
         ui_video_gop_optimize_label: "优化GOP: "
         ui_video_gop_optimize_help: |
           是否启用 GOP 优化

@@ -25,8 +25,8 @@ en_US:
     ui_confirm: "Confirm"
     ui_cancel: "Cancel"
     ui_ok: "OK"
-    ui_timeout_hint: "\n\nAuto-cancel in %{seconds} seconds if no action."
-    ui_timeout_hint_close: "\n\nAuto-close this window in %{seconds} seconds if no action."
+    ui_timeout_hint: "\nAuto-cancel in %{seconds} seconds if no action."
+    ui_timeout_hint_close: "\nAuto-close this window in %{seconds} seconds if no action."
 
   media_ffprobe_inspect:
     ui_video_stream_info:
@@ -108,13 +108,13 @@ en_US:
         ui_video_resolution_help: |
           Sets output resolution
 
-          origin: keep original resolution.
+          original: keep original resolution.
           others: scale to fit while preserving aspect ratio, pad remaining space with black pixels.
         ui_video_fps_label: "FPS: "
         ui_video_fps_help: |
           Sets output frame rate
 
-          origin: keep original FPS.
+          original: keep original FPS.
         ui_video_gop_optimize_label: "Optimize GOP: "
         ui_video_gop_optimize_help: |
           Toggle GOP optimization
