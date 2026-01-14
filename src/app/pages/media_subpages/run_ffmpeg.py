@@ -448,8 +448,8 @@ class RunFFmpegPage(BaseOutputPage):
 
             # 手动触发完整输出路径更新
             result = self.update_output_full_path_display()
-            #if not result.is_ok:
-                #return
+            if not result.is_ok:
+                return
 
             raw_data: dict = {
                 # common
@@ -478,7 +478,16 @@ class RunFFmpegPage(BaseOutputPage):
             task_name = self.taskname_line_edit.text().strip()
             result = MediaPipeline.submit_task(raw_data, task_name)
             if not result.is_ok:
-                error_msg = i18n.t("app.media_subpages.run_ffmpeg.warning_task_submit_failed", error=print_op_result(result, only_parse_last=True))
+                reason = print_op_result(result) # 保底
+                # 尝试直接访问普通 pydantic 错误
+                try:
+                    root_result = result.inner.inner
+                    if "validate_pydantic()" in root_result.source.lower() and \
+                       "pydantic validation failed" in root_result.error_msg.lower():
+                        reason = root_result.error_raw
+                except Exception:
+                    pass
+                error_msg = i18n.t("app.media_subpages.run_ffmpeg.warning_task_submit_failed", error = reason)
                 show_notify_dialog("app.media_subpages.run_ffmpeg", error_msg)
                 return
             
