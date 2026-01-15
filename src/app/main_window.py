@@ -1,20 +1,19 @@
-"""
-Main Window - 主窗口框架
-"""
+"""Main Window - 主窗口框架"""
 
-import sys
-from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QWindow
 
 from .widgets import SquareWidget
 from .widgets import SegmentedNavBar
-from .pages.media_tools_page import MediaToolsPage
-from .pages.tasks_page import TasksPage
 from .ui_style import UI_Style
 
+from .pages.majdata_page import MajdataPage
+from .pages.media_tools_page import MediaToolsPage
+from .pages.tasks_page import TasksPage
+
 import i18n
-from src.services import SettingsManage, PathManage
+from src.services import SettingsManage, PathManage, MajdataSession
 
 
 class LeftPanel(QWidget):
@@ -25,6 +24,8 @@ class LeftPanel(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.majdata_placeholder = None
+        self.video_placeholder = None
         self.setup_ui()
 
 
@@ -34,11 +35,11 @@ class LeftPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(UI_Style.widget_spacing)
         
-        # 上方：MajdataView 占位符
+        # 上方：MajdataView
         self.majdata_placeholder = SquareWidget()
         layout.addWidget(self.majdata_placeholder)
         
-        # 下方：VideoPlayer 占位符
+        # 下方：VideoPlayer
         self.video_placeholder = SquareWidget()
         layout.addWidget(self.video_placeholder)
 
@@ -58,7 +59,8 @@ class LeftPanel(QWidget):
 
     def resizeEvent(self, event):
         """
-        根据高度动态调整宽度，以保持内部两个子控件为正方形
+        根据高度动态调整宽度，以保持内部两个子控件为正方形。
+        高度是 qt 自动计算，所以仅调整宽度。
         计算公式：
         Height = 2 * Width + Spacing
         Width = (Height - Spacing) / 2
@@ -67,12 +69,26 @@ class LeftPanel(QWidget):
         # 计算目标宽度
         spacing = UI_Style.widget_spacing
         target_width = (self.height() - spacing) // 2
-
         # 设置宽度
         if target_width > 0 and self.width() != target_width:
             self.setFixedWidth(target_width)
-            
+
         super().resizeEvent(event)
+
+
+    def set_majdata_view_hwnd(self, hwnd: int) -> None:
+
+        layout = self.majdata_placeholder.layout()
+        # 删除旧组件防止重复嵌入
+        # while layout.count():
+        #     item = layout.takeAt(0)
+        #     w = item.widget()
+        #     if w is not None:
+        #         w.setParent(None)
+        #         w.deleteLater()
+        win = QWindow.fromWinId(int(hwnd))
+        container = QWidget.createWindowContainer(win, layout.parentWidget())
+        layout.addWidget(container)
 
 
 
@@ -85,6 +101,7 @@ class RightPanel(QWidget):
     """
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.majdata_page = None # 保存引用，后续要嵌入程序
         self.setup_ui()
 
 
@@ -103,8 +120,9 @@ class RightPanel(QWidget):
         layout.addWidget(self.stack)
 
         # 添加页面
-        # 0: Majdata (Placeholder)
-        self.stack.addWidget(self.create_placeholder("Majdata Page"))
+        # 0: Majdata
+        self.majdata_page = MajdataPage()
+        self.stack.addWidget(self.majdata_page)
         # 1: Auto Convert (Placeholder)
         self.stack.addWidget(self.create_placeholder("Auto Convert Page"))
         # 2: Media Tools
@@ -116,10 +134,10 @@ class RightPanel(QWidget):
 
         # 连接信号
         self.nav_bar.currentChanged.connect(self.stack.setCurrentIndex)
-        
 
 
-
+    def set_majdata_edit_hwnd(self, hwnd: int) -> None:
+        self.majdata_page.set_edit_hwnd(int(hwnd))
 
 
     # 临时的，后续会删掉
@@ -142,6 +160,8 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        self._majdata_session = None
+        self._closing: bool = False
         self.setup_ui()
     
 
@@ -190,3 +210,43 @@ class MainWindow(QMainWindow):
         # 右侧面板
         self.right_panel = RightPanel()
         main_layout.addWidget(self.right_panel)
+
+        # 启动 MajdataSession
+        self._majdata_session = MajdataSession(self)
+        self._majdata_session.ready.connect(self._on_majdata_ready)
+        result = self._majdata_session.start()
+        # if not result.is_ok:
+        #     print(f"--Warning: MajdataSession.start failed: {result.error_msg}")
+
+
+
+    def closeEvent(self, event):
+        # Non-blocking shutdown
+
+        if self._closing:
+            event.accept()
+            return
+
+        self._closing = True
+
+        try:
+            # 开始退出 majdata，后通过信号得知退出完成
+            self._majdata_session.shutdown_finished.connect(lambda: QApplication.instance().quit())
+            self._majdata_session.shutdown()
+        except Exception:
+            QApplication.instance().quit()
+
+        event.ignore() # 此处忽略，不退出，等待 majdata 信号
+
+
+
+    def _on_majdata_ready(self, view_hwnd: int, edit_hwnd: int) -> None:
+        try:
+            self.left_panel.set_majdata_view_hwnd(int(view_hwnd))
+        except Exception as e:
+            print(f"--Warning: Failed to embed MajdataView: {e}")
+
+        try:
+            self.right_panel.set_majdata_edit_hwnd(int(edit_hwnd))
+        except Exception as e:
+            print(f"--Warning: Failed to embed MajdataEdit: {e}")
