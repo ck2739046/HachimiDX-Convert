@@ -24,7 +24,7 @@ class LeftPanel(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.majdata_placeholder = None
+        self.majdataview_placeholder = None
         self.video_placeholder = None
         self.setup_ui()
 
@@ -36,8 +36,8 @@ class LeftPanel(QWidget):
         layout.setSpacing(UI_Style.widget_spacing)
         
         # 上方：MajdataView
-        self.majdata_placeholder = SquareWidget()
-        layout.addWidget(self.majdata_placeholder)
+        self.majdataview_placeholder = SquareWidget()
+        layout.addWidget(self.majdataview_placeholder)
         
         # 下方：VideoPlayer
         self.video_placeholder = SquareWidget()
@@ -78,7 +78,7 @@ class LeftPanel(QWidget):
 
     def set_majdata_view_hwnd(self, hwnd: int) -> None:
 
-        layout = self.majdata_placeholder.layout()
+        layout = self.majdataview_placeholder.layout()
         # 删除旧组件防止重复嵌入
         # while layout.count():
         #     item = layout.takeAt(0)
@@ -87,7 +87,7 @@ class LeftPanel(QWidget):
         #         w.setParent(None)
         #         w.deleteLater()
         win = QWindow.fromWinId(int(hwnd))
-        container = QWidget.createWindowContainer(win, layout.parentWidget())
+        container = QWidget.createWindowContainer(win, self) # parent = self
         layout.addWidget(container)
 
 
