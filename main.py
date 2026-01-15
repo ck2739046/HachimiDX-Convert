@@ -1,12 +1,26 @@
 import sys
-import traceback
 from PyQt6.QtWidgets import QApplication
 from src.core.schemas.op_result import print_op_result
 from src.app import MainWindow
-from src.services import AllServices
+from src.services import AllServices, static_shutdown_majdata
 
 
-def main():
+def build_str(input) -> str:
+    return f"\n{'-' * 25}\n{input}\n{'-' * 25}\n"
+
+
+def exception_handler(exctype, value, traceback):
+    print(build_str("Error caught by main.py:"))
+    # Print the original error
+    sys.__excepthook__(exctype, value, traceback)
+    print(build_str("End of error."))
+
+
+def main() -> int:
+    """程序主入口，返回退出码"""
+
+    # 设置全局异常处理器
+    sys.excepthook = exception_handler
 
     try:
         app = QApplication(sys.argv)
@@ -14,23 +28,19 @@ def main():
 
         result = AllServices.initialize_all()
         if not result.is_ok:
-            print("\n------------------------ \
-                   \nInitialization Error: \
-                   \n------------------------\n")
+            print(build_str("Initialization Error:"))
             print(print_op_result(result))
-            sys.exit(1)
+            print(build_str("End of Initialization Error."))
+            return 1
 
         window = MainWindow()
         window.show()
-        sys.exit(app.exec())
+        return app.exec()
 
-    except Exception:
-        print("\n------------------------ \
-               \nError caught by main.py: \
-               \n------------------------\n")
-        traceback.print_exc()
-        sys.exit(1)
+    finally:
+        # 确保清理外部程序
+        static_shutdown_majdata()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

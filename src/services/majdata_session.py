@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import win32gui
-
+import subprocess
+import psutil
 import time
 from typing import Optional
 
@@ -60,12 +61,14 @@ class MajdataSession(QObject):
         self._shutdown_timer.setInterval(100)
         self._shutdown_timer.timeout.connect(self._poll_majdataedit_exit)
         self._shutdown_started_at: Optional[float] = None
-        self._shutdown_timeout_s: float = 15.0
+        self._shutdown_timeout_s: float = 10.0
 
 
     
 
     def start(self) -> OpResult[None]:
+
+        static_shutdown_majdata()
 
         majdataview_exe = PathManage.MajdataView_EXE_PATH
         majdataedit_exe = PathManage.MajdataEdit_EXE_PATH
@@ -273,3 +276,55 @@ class MajdataSession(QObject):
             self.shutdown_finished.emit()
         except Exception:
             pass
+
+
+
+
+
+
+def _find_pids_by_process_name(target: str) -> Optional[list[int]]:
+    """查根据进程名查找 PID 列表"""
+
+    found_pids = []
+
+    for proc in psutil.process_iter(['pid', 'name']):
+
+        try:
+            name = proc.info['name'].lower()
+            pid = proc.info['pid']
+            if name.startswith(target.lower()) and "-" not in name:
+                found_pids.append(pid)
+
+        except Exception:
+            pass
+
+    return found_pids if found_pids else None
+
+
+
+def _force_kill_process_by_name(target: str) -> None:
+    
+    result = _find_pids_by_process_name(target)
+    if result:
+        print(f"Found {len(result)} '{target}' process(es): {result}, will force kill...")
+        for pid in result:
+            try:
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], 
+                                timeout=5, capture_output=True)
+            except Exception:
+                pass
+        time.sleep(0.5)  # wait a moment
+
+
+
+# static method
+def static_shutdown_majdata() -> None:
+    """
+    查找所有 MajdataView 和 MajdataEdit 窗口并强制关闭
+    """
+
+    # 1) Kill MajdataView first (force)
+    _force_kill_process_by_name("MajdataView")
+
+    # 2) Then kill MajdataEdit (force)
+    _force_kill_process_by_name("MajdataEdit")
