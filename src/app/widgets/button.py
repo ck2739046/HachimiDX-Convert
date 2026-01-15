@@ -88,7 +88,7 @@ class StatedButton(QPushButton):
 
 
 
-def create_button(text: str, isbig: bool = False, width: int = None, height: int = None) -> StatedButton:
+def create_stated_button(text: str, isbig: bool = False, width: int = None) -> StatedButton:
     """
     创建大按钮，带启用/禁用状态切换
 
@@ -96,7 +96,6 @@ def create_button(text: str, isbig: bool = False, width: int = None, height: int
         text (str): 按钮文本
         isbig (bool, optional): 是否为大按钮. 默认值为 False
         width (int, optional): 按钮宽度. 默认值 None
-        height (int, optional): 按钮高度. 动态默认值
         
         大按钮默认高度: 35
         小按钮默认高度: element_height
@@ -104,15 +103,44 @@ def create_button(text: str, isbig: bool = False, width: int = None, height: int
     Returns:
         StatedButton: 按钮实例
 
-    按钮状态:
+    设置按钮状态:
         setEnabled(True): 启用状态，显示为蓝色
         setEnabled(False): 禁用状态，显示为灰色
     """
     
-    if height is None:
-        if isbig:
-            height = 35
-        else:
-            height = UI_Style.element_height
+    if isbig:
+        height = 35
+    else:
+        height = UI_Style.element_height
 
     return StatedButton(text, isbig=isbig, width=width, height=height)
+
+
+
+
+def create_button(text: str, width: int = None) -> QPushButton:
+    """
+    创建普通按钮
+
+    Args:
+        text (str): 按钮文本
+        width (int, 可选): 按钮宽度. 默认 None，根据文本自适应宽度
+
+    Returns:
+        QPushButton: 按钮实例
+    """
+    
+    button = QPushButton(text)
+    button.setFixedHeight(UI_Style.element_height)
+    if width is not None:
+        button.setFixedWidth(width)
+    colors = UI_Style.COLORS
+    button.setStyleSheet(f'''
+        QPushButton {{
+            background-color: {colors['accent']};
+        }}
+        QPushButton:hover {{
+            background-color: {colors['accent_hover']};
+        }}
+    ''')
+    return button

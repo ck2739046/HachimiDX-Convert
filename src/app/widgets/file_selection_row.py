@@ -5,6 +5,7 @@ from PyQt6.QtGui import QCursor
 from ..ui_style import UI_Style
 from .help_icon import create_help_icon
 from .path_display import create_path_display
+from .button import create_button
 
 def create_file_selection_row(button_text: str, help_text: str = None, on_button_clicked_handler=None):
     """
@@ -21,16 +22,7 @@ def create_file_selection_row(button_text: str, help_text: str = None, on_button
     colors = UI_Style.COLORS
 
     # 创建文件选择按钮
-    button = QPushButton(button_text)
-    button.setStyleSheet(f'''
-        QPushButton {{
-            background-color: {colors['accent']};
-        }}
-        QPushButton:hover {{
-            background-color: {colors['accent_hover']};
-        }}
-    ''')
-    button.setFixedSize(120, UI_Style.element_height)
+    button = create_button(button_text, 120)
 
     # 创建可选的帮助图标
     help_label = None

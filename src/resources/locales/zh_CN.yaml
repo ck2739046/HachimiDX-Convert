@@ -196,3 +196,13 @@ zh_CN:
           ui_no_audio_stream_info: "音频流:  未检测到音频流"
           ui_video_stream_info_prefix: "视频流:  "
           ui_audio_stream_info_prefix: "音频流:  "
+
+
+
+
+    # ---- majdata 页面 ----
+
+    majdata_page:
+      ui_play_video_help: |
+        勾选：视频会在左上 MajdataView 和左下视频播放器中都播放。
+        不勾选：视频只在左下视频播放器中播放。

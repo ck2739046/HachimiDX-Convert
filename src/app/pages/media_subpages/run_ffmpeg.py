@@ -164,7 +164,7 @@ class RunFFmpegPage(BaseOutputPage):
         # 第七行：submit按钮 + taskname输入框
         self.taskname_line_edit = create_line_edit(
             length=200, placeholder=i18n.t("app.media_subpages.run_ffmpeg.ui_taskname_placeholder"))
-        self.submit_button = create_button(i18n.t("app.media_subpages.run_ffmpeg.ui_submit_button"), isbig=True)
+        self.submit_button = create_stated_button(i18n.t("app.media_subpages.run_ffmpeg.ui_submit_button"), isbig=True)
         self.content_layout.addSpacing(UI_Style.widget_spacing)
         self.create_row(self.submit_button, self.taskname_line_edit, add_stretch=True)
 

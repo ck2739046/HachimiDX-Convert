@@ -196,3 +196,13 @@ en_US:
           ui_no_audio_stream_info: "Audio Stream:  No audio stream detected"
           ui_video_stream_info_prefix: "Video Stream:  "
           ui_audio_stream_info_prefix: "Audio Stream:  "
+
+
+
+
+    # ---- majdata page ----
+
+    majdata_page:
+      ui_play_video_help: |
+        checked: The video will play in both the top-left MajdataView and the bottom-left video player.
+        unchecked: The video will only play in the bottom-left video player.

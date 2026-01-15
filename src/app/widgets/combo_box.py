@@ -1,8 +1,7 @@
 import os
 from PyQt6.QtWidgets import QComboBox, QToolTip
-from PyQt6.QtCore import Qt, QPoint, QEvent
+from PyQt6.QtCore import QPoint, QEvent
 from ..ui_style import UI_Style
-from src.services import PathManage
 
 class ToolTipComboBox(QComboBox):
     """QComboBox with immediate hover tooltip for dropdown items."""
@@ -124,21 +123,22 @@ class ToolTipComboBox(QComboBox):
 class FolderComboBox(ToolTipComboBox):
     """支持自动刷新子目录列表并恢复上次选择的下拉框"""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, main_output_dir, option_placeholder, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.main_output_dir = PathManage.get_main_output_dir()
+        self.main_output_dir = main_output_dir
+        self.option_placeholder = option_placeholder
 
     def mousePressEvent(self, event):
         current_text = self.currentText() # Save current text before clear
         self.clear()
-        self.addItem("---")  # 添加占位符
+        self.addItem(self.option_placeholder)  # 添加占位符
         if self.main_output_dir and os.path.exists(self.main_output_dir):
             subdirs = [d for d in os.listdir(self.main_output_dir) 
                       if os.path.isdir(os.path.join(self.main_output_dir, d))]
             self.addItems(subdirs)
 
         # Restore previous selection if it exists
-        if current_text and current_text != "---":
+        if current_text and current_text != self.option_placeholder:
             index = self.findText(current_text)
             if index >= 0:
                 self.setCurrentIndex(index)
@@ -180,4 +180,24 @@ def create_combo_box(length, items=None, default_index=0, show_tooltip=False):
         if 0 <= default_index < len(str_items):
             combo.setCurrentIndex(default_index)
     
+    return combo
+
+
+
+def create_folder_combo_box(main_output_dir, option_placeholder, length):
+    """
+    Args:
+        main_output_dir: str，主输出目录路径
+        option_placeholder: str，占位符文本
+        length: int，宽度（像素）
+
+    Return:
+        FolderComboBox: 配置好的文件夹下拉选择框
+    """
+
+    combo = FolderComboBox(main_output_dir, option_placeholder)
+    combo.setEditable(True)
+    combo.setStyleSheet(f"background-color: {UI_Style.COLORS['grey']};")
+    combo.setFixedSize(length, UI_Style.element_height)
+    combo.addItem(option_placeholder)  # 添加占位符
     return combo
