@@ -116,16 +116,46 @@ class MajdataSession(QObject):
 
 
     def _on_majdataview_stdout_ready(self) -> None:
+
+        # 过滤输出
+        filters = (
+            # 启动的 unity memory config 日志
+            '[unitymemory] configuration parameters',
+            '"memorysetup-'
+        )
+
         if self._majdataview_proc:
             data = self._majdataview_proc.readAllStandardOutput().data().decode('utf-8', errors='replace')
-            if data:
-                print(f"[MajdataView STDOUT] {data.rstrip()}")
+            if not data: return
+            new_lines = []
+            for line in data.splitlines():
+                if line.lower().strip().startswith(filters):
+                    continue
+                # 每一行都加上前缀
+                new_lines.append("[MajdataView STDOUT] " + line.rstrip())
+            if new_lines:
+                print("\n".join(new_lines))
+
 
     def _on_majdataedit_stdout_ready(self) -> None:
+
+        # 过滤输出
+        filters = (
+            # iniwave 打印
+            'initwave'
+        )
+        
         if self._majdataedit_proc:
             data = self._majdataedit_proc.readAllStandardOutput().data().decode('utf-8', errors='replace')
-            if data:
-                print(f"[MajdataEdit STDOUT] {data.rstrip()}")
+            if not data: return
+            new_lines = []
+            for line in data.splitlines():
+                if line.lower().strip().startswith(filters):
+                    continue
+                # 每一行都加上前缀
+                new_lines.append("[MajdataEdit STDOUT] " + line.rstrip())
+            if new_lines:
+                print("\n".join(new_lines))
 
 
 
