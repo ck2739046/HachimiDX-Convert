@@ -3,7 +3,7 @@ from .all_services import AllServices
 # from .i18n_manage import I18nManage
 from .path_manage import PathManage
 from .settings_manage import SettingsManage
-from .majdata_session import MajdataSession, static_shutdown_majdata
+from .majdata_session import MajdataSession, static_shutdown_majdata, pause_majdata
 from .majdata_sync_server import VideoSyncServer
 
 from .pipeline import MediaPipeline
@@ -17,7 +17,7 @@ __all__ = [
     # "I18nManage",
     "PathManage",
     "SettingsManage",
-    "MajdataSession", "static_shutdown_majdata",
+    "MajdataSession", "static_shutdown_majdata", "pause_majdata",
     "VideoSyncServer",
 
     "MediaPipeline",

@@ -8,7 +8,7 @@ from PyQt6.QtCore import QUrl, pyqtSlot
 from PyQt6.QtGui import QWindow
 from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 
-from src.services import PathManage
+from src.services import PathManage, pause_majdata
 from ..ui_style import UI_Style
 from ..widgets import *
 import i18n
@@ -254,12 +254,8 @@ class MajdataPage(QWidget):
             self._media_player.stop()
             self._media_player.setSource(QUrl())
 
-        # 2. Create a control txt to let majdataview reset
-        control_text = "folder: ---\nmaidata: ---\ntrack: ---"
-        try:
-            self._control_txt.write_text(control_text, encoding="utf-8")
-        except Exception as e:
-            print(f"Error writing to MajdataEdit control file: {e}")
+        # 2. Pause majdata
+        pause_majdata()
 
         # 3. Clear comboboxes
         self._maidata_combo.clear()

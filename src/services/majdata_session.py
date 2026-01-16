@@ -99,10 +99,10 @@ class MajdataSession(QObject):
         self._majdataedit_proc.readyReadStandardOutput.connect(self._on_majdataedit_stdout_ready)
 
         # majdataedit 在启动时会尝试启动 majdataview
-        # 为了避免启动 2 个 majdataview
-        # 先启动 majdataview，再延迟 1s 启动 majdataedit
+        # 为了避免启动多个 majdataview
+        # 先启动 majdataview，再延迟 0.5s 启动 majdataedit
         self._majdataview_proc.start()
-        QTimer.singleShot(1000, self._majdataedit_proc.start)
+        QTimer.singleShot(500, self._majdataedit_proc.start)
 
         self._majdataview_hwnd = None
         self._majdataedit_hwnd = None
@@ -216,16 +216,20 @@ class MajdataSession(QObject):
         # Stop polling to avoid late emits during teardown.
         self._poll_timer.stop()
 
+        # 1) 先暂停 majdata
+        pause_majdata()
+        time.sleep(0.6) # 因为 watcher 有 500ms 的间隔，所以这里多等一点
+
         # majdataedit 退出时会弹窗提示是否要关闭 majdataview
         # 为了避免弹窗，先退出 majdataview 再退出 majdataedit
 
-        # 1) Kill MajdataView first (force).
+        # 2) Kill MajdataView first (force).
         proc = self._majdataview_proc
         if proc:
             proc.kill()
             proc.waitForFinished(500)
 
-        # 2) Request MajdataEdit exit via control file.
+        # 3) Request MajdataEdit exit via control file.
         try:
             if self._majdataedit_proc:
                 control_txt = PathManage.MajdataEdit_CONTROL_TXT_PATH
@@ -233,7 +237,7 @@ class MajdataSession(QObject):
         except Exception:
             pass
 
-        # 3) 启动非阻塞轮询 MajdataEdit 退出，如果超时会强制退出
+        # 4) 启动非阻塞轮询 MajdataEdit 退出，如果超时会强制退出
         self._shutdown_started_at = time.time()
         self._shutdown_timer.start()
 
@@ -329,3 +333,15 @@ def static_shutdown_majdata() -> None:
 
     # 2) Then kill MajdataEdit (force)
     _force_kill_process_by_name("MajdataEdit")
+
+
+
+
+# static method
+def pause_majdata() -> None:
+    try:
+        text = "folder: ---\nmaidata: ---\ntrack: ---"
+        control_txt = PathManage.MajdataEdit_CONTROL_TXT_PATH
+        control_txt.write_text(text, encoding="utf-8")
+    except Exception as e:
+        print(f"Error writing to MajdataEdit control file: {e}")
