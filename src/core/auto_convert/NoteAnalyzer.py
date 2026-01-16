@@ -1,0 +1,2759 @@
+from collections import defaultdict
+import os
+import cv2
+import numpy as np
+import math
+import functools
+import traceback
+from math import gcd
+import NoteDetector
+
+
+
+
+error_trace = []
+
+def log_error(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            error_trace.append(f'{func.__name__}')
+            raise
+    return wrapper
+
+
+
+class NoteAnalyzer:
+    def __init__(self):
+
+        # 速度常数
+        self.note_DefaultMsec = 0
+        self.note_OptionNotespeed = 0
+        self.touch_DefaultMsec = 0
+        self.touch_OptionNotespeed = 0
+
+        # 常用变量
+        self.video_size = 0
+        self.fps = 0
+        self.screen_cx = 0
+        self.screen_cy = 0
+        self.judgeline_start = 0
+        self.judgeline_end = 0
+        self.note_travel_dist = 0
+        self.touch_travel_dist = 0
+        self.touch_hold_travel_dist = 0
+        self.touch_areas = {}
+        self.track_data = ()
+        self.noteDetector = None
+        self.video_path = ""
+
+
+
+    # debug
+    @log_error
+    def preprocess_tap_data(self):
+        '''
+        收集所有tap音符的数据
+        过滤轨迹过短的音符
+        计算音符方向
+        计算音符到圆心的距离
+        过滤刚离开起点的和马上要到终点的音符数据 (10%-90%距离)
+
+        返回格式:
+        dict{
+            key: (track_id, class_id, position),
+            value: note path list
+            [
+                {
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'dist': dist_to_center
+                },
+                ...
+            ]
+        }
+        '''
+
+        tap_data = {}
+
+        end_tolerance = self.note_travel_dist * 0.1
+        start_tolerance = self.note_travel_dist * 0.1
+        valid_judgeline_start = self.judgeline_start + start_tolerance
+        valid_judgeline_end = self.judgeline_end - end_tolerance
+
+        # read track data
+        for track_id, track_data in self.track_data.items():
+
+            if 'path' not in track_data: continue
+            track_path = track_data['path']
+            if len(track_path) < 10: continue
+            if 'class_id' not in track_data: continue
+            class_id = round(track_data['class_id'])
+            if self.noteDetector.get_main_class_id(class_id) != 1:
+                continue # 1 = tap，忽视非tap音符
+
+
+            # read track path
+            valid_track_path = []
+            for track_box in track_path:
+
+                frame_num = track_box['frame']
+                x1 = track_box['x1'] # 左上角
+                y1 = track_box['y1'] # 左上角
+                x2 = track_box['x3'] # 右下角
+                y2 = track_box['y3'] # 右下角
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
+
+                # 计算距离圆心的距离
+                dist_to_center = np.sqrt(((cx - self.screen_cx)**2 + (cy - self.screen_cy)**2))
+                # 计算方向(1-8)
+                position = self.calculate_oct_position(self.screen_cx, self.screen_cy, cx, cy)
+                # 过滤10%-90%距离的数据
+                if dist_to_center < valid_judgeline_start:
+                    continue # 掐头
+                elif dist_to_center > valid_judgeline_end:
+                    continue # 去尾
+                # 添加轨迹点
+                valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist_to_center))
+
+
+            # 检查轨迹存在
+            if not valid_track_path:
+                print(f"preprocess_tap_data: no valid_track_path for track_id {track_id}")
+                continue
+            valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
+            
+            # 检验长度
+            if len(valid_track_path) < 6:
+                print(f"preprocess_tap_data: valid_track_path too short for track_id {track_id}, length: {len(valid_track_path)}")
+                continue
+            # 检验方位一致
+            positions = [x[5] for x in valid_track_path]
+            if len(set(positions)) != 1:
+                print(f"preprocess_tap_data: positions not consistent for track_id {track_id}")
+                continue
+            # 检查dist是否递增 (允许微小回退5%总距离)
+            dists = [x[6] for x in valid_track_path]
+            if not all(later - earlier > - 0.5 * start_tolerance for earlier, later in zip(dists, dists[1:])):
+                print(f"preprocess_tap_data: dist not increasing for track_id {track_id}")
+                continue
+            # 检查dist是否在头尾 (20%-80%)
+            if dists[0] > valid_judgeline_start + 2*start_tolerance or dists[-1] < valid_judgeline_end - 2*end_tolerance:
+                print(f"preprocess_tap_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}")
+                continue
+            # 添加到tap_data
+            path = []
+            for frame_num, x1, y1, x2, y2, position, dist_to_center in valid_track_path:
+                path.append({
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'dist': dist_to_center
+                })
+            tap_data[(track_id, class_id, positions[0])] = path
+            # self.draw_path_on_frame(track_id, path[0]['frame']+3, path)
+
+        if not tap_data:
+            print("preprocess_tap_data: no tap data")
+            return {}
+
+        return tap_data
+    
+
+
+    @log_error
+    def estimate_note_DefaultMsec(self, tap_data):
+        """
+        音符从起点移动到判定线需要耗时 DefaultMsec (ms)
+        采样4个点（0%、25%、50%、100%）计算三个阶段性速度
+        """
+
+        note_speeds = []
+
+        for path in tap_data.values():
+
+            # 获取4个采样点的索引
+            path_length = len(path)
+            indices = [
+                0,  # 0%
+                path_length // 4,  # 25%
+                path_length // 2,  # 50%
+                path_length - 1  # 100%
+            ]
+            
+            # 计算三个阶段性速度
+            for i in range(3):
+                start_idx = indices[i]
+                end_idx = indices[i + 1]
+                
+                frame_num_start = path[start_idx]['frame']
+                frame_num_end = path[end_idx]['frame']
+                dist_start = path[start_idx]['dist']
+                dist_end = path[end_idx]['dist']
+
+                frame_num_diff = frame_num_end - frame_num_start
+                total_dist = dist_end - dist_start
+                
+                if frame_num_diff > 0: # 避免除零错误
+                    note_speed = total_dist / frame_num_diff  # pixel/frame
+                    note_speeds.append(note_speed)
+
+        length = len(note_speeds)
+        mean = np.mean(note_speeds)
+        min = np.min(note_speeds)
+        max = np.max(note_speeds)
+        median = np.median(note_speeds)
+        std_dev = np.std(note_speeds)
+        print(f"speed of {length} tap notes: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
+
+        note_DefaultMsec, note_OptionNotespeed = self.get_note_DefaultMsec(median)
+        return note_DefaultMsec, note_OptionNotespeed
+    
+
+
+    @log_error
+    def analyze_tap_reach_time(self, tap_data):
+
+        tap_info = {}
+        for (track_id, class_id, direction), path in tap_data.items():
+            # 平均所有轨迹的到达时间
+            times = []
+            for point in path:
+                frame_num = point['frame']
+                dist = point['dist']
+                reach_end_Msec = self.predict_note_reach_end_time(dist, frame_num)
+                times.append(reach_end_Msec)
+            mean = np.mean(times)
+            tap_info[(track_id, class_id, direction)] = mean
+
+            
+            # min = np.min(times)
+            # max = np.max(times)
+            # median = np.median(times)
+            # std_dev = np.std(times)
+            # if max - min > 4:
+            #     print(f"Tap ID {track_id} Direction {direction}:")
+            #     print(f"  Mean {mean:.3f}, Min {min:.3f}, Max {max:.3f}, Median {median:.3f}, Std Dev {std_dev:.3f}")
+
+
+        return tap_info
+
+
+
+    @log_error
+    def predict_note_reach_end_time(self, cur_dist, cur_frame):
+        '''
+        正向:
+        [dist_offset] = -1/120 * 总距离 * (OptionNotespeed/150f -1)
+        [time_offset] = (OptionNotespeed/150f -1) * (-0.5 / (OptionNotespeed/150f -1)) * 1.6 * 1000 / 60
+        高速的dist和time偏移都是负值 (实测后取消应用 time_offset)
+
+        时间进度 = (current_Msec - leave_start_Msec + time_offset) / [DefaultMsec]
+        travelled_dist = 时间进度 * [total_dist]
+        current_dist = [startPos] + travelled_dist + [dist_offset]
+
+        逆向:
+        已知 current_dist, [dist_offset], [startPos]
+        -> travelled_dist = current_dist - startPos - dist_offset
+        已知 travelled_dist, [total_dist]
+        -> 时间进度 = travelled_dist / total_dist
+        已知 时间进度, [DefaultMsec], current_Msec, [time_offset]
+        -> leave_start_Msec = current_Msec - 时间进度 * DefaultMsec + time_offset
+        -> reach_end_Msec = leave_start_Msec + DefaultMsec
+        '''
+
+        cur_time = cur_frame / self.fps * 1000 # 转换为毫秒
+        total_dist = self.note_travel_dist
+        dist_offset = -1/120 * total_dist * (self.note_OptionNotespeed / 150 - 1)
+        #time_offset = (self.note_OptionNotespeed / 150 - 1) * (-0.5 / (self.note_OptionNotespeed / 150 - 1)) * 1.6 * 1000 / 60
+        start_pos = self.judgeline_start
+
+        travelled_dist = cur_dist - start_pos - dist_offset
+        time_progress = travelled_dist / total_dist
+        leave_start_Msec = cur_time - time_progress * self.note_DefaultMsec # + time_offset
+        reach_end_Msec = leave_start_Msec + self.note_DefaultMsec
+
+        return reach_end_Msec
+
+
+
+    @log_error
+    def get_note_DefaultMsec(self, detected_note_speed):
+
+        def get_standard_note_DefaultMsec(ui_speed):
+            # 游戏源码实现
+            OptionNotespeed = round(ui_speed * 100 + 100) # 6.25 = 725
+            NoteSpeedForBeat = 1000 / (OptionNotespeed / 60)
+            DefaultMsec = NoteSpeedForBeat * 4
+            return DefaultMsec, OptionNotespeed
+
+        total_dist = self.note_travel_dist
+        detected_note_speed = detected_note_speed * self.fps / 1000 # pixel/frame to pixel/ms
+        note_lifetime = total_dist / detected_note_speed # 走完全程需要多少时间
+
+        # 查找最接近的 DefaultMsec
+        cloest_DefaultMsec = 0
+        cloest_i = 0
+        cloest_OptionNotespeed = 0
+        i = 1
+        while i <= 10:
+
+            DefaultMsec, OptionNotespeed = get_standard_note_DefaultMsec(i)
+
+            if abs(DefaultMsec - note_lifetime) < abs(cloest_DefaultMsec - note_lifetime):
+                cloest_DefaultMsec = DefaultMsec
+                cloest_i = i
+                cloest_OptionNotespeed = OptionNotespeed
+            i += 0.25
+
+        print(f"estimate note speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {note_lifetime:.3f}ms)")
+
+        return cloest_DefaultMsec, cloest_OptionNotespeed
+    
+
+
+    @log_error
+    def draw_path_on_frame(self, track_id, frame_num, path):
+
+        cap = cv2.VideoCapture(self.video_path)  
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+        ret, frame = cap.read()
+        if not ret:
+            print(f"draw_path_on_frame: failed to read frame {frame_num}")
+            cap.release()
+            return
+        
+        cv2.putText(frame, f"track_id: {track_id}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        # 绘制两个圈
+        cv2.circle(frame, (round(self.screen_cx), round(self.screen_cy)), round(self.judgeline_end), (0, 255, 0), 2)
+        cv2.circle(frame, (round(self.screen_cx), round(self.screen_cy)), round(self.judgeline_start), (255, 0, 0), 2)
+
+        for point in path:
+            frame_num = point['frame']
+            cx = (point['x1'] + point['x2']) // 2
+            cy = (point['y1'] + point['y2']) // 2
+            cv2.circle(frame, (round(cx), round(cy)), 3, (0, 0, 255), -1)
+
+        # Resize and show frame
+        resized_frame = cv2.resize(frame, (900, 900), interpolation=cv2.INTER_AREA)
+        window_name = f'Tap ID: {track_id}'
+        cv2.namedWindow(window_name)
+        cv2.moveWindow(window_name, 500, 80)
+        cv2.imshow(window_name, resized_frame)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        cap.release()
+
+
+
+    @log_error
+    def calculate_oct_position(self, circle_center_x, circle_center_y, note_x, note_y):
+        x_diff = note_x - circle_center_x
+        y_diff = note_y - circle_center_y
+        if x_diff >= 0 and y_diff <= 0:
+            # 1, 2
+            if abs(x_diff) < abs(y_diff):
+                return 1
+            else:
+                return 2
+        elif x_diff >= 0 and y_diff >= 0:
+            # 3, 4
+            if abs(x_diff) > abs(y_diff):
+                return 3
+            else:
+                return 4
+        elif x_diff <= 0 and y_diff >= 0:
+            # 5, 6
+            if abs(x_diff) < abs(y_diff):
+                return 5
+            else:
+                return 6
+        elif x_diff <= 0 and y_diff <= 0:
+            # 7, 8
+            if abs(x_diff) > abs(y_diff):
+                return 7
+            else:
+                return 8
+                
+
+
+
+
+
+
+
+
+    # debug
+    @log_error
+    def preprocess_touch_data(self):
+        '''
+        收集所有touch音符的数据
+        过滤轨迹过短的音符
+        计算音符方位
+        计算音符的三角到中心的距离
+        过滤刚离开起点的和马上要到终点的音符数据 (10%-90%距离)
+
+        返回格式:
+        dict{
+            key: (track_id, class_id, position),
+            value: note path list
+            [
+                {
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'dist': dist_to_center
+                },
+                ...
+            ]
+        }
+        '''
+
+        touch_data = {}
+
+        end_tolerance = self.touch_travel_dist * 0.1
+        start_tolerance = self.touch_travel_dist * 0.1
+        valid_dist_end = 0 + end_tolerance
+        valid_dist_start = self.touch_travel_dist - start_tolerance
+        outer_size = 54 * self.video_size / 1080 # 1080p下，外部尺寸为54
+
+        # read track data
+        for track_id, track_data in self.track_data.items():
+
+            if 'path' not in track_data: continue
+            track_path = track_data['path']
+            if len(track_path) < 10: continue
+            class_id = round(track_data['class_id'])
+            if self.noteDetector.get_main_class_id(class_id) != 3:
+                continue # 3 = touch，忽视非touch音符
+
+            # read track path
+            valid_track_path = []
+            for track_box in track_path:
+
+                frame_num = track_box['frame']
+                x1 = track_box['x1'] # 左上角
+                y1 = track_box['y1'] # 左上角
+                x2 = track_box['x3'] # 右下角
+                y2 = track_box['y3'] # 右下角
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
+
+                # 计算三角到中心的距离
+                # 根据label_notes可知，touch音符的整体尺寸=(dist+54)x2，1080p下
+                avg_touch_size = ((x2 - x1) + (y2 - y1)) / 2
+                dist = avg_touch_size / 2 - outer_size
+                # 计算方位
+                position = self.calculate_all_position(cx, cy)
+                # 过滤前后两端的数据
+                if dist > valid_dist_start:
+                    continue # 掐头
+                elif dist < valid_dist_end:
+                    continue # 去尾
+                # 添加轨迹点
+                valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist))
+
+
+            # 检查轨迹存在
+            if not valid_track_path:
+                print(f"preprocess_touch_data: no valid_track_path for track_id {track_id}")
+                continue
+            valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
+            # 检验长度
+            if len(valid_track_path) < 6:
+                print(f"preprocess_touch_data: path too short for track_id {track_id}, length: {len(valid_track_path)}")
+                continue
+            # 检验方位一致
+            positions = [x[5] for x in valid_track_path]
+            if len(set(positions)) != 1:
+                print(f"preprocess_touch_data: positions not consistent for track_id {track_id}")
+                continue
+            # 添加到touch_data
+            path = []
+            for frame_num, x1, y1, x2, y2, position, dist in valid_track_path:
+                path.append({
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'dist': dist
+                })
+            touch_data[(track_id, class_id, positions[0])] = path
+
+
+        if not touch_data:
+            print("preprocess_touch_data: no touch data")
+            return {}
+        
+        return touch_data
+
+
+
+    # @log_error
+    # def detect_precise_touch(self, i, roi, thresh_roi, circle_info, frame_num, track_id):
+
+    #     # 使用基于轮廓识别的坐标和dist精确数据
+    #     # threshhold: regular 150, each 185
+
+    #     circle_center_x, circle_center_y, circle_radius = circle_info
+    #     touch_radius_min = circle_radius * 0.035
+    #     touch_radius_max = circle_radius * 0.055
+    #     center_dot_min = circle_radius * 0.02
+    #     center_dot_max = circle_radius * 0.04
+    #     None_result = (None, None, None, None, None, None, None)
+
+    #     # 寻找中心点
+    #     note_cx = 0
+    #     note_cy = 0
+    #     roi_cx = (roi.shape[1] - 1) / 2
+    #     roi_cy = (roi.shape[0] - 1) / 2
+    #     gray_dot_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    #     _, thresh_dot_roi = cv2.threshold(gray_dot_roi, 160, 255, cv2.THRESH_BINARY)
+    #     # 轮廓识别
+    #     contours, _ = cv2.findContours(thresh_dot_roi, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    #     if not contours: return None_result
+    #     for contour in contours:
+    #         (x, y), radius = cv2.minEnclosingCircle(contour)         
+    #         # 尺寸合适 
+    #         if radius < center_dot_min or radius > center_dot_max: continue
+    #         # 验证轮廓圆形度 (0.8)
+    #         area = cv2.contourArea(contour)
+    #         circle_area = 3.14 * radius * radius + 1e-6 # 避免除0错误
+    #         circularity = area / circle_area
+    #         if circularity < 0.8: continue
+    #         # 验证是否在中心附近
+    #         if abs(x - roi_cx) > center_dot_max or abs(y - roi_cy) > center_dot_max: continue
+    #         # 视为合法结果
+    #         note_cx = x
+    #         note_cy = y
+
+    #     if note_cx == 0 or note_cy == 0:
+    #         print(f"detect_precise_touch: [track_id {track_id}] no valid center point at frame {frame_num}")
+    #         return None_result
+
+
+    #     valid_points = {}
+    #     # 轮廓识别
+    #     contours, _ = cv2.findContours(thresh_roi, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    #     if not contours: return None_result
+    #     for contour in contours:
+
+    #         # 尺寸合适
+    #         (x, y), radius = cv2.minEnclosingCircle(contour)          
+    #         if radius < touch_radius_min or radius > touch_radius_max:
+    #             continue
+
+    #         # 轮廓是三角形
+    #         epsilon = 0.04 * cv2.arcLength(contour, True) # 逼近精度，值越小，越接近原始轮廓。
+    #         approx = cv2.approxPolyDP(contour, epsilon, True) # 近似多边形
+    #         if len(approx) != 3: continue
+
+    #         # 轮廓内部是白色
+    #         # 创建掩码
+    #         mask = np.zeros(thresh_roi.shape, dtype=np.uint8)
+    #         cv2.fillPoly(mask, [contour], 255)
+    #         # 轮廓内的像素
+    #         contour_pixels = thresh_roi[mask == 255]
+    #         # 计算白色像素比例
+    #         white_pixels = np.sum(contour_pixels == 255)
+    #         total_pixels = len(contour_pixels)
+    #         white_ratio = white_pixels / total_pixels
+    #         if white_ratio > 0.5: continue
+            
+    #         # 方向正确
+    #         # 获取包围圆的上下左右四个点
+    #         up = (x, y - radius)
+    #         left = (x - radius, y)
+    #         down = (x, y + radius)
+    #         right = (x + radius, y)
+    #         box_points = [up, left, down, right]
+    #         # 计算轮廓的几何中心（centroid）
+    #         M = cv2.moments(contour)
+    #         cx = M["m10"] / M["m00"]
+    #         cy = M["m01"] / M["m00"]
+    #         # 计算三角形方向 (取离几何中心最近的点)
+    #         distances = [np.linalg.norm(np.array((cx, cy)) - np.array(point)) for point in box_points]
+    #         closest_index = np.argmin(distances)
+    #         orientation = ["up", "left", "down", "right"][closest_index]
+    #         closest_box_point = box_points[closest_index]
+    #         # 排除非法方向
+    #         if orientation == "up":
+    #             if note_cy - cy > 0: continue
+    #         elif orientation == "left":
+    #             if note_cx - cx > 0: continue
+    #         elif orientation == "down":
+    #             if note_cy - cy < 0: continue
+    #         elif orientation == "right":
+    #             if note_cx - cx < 0: continue
+    #         # 计算cloest_box_point到音符中心的距离
+    #         dist = np.sqrt(((closest_box_point[0] - note_cx) ** 2 + (closest_box_point[1] - note_cy) ** 2))
+    #         # 保存结果 
+    #         if orientation not in valid_points.keys():
+    #             valid_points[orientation] = (radius, dist, closest_box_point, contour, round(x), round(y))
+    #         else:
+    #             # 如果同方向已存在，取半径较小的
+    #             existing_radius = valid_points[orientation][0]
+    #             if radius < existing_radius:
+    #                 valid_points[orientation] = (radius, dist)
+
+
+    #     # 计算精准的尺寸
+    #     dists = [value[1] for value in valid_points.values()]
+    #     if len(dists) <= 1:
+    #         print(f"detect_precise_touch: [track_id {track_id}] not enough valid points at frame {frame_num}")
+
+    #         # show frame
+    #         thresh_roi_bgr = cv2.cvtColor(thresh_roi, cv2.COLOR_GRAY2BGR)
+    #         combined_view = np.hstack((roi, thresh_roi_bgr))
+    #         window_name = f'ID{track_id}-{frame_num}-{i}'
+    #         cv2.namedWindow(window_name)
+    #         cv2.moveWindow(window_name, 500, 500)
+    #         time.sleep(0.005)
+    #         cv2.imshow(window_name, combined_view)
+    #         cv2.waitKey(0)
+    #         cv2.destroyAllWindows()
+
+    #         return None_result
+        
+
+    #     # 转换为外框尺寸 ( offset = 0.08 * radius )
+    #     avg_dist = np.mean(dists)
+    #     touch_outer = circle_radius * 0.08
+    #     precise_x1 = note_cx - avg_dist - touch_outer
+    #     precise_y1 = note_cy - avg_dist - touch_outer
+    #     precise_x2 = note_cx + avg_dist + touch_outer
+    #     precise_y2 = note_cy + avg_dist + touch_outer
+
+
+    #     # cv2.rectangle(roi, (round(precise_x1), round(precise_y1)), (round(precise_x2), round(precise_y2)), (0, 255, 0), 2)
+    #     # cv2.circle(roi, (round(note_cx), round(note_cy)), 3, (255, 0, 0), 2)
+    #     # # draw contour
+    #     # for radius, dist, closest_box_point, contour, x, y in valid_points.values():
+    #     #     cv2.drawContours(roi, [contour], 0, (0, 255, 0), 2)
+    #     #     cv2.circle(roi, (round(closest_box_point[0]), round(closest_box_point[1])), 2, (0, 0, 255), 2)
+    #     #     cv2.putText(roi, f'{round(radius)}', (round(x), round(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 1)
+    #     # # show window
+    #     # thresh_roi_bgr = cv2.cvtColor(thresh_roi, cv2.COLOR_GRAY2BGR)
+    #     # combined_view = np.hstack((roi, thresh_roi_bgr))
+    #     # window_name = f'ID{track_id}-{frame_num}-{i}'
+    #     # cv2.namedWindow(window_name)
+    #     # cv2.moveWindow(window_name, 500, 500)
+    #     # time.sleep(0.005)
+    #     # cv2.imshow(window_name, combined_view)
+    #     # cv2.waitKey(0)
+    #     # cv2.destroyAllWindows()
+
+    #     return (precise_x1, precise_y1, precise_x2, precise_y2, note_cx, note_cy, avg_dist)
+    
+
+
+    @log_error
+    def calculate_all_position(self, note_x, note_y):
+        
+        closeset_label = None
+        closeset_dist = 9999
+
+        for label, (cx, cy) in self.touch_areas.items():
+            dist = np.sqrt(((note_x - cx) ** 2 + (note_y - cy) ** 2))
+            if dist < closeset_dist:
+                closeset_label = label
+                closeset_dist = dist
+        
+        return closeset_label
+    
+
+
+    @log_error
+    def estimate_touch_DefaultMsec(self, touch_data):
+        '''
+        正向：
+        根据 time_progress = (current_time - move_start_time) / DefaultMsec 获得 time_progress
+        应用缓动函数, location_progress = 缓动函数(time_progress)
+        根据 location_progress 决定4个三角距离中心点的距离
+        current_Dist = total_Dist * (1 - location_progress) 纯线性的
+
+        逆向：
+        反推 location_progress = 1 - current_Dist / total_Dist
+        二分法, 通过location_progress反推出time_progress ( y -> x )
+        反推 DefaultMsec = (current_time - move_start_time) / time_progress
+
+        方案:
+        已知 current_dist, current_time, 求解 DefaultMsec, move_start_time
+        通过dump游戏得知total_Dist = 34 (对于标准1080p)
+        DispAdjustFlame: 0 (时间微调参数没有影响, 可以忽略)
+        DefaultCorlsPos Values: [(0.0, 34.0, -1.0), (0.0, -34.0, -1.0), (34.0, 0.0, 0.0), (-34.0, 0.0, 0.0)]
+
+        首先反推出每个点的time_progress, (只保留location_progress 0.15-0.85)
+        选择缓动函数斜率较大的区间，因为这些区间对时间变化更敏感
+        选两个点相减消除未知的move_start_time常量
+        -> DefaultMsec = (current_time1 - current_time2) / (time_progress1 - time_progress2)
+
+        计算多个数据点对的 DefaultMsec 然后取平均值
+        '''
+
+        def reverse_function(y, tolerance=0.001):
+            # 二分查找求解 y = 3.5x⁴ - 3.75x³ + 1.45x² - 0.05x + 0.0005 的反函数
+            low, high = 0.0, 1.0
+            
+            while high - low > tolerance:
+                mid = (low + high) / 2
+                eased_y = 3.5 * mid**4 - 3.75 * mid**3 + 1.45 * mid**2 - 0.05 * mid + 0.0005
+                
+                if abs(eased_y - y) < tolerance:
+                    return mid
+                elif eased_y < y:
+                    low = mid  # 二分查找更新
+                else:
+                    high = mid
+            return (low + high) / 2
+
+
+        DefaultMsecs = []
+
+        for (track_id, class_id, position), path in touch_data.items():
+
+            # 过滤掉斜率较小的轨迹点
+            big_slope_points = []
+            for point in path:
+                # 反推 location_progress (保留15%-85%的点)
+                cur_dist = point['dist']
+                location_progress = 1 - cur_dist / self.touch_travel_dist
+                if location_progress < 0.15 or location_progress > 0.85:
+                    continue
+                # 反推 time_progress
+                time_progress = reverse_function(location_progress)
+                # 加入列表
+                cur_time = point['frame'] / self.fps * 1000 # 帧数转换为毫秒
+                big_slope_points.append((cur_time, time_progress))
+
+            if len(big_slope_points) < 6:
+                print(f"estimate_touch_DefaultMsec: [track_id {track_id}] not enough big slope points, length: {len(big_slope_points)}")
+                continue
+
+            # 轨迹点配对并计算 DefaultMsec
+            big_slope_points.sort(key=lambda x: x[1]) # 按 time_progress 排序
+            for i in range(len(big_slope_points)):
+                for j in range(i + 1, len(big_slope_points)):
+                    time1, progress1 = big_slope_points[i]
+                    time2, progress2 = big_slope_points[j]
+                    if abs(progress1 - progress2) < 0.15:
+                        continue # 忽略相近的 progress 减少误差 (15%) 
+                    default_msec_estimate = abs(time1 - time2) / abs(progress1 - progress2)
+                    DefaultMsecs.append(default_msec_estimate)
+
+
+        if not DefaultMsecs:
+            print("estimate_touch_DefaultMsec: no valid touch data")
+            return 0, 0
+        
+        length = len(DefaultMsecs)
+        mean = np.mean(DefaultMsecs)
+        min = np.min(DefaultMsecs)
+        max = np.max(DefaultMsecs)
+        median = np.median(DefaultMsecs)
+        std_dev = np.std(DefaultMsecs)
+        print(f"touch DefaultMsec {length}: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
+
+        touch_DefaultMsec, touch_OptionNotespeed = self.get_touch_DefaultMsec(median)
+        return touch_DefaultMsec, touch_OptionNotespeed
+    
+
+
+    @log_error
+    def get_touch_DefaultMsec(self, detected_touch_DefaultMsec):
+
+        def get_standard_touch_DefaultMsec(ui_speed):
+            # 游戏源码实现
+            option_touchspeed_dict = {
+                1.00: 175.0, 1.25: 183.0, 1.50: 200.0, 1.75: 212.0,
+                2.00: 225.0, 2.25: 237.0, 2.50: 250.0, 2.75: 262.0,
+                3.00: 275.0, 3.25: 283.0, 3.50: 300.0, 3.75: 312.0,
+                4.00: 325.0, 4.25: 337.0, 4.50: 350.0, 4.75: 375.0,
+                5.00: 400.0, 5.25: 425.0, 5.50: 450.0, 5.75: 475.0,
+                6.00: 500.0, 6.25: 525.0, 6.50: 550.0, 6.75: 575.0,
+                7.00: 600.0, 7.25: 625.0, 7.50: 650.0, 7.75: 675.0,
+                8.00: 700.0, 8.25: 725.0, 8.50: 750.0, 8.75: 775.0,
+                9.00: 800.0, 9.25: 825.0, 9.50: 850.0, 9.75: 875.0,
+                10.00: 900.0
+            }
+            ui_speed = f'{ui_speed:.2f}'
+            OptionNotespeed = option_touchspeed_dict[float(ui_speed)]
+            NoteSpeedForBeat = 1000 / (OptionNotespeed / 60)
+            DefaultMsec = NoteSpeedForBeat * 4
+            return DefaultMsec, OptionNotespeed
+        
+        # 查找最接近的 DefaultMsec
+        cloest_DefaultMsec = 0
+        cloest_i = 0
+        cloest_OptionNotespeed = 0
+        i = 1
+        while i <= 10:
+
+            DefaultMsec, OptionNotespeed = get_standard_touch_DefaultMsec(i)
+
+            if abs(DefaultMsec - detected_touch_DefaultMsec) < abs(cloest_DefaultMsec - detected_touch_DefaultMsec):
+                cloest_DefaultMsec = DefaultMsec
+                cloest_i = i
+                cloest_OptionNotespeed = OptionNotespeed
+            i += 0.25
+
+        print(f"estimate touch speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {detected_touch_DefaultMsec:.3f}ms)")
+
+        return cloest_DefaultMsec, cloest_OptionNotespeed
+    
+
+
+    @log_error
+    def analyze_touch_reach_time(self, touch_data):
+
+        touch_info = {}
+        for (track_id, class_id, position), path in touch_data.items():
+            # 平均所有轨迹的到达时间
+            times = []
+            for point in path:
+                frame_num = point['frame']
+                dist = point['dist']
+                reach_end_Msec = self.predict_touch_reach_end_time(dist, frame_num, total_dist=self.touch_travel_dist)
+                if reach_end_Msec != 0:
+                    times.append(reach_end_Msec)
+                    
+            mean = np.mean(times)
+            touch_info[(track_id, class_id, position)] = mean
+
+            # print(f"Touch ID {track_id} Position {position}:")
+            # min = np.min(times)
+            # max = np.max(times)
+            # median = np.median(times)
+            # std_dev = np.std(times)
+            # print(f"  Mean {mean:.3f}, Min {min:.3f}, Max {max:.3f}, Median {median:.3f}, Std Dev {std_dev:.3f}")
+
+
+        return touch_info
+    
+
+
+    @log_error
+    def predict_touch_reach_end_time(self, dist, cur_frame, total_dist):
+        '''
+        正向：
+        根据 time_progress = (current_time - move_start_time) / DefaultMsec 获得 time_progress
+        应用缓动函数, location_progress = 缓动函数(time_progress)
+        根据 location_progress 决定4个三角距离中心点的距离
+        current_Dist = total_Dist * (1 - location_progress) 纯线性的
+
+        逆向：
+        反推 location_progress = 1 - current_Dist / total_Dist
+        二分法, 通过location_progress反推出time_progress ( y -> x )
+        反推 move_start_time = current_time - time_progress * DefaultMsec
+        '''
+
+        def reverse_function(y, tolerance=0.001):
+            # 二分查找求解 y = 3.5x⁴ - 3.75x³ + 1.45x² - 0.05x + 0.0005 的反函数
+            low, high = 0.0, 1.0
+            
+            while high - low > tolerance:
+                mid = (low + high) / 2
+                eased_y = 3.5 * mid**4 - 3.75 * mid**3 + 1.45 * mid**2 - 0.05 * mid + 0.0005
+                
+                if abs(eased_y - y) < tolerance:
+                    return mid
+                elif eased_y < y:
+                    low = mid  # 二分查找更新
+                else:
+                    high = mid
+            return (low + high) / 2
+
+
+        # 反推 location_progress
+        location_progress = 1 - dist / total_dist
+        if location_progress < 0.15 or location_progress > 0.85:
+            return 0
+        # 反推 time_progress
+        time_progress = reverse_function(location_progress)
+        # 反推 move_start_time
+        cur_time = cur_frame / self.fps * 1000  # 转换为毫秒
+        move_start_time = cur_time - time_progress * self.touch_DefaultMsec
+        reach_end_time = move_start_time + self.touch_DefaultMsec
+
+        return reach_end_time
+    
+
+
+
+
+
+
+
+
+
+    # debug
+    @log_error
+    def preprocess_hold_data(self):
+        '''
+        收集所有hold音符的数据
+        过滤轨迹过短的音符
+        计算音符方向
+        分离头尾
+        分别计算头尾到圆心的距离
+        过滤刚离开起点的和马上要到终点的音符数据 (5%-95%距离)
+
+        返回格式:
+        dict{
+            key: (track_id, class_id, position),
+            value: note path list
+            [
+                {
+                    'frame': frame_num,
+                    'x-head': x1,
+                    'y-head': y1,
+                    'x-tail': x2,
+                    'y-tail': y2,
+                    'dist-head': dist_head,
+                    'dist-tail': dist_tail
+                },
+                ...
+            ]
+        }
+        '''
+
+        hold_data = {}
+
+        end_tolerance = self.note_travel_dist * 0.05
+        start_tolerance = self.note_travel_dist * 0.05
+        valid_judgeline_start = self.judgeline_start + start_tolerance
+        valid_judgeline_end = self.judgeline_end - end_tolerance
+
+        # read track data
+        for track_id, track_data in self.track_data.items():
+
+            if 'path' not in track_data: continue
+            track_path = track_data['path']
+            if len(track_path) < 10: continue
+            if 'class_id' not in track_data: continue
+            class_id = round(track_data['class_id'])
+            if self.noteDetector.get_main_class_id(class_id) != 4:
+                continue # 4 = hold，忽视非hold音符
+
+
+            # read track path
+            valid_track_path = []
+            for track_box in track_path:
+
+                frame_num = track_box['frame']
+                x1 = track_box['x1']
+                y1 = track_box['y1']
+                x2 = track_box['x2']
+                y2 = track_box['y2']
+                x3 = track_box['x3']
+                y3 = track_box['y3']
+                x4 = track_box['x4']
+                y4 = track_box['y4']
+                cx = (x1 + x2 + x3 + x4) / 4
+                cy = (y1 + y2 + y3 + y4) / 4
+
+                # 计算距离圆心的距离
+                dist_to_center = np.sqrt(((cx - self.screen_cx)**2 + (cy - self.screen_cy)**2))
+                # 计算方向(1-8)
+                position = self.calculate_oct_position(self.screen_cx, self.screen_cy, cx, cy)
+                # 过滤5%-95%距离的数据
+                if dist_to_center < valid_judgeline_start:
+                    continue # 掐头
+                elif dist_to_center > valid_judgeline_end:
+                    continue # 去尾
+                # 计算头和尾的坐标
+                x_head, y_head, x_tail, y_tail, dist_head, dist_tail = self.calculate_hold_head_tail(x1, y1, x2, y2, x3, y3, x4, y4, position, class_id)
+                # 添加轨迹点
+                valid_track_path.append((frame_num, x_head, y_head, x_tail, y_tail, position, dist_head, dist_tail))
+
+
+            # 检查轨迹存在
+            if not valid_track_path:
+                print(f"preprocess_hold_data: no valid_track_path for track_id {track_id}")
+                continue
+            valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
+            # 检验长度
+            if len(valid_track_path) < 6:
+                print(f"preprocess_hold_data: valid_track_path too short for track_id {track_id}, length: {len(valid_track_path)}")
+                continue
+            # 检验方位一致
+            positions = [x[5] for x in valid_track_path]
+            if len(set(positions)) != 1:
+                print(f"preprocess_hold_data: positions not consistent for track_id {track_id}")
+                continue
+            # 检查dist是否递增 (允许微小回退15%总距离)
+            dists = [(x[6] + x[7]) / 2 for x in valid_track_path]
+            if not all(later - earlier > - 3*start_tolerance for earlier, later in zip(dists, dists[1:])):
+                print(f"preprocess_hold_data: dist not increasing for track_id {track_id}")
+                continue
+            # 检查dist是否在头尾 (20%-80%)
+            if dists[0] > valid_judgeline_start + 4*start_tolerance or dists[-1] < valid_judgeline_end - 4*end_tolerance:
+                print(f"preprocess_hold_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}")
+                continue
+            # 添加到hold_data
+            path = []
+            for frame_num, x_head, y_head, x_tail, y_tail, position, dist_head, dist_tail in valid_track_path:
+                path.append({
+                    'frame': frame_num,
+                    'x-head': x_head,
+                    'y-head': y_head,
+                    'x-tail': x_tail,
+                    'y-tail': y_tail,
+                    'dist-head': dist_head,
+                    'dist-tail': dist_tail
+                })
+            hold_data[(track_id, class_id, positions[0])] = path
+
+        if not hold_data:
+            print("preprocess_hold_data: no hold data")
+            return {}
+
+        return hold_data
+    
+
+
+    @log_error
+    def calculate_hold_head_tail(self, x1, y1, x2, y2, x3, y3, x4, y4, position, class_id):
+        '''
+        获取hold框与轨道线的两个交点，视为hold的两个端点
+        然后两个端点往回缩一点就是head和tail的位置
+        '''
+
+        # 直线经过中心点 (screen_cx, screen_cy)
+        # 输入直线的y轴下方与x轴正半轴的夹角 (0°-180°)
+        def get_line(angle):
+            # 计算斜率 a = tan(angle)
+            a = math.tan(math.radians(angle)) # 角度转换为弧度
+            # 将屏幕中心点代入 y=ax+b 求解 b
+            b = self.screen_cy - a * self.screen_cx
+            return (a, b)
+
+
+        # 计算矩形与直线的交点，应该是会有两个
+        def calculate_line_rectangle_intersections(a, b, x1, y1, x2, y2, x3, y3, x4, y4):        
+            # 四条边
+            edges = [(x1, y1, x2, y2), (x2, y2, x3, y3), (x3, y3, x4, y4), (x4, y4, x1, y1)]
+            intersections = []
+            for x_start, y_start, x_end, y_end in edges:
+                # 特殊处理竖直边，防止除零错误
+                if abs(x_end - x_start) < 1e-1:
+                    x_intersect = x_start
+                    y_intersect = a * x_intersect + b   
+                # 普通情况
+                else:
+                    # 计算边的斜率和截距
+                    edge_a = (y_end - y_start) / (x_end - x_start)
+                    edge_b = y_start - edge_a * x_start
+                    # 计算交点
+                    if abs(a - edge_a) < 1e-1: continue # 跳过平行边，防止除零错误
+                    x_intersect = (edge_b - b) / (a - edge_a)
+                    y_intersect = a * x_intersect + b
+                # 检查交点是否在边的x范围内
+                if ((min(x_start, x_end) <= x_intersect <= max(x_start, x_end)) and
+                    (min(y_start, y_end) <= y_intersect <= max(y_start, y_end))):
+                    intersections.append((x_intersect, y_intersect))
+            return intersections
+        
+
+        # 根据到中心点的距离，在轨迹线上计算新的点
+        def get_point_by_dist_to_center(a, b, x, y, dist):
+            # 沿轨迹线获得距离为 dist 的两个点
+            dx = dist / np.sqrt(1 + np.power(a, 2))
+            dy = a * dx
+            p1x = self.screen_cx + dx
+            p1y = self.screen_cy + dy
+            p2x = self.screen_cx - dx
+            p2y = self.screen_cy - dy
+            # 更接近原始点的就是新的点
+            if abs(p1x - x) > abs(p2x - x):
+                return p2x, p2y
+            else:
+                return p1x, p1y
+
+
+        # 根据方向确定轨道直线
+        if position == 1 or position == 5:
+            a, b = get_line(112.5)
+        elif position == 2 or position == 6:
+            a, b = get_line(157.5)
+        elif position == 3 or position == 7:
+            a, b = get_line(22.5)
+        elif position == 4 or position == 8:
+            a, b = get_line(67.5)
+
+        # 计算hold框的四条边与轨道直线的交点
+        intersections = calculate_line_rectangle_intersections(a, b, x1, y1, x2, y2, x3, y3, x4, y4)
+        
+        if len(intersections) != 2:
+            print(f"expect 2 intersections, but got {len(intersections)}, skip")
+            return None, None, None, None, None, None
+            
+        # 根据距离圆心的远近区分head和tail
+        dist1 = math.sqrt((intersections[0][0] - self.screen_cx)**2 + (intersections[0][1] - self.screen_cy)**2)
+        dist2 = math.sqrt((intersections[1][0] - self.screen_cx)**2 + (intersections[1][1] - self.screen_cy)**2)
+        # 更远的是 head, 更近的是 tail
+        head_x, head_y = intersections[0] if dist1 > dist2 else intersections[1]
+        tail_x, tail_y = intersections[1] if dist1 > dist2 else intersections[0]
+        dist_head = dist1 if dist1 > dist2 else dist2
+        dist_tail = dist2 if dist1 > dist2 else dist1
+        # 根据 label_notes 定义，整个hold的一半宽度为 70x0.77 (ex再+5)
+        # 那么正六边形的端点到中心的距离约为 70x0.77 x 2/√3
+        width = 70 * 0.77 if class_id not in [17,18] else 75 * 0.77 + 5
+        offset = width * 2 / math.sqrt(3)
+        # 往回缩一点
+        new_dist_head = dist_head - offset
+        new_dist_tail = dist_tail + offset
+        # 防止越过起点和终点
+        if dist_head > self.judgeline_end:
+            dist_head = self.judgeline_end
+        if dist_head < self.judgeline_start:
+            dist_head = self.judgeline_start
+        if dist_tail > self.judgeline_end:
+            dist_tail = self.judgeline_end
+        if dist_tail < self.judgeline_start:
+            dist_tail = self.judgeline_start
+        # 计算新的head和tail坐标
+        new_head_x, new_head_y = get_point_by_dist_to_center(a, b, head_x, head_y, new_dist_head)
+        new_tail_x, new_tail_y = get_point_by_dist_to_center(a, b, tail_x, tail_y, new_dist_tail)
+
+        return new_head_x, new_head_y, new_tail_x, new_tail_y, new_dist_head, new_dist_tail
+
+
+  
+    @log_error
+    def analyze_hold_reach_time(self, hold_data):
+
+        hold_info = {}
+
+        end_tolerance = self.note_travel_dist * 0.1
+        start_tolerance = self.note_travel_dist * 0.1
+        valid_judgeline_start = self.judgeline_start + start_tolerance
+        valid_judgeline_end = self.judgeline_end - end_tolerance
+
+        for (track_id, class_id, direction), path in hold_data.items():
+
+            head_times = []
+            tail_times = []
+            # 平均所有轨迹的到达时间
+            for point in path:
+                frame_num = point['frame']
+                dist_head = point['dist-head']
+                dist_tail = point['dist-tail']
+                # 过滤 head 和 tail (10%-90%)
+                if valid_judgeline_start <= dist_head <= valid_judgeline_end:
+                    reach_end_Msec_head = self.predict_note_reach_end_time(dist_head, frame_num)
+                    head_times.append(reach_end_Msec_head)
+                if valid_judgeline_start <= dist_tail <= valid_judgeline_end:
+                    reach_end_Msec_tail = self.predict_note_reach_end_time(dist_tail, frame_num)
+                    tail_times.append(reach_end_Msec_tail)
+            # 计算平均时间
+            mean_head = np.mean(head_times)
+            mean_tail = np.mean(tail_times)
+            hold_info[(track_id, class_id, direction)] = (mean_head, mean_tail)
+
+            # print(f"Hold ID {track_id} Direction {direction}:")
+            # min1 = np.min(head_times)
+            # max1 = np.max(head_times)
+            # median1 = np.median(head_times)
+            # std_dev1 = np.std(head_times)
+            # print(f"  head - Mean {mean_head:.3f}, Min {min1:.3f}, Max {max1:.3f}, Median {median1:.3f}, Std Dev {std_dev1:.3f}")
+
+            # min2 = np.min(tail_times)
+            # max2 = np.max(tail_times)
+            # median2 = np.median(tail_times)
+            # std_dev2 = np.std(tail_times)
+            # print(f"  tail - Mean {mean_tail:.3f}, Min {min2:.3f}, Max {max2:.3f}, Median {median2:.3f}, Std Dev {std_dev2:.3f}")
+
+        return hold_info
+
+
+
+
+
+    
+
+
+    # debug
+    @log_error
+    def preprocess_touch_hold_data(self):
+        '''
+        收集所有touch_hold音符的数据
+        过滤轨迹过短的音符
+        计算音符方位
+        计算音符的三角到中心的距离 (精确)
+        过滤前后两端的数据 (距离10%-75%, 百分比3%-47%)
+
+        返回格式:
+        dict{
+            key: (track_id, class_id, position),
+            value: note path list
+            [
+                {
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'dist': dist_to_center,
+                    'percent': percent_of_hold
+                },
+                ...
+            ]
+        }
+        '''
+
+        touch_hold_data = {}
+
+        dist_end_tolerance = self.touch_hold_travel_dist * 0.25
+        dist_start_tolerance = self.touch_hold_travel_dist * 0.1
+        valid_dist_end = 0 + dist_end_tolerance
+        valid_dist_start = self.touch_hold_travel_dist - dist_start_tolerance
+        percent_end_tolerance = 0.03
+        percent_start_tolerance = 0.03
+        valid_percent_end = 0.5 - percent_end_tolerance
+        valid_percent_start = 0 + percent_start_tolerance
+        cap = cv2.VideoCapture(self.video_path)
+
+        # read track data
+        for track_id, track_data in self.track_data.items():
+
+            if 'path' not in track_data: continue
+            track_path = track_data['path']
+            if len(track_path) < 10: continue
+            class_id = round(track_data['class_id'])
+            if self.noteDetector.get_main_class_id(class_id) != 5:
+                continue # 5 = touch_hold，忽视非touch_hold音符
+
+            counter = 0
+            precent_counter = 0
+
+            # read track path
+            valid_track_path = []
+            for track_box in track_path:
+
+                print(f"preprocess_touch_hold_data: processing track_id {track_id}, frame_{counter}/{len(track_path)}   ", end='\r', flush=True)
+                counter += 1
+
+                frame_num = track_box['frame']
+                x1 = track_box['x1'] # 左上角
+                y1 = track_box['y1'] # 左上角
+                x2 = track_box['x3'] # 右下角
+                y2 = track_box['y3'] # 右下角
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
+
+                # 计算三角到中心的距离
+                if precent_counter >= 5: break # 节省时间，hold阶段后半都不用计算了
+                dist, percent_of_hold = self.get_touch_hold_data(cx, cy, frame_num, cap)
+                # 过滤前后两端的数据
+                if dist > valid_dist_start:
+                    dist = -1 # 掐头
+                elif dist < valid_dist_end:
+                    dist = -1 # 去尾
+                if percent_of_hold < valid_percent_start:
+                    percent_of_hold = -1 # 掐头
+                elif percent_of_hold > valid_percent_end:
+                    percent_of_hold = -1 # 去尾
+                    precent_counter += 1
+                #  两个值都无效才跳过
+                if dist == -1 and percent_of_hold == -1:
+                    continue
+                # 计算方位
+                position = self.calculate_all_position(cx, cy)
+                # 添加轨迹点
+                valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist, percent_of_hold))
+
+
+            # 检查轨迹存在
+            if not valid_track_path:
+                print(f"preprocess_touch_hold_data: no valid_track_path for track_id {track_id}")
+                continue
+            valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
+            # 检验长度
+            if len(valid_track_path) < 6:
+                print(f"preprocess_touch_hold_data: path too short for track_id {track_id}, length: {len(valid_track_path)}")
+                continue
+            # 检验方位一致
+            positions = [x[5] for x in valid_track_path]
+            if len(set(positions)) != 1:
+                print(f"preprocess_touch_hold_data: positions not consistent for track_id {track_id}")
+                continue
+            # 添加到touch_hold_data
+            path = []
+            for frame_num, x1, y1, x2, y2, position, dist, percent_of_hold in valid_track_path:
+                path.append({
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'dist': dist,
+                    'percent': percent_of_hold
+                })
+            touch_hold_data[(track_id, class_id, positions[0])] = path
+
+
+        if not touch_hold_data:
+            print("preprocess_touch_hold_data: no touch data")
+            touch_hold_data = {}
+        
+        cap.release()
+        print(f"{' '*70}", end='\r', flush=True) # 清除行
+        return touch_hold_data
+    
+
+
+    @log_error
+    def get_touch_hold_data(self, cx, cy, frame_num, cap):
+
+        try:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            ret, frame = cap.read()
+            if not ret:
+                print(f"get_touch_hold_data: failed to read frame {frame_num}")
+                return -1, -1
+
+            # 根据label-notes定义，touch_hold的整体尺寸是 (30+100) x 2/√3 (1080p下)
+            # 保险起见变成 200x200
+            roi_radius = 100 * self.video_size / 1080
+
+            # 提取ROI区域
+            x_start = round(max(cx - roi_radius, 0))
+            y_start = round(max(cy - roi_radius, 0))
+            x_end = round(min(cx + roi_radius, self.video_size - 1))
+            y_end = round(min(cy + roi_radius, self.video_size - 1))
+            roi = frame[y_start:y_end, x_start:x_end]
+            # 处理roi
+            transformed_roi = self.diamond_polar_transform(roi)
+            stretched_roi = self.stretch_transformed_image(transformed_roi)
+            final_roi = self.apply_hsv_threshold(stretched_roi)
+            h, w = final_roi.shape[:2]
+            # 计算 final_roi 上方 15% - 50% 区域中黑色像素的比例
+            roi_top = final_roi[int(h * 0.15):int(h * 0.5), :, :]
+            black_mask = cv2.inRange(roi_top, (0, 0, 0), (10, 10, 10))
+            black_pixel_count = cv2.countNonZero(black_mask)
+            total_pixel_count = roi_top.shape[0] * roi_top.shape[1]
+            black_pixel_ratio = black_pixel_count / total_pixel_count if total_pixel_count > 0 else 0
+            # 计算dist和percent
+            dist = -1
+            percent_of_hold = -1
+
+            # 视为scale阶段,计算dist
+            if black_pixel_ratio > 0.25:
+                # 动态阈值
+                grey_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                _, binary_roi = cv2.threshold(grey_roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                # 轮廓识别
+                distances = []
+                contours, _ = cv2.findContours(binary_roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if not contours: return -1, -1
+                for contour in contours:
+                    # 尺寸合适
+                    _, radius = cv2.minEnclosingCircle(contour)          
+                    if radius < roi_radius * 0.4 or radius > roi_radius * 0.5:
+                        continue
+                    # 轮廓是三角形
+                    epsilon = 0.04 * cv2.arcLength(contour, True)     # 逼近精度，值越小，越接近原始轮廓。
+                    approx = cv2.approxPolyDP(contour, epsilon, True) # 近似多边形
+                    if len(approx) != 3: continue
+                    #cv2.drawContours(roi, [approx], -1, (0, 255, 0), 2)
+                    # 计算三角形每个顶点到中心的距离
+                    roi_center = np.array([roi_radius, roi_radius])
+                    tri_distances = []
+                    for point in approx:
+                        point_coords = point[0] # 获取点的坐标
+                        tri_distance = np.linalg.norm(point_coords - roi_center)
+                        tri_distances.append(tri_distance)
+                    # 校验三点距离关系
+                    tri_distances.sort()
+                    if ((tri_distances[2] - tri_distances[1]) < roi_radius * 0.05 and # 等边三角形
+                        (tri_distances[1] - tri_distances[0]) > roi_radius * 0.4):    # 朝向中心
+                        distances.append(tri_distances[0]) # 取最短距离
+                # 平均距离
+                if distances:
+                    dist = np.mean(distances)
+                    dist -= roi_radius * 0.1 # 微调
+
+                # # 显示窗口
+                # print(f"frame {frame_num}: dist {dist:.2f}")
+                # cv2.imshow(f'frame {frame_num}', roi)
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
+
+            # 视为hold阶段,计算percent_of_hold
+            else:
+                # 逐列扫描final_roi的左边一半，关注每一列最下面的30%像素
+                # 如果这一列最下面的30%像素中，黑色像素占比小于70%，计数器+1
+                counter = 0
+                for col in range(w // 2):
+                    # 获取当前列最下面30%的像素
+                    bottom_pixels = final_roi[int(h * 0.7):, col]
+                    # 计算黑色像素的数量
+                    black_pixels = 0
+                    for pixel in bottom_pixels:
+                        if (pixel[0] < 10 and pixel[1] < 10 and pixel[2] < 10):
+                            black_pixels += 1
+                    # 如果黑色像素占比小于70%，计数器+1
+                    if black_pixels < h * 0.3 * 0.7:
+                        counter += 1
+                # 计算百分比
+                percent_of_hold = counter / (w // 2 - 1) / 2 # 除以2是因为只扫描了一半宽度
+
+            return dist, percent_of_hold
+
+        except Exception as e:
+            print(f"get_touch_hold_data - frame {frame_num}: exception {e}")
+            return -1, -1
+
+
+
+    @log_error
+    def diamond_polar_transform(self, roi):
+        """
+        菱形极坐标变换
+        """
+        
+        # 获取ROI尺寸
+        h, w = roi.shape[:2]
+        cx, cy = w // 2, h // 2
+        # 输出的矩形的尺寸
+        height = min(cx, cy) - 1 # 防止越界
+        width = height * 4
+        transformed_image = np.zeros((height, width, 3), dtype=np.uint8)
+        # 菱形极坐标变换
+        for y_out in range(height):
+            for x_out in range(width):
+                # 计算菱形极坐标
+                # 径向坐标：从中心到外径
+                r = y_out
+                # 角坐标：沿菱形边界的归一化位置 (0-1)
+                # 左移1/8个圆（45度），让起点从菱形正上方开始
+                angle_frac = (x_out / width + 0.125) % 1.0
+                # 将角坐标转换为菱形边界上的位置
+                # 菱形有4个边，每个边对应90度
+                side_index = int(angle_frac * 4) % 4
+                side_pos = (angle_frac * 4) % 1.0
+                # 根据所在边计算笛卡尔坐标
+                if side_index == 0:  # 上
+                    x_diamond = r * (2 * side_pos - 1)
+                    y_diamond = -r
+                elif side_index == 1:  # 右
+                    x_diamond = r
+                    y_diamond = r * (2 * side_pos - 1)
+                elif side_index == 2:  # 下
+                    x_diamond = r * (1 - 2 * side_pos)
+                    y_diamond = r
+                else:  # 左
+                    x_diamond = -r
+                    y_diamond = r * (1 - 2 * side_pos)
+                # 转换为ROI中的像素坐标
+                x_roi = int(cx + x_diamond)
+                y_roi = int(cy + y_diamond)
+                # 检查边界并采样
+                if 0 <= x_roi < w and 0 <= y_roi < h:
+                    transformed_image[y_out, x_out] = roi[y_roi, x_roi]
+
+        return transformed_image
+
+
+
+    @log_error
+    def stretch_transformed_image(self, roi):
+        """
+        对菱形极坐标变换后的矩形进行后处理
+        从左到右对每一列进行向下拉伸，消除底部的三角形背景区域
+        三角形的底长为矩形宽度的1/4，高度为矩形高度的1/2.4
+        """
+        h, w = roi.shape[:2]
+        # 创建拉伸后的图像（尺寸保持不变）
+        stretched_image = np.zeros_like(roi)
+        # 计算每个列的拉伸参数
+        for x in range(w):
+            # 计算当前列在矩形中的位置
+            pos_frac = x / w
+            # 转换为在一个三角形内的位置 (1/4)
+            while pos_frac > 0.25:
+                pos_frac -= 0.25
+            # 计算此时的三角形的高度
+            # 相似三角形：底:底=高:高
+            if pos_frac < 0.125: # 左边
+                tri_h = (pos_frac / 0.125) * (h / 2.4)
+            else: # 右边
+                tri_h = ((0.25 - pos_frac) / 0.125) * (h / 2.4)
+            # 计算拉伸因子
+            stretch_factor = h / (h - tri_h)
+            stretch_factor = max(stretch_factor, 1) # 防止小于1
+
+            # 对当前列进行拉伸
+            # 使用反向映射避免黑色像素(计算目标像素对应的原始像素)
+            for y_stretched in range(h):
+                # 计算对应的原始y坐标
+                y_orig = y_stretched / stretch_factor
+                # 如果y_orig不是整数，使用上下两个像素进行插值（双线性插值）
+                y0 = int(y_orig)        # 下界
+                y1 = min(y0 + 1, h - 1) # 上界
+                if y0 < h:
+                    # 计算插值权重
+                    weight = y_orig - y0
+                    # 双线性插值
+                    if y0 < h - 1:
+                        pixel_value = (1 - weight) * roi[y0, x] + weight * roi[y1, x]
+                        stretched_image[y_stretched, x] = pixel_value.astype(np.uint8)
+                    else:
+                        stretched_image[y_stretched, x] = roi[y0, x]
+
+        return stretched_image
+    
+
+
+    @log_error
+    def apply_hsv_threshold(self, roi):
+        """
+        采样展开后的矩形最上面一行的所有像素的平均饱和度和亮度
+        设置饱和度和亮度阈值，过滤背景和黄色光晕特效
+        """
+        h, w = roi.shape[:2]
+
+        # 转换到HSV颜色空间
+        hsv_image = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        # 采样最上面一行的所有像素
+        top_row_hsv = hsv_image[0, :, :]
+        # 计算平均饱和度和亮度
+        avg_saturation = np.mean(top_row_hsv[:, 1])   # 饱和度通道
+        avg_value = np.mean(top_row_hsv[:, 2])        # 亮度通道
+        saturation_threshold = avg_saturation * 0.7   # 使用平均饱和度的70%作为阈值
+        value_threshold = avg_value * 0.75            # 使用平均亮度的75%作为阈值
+        # 对整个图像应用饱和度阈值
+        for y in range(h):
+            for x in range(w):
+                h_val, s_val, v_val = hsv_image[y, x] # 获取当前像素的HSV值
+                if s_val < saturation_threshold:      # 如果饱和度低于阈值，将像素变为黑色
+                    roi[y, x] = [0, 0, 0]
+        # 对新的图像的下半30%应用亮度阈值
+        hsv_image = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        for y in range(int(h*0.7), h):
+            for x in range(w):
+                h_val, s_val, v_val = hsv_image[y, x]
+                if v_val < value_threshold:
+                    roi[y, x] = [0, 0, 0]
+
+        return roi
+    
+
+
+    @log_error
+    def analyze_touch_hold_reach_time(self, touch_hold_data):
+
+        touch_hold_info = {}
+        
+        for (track_id, class_id, position), path in touch_hold_data.items():
+
+            dist_times = []
+            percent_data = []
+            for point in path:
+                frame_num = point['frame']
+                dist = point['dist']
+                percent = point['percent']
+                # 将 percent 数据单独处理
+                if percent != -1:
+                    cur_time = point['frame'] / self.fps * 1000 # 帧数转换为毫秒
+                    percent_data.append((cur_time, percent))
+                # 将 dist 数据视为 touch note 处理
+                if dist != -1:
+                    reach_end_Msec = self.predict_touch_reach_end_time(dist, frame_num, total_dist=self.touch_hold_travel_dist)
+                    if reach_end_Msec != 0:
+                        dist_times.append(reach_end_Msec)
+
+            percent_times, percent_speeds = self.predict_touch_hold_percent_reach_end_time(percent_data)
+
+            # 计算平均值
+            mean_dist = np.mean(dist_times)
+            mean_percent = np.mean(percent_times)
+            touch_hold_info[(track_id, class_id, position)] = mean_dist, mean_percent
+
+            # print(f"Touch Hold ID {track_id} Position {position}:")
+
+            # mean = np.mean(percent_speeds)
+            # min = np.min(percent_speeds)
+            # max = np.max(percent_speeds)
+            # median = np.median(percent_speeds)
+            # std_dev = np.std(percent_speeds)
+            # print(f"  speed Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
+
+            # min_dist = np.min(dist_times)
+            # max_dist = np.max(dist_times)
+            # median_dist = np.median(dist_times)
+            # std_dev_dist = np.std(dist_times)
+            # print(f"  dist Mean {mean_dist:.3f}, Min {min_dist:.3f}, Max {max_dist:.3f}, Median {median_dist:.3f}, Std Dev {std_dev_dist:.3f}")
+
+            # min_percent = np.min(percent_times)
+            # max_percent = np.max(percent_times)
+            # median_percent = np.median(percent_times)
+            # std_dev_percent = np.std(percent_times)
+            # print(f"  percent Mean {mean_percent:.3f}, Min {min_percent:.3f}, Max {max_percent:.3f}, Median {median_percent:.3f}, Std Dev {std_dev_percent:.3f}")
+
+        return touch_hold_info
+    
+
+
+    @log_error
+    def predict_touch_hold_percent_reach_end_time(self, percent_data):
+
+        # 点配对并计算 speed
+        speeds = []
+        percent_data.sort(key=lambda x: x[1]) # 按 percent 排序
+        for i in range(len(percent_data)):
+            for j in range(i + 1, len(percent_data)):
+                time1, progress1 = percent_data[i]
+                time2, progress2 = percent_data[j]
+                if abs(progress1 - progress2) < 0.05:
+                    continue # 忽略相近的 progress 减少误差 (5%) 
+                speed = abs(time1 - time2) / abs(progress1 - progress2)
+                speeds.append(speed)
+
+        final_speed = np.median(speeds)
+
+        # 预测到达时间
+        reach_end_times = []
+        for time, progress in percent_data:
+            remaining_progress = 1 - progress
+            reach_end_time = time + remaining_progress * final_speed
+            reach_end_times.append(reach_end_time)
+
+        return reach_end_times, speeds
+
+
+
+
+
+
+
+
+
+
+
+    # debug
+    @log_error
+    def preprocess_slide_head_data(self):
+        '''
+        收集所有slide音符的数据
+        只分离出星星头，视为 tap note 处理, 忽略后续轨迹移动
+        过滤轨迹过短的音符
+        计算音符方向
+        计算音符到圆心的距离
+        过滤刚离开起点的和马上要到终点的音符数据 (10%-90%距离)
+
+        返回格式:
+        dict{
+            key: (track_id, class_id, position),
+            value: note path list
+            [
+                {
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'dist': dist_to_center
+                },
+                ...
+            ]
+        }
+        '''
+
+        slide_data = {}
+
+        end_tolerance = self.note_travel_dist * 0.1
+        start_tolerance = self.note_travel_dist * 0.1
+        valid_judgeline_start = self.judgeline_start + start_tolerance
+        valid_judgeline_end = self.judgeline_end - end_tolerance
+
+        # read track data
+        for track_id, track_data in self.track_data.items():
+
+            if 'path' not in track_data: continue
+            track_path = track_data['path']
+            if len(track_path) < 10: continue
+            if 'class_id' not in track_data: continue
+            class_id = round(track_data['class_id'])
+            if self.noteDetector.get_main_class_id(class_id) != 2:
+                continue # 2 = slide，忽视非slide音符
+
+
+            # read track path
+            valid_track_path = []
+            for track_box in track_path:
+
+                frame_num = track_box['frame']
+                x1 = track_box['x1'] # 左上角
+                y1 = track_box['y1'] # 左上角
+                x2 = track_box['x3'] # 右下角
+                y2 = track_box['y3'] # 右下角
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
+
+                # 计算距离圆心的距离
+                dist_to_center = np.sqrt(((cx - self.screen_cx)**2 + (cy - self.screen_cy)**2))
+                # 计算方向(1-8)
+                position = self.calculate_oct_position(self.screen_cx, self.screen_cy, cx, cy)
+                # 过滤10%-90%距离的数据
+                if dist_to_center < valid_judgeline_start:
+                    continue # 掐头
+                elif dist_to_center > valid_judgeline_end:
+                    continue # 去尾
+                # 添加轨迹点
+                valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist_to_center))
+
+
+            # 检查轨迹存在
+            if not valid_track_path:
+                # print(f"preprocess_slide_head_data: no valid_track_path for track_id {track_id}")
+                continue
+            valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
+            
+            # 检验长度
+            if len(valid_track_path) < 6:
+                # print(f"preprocess_slide_head_data: valid_track_path too short for track_id {track_id}, length: {len(valid_track_path)}")
+                continue
+            # 检验方位一致
+            positions = [x[5] for x in valid_track_path]
+            if len(set(positions)) != 1:
+                # print(f"preprocess_slide_head_data: positions not consistent for track_id {track_id}")
+                continue
+            # 检查dist是否递增 (允许微小回退 -0.5* start_tolerance)
+            dists = [x[6] for x in valid_track_path]
+            if not all(later - earlier > -0.5 * start_tolerance for earlier, later in zip(dists, dists[1:])):
+                # print(f"preprocess_slide_head_data: dist not increasing for track_id {track_id}")
+                continue
+            # 检查dist是否在头尾 (20%-80%)
+            if dists[0] > valid_judgeline_start + start_tolerance or dists[-1] < valid_judgeline_end - end_tolerance:
+                # print(f"preprocess_slide_head_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}")
+                continue
+            # 添加到slide_data
+            path = []
+            for frame_num, x1, y1, x2, y2, position, dist_to_center in valid_track_path:
+                path.append({
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'dist': dist_to_center
+                })
+            slide_data[(track_id, class_id, positions[0])] = path
+            # self.draw_path_on_frame(track_id, path[0]['frame']+3, path)
+
+        if not slide_data:
+            print("preprocess_slide_head_data: no slide head data")
+            return {}
+
+        return slide_data
+    
+
+
+    def preprocess_slide_tail_data(self):
+        '''
+        收集所有slide音符的数据
+        过滤轨迹过短的音符
+        对所有轨迹点进行方位计算，形成移动路径
+        只分离出移动阶段的星星，忽略星星头
+
+        分离方法: 仅接受轨迹开头和结尾都在A区的音符
+
+        返回格式:
+        dict{
+            key: (track_id, class_id, start_position),
+            value: note path list
+            [
+                {
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'dist': dist_to_center,
+                    'position': position
+                },
+                ...
+            ]
+        }
+        '''
+
+        slide_data = {}
+
+        # read track data
+        for track_id, track_data in self.track_data.items():
+
+            if 'path' not in track_data: continue
+            track_path = track_data['path']
+            if len(track_path) < 10: continue
+            if 'class_id' not in track_data: continue
+            class_id = round(track_data['class_id'])
+            if self.noteDetector.get_main_class_id(class_id) != 2:
+                continue # 2 = slide，忽视非slide音符
+
+
+            # 先检查开头和结尾
+            box = track_path[0]
+            cx = (box['x1'] + box['x3']) / 2
+            cy = (box['y1'] + box['y3']) / 2
+            position = self.calculate_all_position(cx, cy)
+            if not position.startswith('A'):
+                continue # 忽视非A区开头音符
+            box = track_path[-1]
+            cx = (box['x1'] + box['x3']) / 2
+            cy = (box['y1'] + box['y3']) / 2
+            position = self.calculate_all_position(cx, cy)
+            if not position.startswith('A') and not position.startswith('D'):
+                continue # 忽视非A区或D区结尾音符
+
+
+            # read track path
+            valid_track_path = []
+            for track_box in track_path:
+
+                frame_num = track_box['frame']
+                x1 = track_box['x1'] # 左上角
+                y1 = track_box['y1'] # 左上角
+                x2 = track_box['x3'] # 右下角
+                y2 = track_box['y3'] # 右下角
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
+
+                # 计算距离圆心的距离
+                dist_to_center = np.sqrt(((cx - self.screen_cx)**2 + (cy - self.screen_cy)**2))
+                # 允许音符略微超出判定线范围(10%)，但更远的就忽略了
+                if dist_to_center > self.judgeline_end * 1.1: # 110%
+                    continue
+                # 计算方位
+                position = self.calculate_all_position(cx, cy)
+                # 添加轨迹点
+                valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist_to_center))
+
+
+            # 检查轨迹存在
+            if not valid_track_path:
+                # print(f"preprocess_slide_tail_data: no valid_track_path for track_id {track_id}")
+                continue
+            valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
+            
+            # 检验长度
+            if len(valid_track_path) < 6:
+                # print(f"preprocess_slide_tail_data: valid_track_path too short for track_id {track_id}, length: {len(valid_track_path)}")
+                continue
+
+            # 添加到slide_data
+            path = []
+            for frame_num, x1, y1, x2, y2, position, dist_to_center in valid_track_path:
+                path.append({
+                    'frame': frame_num,
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
+                    'dist': dist_to_center,
+                    'position': position
+                })
+            positions = [x[5] for x in valid_track_path]
+            slide_data[(track_id, class_id, positions[0])] = path
+            # self.draw_path_on_frame(track_id, path[0]['frame']+3, path)
+
+        if not slide_data:
+            print("preprocess_slide_tail_data: no slide tail data")
+            return {}
+
+        return slide_data
+    
+
+
+    def analyze_slide_tail(self, slide_tail_data):
+        '''
+        return {(track_id, class_id, start_position): (movement_syntax, start_time, end_time)}
+        '''
+
+        # 原点为(0, 0)，半径为480 (标准1080p)，标准xy坐标系
+        # 判定线圆圈上的8个点
+        std_dict = {
+            'A1': (184, 443),
+            'A2': (443, 184),
+            'A3': (443, -183),
+            'A4': (184, -443),
+            'A5': (-183, -443),
+            'A6': (-443, -183),
+            'A7': (-443, 183),
+            'A8': (-183, 443),
+        }
+        # 需要转换为屏幕坐标
+        new_dict = {}
+        for area_label, (x, y) in std_dict.items():
+            # 转换成标准1080p屏幕坐标系
+            # 原点是(540, 540)，y轴向下为正
+            x_on_screen_cx = x + 540
+            y_on_screen_cy = -y + 540
+            # 按比例缩放到当前分辨率
+            scaled_x = round((x_on_screen_cx - 540) * self.video_size / 1080 + self.screen_cx)
+            scaled_y = round((y_on_screen_cy - 540) * self.video_size / 1080 + self.screen_cy)
+            new_dict[area_label] = (scaled_x, scaled_y)
+
+        A_zone_endpoint_on_judgeline = new_dict
+
+
+        # 分析运动模式
+        # 暂时只检测边缘旋转 x>x / x<x
+        # 其他的一律视为直线 x-x
+        slide_tail_info = {}
+        for (track_id, class_id, start_position), note_path in slide_tail_data.items():
+
+            # 计算运动语法
+            # 期望的返回: >5 / <3 / -7
+            movement_syntax = self.analyze_slide_tail_movement_syntax(note_path, A_zone_endpoint_on_judgeline)
+            if movement_syntax is None:
+                continue
+            
+            # 计算持续时间
+            start_time, end_time = self.analyze_slide_tail_start_end_time(note_path, A_zone_endpoint_on_judgeline)
+            if start_time is None or end_time is None:
+                continue
+
+            slide_tail_info[(track_id, class_id, start_position[1])] = (movement_syntax, start_time, end_time)
+
+        return slide_tail_info
+    
+
+
+    def analyze_slide_tail_movement_syntax(self, note_path, A_zone_endpoint_on_judgeline):
+        '''
+        分析运动模式
+        暂时只检测边缘旋转 x>x / x<x
+        其他的一律视为直线 x-x
+
+        如果星星全程仅在A区或D区内移动，视为旋转
+        '''
+
+        def get_A_zone_endpoint_on_judgeline(x, y, A_zone_endpoint_on_judgeline):
+            tolerance = self.video_size * 0.02
+            for label, (px, py) in A_zone_endpoint_on_judgeline.items():
+                dist = np.sqrt((x - px)**2 + (y - py)**2)
+                if dist < tolerance:
+                    return label
+            return None
+        
+
+        def get_outer_rotation_syntax(start_position_id, next_position_id, end_position_id):
+            # 判断起始点在左侧还是右侧
+            if start_position_id in [1,2,7,8]:
+                start_side = 'up'
+            else:
+                start_side = 'down'
+            # 判断旋转方向
+            # > 代表从起点开始箭头向右, < 代表从起点开始箭头向左
+            if start_side == 'up':
+                # 处理1和8的特殊情况
+                if start_position_id == 1:
+                    if next_position_id in [7, 8]:
+                        next_position_id -= 8
+                elif start_position_id == 8:
+                    if next_position_id in [1, 2]:
+                        next_position_id += 8
+                # 判断方向
+                if next_position_id > start_position_id:
+                    movement_type = '>'
+                else:
+                    movement_type = '<'
+            else: # start_side == 'down'
+                if next_position_id > start_position_id:
+                    movement_type = '<'
+                else:
+                    movement_type = '>'
+            # 组合语法
+            movement_syntax = f"{movement_type}{end_position_id}"
+            return movement_syntax
+        
+
+        def is_consecutive(id1, id2):
+                # 检查两个A区ID是否连续（考虑环形结构）
+                # 顺时针：1->2, 2->3, ..., 7->8, 8->1
+                if (id2 - id1) == 1 or (id1 == 8 and id2 == 1):
+                    return True, 'clockwise'
+                # 逆时针：1->8, 8->7, ..., 2->1
+                if (id1 - id2) == 1 or (id1 == 1 and id2 == 8):
+                    return True, 'counterclockwise'
+                return False, None
+
+
+        if len(note_path) < 6:
+            return None
+        positions = [x['position'] for x in note_path]
+        if not positions or len(positions) < 6:
+            return None
+
+        start_position_id = int(positions[0][1]) # A1 -> 1
+        end_position_id = int(positions[-1][1])
+
+        # 如果只在A区或D区移动，视为旋转
+        if all(pos.startswith('A') or pos.startswith('D') for pos in positions):
+
+            # 找到第一个与起始点不同的位置
+            next_position_id = None
+            for pos in positions[1:]:
+                if pos[1] != str(start_position_id):
+                    next_position_id = int(pos[1])
+                    break
+            if next_position_id is None:
+                return None
+
+            movement_syntax = get_outer_rotation_syntax(start_position_id, next_position_id, end_position_id)
+
+        else:
+            # 获得音符经过的所有A区判定点
+            A_zones = []
+            last_A_zone = ''
+            for note in note_path:
+                x1 = note['x1']
+                y1 = note['y1']
+                x2 = note['x2']
+                y2 = note['y2']
+                cx = (x1 + x2) / 2
+                cy = (y1 + y2) / 2
+                pos = get_A_zone_endpoint_on_judgeline(cx, cy, A_zone_endpoint_on_judgeline)
+                if pos is None: continue
+                if not pos.startswith('A'): continue
+                if pos == last_A_zone: continue
+                last_A_zone = pos
+                A_zones.append(pos)
+            # 考虑到有些星星最后可能提前结束，没有进入A区
+            # 使用最后一个位置作为保底结尾
+            end_position = f'A{end_position_id}'
+            if end_position != last_A_zone:
+                A_zones.append(end_position)
+            if len(A_zones) < 2:
+                return None
+
+
+
+            # 检测这个A区路径里边是否包含一些圆弧，要单独拆分出来
+            arc_segments = []
+            i = 0
+            while i < len(A_zones):
+                current_id = int(A_zones[i][1])  # 'A7' -> 7
+                # 尝试检测从当前位置开始的圆弧
+                if i + 1 < len(A_zones):
+                    next_id = int(A_zones[i + 1][1])
+                    is_consec, direction = is_consecutive(current_id, next_id)
+
+                    if is_consec:
+                        # 找到圆弧的起点，继续向后查找相同方向的连续点
+                        arc_start = current_id
+                        arc_next = next_id
+                        arc_end = next_id
+                        j = i + 2
+                        while j < len(A_zones):
+                            check_id = int(A_zones[j][1])
+                            prev_id = int(A_zones[j - 1][1])
+                            is_consec_next, dir_next = is_consecutive(prev_id, check_id)
+                            # 如果方向一致且连续，继续扩展圆弧
+                            if is_consec_next and dir_next == direction:
+                                arc_end = check_id
+                                j += 1
+                            else:
+                                break
+                        # 记录这个圆弧
+                        arc_segments.append(('arc', (arc_start, arc_next, arc_end)))
+                        i = j  # 跳过已处理的圆弧部分
+                        continue
+                
+                # 不是圆弧的一部分，作为单独的点
+                arc_segments.append(('single', current_id))
+                i += 1
+            
+            
+            # 将圆弧和单独的点组合成最终语法
+            syntax_parts = []
+            for seg_type, seg_data in arc_segments:
+                if seg_type == 'arc':
+                    start_id, next_id, end_id = seg_data
+                    arc_syntax = get_outer_rotation_syntax(start_id, next_id, end_id)
+                    syntax_parts.append(f"{start_id}{arc_syntax}")
+                else:  # single
+                    syntax_parts.append(str(seg_data))
+            
+            movement_syntax = '-'.join(syntax_parts)
+            movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
+
+            # print(f'{" ".join(azone for azone in A_zones)} -> {movement_syntax}')
+
+        return movement_syntax
+    
+
+
+    def analyze_slide_tail_start_end_time(self, note_path, A_zone_endpoint_on_judgeline):
+        '''
+        粗略计算持续时间
+
+        根据每一帧之间的位移，计算音符的帧间移动速度，取中位数作为最终速度
+        找到第一个离开起始A区的点，计算此时到A区中心的距离，配合速度计算时间
+        这个时间就是音符从A区中心移动到此处所消耗的时间
+        音符此时的帧时间 - 这个时间 = 反推出音符开始移动的时间
+        同理，找到最后一个进入终点A区的点，计算得到音符停止移动的时间
+        持续时间 = 停止时间 - 开始时间
+        '''
+
+        if len(note_path) < 6:
+            return None, None
+        positions = [x['position'] for x in note_path]
+        if not positions or len(positions) < 6:
+            return None, None
+
+        # 计算帧间速度
+        last_cx = None
+        last_cy = None
+        last_frame = None
+        frame_speeds = []
+        for i in range(len(note_path)):
+            point = note_path[i]
+            frame_num = point['frame']
+            x1 = point['x1']
+            y1 = point['y1']
+            x2 = point['x2']
+            y2 = point['y2']
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+
+            if last_cx is not None and last_cy is not None and last_frame is not None:
+                dist = np.sqrt((cx - last_cx)**2 + (cy - last_cy)**2)
+                frame_diff = frame_num - last_frame
+                if frame_diff > 0:
+                    speed = dist / frame_diff
+                    frame_speeds.append(speed)
+
+            last_cx = cx
+            last_cy = cy
+            last_frame = frame_num
+
+        # 获取第60%的速度 (比中位数偏右一点)
+        if not frame_speeds:
+            return None, None
+        index = round(len(frame_speeds) * 0.6)
+        sorted_speeds = sorted(frame_speeds)
+        note_speed = sorted_speeds[index]
+
+        # 定义起点和终点位置
+        point = A_zone_endpoint_on_judgeline.get(positions[0], None)
+        if point is None:
+            return None, None
+        start_cx, start_cy = point
+        # 允许终点在A区或D区
+        temp_position_str = f'A{positions[-1][1]}'
+        point = A_zone_endpoint_on_judgeline.get(temp_position_str, None)
+        if point is None:
+            return None, None
+        end_cx, end_cy = point
+
+        # 定义A区中心半径
+        self.note_travel_dist = 0
+        a_zone_radius = (self.note_travel_dist) / 7
+
+        # 找到第一个离开起始A区的点
+        start_move_frame = None
+        dist_to_start = 0
+        for i in range(round(len(note_path)*0.5)): # 只搜索前半，从前往后
+            point = note_path[i]
+            frame_num = point['frame']
+            x1 = point['x1']
+            y1 = point['y1']
+            x2 = point['x2']
+            y2 = point['y2']
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+            dist_to_start = np.sqrt((cx - start_cx)**2 + (cy - start_cy)**2)
+            if dist_to_start > a_zone_radius:
+                start_move_frame = frame_num
+                break
+        
+        # 计算开始时间
+        if start_move_frame is None:
+            return None, None
+        time_to_start_Msec = (dist_to_start / note_speed) * (1000 / self.fps)
+        note_start_time_Msec = start_move_frame / self.fps * 1000 - time_to_start_Msec
+
+        # 找到最后一个进入终点A区的点
+        end_move_frame = None
+        dist_to_end = 0
+        for i in range(len(note_path)-1, round(len(note_path)*0.5), -1): # 只搜索后半，从后往前
+            point = note_path[i]
+            frame_num = point['frame']
+            x1 = point['x1']
+            y1 = point['y1']
+            x2 = point['x2']
+            y2 = point['y2']
+            cx = (x1 + x2) / 2
+            cy = (y1 + y2) / 2
+            dist_to_end = np.sqrt((cx - end_cx)**2 + (cy - end_cy)**2)
+            if dist_to_end > a_zone_radius:
+                end_move_frame = frame_num
+                break
+
+        # 计算结束时间
+        if end_move_frame is None:
+            return None, None
+        time_to_end_Msec = (dist_to_end / note_speed) * (1000 / self.fps)
+        note_end_time_Msec = end_move_frame / self.fps * 1000 + time_to_end_Msec
+
+        return note_start_time_Msec, note_end_time_Msec
+    
+
+
+    def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_index=0.25):
+        '''
+        合并slide头尾信息
+        输入: for (head_track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
+              for (tail_track_id, tail_class_id, tail_start_position): (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+
+        将这两组进行匹配：
+        delay = tail_start_time - head_end_time
+        规则1：head_position = tail_start_position (str)
+        规则2：min_delay < delay < max_delay
+        规则3：一个tail最多只能匹配到一个head，但是一个head可以匹配多个tail
+        规则4：如果tail与多个head都符合匹配条件，选择delay与std_delay最接近的head
+
+        返回格式:
+        dict{
+            # 匹配的head_tail组合
+            key: (head_track_id, head_class_id, full_movement_syntax),
+            value: (head_end_time, tail_start_time, tail_end_time)
+            # 未匹配的head
+            key: (head_track_id, head_class_id, head_position),
+            value: head_end_time
+        }
+        '''
+
+        def get_suffix(class_id, isSingleHead=False):
+            dict = {
+                20: '',    # slide
+                21: 'b',   # break-slide
+                22: 'x',   # ex-slide
+                23: 'bx',  # break-ex-slide
+            }
+            dict_single = {
+                20: '$',    # single-slide
+                21: 'b$',   # break-single-slide
+                22: 'x$',   # ex-single-slide
+                23: 'bx$',  # break-ex-single-slide
+            }
+            if isSingleHead:
+                return dict_single.get(class_id, '')
+            else:
+                return dict.get(class_id, '')
+
+
+        final_slide_info = {}
+
+        # 标准延迟是0.25拍
+        one_beat_Msec = 60 / bpm * 1000 * 4
+        std_delay = one_beat_Msec * delay_index
+        max_delay = one_beat_Msec * delay_index * 1.2
+        min_delay = one_beat_Msec * delay_index * 0.6
+
+        # print(f"\n=== Matching Parameters ===")
+        # print(f"BPM: {bpm}, One Beat: {one_beat_Msec:.2f} ms")
+        # print(f"Std Delay: {std_delay:.2f} ms")
+        # print(f"Min Delay: {min_delay:.2f} ms")
+        # print(f"Max Delay: {max_delaye:.2f} ms")
+        # print(f"===========================\n")
+
+        # 先按位置分组head数据
+        # 这样后续tail查找head时，只会在对应位置的head中查找，减少计算量
+        head_by_position = defaultdict(list)
+        for (track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
+            head_by_position[str(head_position)].append((track_id, head_class_id, head_position, head_end_time))
+
+        # 记录哪些head_track_id被匹配了，使用set避免重复
+        matched_head_track_ids = set()
+
+        # 遍历所有tail，寻找匹配的head
+        processed_tails = 0
+        for (tail_track_id, tail_class_id, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+            processed_tails += 1
+
+            # 先看看有没有任何与tail位置相同的head
+            tail_start_position = str(tail_start_position)
+            if tail_start_position not in head_by_position:
+                print(f"{tail_track_id} Tail not match: No heads at position {tail_start_position}")
+                continue
+            # 如果有，遍历这些head，寻找符合delay条件的head
+            # 条件1：min_delay < delay < max_delay
+            # 条件2：与std_delay最接近
+            best_head = None
+            best_delay_diff = float('inf')
+            for head_track_id, head_class_id, head_position, head_end_time in head_by_position[tail_start_position]:
+                # 条件1
+                delay = tail_start_time - head_end_time
+                if not (min_delay < delay < max_delay):
+                    continue
+                # 条件2
+                delay_diff = abs(delay - std_delay)
+                if delay_diff < best_delay_diff:
+                    best_delay_diff = delay_diff
+                    best_head = (head_track_id, head_class_id, head_position, head_end_time)
+
+            if best_head is None:
+                print(f"{tail_track_id} Tail not match: No heads match delay at position {tail_start_position}")
+                continue
+
+            # 找到了匹配的head，进行记录
+            head_track_id, head_class_id, head_position, head_end_time = best_head
+            matched_head_track_ids.add(head_track_id)
+            # 由于未知原因，星星时长总是长了1/16拍，进行修正
+            tail_end_time -= one_beat_Msec / 16
+            # 写入final_slide_info
+            full_movement_syntax = f"{tail_start_position}{get_suffix(head_class_id)}{tail_movement_syntax}{get_suffix(tail_class_id)}"
+            key = (head_track_id, head_class_id, full_movement_syntax)
+            value = (head_end_time, tail_start_time, tail_end_time)
+            final_slide_info[key] = value
+
+
+        # 将未匹配的head也写入final_slide_info
+        for (head_track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
+            if head_track_id not in matched_head_track_ids:
+                full_movement_syntax = f"{head_position}{get_suffix(head_class_id, isSingleHead=True)}"
+                key = (head_track_id, head_class_id, full_movement_syntax)
+                value = head_end_time
+                final_slide_info[key] = value
+
+        # # 打印final_slide_info
+        # print("\n=== Final Slide Info ===")
+        # for (track_id, class_id, movement_syntax), time_info in final_slide_info.items():
+        #     if isinstance(time_info, tuple):
+        #         head_end_time, tail_start_time, tail_end_time = time_info
+        #         print(f"Slide Note: Track ID {track_id}, Class ID {class_id}, Movement {movement_syntax}, Head End Time {head_end_time:.2f} ms, Tail Start Time {tail_start_time:.2f} ms, Tail End Time {tail_end_time:.2f} ms")
+        #     else:
+        #         head_end_time = time_info
+        #         print(f"Single Slide Note: Track ID {track_id}, Class ID {class_id}, Movement {movement_syntax}, Head End Time {head_end_time:.2f} ms")
+
+        return final_slide_info
+
+
+
+
+
+
+
+
+
+
+
+    # debug
+    @log_error
+    def analyze_all_notes_info(self, bpm, chart_lv, base_denominator, duration_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
+
+
+        def get_best_numerator_denominator(diff_beat, input_denominator, enable_12):
+            """在12和输入分母中选择误差最小的分母"""
+
+            # 如果输入的分母 >=16，启用12作为备选分母
+            candidates = [input_denominator]
+            if input_denominator >= 16 and enable_12:
+                candidates.append(12)
+            
+            # 选择误差最小的分母
+            best_error = float('inf')
+            best_total_numerator = 0
+            best_denominator = input_denominator
+
+            for denom in candidates:
+                total_numerator = round(diff_beat * denom)
+                # 零间隔
+                if total_numerator == 0:
+                    error = abs(diff_beat)
+                    if error < best_error:
+                        best_error = error
+                        best_total_numerator = 0
+                        best_denominator = 1
+                    continue
+                # 计算误差
+                fraction_value = total_numerator / denom
+                error = abs(diff_beat - fraction_value)
+                if error < best_error:
+                    best_error = error
+                    best_total_numerator = total_numerator
+                    best_denominator = denom
+
+            return best_total_numerator, best_denominator
+            
+
+        def get_fraction(diff_beat, input_denominator, enable_12=True):
+            # 返回格式：分子，分母，整数
+            # 0.5  -> 1/2 + 0 -> 1, 2, 0
+            # 1.0  -> 0/1 + 1 -> 0, 1, 1
+            # 2.25 -> 1/4 + 2 -> 1, 4, 2
+            
+            raw_numerator, raw_denominator = get_best_numerator_denominator(diff_beat, input_denominator, enable_12)
+            if raw_numerator == 0: return 0, 1, 0 # 零间隔直接返回
+            # 获取整数和余数部分
+            one = raw_numerator // raw_denominator
+            remainder = raw_numerator % raw_denominator
+            # 是整数，直接返回，不需要约分余数
+            if remainder == 0: return 0, 1, one
+            # 是小数，约分余数部分
+            gcd_num = gcd(remainder, raw_denominator)
+            numerator = remainder // gcd_num
+            denominator = raw_denominator // gcd_num
+
+            return numerator, denominator, one
+
+
+
+
+
+
+
+
+        # 准备输出txt文件
+        output_dir = os.path.dirname(self.video_path)
+        txt_path = os.path.join(output_dir, 'maidata.txt')
+        if os.path.exists(txt_path):
+            os.remove(txt_path)
+        # 写入文件头
+        video_name = os.path.splitext(os.path.basename(self.video_path))[0].replace('_standardized', '')
+        with open(txt_path, 'w', encoding='utf-8') as f:
+            f.write(f'&title={video_name}\n')
+            f.write('&artist=default\n')
+            f.write('&first=0\n')
+            f.write(f'&des_{chart_lv}=default\n')
+            f.write(f'&lv_{chart_lv}=10\n')
+            f.write(f'&inote_{chart_lv}=({bpm})' + '{1},')
+        # 打印基础信息
+        level_label = ['zero', 'easy', 'basic', 'advanced', 'expert', 'master', 'remaster', 'special']
+        print(f"\n{video_name} - {level_label[chart_lv]}")
+        one_beat_Msec = 60 / bpm * 1000 * 4
+        base_resolution = one_beat_Msec / base_denominator
+        print(f"bpm: {bpm}, one beat: {one_beat_Msec:.3f} ms, base resolution: {base_resolution:.3f} ms")
+
+        # 合并所有info
+        all_notes_info = {**tap_info, **slide_info, **touch_info, **hold_info, **touch_hold_info}
+        # 按时间排序
+        sorted_notes = sorted(all_notes_info.items(), key=lambda item: item[1][0] if isinstance(item[1], tuple) else item[1])
+        # 保存合并后的整体预处理数据到文件
+        note_preprocess_result_path = os.path.join(output_dir, 'note_preprocess_result.txt')
+        if os.path.exists(note_preprocess_result_path):
+            os.remove(note_preprocess_result_path)
+        with open(note_preprocess_result_path, 'w', encoding='utf-8') as f:
+            for (track_id, class_id, position), time in sorted_notes:
+                # 将time元组转为字符串
+                if isinstance(time, tuple):
+                    time = ','.join(str(item) for item in time)
+                # 写入格式：track_id, class_id, position, time
+                f.write(f"{track_id}, {class_id}, {position}, {time}\n")
+        print(f"note preprocess data saved to {note_preprocess_result_path}")
+
+
+
+
+
+
+
+
+        # 计算最小公倍数分母用于累加
+        if base_denominator >= 16:
+            lcm_denom = base_denominator * 12 // gcd(base_denominator, 12)
+        else:
+            lcm_denom = base_denominator
+
+        # 定义后缀词典
+        position_suffix = {
+            11: 'b',    # break-tap
+            12: 'x',    # ex-tap
+            13: 'bx',   # break-ex-tap
+
+            # 没有星星，因为星星后缀在 merge_slide_info() 中处理过了
+
+            40: 'h',   # hold
+            41: 'bh',  # break-hold
+            42: 'xh',  # ex-hold
+            43: 'bxh', # break-ex-hold
+
+            50: 'h',   # touch-hold
+        }
+
+        init_time = 0
+        last_time = 0
+        base_numerator_counter = 0
+        last_position = None
+        last_denominator = 0
+        time_deviations = []
+
+        with open(txt_path, 'a', encoding='utf-8') as f:
+            for (track_id, class_id, position), time in sorted_notes:
+
+                # 根据class_id设置position后缀
+                position = f"{position}{position_suffix.get(class_id, '')}"
+
+                if isinstance(time, (float, int)):
+                    # check time
+                    if math.isnan(time) or time < 0:
+                        print(f"analyze_all_notes_info: invalid time value for track_id {track_id}, time: {time}")
+                        continue
+                    # 赋值
+                    note_time = time
+                elif isinstance(time, tuple):
+                    # check time tuple
+                    if len(time) == 0:
+                        print(f"analyze_all_notes_info: empty time tuple for track_id {track_id}")
+                        continue
+                    valid = True
+                    for i, t in enumerate(time):
+                        if not (isinstance(t, (float, int)) and not math.isnan(t) and t >= 0):
+                            print(f"analyze_all_notes_info: invalid time tuple element at index {i} for track_id {track_id}, value: {t}")
+                            valid = False
+                            break
+                    if not valid:
+                        continue
+                    # 赋值
+                    note_time = time[0]
+                else:
+                    print(f"analyze_all_notes_info: invalid time format for track_id {track_id}, time: {time}")
+                    continue
+
+                if isinstance(time, tuple) and len(time) >= 2:
+                    # 处理 length 信息
+                    note_length = time[-1] - time[-2]
+                    length_beat = note_length / one_beat_Msec
+                    # 分类处理: hold -> base_denominator，touch_hold/slide -> duration_denominator
+                    denominator_to_use = duration_denominator \
+                        if self.noteDetector.get_main_class_id(class_id) in [2, 5] \
+                        else base_denominator
+                    numerator, denominator, one = get_fraction(length_beat, denominator_to_use, enable_12=False)
+                    # 将整数部分加入分子
+                    if one > 0:
+                        numerator = numerator + one * denominator
+                    # 异常情况默认变为1/1 (时值不能为0)
+                    if numerator == 0 and denominator == 1 and one == 0:
+                        numerator = 1
+                        denominator = 1
+                    position = f'{position}[{denominator}:{numerator}]'
+
+
+                if last_time == 0:
+                    # 第一个音符
+                    init_time = note_time
+                    last_time = note_time
+                    last_position = position
+                    print(f"[{note_time:.3f}] ", end='')
+                    continue
+                
+                diff_Msec = note_time - last_time
+                diff_beat = diff_Msec / one_beat_Msec
+                numerator, denominator, one = get_fraction(diff_beat, base_denominator, enable_12=True)
+
+                # update last_time
+                # 使用最小公倍数分母进行累加 (为了兼容1/12)
+                # 采用 init_time + 总passed_beat
+                # 这是精确的谱面播放到此处的时间点，避免了累加误差
+                base_numerator = round(diff_beat * lcm_denom)
+                base_numerator_counter += base_numerator
+                passed_beat = base_numerator_counter / lcm_denom
+                passed_beat_Msec = passed_beat * one_beat_Msec
+                last_time = passed_beat_Msec + init_time
+
+                # 统计误差
+                real_time_diff = note_time - init_time
+                time_deviation = real_time_diff - passed_beat_Msec
+                time_deviations.append(time_deviation)
+
+                if numerator == 0 and one == 0:
+                    # 零间隔，使用 '/' 与上一个音符连接 
+                    last_position = f'{last_position}/{position}'
+                    continue
+                
+                # 打印当前音符信息
+                if one > 0:
+                    print(f"{last_position}-{numerator}/{denominator}+{one}, ", end='')
+                else:
+                    print(f"{last_position}-{numerator}/{denominator}, ", end='')
+
+                # 生成逗号部分
+                if numerator == 0 and denominator == 1 and one > 0:
+                    commas = f'{"," * one}'
+                elif one > 0:
+                    commas = f'{"," * numerator}' + '{1}' + f'{"," * one}'
+                else:
+                    commas = f'{"," * numerator}'
+
+                # 将当前音符写入txt
+                if denominator != last_denominator:
+                    f.write('\n{' + f'{denominator}' + '}' + f'{last_position}{commas}')
+                else:
+                    f.write(f'{last_position}{commas}')
+
+                if one > 0: denominator = 1
+                last_denominator = denominator
+                last_position = position
+                
+
+
+
+
+
+
+
+
+
+        # 添加结尾E
+        print(f'{last_position}-E')
+        with open(txt_path, 'a', encoding='utf-8') as f:
+            f.write(f'{last_position},\n' + '{1},E\n')
+
+        # 打印offset统计信息
+        length = len(time_deviations)
+        mean = np.mean(time_deviations)
+        min = np.min(time_deviations)
+        max = np.max(time_deviations)
+        median = np.median(time_deviations)
+        std_dev = np.std(time_deviations)
+        print(f"Time deviations of {length} notes: Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
+
+
+
+
+
+
+
+
+
+    # debug
+    @log_error
+    def main(self, main_folder: str, bpm: float, chart_lv: int, base_denominator: int, duration_denominator: int):
+        try:
+            # 在文件夹查找视频文件
+            for root, _, files in os.walk(main_folder):
+                for fn in files:
+                    if fn.lower().endswith('standardized.mp4'):
+                        self.video_path = os.path.join(root, fn)
+                        break
+            if not self.video_path:
+                raise Exception(f"No standardized.mp4 file found under {main_folder}")
+            
+            # 获取视频信息
+            cap = cv2.VideoCapture(self.video_path)
+            self.video_size = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.fps = round(cap.get(cv2.CAP_PROP_FPS))
+            #total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            cap.release()
+
+            # 定义一些常数
+            self.screen_cx = self.video_size // 2
+            self.screen_cy = self.screen_cx
+            # 1080p下，音符从120出现480结束
+            self.judgeline_start = self.video_size * 120 / 1080
+            self.judgeline_end = self.video_size * 480 / 1080
+            self.note_travel_dist = self.judgeline_end - self.judgeline_start
+            self.touch_travel_dist = 34 * self.video_size / 1080        # 1080p下，touch移动距离为34像素
+            self.touch_hold_travel_dist = 30 * self.video_size / 1080   # 1080p下，touch_hold移动距离为30像素
+            self.touch_areas = self.get_touch_areas()
+            self.noteDetector = NoteDetector.NoteDetector()
+            self.track_data = self.noteDetector._load_track_results(main_folder)
+
+
+            # tap
+            tap_info = {}
+            tap_data = self.preprocess_tap_data()
+            if tap_data:
+                self.note_DefaultMsec, self.note_OptionNotespeed = self.estimate_note_DefaultMsec(tap_data)
+                tap_info = self.analyze_tap_reach_time(tap_data)
+
+            # touch
+            touch_info = {}
+            touch_data = self.preprocess_touch_data()
+            if touch_data:
+                self.touch_DefaultMsec, self.touch_OptionNotespeed = self.estimate_touch_DefaultMsec(touch_data)
+                touch_info = self.analyze_touch_reach_time(touch_data)
+
+            # hold
+            hold_info = {}
+            hold_data = self.preprocess_hold_data()
+            if hold_data:
+                hold_info = self.analyze_hold_reach_time(hold_data)
+
+            # touch-hold
+            touch_hold_info = {}
+            touch_hold_data = self.preprocess_touch_hold_data()
+            if touch_hold_data:
+                touch_hold_info = self.analyze_touch_hold_reach_time(touch_hold_data)
+
+            # slide
+            # 处理星星头，视为 tap 处理
+            slide_head_info = {}
+            slide_head_data = self.preprocess_slide_head_data()
+            if slide_head_data:
+                slide_head_info = self.analyze_tap_reach_time(slide_head_data)
+            # 处理星星尾
+            slide_tail_info = {}
+            slide_tail_data = self.preprocess_slide_tail_data()
+            if slide_tail_data:
+                slide_tail_info = self.analyze_slide_tail(slide_tail_data)
+            # 合并slide信息
+            slide_info = self.merge_slide_info(slide_head_info, slide_tail_info, bpm)
+
+            # analyze all notes info
+            self.analyze_all_notes_info(bpm, chart_lv, base_denominator, duration_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
+
+        except Exception as e:
+            raise Exception(f"Error in NoteAnalyzer.main: {e}")
+        
+
+
+    @log_error
+    def get_touch_areas(self) -> dict:
+        # 1080p的触摸区域中心坐标
+        std_touch_areas = {
+            # A
+            'A1': (693, 171), 'A2': (909, 388), 'A3': (908, 693), 'A4': (692, 910),
+            'A5': (387, 909), 'A6': (170, 694), 'A7': (170, 388), 'A8': (386, 170),
+            # B
+            'B1': (624, 336), 'B2': (745, 456), 'B3': (744, 626), 'B4': (624, 745),
+            'B5': (455, 745), 'B6': (335, 626), 'B7': (335, 456), 'B8': (454, 336),
+            # C
+            'C1': (540, 540),
+            # D
+            'D1': (540, 117), 'D2': (840, 241), 'D3': (963, 542), 'D4': (839, 840),
+            'D5': (540, 964), 'D6': (241, 840), 'D7': (116, 540), 'D8': (239, 241),
+            # E
+            'E1': (540, 229), 'E2': (760, 320), 'E3': (852, 540), 'E4': (760, 761),
+            'E5': (539, 853), 'E6': (319, 760), 'E7': (228, 540), 'E8': (319, 321),
+        }
+        new_touch_areas = {}
+        for area_label, (x, y) in std_touch_areas.items():
+            scaled_x = round((x - 540) * self.video_size / 1080 + self.screen_cx)
+            scaled_y = round((y - 540) * self.video_size / 1080 + self.screen_cy)
+            new_touch_areas[area_label] = (scaled_x, scaled_y)
+        return new_touch_areas
+
+
+
+if __name__ == "__main__":
+
+    folder_name = "Get U ♭ack EXPERT"
+    folder_path = rf"D:\git\aaa-HachimiDX-Convert\aaa-result\{folder_name}"
+
+    bpm = 205
+    chart_lv = 4
+    base_denominator = 16
+    duration_denominator = 8
+
+    try:
+        analyzer = NoteAnalyzer()
+        analyzer.main(folder_path, bpm, chart_lv, base_denominator, duration_denominator)
+    except Exception as e:
+        print(f"Error: {e}")
+        print(f"Error trace: {error_trace}")
+        traceback.print_exc()
