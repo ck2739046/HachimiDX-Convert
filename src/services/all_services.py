@@ -5,6 +5,7 @@ from .path_manage import PathManage
 from .settings_manage import SettingsManage
 from .i18n_manage import I18nManage
 from .pipeline import MediaPipeline
+from .majdata_sync_server import VideoSyncServer
 import i18n
 
 
@@ -46,6 +47,14 @@ class AllServices:
             print("MediaPipeline initialization completed.")
         else:
             return err("Failed to initialize MediaPipeline.", inner=result)
+
+
+        # Majdata sync server (global singleton)
+        try:
+            VideoSyncServer.get_instance()
+            print("Majdata sync server initialization completed.")
+        except Exception as e:
+            return err(f"Failed to initialize Majdata sync server: {e}")
         
 
         print(i18n.t("all_services.notice_all_initialized"))
@@ -62,6 +71,12 @@ class AllServices:
         print(i18n.t("all_services.notice_shutting_down_all"))
 
         # 关闭顺序要反着来
+
+        # Stop Majdata sync server
+        try:
+            VideoSyncServer.shutdown_instance()
+        except Exception:
+            pass
 
         print(i18n.t("all_services.notice_all_shutdown"))
         cls._is_initialized = False
