@@ -6,7 +6,7 @@ import math
 import functools
 import traceback
 from math import gcd
-import NoteDetector
+import core.auto_convert.NoteDetect as NoteDetect
 
 
 
@@ -2660,7 +2660,7 @@ class NoteAnalyzer:
             self.touch_travel_dist = 34 * self.video_size / 1080        # 1080p下，touch移动距离为34像素
             self.touch_hold_travel_dist = 30 * self.video_size / 1080   # 1080p下，touch_hold移动距离为30像素
             self.touch_areas = self.get_touch_areas()
-            self.noteDetector = NoteDetector.NoteDetector()
+            self.noteDetector = NoteDetect.NoteDetector()
             self.track_data = self.noteDetector._load_track_results(main_folder)
 
 

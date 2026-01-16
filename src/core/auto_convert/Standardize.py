@@ -1,22 +1,31 @@
 import cv2
 import numpy as np
 import os
-import subprocess
 from typing import Tuple, Optional
 import sys
-import tkinter as tk
-from tkinter import ttk, messagebox
+from pathlib import Path
 
-root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-if root not in sys.path: sys.path.insert(0, root)
-import tools.path_config
-import tools.ffmpeg_utils
+from ..schemas.op_result import OpResult, ok, err, print_op_result
+from ..tools import media_ffprobe_inspect, FFprobeInspectResult
+from src.services import PathManage
 
-class Standardizer:
+
+
+class Standardize:
+
     def __init__(self):
-        self.circle_center = None  # (x, y)
-        self.circle_radius = None
-        self.temp_dir = os.path.normpath(os.path.abspath(tools.path_config.temp_dir))
+        self.circle_center: Tuple[int, int] = None  # (x, y)
+        self.circle_radius: float = None
+        self.temp_dir: Path = PathManage.TEMP_DIR
+
+
+
+
+    def main(self, data: StandardizeModel):
+        """
+        规范化视频 主入口
+
+        """
         
 
 
