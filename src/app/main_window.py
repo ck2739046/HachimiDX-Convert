@@ -1,8 +1,14 @@
 """Main Window - 主窗口框架"""
 
+from __future__ import annotations
+
+from typing import Optional
+
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel, QSizePolicy
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, QObject, pyqtSignal, pyqtSlot, QUrl
 from PyQt6.QtGui import QIcon, QWindow
+from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PyQt6.QtMultimediaWidgets import QVideoWidget
 
 from .widgets import SquareWidget
 from .widgets import SegmentedNavBar
@@ -13,7 +19,16 @@ from .pages.media_tools_page import MediaToolsPage
 from .pages.tasks_page import TasksPage
 
 import i18n
-from src.services import SettingsManage, PathManage, MajdataSession
+from src.services import SettingsManage, PathManage, MajdataSession, VideoSyncServer
+
+
+class _CallbackEmitter(QObject):
+    """Execute callables in Qt main thread via signal."""
+    callback_signal = pyqtSignal(object)
+    def __init__(self):
+        super().__init__()
+    def emit_callback(self, callback) -> None:
+        self.callback_signal.emit(callback)
 
 
 class LeftPanel(QWidget):
@@ -91,6 +106,12 @@ class LeftPanel(QWidget):
         layout.addWidget(container)
 
 
+    def set_video_widget(self, widget: QWidget) -> None:
+
+        layout = self.video_placeholder.layout()
+        layout.addWidget(widget)
+
+
 
 
 
@@ -140,6 +161,10 @@ class RightPanel(QWidget):
         self.majdata_page.set_edit_hwnd(int(hwnd))
 
 
+    def set_majdata_page_video_player(self, media_player) -> None:
+        self.majdata_page._media_player = media_player
+
+
     # 临时的，后续会删掉
     def create_placeholder(self, text):
         label = QLabel(text)
@@ -162,6 +187,16 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._majdata_session = None
         self._closing: bool = False
+
+        # Video player
+        self._media_player: Optional[QMediaPlayer] = None
+        self._audio_output: Optional[QAudioOutput] = None
+        self._video_widget: Optional[QVideoWidget] = None
+
+        # Cross-thread callback executor (for sync server)
+        self._callback_emitter = _CallbackEmitter()
+        self._callback_emitter.callback_signal.connect(self._execute_callback)
+
         self.setup_ui()
     
 
@@ -206,10 +241,13 @@ class MainWindow(QMainWindow):
         # 左侧面板
         self.left_panel = LeftPanel()
         main_layout.addWidget(self.left_panel)
-        
+
         # 右侧面板
         self.right_panel = RightPanel()
         main_layout.addWidget(self.right_panel)
+
+        # Init Video player
+        self._init_video_player()
 
         # 启动 MajdataSession
         self._majdata_session = MajdataSession(self)
@@ -217,6 +255,46 @@ class MainWindow(QMainWindow):
         result = self._majdata_session.start()
         # if not result.is_ok:
         #     print(f"--Warning: MajdataSession.start failed: {result.error_msg}")
+
+
+
+    def _init_video_player(self) -> None:
+
+        self._video_widget = QVideoWidget()
+        self._video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatioByExpanding)
+
+        self._media_player = QMediaPlayer()
+        self._media_player.setVideoOutput(self._video_widget)
+        self._audio_output = QAudioOutput()
+        self._media_player.setAudioOutput(self._audio_output)
+        self._audio_output.setMuted(True)
+        
+        self.left_panel.set_video_widget(self._video_widget)
+        self.right_panel.set_majdata_page_video_player(self._media_player)
+
+        # Bind global sync server to this window's media player and UI-thread executor
+        try:
+            server = VideoSyncServer.get_instance()
+            server.set_media_player(self._media_player)
+            server.set_main_thread_callback(self.execute_in_main_thread)
+        except Exception as e:
+            print(f"--Warning: Failed to bind Majdata sync server: {e}")
+
+
+
+    def execute_in_main_thread(self, callback) -> None:
+        """Schedule a callable to run in Qt main thread."""
+        try:
+            self._callback_emitter.emit_callback(callback)
+        except Exception:
+            pass
+
+    @pyqtSlot(object)
+    def _execute_callback(self, callback) -> None:
+        try:
+            callback()
+        except Exception as e:
+            print(f"[MajdataSync] Error executing callback: {e}")
 
 
 
@@ -228,6 +306,11 @@ class MainWindow(QMainWindow):
             return
 
         self._closing = True
+
+        # Reset video player
+        if self._media_player is not None:
+            self._media_player.stop()
+            self._media_player.setSource(QUrl())
 
         try:
             # 开始退出 majdata，后通过信号得知退出完成
