@@ -187,12 +187,13 @@ class MajdataSession(QObject):
 
 
     @staticmethod
-    def _find_hwnd(title_prefix: str) -> Optional[int]:
+    def _find_hwnd(keyword: str) -> Optional[int]:
 
         def callback(hwnd: int, extra: list[int]) -> bool:
             name = win32gui.GetWindowText(hwnd)
-            # 通过排除 '-' 来避免找到 Explorer.exe 窗口
-            if name.startswith(title_prefix) and "-" not in name:
+            # 通过排除 'hachimidx' 来避免找到 Explorer.exe 窗口
+            name_l, keyword_l = name.lower(), keyword.lower()
+            if name_l.startswith(keyword_l) and "hachimidx" not in name_l:
                 extra.append(hwnd)
             return True
 
@@ -292,7 +293,7 @@ def _find_pids_by_process_name(target: str) -> Optional[list[int]]:
         try:
             name = proc.info['name'].lower()
             pid = proc.info['pid']
-            if name.startswith(target.lower()) and "-" not in name:
+            if name.startswith(target.lower()) and "hachimidx" not in name:
                 found_pids.append(pid)
 
         except Exception:
