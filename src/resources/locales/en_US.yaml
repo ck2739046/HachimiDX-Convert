@@ -183,7 +183,7 @@ en_US:
 
         # ---- Submit Button ----
         warning_task_submit_failed: "Task submit failed.\n\n%{error}"
-        notice_task_submit_success: "Task submitted: %{task_info}"
+        notice_task_submit_success: "Task submitted: %{task_id}"
         warning_unexpected_submit_error: "Unexpected error during task submission:\n%{error}"
 
         # other

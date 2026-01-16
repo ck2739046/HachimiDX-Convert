@@ -14,6 +14,7 @@ from .divider import create_divider
 from .file_selection_row import create_file_selection_row
 from .path_display import create_path_display
 from .button import create_stated_button, create_button
+from .floating_notification import create_floating_notification
 
 __all__ = [
 	'SquareWidget',
@@ -28,4 +29,5 @@ __all__ = [
 	'create_file_selection_row',
 	'create_path_display',
 	'create_button', 'create_stated_button',
+	'create_floating_notification',
 ]

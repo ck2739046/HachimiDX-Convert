@@ -183,7 +183,7 @@ zh_CN:
         
         # ---- Submit Button ----
         warning_task_submit_failed: "任务提交失败。\n\n%{error}"
-        notice_task_submit_success: "任务已提交: %{task_info}"
+        notice_task_submit_success: "任务已提交: %{task_id}"
         warning_unexpected_submit_error: "任务提交时发生意外错误：\n%{error}"
 
         # 其他

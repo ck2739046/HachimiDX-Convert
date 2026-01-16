@@ -493,6 +493,10 @@ class RunFFmpegPage(BaseOutputPage):
             
             runner_id, cmd_list = result.value
             self.output_widget.bind_current_runner_id(runner_id)
+            
+            # 显示悬浮通知
+            message = i18n.t("app.media_subpages.run_ffmpeg.notice_task_submit_success", task_id=runner_id)
+            create_floating_notification(message, self.window())
 
 
         except Exception as e:
