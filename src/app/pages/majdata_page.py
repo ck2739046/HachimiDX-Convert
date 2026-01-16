@@ -97,16 +97,18 @@ class MajdataPage(QWidget):
         layout.setSpacing(0)
 
         # Folder editable combobox
-        self._song_combo = create_folder_combo_box(str(self._main_output_dir), self._option_placeholder, 230)
+        self._song_combo = create_folder_combo_box(str(self._main_output_dir), self._option_placeholder, 240)
         layout.addWidget(self._song_combo)
+        _song_combo_help = create_help_icon(i18n.t("app.majdata_page.ui_song_help"))
+        layout.addWidget(_song_combo_help)
         # Maidata choose
-        self._maidata_combo = create_combo_box(150, show_tooltip = True)
+        self._maidata_combo = create_combo_box(140, show_tooltip = True)
         layout.addWidget(self._maidata_combo)
         # Track choose
-        self._track_combo = create_combo_box(150, show_tooltip = True)
+        self._track_combo = create_combo_box(140, show_tooltip = True)
         layout.addWidget(self._track_combo)
         # Video choose
-        self._video_combo = create_combo_box(150, show_tooltip = True)
+        self._video_combo = create_combo_box(140, show_tooltip = True)
         layout.addWidget(self._video_combo)
         # CheckBox: play video in MajdataView
         self._play_video_checkbox = create_check_box(True)
@@ -145,14 +147,14 @@ class MajdataPage(QWidget):
 
         # Check song
         song = self._song_combo.currentText()
-        if not song or song == self._option_placeholder or song == self._last_selection:
+        if not song or song == self._option_placeholder or song == self._last_selected_song:
             return
         song_path = self._main_output_dir / song
         if not song_path.exists():
             return
 
         # Update last selection
-        self._last_selection = song
+        self._last_selected_song = song
 
         # Clear combobox
         self._maidata_combo.clear()
@@ -263,5 +265,8 @@ class MajdataPage(QWidget):
         self._maidata_combo.clear()
         self._track_combo.clear()
         self._video_combo.clear()
+
+        # 4. Reset last selected song
+        self._last_selected_song = ""
 
         return

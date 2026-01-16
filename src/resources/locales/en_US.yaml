@@ -203,6 +203,17 @@ en_US:
     # ---- majdata page ----
 
     majdata_page:
+      ui_song_help: |
+        The program will automatically scan the subfolders under data/{main_output_dir}.
+        
+        After selecting a folder, the program will look for three types of files:
+        1. Chart files (*.txt)
+        2. Audio files (*.mp3, *.ogg)
+        3. Video files (*.mp4)
+
+        If "---" is selected:
+        1. The video player in the bottom-left stops playing video
+        2. MajdataView/MajdataEdit pauses playback
       ui_play_video_help: |
         checked: The video will play in both the top-left MajdataView and the bottom-left video player.
         unchecked: The video will only play in the bottom-left video player.
