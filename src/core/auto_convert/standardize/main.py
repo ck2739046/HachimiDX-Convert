@@ -21,12 +21,42 @@ class Standardize:
 
 
 
-    def main(self, data: StandardizeModel):
+    def main(self, input_video: Path,
+                   video_mode: str,
+                   start_sec: float = 0.0,
+                   end_sec: float = 0.0,
+                   target_res: int = 1080,
+                   skip_detect_circle: bool = False
+            ) -> OpResult[str]:
+        
         """
         规范化视频 主入口
 
+        Args:
+            input_video(Path): 输入视频路径
+            video_mode(str): 视频模式 source / camera footage
+            start_sec(float): 开始时间(秒)
+            end_sec(float): 结束时间(秒)
+            target_res(int): 目标分辨率(边长)，默认 1080
+            skip_detect_circle(bool): 是否跳过圆心检测，默认 False
+
+        Returns:
+            OpResult[str]: 标准化后的视频的完整路径
         """
         
+        try:
+            print("Standardize video..")
+
+
+
+
+
+
+
+            
+        except Exception as e:
+            return err(f"Unexcepted error in Standardize.main().", error_raw = e)
+
 
 
 
