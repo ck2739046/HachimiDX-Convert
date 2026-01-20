@@ -42,6 +42,9 @@ def main(input_video: Path,
     """
 
     try:
+
+        print("Process video...")
+
         # 获取视频基本信息
         cap = cv2.VideoCapture(input_video)
         if not cap.isOpened():
@@ -68,6 +71,8 @@ def main(input_video: Path,
         if is_output_std:
             return ok(output_path) # 如果输出已经标准了，直接返回
         
+
+
 
 
         # 构建参数
@@ -101,6 +106,20 @@ def main(input_video: Path,
                 M_Defs.end.key: end_sec,
             })
 
+        change_hint = ''
+
+        if need_crop:
+            change_hint += f'  crop to {crop_size}:{crop_size}:{crop_x}:{crop_y} (w:h:x:y)\n'
+        if need_resize:
+            change_hint += f'  resize to {target_res}x{target_res}\n'
+        if need_trim_start:
+            change_hint += f'  trim start to {start_sec}s\n'
+        if need_trim_end:
+            change_hint += f'  trim end to {end_sec}s\n'
+
+        if change_hint:
+            print(f"Process video with changes:\n{change_hint}")
+
 
 
 
@@ -112,6 +131,8 @@ def main(input_video: Path,
         if result_rid != std_runner_id:
             return err(f"Runner ID mismatch when starting process video. expect {std_runner_id}, got {result_rid}.")
         
+        print(f"Process video...Start. (Runner ID = {std_runner_id})")
+
         end_data = wait_ffmpeg_ended(std_runner_id)
 
         result = parse_end_data(end_data)
@@ -121,6 +142,8 @@ def main(input_video: Path,
         # 二次验证：确保输出文件存在且参数符合预期
         if not is_output_already_standardized(output_path, target_res, duration, start_sec, end_sec):
             return err("Output video is invalid after processing.")
+        
+        print("Process video...Ok")
 
         return ok(output_path)
 

@@ -35,7 +35,7 @@ def main(input_video: Path,
 
         # 如果跳过检测，直接返回屏幕中心点
         if skip_detect_circle:
-            print("- Detect circle...skip")
+            print("Detect circle...skip")
             # 默认已经全屏并且在屏幕中心
             circle_center = (video_width // 2, video_height // 2)
             circle_radius = min(video_width, video_height) // 2
@@ -61,7 +61,7 @@ def main(input_video: Path,
 
             # 打印进度
             frame_counter += 1
-            print(f"- Initial detection...{frame_counter}/{total_frames}", end="\r")
+            print(f"Initial detection...{frame_counter}/{total_frames}", end="\r")
 
             ret, frame = cap.read()
             if not ret: break  # 视频结束
@@ -92,7 +92,7 @@ def main(input_video: Path,
         circle_center = (circle_center[0]+1, circle_center[1]) # x轴左移1像素
         circle_radius -= int(video_size / 800)  # 半径减掉一点以避免边缘误差
 
-        print(f"- Initial detection...ok{' '*12}")
+        print(f"Initial detection...ok{' '*12}")
         print(f"  Circle center: {circle_center}, radius: {circle_radius}")
         
         return ok((circle_center, circle_radius))

@@ -70,6 +70,9 @@ class ManualAdjust:
             
             self.display_preview(cap, start_frame, end_frame, fps)
 
+            print("Manual check circle...ok")
+            print(f"  Circle center: {self.operation_history[-1][0]}, radius: {self.operation_history[-1][1]}")
+
             return ok(self.operation_history[-1])
             
         except Exception as e:
