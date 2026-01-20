@@ -1,12 +1,8 @@
-import cv2
-import numpy as np
-import os
-from typing import Tuple, Optional
-import sys
 from pathlib import Path
 
 from ...schemas.op_result import OpResult, ok, err, print_op_result
 from ...schemas.media_model import MediaType
+from src.services import PathManage
 
 from . import detect_circle
 from .manual_adjust import ManualAdjust
@@ -15,15 +11,15 @@ from . import process_video
 
 
 
-def main(self, input_video: Path,
-               video_mode: str,
-               media_type: MediaType,
-               duration: float,
-               std_runner_id: str,
-               start_sec: float = 0.0,
-               end_sec: float = 0.0,
-               skip_detect_circle: bool = False,
-               target_res: int = 1080
+def main(input_video: Path,
+         video_mode: str,
+         media_type: MediaType,
+         duration: float,
+         std_runner_id: str,
+         start_sec: float = 0.0,
+         end_sec: float = 0.0,
+         skip_detect_circle: bool = False,
+         target_res: int = 1080
         ) -> OpResult[Path]:
     
     """
@@ -84,9 +80,20 @@ def main(self, input_video: Path,
         )
         if not result.is_ok:
             return err("Failed to process video.", inner=result)
-        output_path = result.value
+        temp_output_path = result.value
 
-        return ok(output_path)
+        # 第四步：从 temp 目录移动到正式输出目录
+        result = PathManage.get_main_output_dir()
+        if not result.is_ok:
+            return err(f"Failed to get main output dir", inner = result)
+        main_output_dir = result.value
+        final_output_path = main_output_dir / temp_output_path.name
+        try:
+            temp_output_path.replace(final_output_path)
+        except Exception as e:
+            return err(f"Failed to move output video to main output dir.", error_raw=e)
+
+        return ok(final_output_path)
         
     except Exception as e:
         return err(f"Unexcepted error in Standardize.main().", error_raw = e)

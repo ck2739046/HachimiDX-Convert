@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Tuple
 import cv2
+import shutil
 from PyQt6.QtCore import QCoreApplication, QEventLoop
 
 from ...schemas.op_result import OpResult, ok, err, print_op_result
@@ -57,10 +58,6 @@ def main(input_video: Path,
 
 
         crop_size, crop_x, crop_y = calculate_crop_params(video_width, video_height, circle_center, circle_radius, target_res)
-
-        is_input_std, need_crop, need_resize, need_trim_start, need_trim_end = is_input_already_standardized(crop_size, crop_x, crop_y, video_width, video_height, target_res, start_sec, end_sec)
-        if is_input_std:
-            return ok(input_video) # 如果输入已经标准了，直接返回
         
         result = build_output_path(input_video)
         if not result.is_ok:
@@ -70,6 +67,20 @@ def main(input_video: Path,
         is_output_std = is_output_already_standardized(output_path, target_res, duration, start_sec, end_sec)
         if is_output_std:
             return ok(output_path) # 如果输出已经标准了，直接返回
+        
+        is_input_std, need_crop, need_resize, need_trim_start, need_trim_end = is_input_already_standardized(crop_size, crop_x, crop_y, video_width, video_height, target_res, start_sec, end_sec)
+        if is_input_std:
+            # 如果输入已经标准了，直接复制到输出路径
+            print("Input video already standardized, copy to output path.")
+            try:
+                # 如果输出文件已存在，先删除
+                if output_path.exists():
+                    output_path.unlink()
+                # 复制输入文件到输出路径
+                shutil.copy2(input_video, output_path)
+                return ok(output_path)
+            except Exception as e:
+                return err(f"Failed to copy video file: {e}")
         
 
 
@@ -237,12 +248,9 @@ def is_input_already_standardized(crop_size: int,
 def build_output_path(input_video: Path) -> OpResult[Path]:
     
     input_filename = input_video.stem
-    result = PathManage.get_main_output_dir()
-    if not result.is_ok:
-        return err(f"Failed to get main output dir", inner = result)
-    main_output_dir = result.value
+    output_dir = PathManage.TEMP_DIR
     output_filename = f"{input_filename}_std.mp4"
-    output_path = main_output_dir / output_filename
+    output_path = output_dir / output_filename
 
     return ok(output_path.resolve())
 
