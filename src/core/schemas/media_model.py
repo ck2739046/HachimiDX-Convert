@@ -203,7 +203,7 @@ class MediaModel(BaseModel):
 
     @model_validator(mode='after')
     def validate_video_crop_params(self):
-        """校验 video_crop_x/y/w/h 的关系"""
+        """校验 video_crop_w/h/x/y 的关系"""
         set_w = self.video_crop_w is not None
         set_h = self.video_crop_h is not None
         set_x = self.video_crop_x is not None

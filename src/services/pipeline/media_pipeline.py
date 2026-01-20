@@ -96,7 +96,7 @@ class MediaPipeline:
 
 
     @classmethod
-    def run_now(cls, raw_data: dict[str, Any]) -> OpResult[tuple[str, list[str]]]:
+    def run_now(cls, raw_data: dict[str, Any], runner_id: Optional[str]) -> OpResult[tuple[str, list[str]]]:
         """
         API (direct-run): validate -> build cmd -> ProcessManager.start.
 
@@ -112,10 +112,8 @@ class MediaPipeline:
         if not cmd_res.is_ok:
             return err("Failed to build ffmpeg command", inner=cmd_res)
 
-        return process_manager_api.start(cmd_res.value)
-
-
-    @staticmethod
-    def cancel_run(runner_id: str) -> OpResult[None]:
-        """Cancel a running process (direct-run) by runner_id."""
-        return process_manager_api.cancel(runner_id)
+        rid_res = process_manager_api.start(cmd_res.value, runner_id)
+        if not rid_res.is_ok:
+            return err("Failed to start process", inner=rid_res)
+        
+        return ok((rid_res.value, cmd_res.value))
