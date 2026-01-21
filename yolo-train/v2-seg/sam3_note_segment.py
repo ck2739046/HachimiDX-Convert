@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Iterable
+from typing import Any
 
 import cv2
 import numpy as np
@@ -11,37 +10,82 @@ from ultralytics.models.sam import SAM3SemanticPredictor
 
 SAM3_PT: str | None = None
 
-PROMPTS: dict[str, str] = {
-    "tap_note": "hollow circular ring",
-    "hold_note": "elongated hexagonal frame",
-    "slide_note": "star polygon outline",
-    "touch_note": "cluster of four inward-pointing triangles",
-    "touch_hold": "geometric diamond enclosed by a circular arc",
-    "wifi_tip": "pattern of parallel chevron lines",
-}
+# Research flags
+DRAW_CONTOURS = True
+DRAW_LABELS = True
 
-# Control flags (research use only)
-DRAW_CONTOURS = True   # Draw contour lines around each mask
-DRAW_LABELS = True     # Draw class name label
+# Dataset locations (this script is for the v2-seg dataset layout)
+HERE = Path(__file__).resolve().parent
+DATASET_ROOT = HERE / "dataset" / "11820"
+IMAGES_DIR = DATASET_ROOT / "images"
+LABELS_DETECT_DIR = DATASET_ROOT / "labels_detect"
+LABELS_OBB_DIR = DATASET_ROOT / "labels_obb"
 
-# BGR colors for OpenCV overlay
+# Filename pattern
+FILE_PREFIX = "11820_120_standardized_"
+IMAGE_EXT = ".jpg"
+
+# Hardcoded class order (from your dataset YAMLs)
+DETECT_CLASS_NAMES = ["tap", "slide", "touch", "touch-hold"]
+OBB_CLASS_NAMES = ["hold"]
+
+
 COLORS_BGR: dict[str, tuple[int, int, int]] = {
-    "tap_note": (0, 255, 255),  # yellow
-    "hold_note": (255, 128, 0),  # blue-ish (BGR)
-    "slide_note": (255, 0, 255),  # magenta
-    "touch_note": (0, 255, 0),  # green
-    "touch_hold": (0, 128, 255),  # orange
-    "wifi_tip": (255, 255, 0),  # cyan
+    "tap": (0, 255, 255),
+    "slide": (255, 0, 255),
+    "touch": (0, 255, 0),
+    "touch-hold": (0, 128, 255),
+    "hold": (255, 128, 0),
 }
 
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+def get_color(cls_name: str, cls_id: int) -> tuple[int, int, int]:
+    if cls_name in COLORS_BGR:
+        return COLORS_BGR[cls_name]
+    return (255, 255, 255)
 
 
-def _iter_images(input_dir: str | os.PathLike[str]) -> Iterable[Path]:
-    base = Path(input_dir)
-    for p in sorted(base.rglob("*")):
-        if p.is_file() and p.suffix.lower() in IMAGE_EXTS:
-            yield p
+def _read_detect_boxes(label_path: Path, img_w: int, img_h: int) -> dict[int, list[list[float]]]:
+    """YOLO detect format: class cx cy w h (normalized). Returns class_id -> list[xyxy]."""
+    boxes_by_class: dict[int, list[list[float]]] = {}
+    for line in label_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        c_s, cx_s, cy_s, w_s, h_s, *_ = line.split()
+        c = int(float(c_s))
+        cx = float(cx_s)
+        cy = float(cy_s)
+        bw = float(w_s)
+        bh = float(h_s)
+
+        x1 = (cx - bw / 2.0) * img_w
+        y1 = (cy - bh / 2.0) * img_h
+        x2 = (cx + bw / 2.0) * img_w
+        y2 = (cy + bh / 2.0) * img_h
+
+        boxes_by_class.setdefault(c, []).append([x1, y1, x2, y2])
+
+    return boxes_by_class
+
+
+def _read_obb_boxes(label_path: Path, img_w: int, img_h: int) -> dict[int, list[list[float]]]:
+    """YOLO OBB format: class x1 y1 x2 y2 x3 y3 x4 y4 (normalized). Returns class_id -> list[xyxy]."""
+    boxes_by_class: dict[int, list[list[float]]] = {}
+    for line in label_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        parts = line.split()
+        c = int(float(parts[0]))
+        coords = [float(x) for x in parts[1:9]]
+        xs = [coords[i] * img_w for i in (0, 2, 4, 6)]
+        ys = [coords[i] * img_h for i in (1, 3, 5, 7)]
+
+        x1 = min(xs)
+        y1 = min(ys)
+        x2 = max(xs)
+        y2 = max(ys)
+        boxes_by_class.setdefault(c, []).append([x1, y1, x2, y2])
+
+    return boxes_by_class
 
 
 def _overlay_mask_bgr(image_bgr: np.ndarray, mask: np.ndarray, color_bgr: tuple[int, int, int], alpha: float) -> None:
@@ -108,83 +152,77 @@ def _draw_contours_and_label(
         )
 
 
-def main(input_dir: str, output_dir: str) -> None:
-    """Batch-segment all images in input_dir and save colored overlays to output_dir."""
-    if not SAM3_PT:
-        raise RuntimeError("SAM3_PT is not set. Please set it in __main__.")
+def main_ids(frame_ids: list[int], output_dir: str) -> None:
+    """Segment only the given frame ids (no directory scanning)."""
+    if SAM3_PT is None:
+        raise RuntimeError("SAM3_PT must be set.")
 
-    in_dir = Path(input_dir)
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    overrides = dict(
-        conf=0.25,
-        task="segment",
-        mode="predict",
-        model=str(SAM3_PT),
-        half=True,
-        save=False,
-        verbose=False,
-    )
+    overrides: dict[str, Any] = {
+        "conf": 0.25,
+        "task": "segment",
+        "mode": "predict",
+        "model": str(SAM3_PT),
+        "imgsz": 644,  # 14 的倍数
+        "half": True,
+        "save": False,
+        "verbose": False,
+    }
     predictor = SAM3SemanticPredictor(overrides=overrides)
 
-    images = list(_iter_images(in_dir))
-    if not images:
-        print(f"No images found under: {in_dir}")
-        return
-
-    print(f"Found {len(images)} images. Output -> {out_dir}")
-
-    for i, img_path in enumerate(images, start=1):
-        rel = img_path.relative_to(in_dir)
-        out_path = out_dir / rel
-        out_path.parent.mkdir(parents=True, exist_ok=True)
+    for idx, frame_id in enumerate(frame_ids, start=1):
+        stem = f"{FILE_PREFIX}{frame_id}"
+        img_path = IMAGES_DIR / f"{stem}{IMAGE_EXT}"
+        det_path = LABELS_DETECT_DIR / f"{stem}.txt"
+        obb_path = LABELS_OBB_DIR / f"{stem}.txt"
 
         image_bgr = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-        if image_bgr is None:
-            print(f"[{i}/{len(images)}] Skip unreadable: {img_path}")
-            continue
+        h, w = image_bgr.shape[:2]
+
+        detect_boxes = _read_detect_boxes(det_path, w, h)
+        obb_boxes = _read_obb_boxes(obb_path, w, h)
 
         predictor.set_image(str(img_path))
-
         overlay = image_bgr.copy()
         alpha = 0.45
 
-        for cls, prompt in PROMPTS.items():
-            try:
-                results = predictor(text=[prompt])
-            except Exception as e:
-                print(f"[{i}/{len(images)}] Prompt failed ({cls}): {e}")
-                continue
-
-            if not results:
-                continue
-
-            r0 = results[0]
-            if getattr(r0, "masks", None) is None or r0.masks is None:
-                continue
-
-            masks_t = getattr(r0.masks, "data", None)
-            if masks_t is None:
-                continue
-
-            masks = masks_t.detach().cpu().numpy()
-            if masks.ndim != 3:
-                continue
-
-            color = COLORS_BGR.get(cls, (0, 0, 255))
+        # Detect classes (tap/slide/touch/touch-hold)
+        for cls_id, bboxes in detect_boxes.items():
+            cls_name = DETECT_CLASS_NAMES[cls_id]
+            results = predictor(bboxes=bboxes)
+            masks = results[0].masks.data.detach().cpu().numpy()
+            if masks.ndim == 4:
+                masks = masks.squeeze(1)
+            color = get_color(cls_name, cls_id)
             for mask in masks:
                 _overlay_mask_bgr(overlay, mask, color, alpha)
-                _draw_contours_and_label(overlay, mask, cls, color)
+                _draw_contours_and_label(overlay, mask, cls_name, color)
 
+        # OBB classes (hold)
+        for cls_id, bboxes in obb_boxes.items():
+            cls_name = OBB_CLASS_NAMES[cls_id]
+            results = predictor(bboxes=bboxes)
+            masks = results[0].masks.data.detach().cpu().numpy()
+            if masks.ndim == 4:
+                masks = masks.squeeze(1)
+            color = get_color(cls_name, 1000 + cls_id)
+            for mask in masks:
+                _overlay_mask_bgr(overlay, mask, color, alpha)
+                _draw_contours_and_label(overlay, mask, cls_name, color)
+
+        out_path = out_dir / f"{stem}{IMAGE_EXT}"
         cv2.imwrite(str(out_path), overlay)
-        print(f"[{i}/{len(images)}] Wrote: {out_path}")
+        print(f"[{idx}/{len(frame_ids)}] Wrote: {out_path}")
 
 
 if __name__ == "__main__":
 
     SAM3_PT = r"D:\git\aaa-HachimiDX-Convert\yolo-train\sam3.pt"
-    input_dir = r"C:\Users\ck273\Desktop\a"
-    output_dir = r"C:\Users\ck273\Desktop\b"
 
-    main(input_dir, output_dir)
+    FRAME_IDS = [512, 1080, 1459, 2223, 2458, 3242, 3616, 4435,
+                 4660, 4720, 5757, 30472, 30482, 29172, 28591]
+
+    output_dir = str(HERE / "sam3_output")
+    main_ids(FRAME_IDS, output_dir)
