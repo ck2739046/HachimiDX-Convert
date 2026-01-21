@@ -11,7 +11,3 @@ temp.py
 
 data/settings.json
 data/1-output/
-
-sam3*.7z
-sam3*.pt
-yolo-train/v2-seg/dataset
