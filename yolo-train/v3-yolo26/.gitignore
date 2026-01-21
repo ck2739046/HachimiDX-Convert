@@ -1,0 +1,3 @@
+*dataset/
+*.pt
+*_bad_ids.txt
