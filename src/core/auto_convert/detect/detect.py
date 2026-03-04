@@ -13,7 +13,7 @@ def main(std_video_path: Path,
          inference_device: str,
          detect_model_path: str,
          obb_model_path: str
-        ) -> OpResult[Path]:
+        ) -> OpResult[None]:
     
     """
     输入:
@@ -24,7 +24,7 @@ def main(std_video_path: Path,
     - obb_model_path
 
     返回:
-    - OpResult[Path]: output_dir
+    - OpResult[None]
     """
 
     try:
@@ -72,12 +72,11 @@ def main(std_video_path: Path,
             print(f"{name} done, time: {finish_time - start_time:.1f}s, average: {total_frames / (finish_time - start_time):.1f}fps          ")
 
         # 保存到文件
-        output_dir = std_video_path.parent
-        _save_detect_results(final_results, output_dir)
-        return ok(output_dir)
+        _save_detect_results(final_results, std_video_path.parent)
+        return ok()
 
     except Exception as e:
-        return err(e)
+        return err("Unexcepted error in auto_convert > detect > detect", e)
 
 
 
@@ -190,6 +189,8 @@ def _load_detect_results(output_dir):
 
     detections = []
     detect_result_path = os.path.join(output_dir, "detect_result.txt")
+    if not os.path.exists(detect_result_path):
+        raise FileNotFoundError(f"文件不存在: {detect_result_path}")
     
     with open(detect_result_path, 'r', encoding='utf-8') as f:
         current_frame = -1

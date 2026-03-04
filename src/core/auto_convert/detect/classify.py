@@ -7,20 +7,18 @@ from pathlib import Path
 
 from ...schemas.op_result import OpResult, ok, err
 from .note_definition import *
-from .track import _save_track_results
+from .track import _save_track_results, _load_track_results
 
 
-def main(track_results: dict,
-         std_video_path: Path,
+def main(std_video_path: Path,
          batch_cls: int,
          inference_device: str,
          cls_ex_model_path: str,
          cls_break_model_path: str
-        ) -> OpResult[Path]:
+        ) -> OpResult[None]:
     
     """
     输入:
-    - track_results: dict
     - std_video_path
     - batch_cls: yolo predict batch size
     - inference_device
@@ -30,6 +28,10 @@ def main(track_results: dict,
 
     try:
         print("开始分类模块...")
+
+        # 读取追踪结果
+        track_results = _load_track_results(std_video_path.parent)
+
         start_time = time.time()
 
         cap = cv2.VideoCapture(std_video_path)
@@ -103,12 +105,11 @@ def main(track_results: dict,
         print(f"分类模块完成, 耗时{finish_time - start_time:.1f}s                       ")
         
         # 保存到文件
-        output_dir = std_video_path.parent
-        _save_track_results(track_results)
-        return ok(output_dir)
+        _save_track_results(track_results, std_video_path.parent, is_cls=True)
+        return ok()
         
     except Exception as e:
-        return err(e)
+        return err("Unexcepted error in auto_convert > detect > classify", e)
     
     finally:
         cap.release()

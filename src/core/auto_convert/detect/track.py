@@ -10,10 +10,14 @@ from pathlib import Path
 
 from ...schemas.op_result import OpResult, ok, err
 from .note_definition import *
+from .detect import _load_detect_results
 
 
-def main(detect_results: list, std_video_path: Path) -> OpResult[Path]:
+def main(std_video_path: Path) -> OpResult[None]:
     try:
+        # 读取检测结果
+        detect_results = _load_detect_results(std_video_path.parent)
+
         # 获取视频信息
         cap = cv2.VideoCapture(std_video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -87,12 +91,11 @@ def main(detect_results: list, std_video_path: Path) -> OpResult[Path]:
         print(f"追踪模块完成, 耗时{finish_time - start_time:.1f}s, 平均{total_frames / (finish_time - start_time):.1f}fps          ")
         
         # 保存到文件
-        output_dir = std_video_path.parent
-        _save_track_results(final_tracked_results, output_dir, is_cls=False)
-        return ok(output_dir)
+        _save_track_results(final_tracked_results, std_video_path.parent, is_cls=False)
+        return ok()
 
     except Exception as e:
-        return err(e)
+        return err("Unexcepted error in auto_convert > detect > track", e)
 
 
 

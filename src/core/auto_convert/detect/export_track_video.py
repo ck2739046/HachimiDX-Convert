@@ -9,13 +9,17 @@ from pathlib import Path
 
 from ...schemas.op_result import OpResult, ok, err
 from .note_definition import *
+from .track import _load_track_results
 
 
-def main(track_results: dict, std_video_path: Path) -> OpResult[Path]:
+def main(std_video_path: Path) -> OpResult[Path]:
 
     print("开始导出视频模块...")
     
     try:
+        # 读取追踪结果
+        track_results = _load_track_results(std_video_path.parent)
+
         # 获取视频信息
         cap = cv2.VideoCapture(std_video_path)
         video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -251,4 +255,4 @@ def main(track_results: dict, std_video_path: Path) -> OpResult[Path]:
         return ok(Path(final_track_video_path))
 
     except Exception as e:
-        return err(e)
+        return err("Unexcepted error in auto_convert > detect > export_track_video", e)
