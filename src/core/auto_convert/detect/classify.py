@@ -1,18 +1,8 @@
-from dataclasses import dataclass
 from ultralytics import YOLO
-from ultralytics.trackers import BOTSORT
-import os
 import cv2
 import time
 import numpy as np
 from collections import defaultdict
-from types import SimpleNamespace
-from ultralytics.engine.results import OBB
-from ultralytics.utils import LOGGER
-import logging
-import shutil
-import traceback
-import math
 from pathlib import Path
 
 from ...schemas.op_result import OpResult, ok, err
