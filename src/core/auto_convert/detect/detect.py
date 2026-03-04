@@ -156,7 +156,7 @@ def _parse_detections_to_note_geometrys(result, frame_number, model_name):
 
 def _save_detect_results(detections, output_dir):
 
-    detections = sorted(detections, key=lambda x: x.frame)
+    detections = sorted(detections, key=lambda x: x.frame) # 按帧号排序
     detect_result_path = os.path.join(output_dir, "detect_result.txt")
     
     with open(detect_result_path, 'w', encoding='utf-8') as f:

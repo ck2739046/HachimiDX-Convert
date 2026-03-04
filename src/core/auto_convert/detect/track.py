@@ -149,7 +149,7 @@ def _save_track_results(tracks, output_dir, is_cls):
     with open(track_result_path, 'w', encoding='utf-8') as f:
         for key, value in tracks.items():
             track_id, note_type = key
-            note_geometry_list = value
+            note_geometry_list = sorted(value, key=lambda x: x.frame) # 按帧号排序
 
             if len(note_geometry_list) > 0:
                 # 写入轨迹头
