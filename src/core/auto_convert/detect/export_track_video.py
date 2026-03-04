@@ -1,21 +1,17 @@
-from dataclasses import dataclass
-from ultralytics import YOLO
-from ultralytics.trackers import BOTSORT
 import os
 import cv2
 import time
 import numpy as np
 from collections import defaultdict
-from types import SimpleNamespace
-from ultralytics.engine.results import OBB
-from ultralytics.utils import LOGGER
-import logging
 import shutil
-import traceback
-import math
+import subprocess
+from pathlib import Path
+
+from ...schemas.op_result import OpResult, ok, err
+from .note_definition import *
 
 
-def export_video_module(self, track_results, std_video_path, output_dir, video_name):
+def main(track_results: dict, std_video_path: Path) -> OpResult[Path]:
 
     print("开始导出视频模块...")
     
@@ -28,6 +24,8 @@ def export_video_module(self, track_results, std_video_path, output_dir, video_n
         total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
         # 输出视频设置
+        output_dir = std_video_path.parent
+        video_name = output_dir.name
         temp_track_video_path = os.path.join(output_dir, f'{video_name}_tracked_temp.mp4')
         if os.path.exists(temp_track_video_path):
             os.remove(temp_track_video_path)
@@ -54,21 +52,24 @@ def export_video_module(self, track_results, std_video_path, output_dir, video_n
         
         # 按帧号组织轨迹点
         frame_tracks = defaultdict(list)
-        for track_id, track_data in track_results.items():
-            if track_data['class_id'] is not None:
-                for point in track_data['path']:
-                    frame_tracks[point['frame']].append({
-                        'track_id': track_id,
-                        'class_id': track_data['class_id'],
-                        'x1': point['x1'],
-                        'y1': point['y1'],
-                        'x2': point['x2'],
-                        'y2': point['y2'],
-                        'x3': point['x3'],
-                        'y3': point['y3'],
-                        'x4': point['x4'],
-                        'y4': point['y4']
-                    })
+        for key, value in track_results.items():
+            track_id, note_type = key
+            note_geometry_list = value
+            if len(note_geometry_list) <= 0: continue
+            for note in note_geometry_list:
+                frame_tracks[note.frame].append({
+                    'track_id': track_id,
+                    'note_type': note_type,
+                    'note_varient': note.note_varient,
+                    'x1': note.x1,
+                    'y1': note.y1,
+                    'x2': note.x2,
+                    'y2': note.y2,
+                    'x3': note.x3,
+                    'y3': note.y3,
+                    'x4': note.x4,
+                    'y4': note.y4
+                })
         
         # 存储轨迹历史用于绘制轨迹线
         track_history = defaultdict(list)
@@ -93,14 +94,15 @@ def export_video_module(self, track_results, std_video_path, output_dir, video_n
             # 绘制当前帧的音符
             for track in current_tracks:
                 track_id = track['track_id']
-                class_id = track['class_id']
+                note_type = track['note_type']
+                note_varient = track['note_varient']
                 color = get_color_for_id(track_id)
                 
                 # 记录当前帧中存在的轨迹
                 current_track_ids.add(track_id)
                 
-                # 根据class_id绘制不同类型的音符
-                if self.is_obb(class_id):
+                # 根据note_type绘制不同类型的音符
+                if is_obb(note_type):
                     points = np.array([
                         [track['x1'], track['y1']],
                         [track['x2'], track['y2']],
@@ -113,11 +115,10 @@ def export_video_module(self, track_results, std_video_path, output_dir, video_n
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 
                 # 绘制标签
-                class_name = self.class_id_map.get(class_id, f'unknown')
-                label = f'{class_name} ID:{track_id}'
+                label = f'{note_type.name}.{note_varient} ID:{track_id}'
                 label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
                 
-                if self.is_obb(class_id):
+                if is_obb(note_type):
                     # 找到OBB四个点中最上方的点作为标签位置；若y相同则选择x最小
                     points = [
                         (int(track['x1']), int(track['y1'])),
@@ -138,7 +139,7 @@ def export_video_module(self, track_results, std_video_path, output_dir, video_n
                 
                 # 更新轨迹历史
                 # 计算中心点：OBB 使用四点平均，其他类型使用矩形中心
-                if self.is_obb(class_id):
+                if is_obb(note_type):
                     center_x = int(round((track['x1'] + track['x2'] + track['x3'] + track['x4']) / 4.0))
                     center_y = int(round((track['y1'] + track['y2'] + track['y3'] + track['y4']) / 4.0))
                 else:
@@ -214,9 +215,21 @@ def export_video_module(self, track_results, std_video_path, output_dir, video_n
             '-shortest',       # 以最短的流为准
             final_track_video_path
         ]
-        
+        # 使用subprocess运行ffmpeg命令
         try:
-            result = ffmpeg_utils.run_ffmpeg(ffmpeg_args)
+            from src.services import PathManage
+            ffmpeg_exe = str(PathManage.FFMPEG_EXE_PATH)
+            cmd = [ffmpeg_exe] + ffmpeg_args
+
+            print("Running FFmpeg command:", " ".join(cmd))
+        
+            result = subprocess.run(
+                cmd,
+                capture_output=False,
+                text=True,
+                encoding='utf-8'
+            )
+
             if result.returncode == 0:
                 os.remove(temp_track_video_path)
             else:
@@ -235,7 +248,7 @@ def export_video_module(self, track_results, std_video_path, output_dir, video_n
         print(f"追踪视频导出完成，总耗时{elapsed_time:.1f}s")
         print(f"追踪视频已保存到：{final_track_video_path}")
 
-        return final_track_video_path
+        return ok(Path(final_track_video_path))
 
     except Exception as e:
-        raise Exception(f"视频导出模块错误: {e}") 
+        return err(e)
