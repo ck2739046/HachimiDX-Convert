@@ -43,7 +43,7 @@ class Note_Geometry:
     r: float
 
 
-def map_model_output_to_note_type(model_type, index) -> NoteType:
+def map_model_class_to_note_type(model_type, index) -> NoteType:
     if model_type == 'obb':
         if index == 0: return NoteType.HOLD
     else: # detect

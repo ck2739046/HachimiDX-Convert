@@ -25,11 +25,12 @@ from .note_definition import *
 
 
 
-def main(std_video_path,
-         batch_detect,
-         inference_device,
-         detect_model_path,
-         obb_model_path) -> OpResult[Path]:
+def main(std_video_path: Path,
+         batch_detect: int,
+         inference_device: str,
+         detect_model_path: str,
+         obb_model_path: str
+        ) -> OpResult[Path]:
     try:
         # 获取视频信息
         cap = cv2.VideoCapture(std_video_path)
@@ -75,7 +76,7 @@ def main(std_video_path,
             print(f"{name} done, time: {finish_time - start_time:.1f}s, average: {total_frames / (finish_time - start_time):.1f}fps          ")
 
         # 保存到文件
-        final_results = sorted(final_results, key=lambda x: x['frame'])
+        final_results = sorted(final_results, key=lambda x: x.frame)
         _save_detect_results(final_results, std_video_path.parent)
         return final_results
 
@@ -93,29 +94,35 @@ def _parse_detections_to_note_geometrys(result, frame_number, model_name):
             return []
         # 转换为numpy批量获取数据
         boxes = result.boxes.cpu().numpy()
-        xyxy = boxes.xyxy    # shape: (N, 4) 
+        xyxy = boxes.xyxy    # shape: (N, 4)
+        xywh = boxes.xywh    # shape: (N, 4)
         conf = boxes.conf    # shape: (N, 1)
         raw_cls = boxes.cls  # shape: (N, 1)
         # 批量构建字典列表
 
-        boxes_list = [
-            {
-                'frame': frame_number,
-                'main_class_id': get_main_class_id_from_model_output(model_name, raw_cls[i]),
-                'x1': float(xyxy[i, 0]),  # 左上角x
-                'y1': float(xyxy[i, 1]),  # 左上角y
-                'x2': float(xyxy[i, 2]),  # 右上角x
-                'y2': float(xyxy[i, 1]),  # 右上角y
-                'x3': float(xyxy[i, 2]),  # 右下角x
-                'y3': float(xyxy[i, 3]),  # 右下角y
-                'x4': float(xyxy[i, 0]),  # 左下角x
-                'y4': float(xyxy[i, 3]),  # 左下角y
-                'r': -273,                # 占位符
-                'confidence': float(conf[i])  # 置信度
-            }
+        note_geometry_list = [
+            Note_Geometry(
+                frame=frame_number,
+                note_type=map_model_class_to_note_type(model_name, int(raw_cls[i])),
+                note_variant=NoteVariant.NORMAL, # 默认 normal
+                conf=float(conf[i]),
+                x1=float(xyxy[i, 0]),  # 左上角x
+                y1=float(xyxy[i, 1]),  # 左上角y
+                x2=float(xyxy[i, 2]),  # 右上角x
+                y2=float(xyxy[i, 1]),  # 右上角y
+                x3=float(xyxy[i, 2]),  # 右下角x
+                y3=float(xyxy[i, 3]),  # 右下角y
+                x4=float(xyxy[i, 0]),  # 左下角x
+                y4=float(xyxy[i, 3]),  # 左下角y
+                cx=float(xywh[i, 0]),
+                cy=float(xywh[i, 1]),
+                w=float(xywh[i, 2]),
+                h=float(xywh[i, 3]),
+                r=0.0
+            )
             for i in range(len(boxes))
         ]
-        return boxes_list
+        return note_geometry_list
     else:
         # 转换obb模型结果
         if result.obb is None or len(result.obb) == 0:
@@ -127,46 +134,54 @@ def _parse_detections_to_note_geometrys(result, frame_number, model_name):
         conf = obb.conf          # (N, 1)
         raw_cls = obb.cls        # (N, 1)
         # 批量构建字典列表
-        boxes_list = [
-            {
-                'frame': frame_number,
-                'main_class_id': self.get_main_class_id_from_model_output(model_name, raw_cls[i]),
-                'x1': float(xyxyxyxy[i, 0, 0]),  # 第1个点的x坐标
-                'y1': float(xyxyxyxy[i, 0, 1]),  # 第1个点的y坐标
-                'x2': float(xyxyxyxy[i, 1, 0]),  # 第2个点的x坐标
-                'y2': float(xyxyxyxy[i, 1, 1]),  # 第2个点的y坐标
-                'x3': float(xyxyxyxy[i, 2, 0]),  # 第3个点的x坐标
-                'y3': float(xyxyxyxy[i, 2, 1]),  # 第3个点的y坐标
-                'x4': float(xyxyxyxy[i, 3, 0]),  # 第4个点的x坐标
-                'y4': float(xyxyxyxy[i, 3, 1]),  # 第4个点的y坐标
-                'r': float(xywhr[i, 4]),         # xywhr的第五个值
-                'confidence': float(conf[i])
-            }
+        note_geometry_list = [
+            Note_Geometry(
+                frame=frame_number,
+                note_type=map_model_class_to_note_type(model_name, int(raw_cls[i])),
+                note_variant=NoteVariant.NORMAL, # 默认 normal
+                conf=float(conf[i]),
+                x1=float(xyxyxyxy[i, 0, 0]),  # 第1个点的x坐标
+                y1=float(xyxyxyxy[i, 0, 1]),  # 第1个点的y坐标
+                x2=float(xyxyxyxy[i, 1, 0]),  # 第2个点的x坐标
+                y2=float(xyxyxyxy[i, 1, 1]),  # 第2个点的y坐标
+                x3=float(xyxyxyxy[i, 2, 0]),  # 第3个点的x坐标
+                y3=float(xyxyxyxy[i, 2, 1]),  # 第3个点的y坐标
+                x4=float(xyxyxyxy[i, 3, 0]),  # 第4个点的x坐标
+                y4=float(xyxyxyxy[i, 3, 1]),  # 第4个点的y坐标
+                cx=float(xywhr[i, 0]),
+                cy=float(xywhr[i, 1]),
+                w=float(xywhr[i, 2]),
+                h=float(xywhr[i, 3]),
+                r=float(xywhr[i, 4]),         # rotation
+            )
             for i in range(len(obb))
         ]
-        return boxes_list
+        return note_geometry_list
 
 
 
-def _save_detect_results(self, detections, output_dir):
+def _save_detect_results(detections, output_dir):
     detect_result_path = os.path.join(output_dir, "detect_result.txt")
     
     with open(detect_result_path, 'w', encoding='utf-8') as f:
         current_frame = -1
         for detection in detections:
             # 写入新的帧号
-            if detection['frame'] != current_frame:
-                f.write(f"frame: {detection['frame']}\n")
-                current_frame = detection['frame']
+            if detection.frame != current_frame:
+                f.write(f"frame: {detection.frame}\n")
+                current_frame = detection.frame
             # 写入音符数据
             datas = [
-                f"{detection['main_class_id']}",
-                f"{detection['x1']:.4f}", f"{detection['y1']:.4f}",
-                f"{detection['x2']:.4f}", f"{detection['y2']:.4f}",
-                f"{detection['x3']:.4f}", f"{detection['y3']:.4f}",
-                f"{detection['x4']:.4f}", f"{detection['y4']:.4f}",
-                f"{detection['r']:.4f}",
-                f"{detection['confidence']:.4f}"
+                f"{detection.note_type.value}",
+                f"{detection.note_variant.value}",
+                f"{detection.conf:.4f}",
+                f"{detection.x1:.4f}", f"{detection.y1:.4f}",
+                f"{detection.x2:.4f}", f"{detection.y2:.4f}",
+                f"{detection.x3:.4f}", f"{detection.y3:.4f}",
+                f"{detection.x4:.4f}", f"{detection.y4:.4f}",
+                f"{detection.cx:.4f}", f"{detection.cy:.4f}",
+                f"{detection.w:.4f}", f"{detection.h:.4f}",
+                f"{detection.r:.4f}"
             ]
             f.write(', '.join(datas) + '\n')
 
@@ -174,7 +189,7 @@ def _save_detect_results(self, detections, output_dir):
 
 
 
-def _load_detect_results(self, detect_result_path):
+def _load_detect_results(detect_result_path):
 
     detections = []
     
@@ -189,21 +204,26 @@ def _load_detect_results(self, detect_result_path):
             else:
                 # 解析音符数据
                 parts = line.split(',')
-                if len(parts) == 11:
-                    detection = {
-                        'frame': current_frame,
-                        'main_class_id': int(parts[0].strip()),
-                        'x1': float(parts[1].strip()),
-                        'y1': float(parts[2].strip()),
-                        'x2': float(parts[3].strip()),
-                        'y2': float(parts[4].strip()),
-                        'x3': float(parts[5].strip()),
-                        'y3': float(parts[6].strip()),
-                        'x4': float(parts[7].strip()),
-                        'y4': float(parts[8].strip()),
-                        'r': float(parts[9].strip()),
-                        'confidence': float(parts[10].strip())
-                    }
+                if len(parts) == 16:  # 现在有16个字段
+                    detection = Note_Geometry(
+                        frame=current_frame,
+                        note_type=NoteType(parts[0].strip()),
+                        note_variant=NoteVariant(parts[1].strip()),
+                        conf=float(parts[2].strip()),
+                        x1=float(parts[3].strip()),
+                        y1=float(parts[4].strip()),
+                        x2=float(parts[5].strip()),
+                        y2=float(parts[6].strip()),
+                        x3=float(parts[7].strip()),
+                        y3=float(parts[8].strip()),
+                        x4=float(parts[9].strip()),
+                        y4=float(parts[10].strip()),
+                        cx=float(parts[11].strip()),
+                        cy=float(parts[12].strip()),
+                        w=float(parts[13].strip()),
+                        h=float(parts[14].strip()),
+                        r=float(parts[15].strip())
+                    )
                     detections.append(detection)
     
     return detections
