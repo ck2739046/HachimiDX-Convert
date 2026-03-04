@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from ultralytics import YOLO
 from ultralytics.trackers import BOTSORT
 import os
@@ -9,18 +10,9 @@ from types import SimpleNamespace
 from ultralytics.engine.results import OBB
 from ultralytics.utils import LOGGER
 import logging
-import subprocess
 import shutil
 import traceback
 import math
-import sys
-
-root = os.path.normpath(os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-if root not in sys.path: sys.path.insert(0, root)
-import tools.path_config
-import tools.ffmpeg_utils as ffmpeg_utils
-
-
 
 
 original_level = LOGGER.level
@@ -29,142 +21,7 @@ LOGGER.setLevel(logging.ERROR) # 只显示错误信息，忽略 Warning
 class NoteDetector:
     def __init__(self):
         
-        # 每个类型的音符可以有10个子类
-        self.class_id_map = {
-            # main class
-            1: 'Tap',
-            2: 'Slide',
-            3: 'Touch',
-            4: 'Hold',
-            5: 'Touch-hold',
-            # specific tap
-            10: 'Tap',
-            11: 'Tap-B',
-            12: 'Tap-X',
-            13: 'Tap-BX',
-            # specific slide
-            20: 'Slide',
-            21: 'Slide-B',
-            22: 'Slide-X',
-            23: 'Slide-BX',
-            # specific touch
-            30: 'Touch',
-            # specific hold
-            40: 'Hold',
-            41: 'Hold-B',
-            42: 'Hold-X',
-            43: 'Hold-BX',
-            # specific touch-hold
-            50: 'Touch-hold'
-        }
 
-
-    def get_main_class_id(self, id):
-        # main class
-        if 0 <= id <= 9:
-            result = id
-        # tap
-        elif 10 <= id <= 19:
-            result = 1
-        # slide
-        elif 20 <= id <= 29:
-            result = 2
-        # touch
-        elif 30 <= id <= 39:
-            result = 3
-        # hold
-        elif 40 <= id <= 49:
-            result = 4
-        # touch-hold
-        elif 50 <= id <= 59:
-            result = 5
-        else:
-            result = -1  # unknown
-
-        if result != -1 and id in self.class_id_map.keys():
-            return result
-        else:
-            return -1
-        
-
-    def get_specific_class_id(self, class_id, isEx=False, isBreak=False):
-        main_class_id = self.get_main_class_id(class_id)
-        # Tap
-        if main_class_id == 1:
-            if isEx and isBreak:
-                return 13  # Tap-BX
-            elif isEx:
-                return 12  # Tap-X
-            elif isBreak:
-                return 11  # Tap-B
-            else:
-                return 10  # Tap
-        # Slide    
-        elif main_class_id == 2:
-            if isEx and isBreak:
-                return 23  # Slide-BX
-            elif isEx:
-                return 22  # Slide-X
-            elif isBreak:
-                return 21  # Slide-B
-            else:
-                return 20  # Slide
-        # Touch
-        elif main_class_id == 3:
-            return 30  # Touch 没有子类
-        # Hold    
-        elif main_class_id == 4:
-            if isEx and isBreak:
-                return 43  # Hold-BX
-            elif isEx:
-                return 42  # Hold-X
-            elif isBreak:
-                return 41  # Hold-B
-            else:
-                return 40  # Hold
-        elif main_class_id == 5:
-            return 50  # Touch-hold 没有子类
-        else:
-            return -1  # unknown
-        
-
-    def get_main_class_id_from_model_output(self, model, index):
-        if model == 'obb':
-            if index == 0: return 4 # Hold
-        else: # detect
-            if index == 0: return 1 # Tap
-            if index == 1: return 2 # Slide
-            if index == 2: return 3 # Touch
-            if index == 3: return 5 # Touch-Hold
-        
-
-    def is_obb(self, id):
-        id = self.get_main_class_id(id)
-        return id == 4 # 只有 Hold 是 OBB
-    
-
-    def need_cls(self, id):
-        id = self.get_main_class_id(id)
-        return id in [1, 2, 4]  # Tap, Slide, Hold 需要分类
-
-
-    def get_imgsz(self, model_type):
-        if model_type == 'detect' or model_type == 'obb':
-            return 960
-        else:
-            return 224 # cls-ex, cls-break
-
-
-    def print_progress(self, name, speed_unit, counter, total, last_time, last_counter):
-        # 计算即时fps
-        current_time = time.time()
-        elapsed_time = current_time - last_time + 1e-6
-        elapsed_counter = counter - last_counter
-        speed = elapsed_counter / elapsed_time
-        # 打印进度
-        progress = (counter / total) * 100
-        print(f"{name}进度: {counter}/{total} ({progress:.1f}%), {speed:.1f}{speed_unit}  ", end="\r", flush=True)
-        return current_time, counter
 
 
 
