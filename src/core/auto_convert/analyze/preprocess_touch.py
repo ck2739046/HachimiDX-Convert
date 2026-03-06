@@ -1,22 +1,17 @@
-def preprocess_touch_data(self):
-    '''
-    收集所有touch音符的数据
-    过滤轨迹过短的音符
-    计算音符方位
-    计算音符的三角到中心的距离
-    过滤刚离开起点的和马上要到终点的音符数据 (10%-90%距离)
+from ..detect.note_definition import *
+from .tool import *
+from .shared_context import *
 
+
+def preprocess_touch_data(shared_context: SharedContext):
+    '''
     返回格式:
     dict{
-        key: (track_id, class_id, position),
-        value: note path list
+        key: (track_id, note_type, note_varient, note_position),
+        value: note path
         [
             {
                 'frame': frame_num,
-                'x1': x1,
-                'y1': y1,
-                'x2': x2,
-                'y2': y2,
                 'dist': dist_to_center
             },
             ...
@@ -26,75 +21,80 @@ def preprocess_touch_data(self):
 
     touch_data = {}
 
-    end_tolerance = self.touch_travel_dist * 0.1
-    start_tolerance = self.touch_travel_dist * 0.1
+    end_tolerance = shared_context.touch_travel_dist * 0.1
+    start_tolerance = shared_context.touch_travel_dist * 0.1
     valid_dist_end = 0 + end_tolerance
-    valid_dist_start = self.touch_travel_dist - start_tolerance
-    outer_size = 54 * self.video_size / 1080 # 1080p下，外部尺寸为54
+    valid_dist_start = shared_context.touch_travel_dist - start_tolerance
+    outer_size = 54 * shared_context.video_size / 1080 # 1080p下，外部尺寸为54
 
     # read track data
-    for track_id, track_data in self.track_data.items():
+    for key, value in shared_context.track_data.items():
 
-        if 'path' not in track_data: continue
-        track_path = track_data['path']
-        if len(track_path) < 10: continue
-        class_id = round(track_data['class_id'])
-        if self.noteDetector.get_main_class_id(class_id) != 3:
-            continue # 3 = touch，忽视非touch音符
+        track_id, note_type = key
+        note_geometry_list = value
+
+        if note_type != NoteType.TOUCH: continue
+        if len(note_geometry_list) < 10: continue
 
         # read track path
         valid_track_path = []
-        for track_box in track_path:
+        for note in note_geometry_list:
 
-            frame_num = track_box['frame']
-            x1 = track_box['x1'] # 左上角
-            y1 = track_box['y1'] # 左上角
-            x2 = track_box['x3'] # 右下角
-            y2 = track_box['y3'] # 右下角
-            cx = (x1 + x2) / 2
-            cy = (y1 + y2) / 2
-
-            # 计算三角到中心的距离
-            # 根据label_notes可知，touch音符的整体尺寸=(dist+54)x2，1080p下
-            avg_touch_size = ((x2 - x1) + (y2 - y1)) / 2
+            # touch音符的整体边长 = (dist_to_center + 54) x 2，1080p下
+            # 反推得出三角到中心的距离
+            avg_touch_size = (note.w + note.h) / 2
             dist = avg_touch_size / 2 - outer_size
             # 计算方位
-            position = self.calculate_all_position(cx, cy)
+            position = calculate_all_position(shared_context.touch_areas, note.cx, note.cy)
             # 过滤前后两端的数据
             if dist > valid_dist_start:
                 continue # 掐头
             elif dist < valid_dist_end:
                 continue # 去尾
             # 添加轨迹点
-            valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist))
+            valid_track_path.append((note.frame, dist, position))
+
 
 
         # 检查轨迹存在
         if not valid_track_path:
             print(f"preprocess_touch_data: no valid_track_path for track_id {track_id}")
             continue
-        valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
+
         # 检验长度
         if len(valid_track_path) < 6:
             print(f"preprocess_touch_data: path too short for track_id {track_id}, length: {len(valid_track_path)}")
             continue
+
         # 检验方位一致
-        positions = [x[5] for x in valid_track_path]
+        positions = [x[2] for x in valid_track_path]
         if len(set(positions)) != 1:
             print(f"preprocess_touch_data: positions not consistent for track_id {track_id}")
             continue
-        # 添加到touch_data
+
+        # 按frame排序
+        valid_track_path.sort(key=lambda x: x[0])
+
+        # 检查dist是否递减 (允许微小回退6%总距离)
+        # 2个像素占34全程的6%
+        dists = [x[1] for x in valid_track_path]
+        if not all(later - earlier > 0.06 * shared_context.note_travel_dist for earlier, later in zip(dists, dists[1:])):
+            print(f"preprocess_touch_data: dist not decreasing for track_id {track_id}")
+            continue
+
+        # 检查通过，添加到touch_data
+        note_varient = note_geometry_list[0].note_variant
+        position = positions[0]
+        key = (track_id, note_type, note_varient, position)
+
         path = []
-        for frame_num, x1, y1, x2, y2, position, dist in valid_track_path:
+        for frame_num, dist, position in valid_track_path:
             path.append({
                 'frame': frame_num,
-                'x1': x1,
-                'y1': y1,
-                'x2': x2,
-                'y2': y2,
                 'dist': dist
             })
-        touch_data[(track_id, class_id, positions[0])] = path
+
+        touch_data[key] = path
 
 
     if not touch_data:
@@ -104,6 +104,9 @@ def preprocess_touch_data(self):
     return touch_data
 
 
+# 下面是基于轮廓识别得到精确的 dist 数据
+# 但是考虑到上面使用 yolo 框得到的数据已经够精准了
+# 下面这个代码速度较慢，且收益不高，所以先注释掉
 
 # def detect_precise_touch(self, i, roi, thresh_roi, circle_info, frame_num, track_id):
 

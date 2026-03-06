@@ -36,12 +36,12 @@ def calculate_oct_position(circle_center_x, circle_center_y, note_x, note_y):
 
 
 
-def calculate_all_position(self, note_x, note_y):
+def calculate_all_position(touch_areas, note_x, note_y):
     
     closeset_label = None
     closeset_dist = 9999
 
-    for label, (cx, cy) in self.touch_areas.items():
+    for label, (cx, cy) in touch_areas.items():
         dist = np.sqrt(((note_x - cx) ** 2 + (note_y - cy) ** 2))
         if dist < closeset_dist:
             closeset_label = label
