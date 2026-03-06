@@ -15,8 +15,6 @@ def preprocess_slide_head_data(shared_context: SharedContext):
         [
             {
                 'frame': frame_num,
-                'cx': cx,
-                'cy': cy,
                 'dist': dist_to_center
             },
             ...
@@ -55,7 +53,7 @@ def preprocess_slide_head_data(shared_context: SharedContext):
             elif dist_to_center > valid_judgeline_end:
                 continue # 去尾
             # 添加轨迹点
-            valid_track_path.append((note.frame, note.cx, note.cy, position, dist_to_center))
+            valid_track_path.append((note.frame, position, dist_to_center))
 
 
         # 检查轨迹存在
@@ -69,7 +67,7 @@ def preprocess_slide_head_data(shared_context: SharedContext):
             continue
 
         # 检验方位一致
-        positions = [x[3] for x in valid_track_path]
+        positions = [x[1] for x in valid_track_path]
         if len(set(positions)) != 1:
             # print(f"preprocess_slide_head_data: positions not consistent for track_id {track_id}")
             continue
@@ -78,7 +76,7 @@ def preprocess_slide_head_data(shared_context: SharedContext):
         valid_track_path.sort(key=lambda x: x[0])
         
         # 检查dist是否递增 (允许微小回退 -0.5* start_tolerance)
-        dists = [x[4] for x in valid_track_path]
+        dists = [x[2] for x in valid_track_path]
         if not all(later - earlier > -0.5 * start_tolerance for earlier, later in zip(dists, dists[1:])):
             # print(f"preprocess_slide_head_data: dist not increasing for track_id {track_id}")
             continue
@@ -94,11 +92,9 @@ def preprocess_slide_head_data(shared_context: SharedContext):
         key = (track_id, note_type, note_varient, position)
 
         path = []
-        for frame_num, cx, cy, position, dist_to_center in valid_track_path:
+        for frame_num, position, dist_to_center in valid_track_path:
             path.append({
                 'frame': frame_num,
-                'cx': cx,
-                'cy': cy,
                 'dist': dist_to_center
             })
 
@@ -191,7 +187,7 @@ def preprocess_slide_tail_data(shared_context: SharedContext):
         # 检查通过，添加到slide_data
         note_varient = note_geometry_list[0].note_variant
         positions = [x[5] for x in valid_track_path]
-        position = positions[0]
+        position = positions[0][1] # A1 -> 1
         key = (track_id, note_type, note_varient, position)
 
         path = []

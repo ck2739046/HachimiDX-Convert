@@ -1,6 +1,34 @@
-def analyze_slide_tail(self, slide_tail_data):
+import numpy as np
+
+from .shared_context import *
+from .analyze_tap import analyze_tap_reach_time
+
+
+
+def analyze_slide_time(shared_context, slide_head_data, slide_tail_data, bpm):
+
+    # 处理星星头，视为 tap 处理
+    slide_head_info = analyze_tap_reach_time(shared_context, slide_head_data)
+    
+    # 处理星星尾
+    slide_tail_info = analyze_slide_tail(shared_context, slide_tail_data)
+
+    # 合并slide信息
+    slide_info = merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm)
+
+    return slide_info
+
+
+
+
+
+def analyze_slide_tail(shared_context, slide_tail_data):
     '''
-    return {(track_id, class_id, start_position): (movement_syntax, start_time, end_time)}
+    返回格式:
+    dict{
+        key: 同 preprocess_slide_tail_data,
+        value: (movement_syntax, start_time, end_time)
+    }
     '''
 
     # 原点为(0, 0)，半径为480 (标准1080p)，标准xy坐标系
@@ -23,8 +51,8 @@ def analyze_slide_tail(self, slide_tail_data):
         x_on_screen_cx = x + 540
         y_on_screen_cy = -y + 540
         # 按比例缩放到当前分辨率
-        scaled_x = round((x_on_screen_cx - 540) * self.video_size / 1080 + self.screen_cx)
-        scaled_y = round((y_on_screen_cy - 540) * self.video_size / 1080 + self.screen_cy)
+        scaled_x = round((x_on_screen_cx - 540) * shared_context.std_video_size / 1080 + shared_context.std_video_cx)
+        scaled_y = round((y_on_screen_cy - 540) * shared_context.std_video_size / 1080 + shared_context.std_video_cy)
         new_dict[area_label] = (scaled_x, scaled_y)
 
     A_zone_endpoint_on_judgeline = new_dict
@@ -34,58 +62,58 @@ def analyze_slide_tail(self, slide_tail_data):
     # 暂时只检测边缘旋转 x>x / x<x
     # 其他的一律视为直线 x-x
     slide_tail_info = {}
-    for (track_id, class_id, start_position), note_path in slide_tail_data.items():
+    for key, note_path in slide_tail_data.items():
 
         # 计算运动语法
         # 期望的返回: >5 / <3 / -7
-        movement_syntax = self.analyze_slide_tail_movement_syntax(note_path, A_zone_endpoint_on_judgeline)
+        movement_syntax = analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoint_on_judgeline)
         if movement_syntax is None:
             continue
         
         # 计算持续时间
-        start_time, end_time = self.analyze_slide_tail_start_end_time(note_path, A_zone_endpoint_on_judgeline)
+        start_time, end_time = analyze_slide_tail_start_end_time(shared_context, note_path, A_zone_endpoint_on_judgeline)
         if start_time is None or end_time is None:
             continue
 
-        slide_tail_info[(track_id, class_id, start_position[1])] = (movement_syntax, start_time, end_time)
+        slide_tail_info[key] = (movement_syntax, start_time, end_time)
 
     return slide_tail_info
 
 
 
-def analyze_slide_tail_movement_syntax(self, note_path, A_zone_endpoint_on_judgeline):
+
+
+
+
+def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoint_on_judgeline):
     '''
     分析运动模式
     暂时只检测边缘旋转 x>x / x<x
     其他的一律视为直线 x-x
 
     如果星星全程仅在A区或D区内移动，视为旋转
-    '''
+    '''    
 
-    def get_A_zone_endpoint_on_judgeline(x, y, A_zone_endpoint_on_judgeline):
-        tolerance = self.video_size * 0.02
-        for label, (px, py) in A_zone_endpoint_on_judgeline.items():
-            dist = np.sqrt((x - px)**2 + (y - py)**2)
-            if dist < tolerance:
-                return label
-        return None
-    
+    def get_outer_rotation_syntax(start_position, next_position, end_position):
 
-    def get_outer_rotation_syntax(start_position_id, next_position_id, end_position_id):
-        # 判断起始点在左侧还是右侧
+        start_position_id = int(start_position[1]) # 'A1' -> 1
+        next_position_id = int(next_position[1])   # 'A1' -> 1
+
+        # 判断起始点在顶部还是底部
         if start_position_id in [1,2,7,8]:
             start_side = 'up'
         else:
             start_side = 'down'
+
         # 判断旋转方向
         # > 代表从起点开始箭头向右, < 代表从起点开始箭头向左
         if start_side == 'up':
             # 处理1和8的特殊情况
             if start_position_id == 1:
-                if next_position_id in [7, 8]:
+                if next_position_id in [6, 7, 8]:
                     next_position_id -= 8
             elif start_position_id == 8:
-                if next_position_id in [1, 2]:
+                if next_position_id in [1, 2, 3]:
                     next_position_id += 8
             # 判断方向
             if next_position_id > start_position_id:
@@ -97,6 +125,34 @@ def analyze_slide_tail_movement_syntax(self, note_path, A_zone_endpoint_on_judge
                 movement_type = '<'
             else:
                 movement_type = '>'
+
+        # 处理终点位置
+        if end_position.startswith('A'):
+            # 分支1：终点在A区
+            # 直接作为终点位置
+            end_position_id = int(end_position[1])
+        else:
+            # 分支2：终点在D区
+            # 这种情况大概是因为星星提太快了，来不及进入A区就结束了
+            # 终点位置应该是D区后面的那个A区
+            
+            # 判断旋转方向(顺时针/逆时针)
+            if start_position_id == 1:
+                if next_position_id in [6, 7, 8]:
+                    next_position_id -= 8
+            elif start_position_id == 8:
+                if next_position_id in [1, 2, 3]:
+                    next_position_id += 8
+            
+            if next_position_id > start_position_id:
+                # 顺时针, D3 -> A3，序号不变
+                end_position_id = int(end_position[1])
+            else:
+                # 逆时针, D3 -> A2，序号减一
+                end_position_id = int(end_position[1]) - 1
+                if end_position_id == 0:
+                    end_position_id = 8 # D1 -> A8
+
         # 组合语法
         movement_syntax = f"{movement_type}{end_position_id}"
         return movement_syntax
@@ -113,53 +169,57 @@ def analyze_slide_tail_movement_syntax(self, note_path, A_zone_endpoint_on_judge
             return False, None
 
 
+
+
+
     if len(note_path) < 6:
         return None
     positions = [x['position'] for x in note_path]
     if not positions or len(positions) < 6:
         return None
 
-    start_position_id = int(positions[0][1]) # A1 -> 1
-    end_position_id = int(positions[-1][1])
+    start_position = positions[0]
+    end_position = positions[-1]
 
     # 如果只在A区或D区移动，视为旋转
     if all(pos.startswith('A') or pos.startswith('D') for pos in positions):
 
         # 找到第一个与起始点不同的位置
-        next_position_id = None
+        next_position = None
         for pos in positions[1:]:
-            if pos[1] != str(start_position_id):
-                next_position_id = int(pos[1])
+            if pos != start_position:
+                next_position = pos
                 break
-        if next_position_id is None:
+        if next_position is None:
             return None
 
-        movement_syntax = get_outer_rotation_syntax(start_position_id, next_position_id, end_position_id)
+        movement_syntax = get_outer_rotation_syntax(start_position, next_position, end_position)
+
+
+
+
 
     else:
         # 获得音符经过的所有A区判定点
         A_zones = []
         last_A_zone = ''
         for note in note_path:
-            x1 = note['x1']
-            y1 = note['y1']
-            x2 = note['x2']
-            y2 = note['y2']
-            cx = (x1 + x2) / 2
-            cy = (y1 + y2) / 2
-            pos = get_A_zone_endpoint_on_judgeline(cx, cy, A_zone_endpoint_on_judgeline)
-            if pos is None: continue
+            cx = note['cx']
+            cy = note['cy']
+            pos = note['position']
             if not pos.startswith('A'): continue
             if pos == last_A_zone: continue
             last_A_zone = pos
             A_zones.append(pos)
-        # 考虑到有些星星最后可能提前结束，没有进入A区
-        # 使用最后一个位置作为保底结尾
-        end_position = f'A{end_position_id}'
-        if end_position != last_A_zone:
-            A_zones.append(end_position)
-        if len(A_zones) < 2:
-            return None
+        
+        # 考虑到有些星星速度太快，来不及进入A区就结束了
+        # 需要根据惯性猜测最后可能进入哪个A区
+        if not end_position.startswith('A'):
+            before_end_position = positions[-2]
+            # 以倒数第二个点为起点，终点为方向，做射线
+            # 看看这个射线离哪个A区最近，视为最终可能进入的A区
+
+
 
 
 
@@ -204,7 +264,8 @@ def analyze_slide_tail_movement_syntax(self, note_path, A_zone_endpoint_on_judge
         for seg_type, seg_data in arc_segments:
             if seg_type == 'arc':
                 start_id, next_id, end_id = seg_data
-                arc_syntax = get_outer_rotation_syntax(start_id, next_id, end_id)
+                start_position, next_position, end_position = f"A{start_id}", f"A{next_id}", f"A{end_id}"
+                arc_syntax = get_outer_rotation_syntax(start_position, next_position, end_position)
                 syntax_parts.append(f"{start_id}{arc_syntax}")
             else:  # single
                 syntax_parts.append(str(seg_data))
