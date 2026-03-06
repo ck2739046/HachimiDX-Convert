@@ -1,23 +1,21 @@
-def preprocess_hold_data(self):
-    '''
-    收集所有hold音符的数据
-    过滤轨迹过短的音符
-    计算音符方向
-    分离头尾
-    分别计算头尾到圆心的距离
-    过滤刚离开起点的和马上要到终点的音符数据 (5%-95%距离)
+import math
+import numpy as np
 
+from ..detect.note_definition import *
+from .tool import *
+from .shared_context import *
+
+
+
+def preprocess_hold_data(shared_context: SharedContext):
+    '''
     返回格式:
     dict{
-        key: (track_id, class_id, position),
-        value: note path list
+        key: (track_id, note_type, note_varient, note_position),
+        value: note path
         [
             {
                 'frame': frame_num,
-                'x-head': x1,
-                'y-head': y1,
-                'x-tail': x2,
-                'y-tail': y2,
                 'dist-head': dist_head,
                 'dist-tail': dist_tail
             },
@@ -28,90 +26,86 @@ def preprocess_hold_data(self):
 
     hold_data = {}
 
-    end_tolerance = self.note_travel_dist * 0.05
-    start_tolerance = self.note_travel_dist * 0.05
-    valid_judgeline_start = self.judgeline_start + start_tolerance
-    valid_judgeline_end = self.judgeline_end - end_tolerance
+    # 此处hold中点tolerance相对于tap要减半
+    end_tolerance = shared_context.note_travel_dist * 0.05
+    start_tolerance = shared_context.note_travel_dist * 0.05
+    valid_judgeline_start = shared_context.judgeline_start + start_tolerance
+    valid_judgeline_end = shared_context.judgeline_end - end_tolerance
 
     # read track data
-    for track_id, track_data in self.track_data.items():
+    for key, value in shared_context.track_data.items():
 
-        if 'path' not in track_data: continue
-        track_path = track_data['path']
-        if len(track_path) < 10: continue
-        if 'class_id' not in track_data: continue
-        class_id = round(track_data['class_id'])
-        if self.noteDetector.get_main_class_id(class_id) != 4:
-            continue # 4 = hold，忽视非hold音符
+        track_id, note_type = key
+        note_geometry_list = value
+
+        if note_type != NoteType.HOLD: continue
+        if len(note_geometry_list) < 10: continue
 
 
-        # read track path
+        # read note path
         valid_track_path = []
-        for track_box in track_path:
-
-            frame_num = track_box['frame']
-            x1 = track_box['x1']
-            y1 = track_box['y1']
-            x2 = track_box['x2']
-            y2 = track_box['y2']
-            x3 = track_box['x3']
-            y3 = track_box['y3']
-            x4 = track_box['x4']
-            y4 = track_box['y4']
-            cx = (x1 + x2 + x3 + x4) / 4
-            cy = (y1 + y2 + y3 + y4) / 4
+        for note in note_geometry_list:
 
             # 计算距离圆心的距离
-            dist_to_center = np.sqrt(((cx - self.screen_cx)**2 + (cy - self.screen_cy)**2))
+            dist_to_center = np.sqrt(((note.cx - shared_context.std_video_cx)**2 + (note.cy - shared_context.std_video_cy)**2))
             # 计算方向(1-8)
-            position = self.calculate_oct_position(self.screen_cx, self.screen_cy, cx, cy)
-            # 过滤5%-95%距离的数据
+            position = calculate_oct_position(shared_context.std_video_cx, shared_context.std_video_cy, note.cx, note.cy)
+            # 过滤数据
             if dist_to_center < valid_judgeline_start:
                 continue # 掐头
             elif dist_to_center > valid_judgeline_end:
                 continue # 去尾
-            # 计算头和尾的坐标
-            x_head, y_head, x_tail, y_tail, dist_head, dist_tail = self.calculate_hold_head_tail(x1, y1, x2, y2, x3, y3, x4, y4, position, class_id)
+            # 计算头尾的坐标/距离
+            x_head, y_head, x_tail, y_tail, dist_head, dist_tail = calculate_hold_head_tail(shared_context, note.x1, note.y1, note.x2, note.y2, note.x3, note.y3, note.x4, note.y4, note.note_variant, position)
             # 添加轨迹点
-            valid_track_path.append((frame_num, x_head, y_head, x_tail, y_tail, position, dist_head, dist_tail))
+            valid_track_path.append((frame_num, position, dist_head, dist_tail))
 
 
         # 检查轨迹存在
         if not valid_track_path:
             print(f"preprocess_hold_data: no valid_track_path for track_id {track_id}")
             continue
-        valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
+
         # 检验长度
         if len(valid_track_path) < 6:
             print(f"preprocess_hold_data: valid_track_path too short for track_id {track_id}, length: {len(valid_track_path)}")
             continue
+
         # 检验方位一致
-        positions = [x[5] for x in valid_track_path]
+        positions = [x[1] for x in valid_track_path]
         if len(set(positions)) != 1:
             print(f"preprocess_hold_data: positions not consistent for track_id {track_id}")
             continue
-        # 检查dist是否递增 (允许微小回退15%总距离)
-        dists = [(x[6] + x[7]) / 2 for x in valid_track_path]
+
+        # 按frame排序
+        valid_track_path.sort(key=lambda x: x[0]) 
+        
+        # 检查dist是否递增 (允许微小回退3倍tolerance)
+        # 这里宽松一点，因为hold的识别不太稳定
+        dists = [(x[2] + x[3]) / 2 for x in valid_track_path]
         if not all(later - earlier > - 3*start_tolerance for earlier, later in zip(dists, dists[1:])):
             print(f"preprocess_hold_data: dist not increasing for track_id {track_id}")
             continue
-        # 检查dist是否在头尾 (20%-80%)
-        if dists[0] > valid_judgeline_start + 4*start_tolerance or dists[-1] < valid_judgeline_end - 4*end_tolerance:
+
+        # 检查头尾dist是否覆盖全程
+        if dists[0] > valid_judgeline_start + 2*start_tolerance or dists[-1] < valid_judgeline_end - 2*end_tolerance:
             print(f"preprocess_hold_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}")
             continue
-        # 添加到hold_data
+        
+        # 检查通过，添加到hold_data
+        note_varient = note_geometry_list[0].note_variant
+        position = positions[0]
+        key = (track_id, note_type, note_varient, position)
+
         path = []
-        for frame_num, x_head, y_head, x_tail, y_tail, position, dist_head, dist_tail in valid_track_path:
+        for frame_num, position, dist_head, dist_tail in valid_track_path:
             path.append({
                 'frame': frame_num,
-                'x-head': x_head,
-                'y-head': y_head,
-                'x-tail': x_tail,
-                'y-tail': y_tail,
                 'dist-head': dist_head,
                 'dist-tail': dist_tail
             })
-        hold_data[(track_id, class_id, positions[0])] = path
+
+        hold_data[key] = path
 
     if not hold_data:
         print("preprocess_hold_data: no hold data")
@@ -121,20 +115,20 @@ def preprocess_hold_data(self):
 
 
 
-@log_error
-def calculate_hold_head_tail(self, x1, y1, x2, y2, x3, y3, x4, y4, position, class_id):
+
+def calculate_hold_head_tail(shared_context, x1, y1, x2, y2, x3, y3, x4, y4, note_variant, position):
     '''
     获取hold框与轨道线的两个交点，视为hold的两个端点
     然后两个端点往回缩一点就是head和tail的位置
     '''
 
-    # 直线经过中心点 (screen_cx, screen_cy)
+    # 直线经过中心点 (std_video_cx, std_video_cy)
     # 输入直线的y轴下方与x轴正半轴的夹角 (0°-180°)
     def get_line(angle):
         # 计算斜率 a = tan(angle)
         a = math.tan(math.radians(angle)) # 角度转换为弧度
         # 将屏幕中心点代入 y=ax+b 求解 b
-        b = self.screen_cy - a * self.screen_cx
+        b = shared_context.std_video_cy - a * shared_context.std_video_cx
         return (a, b)
 
 
@@ -169,10 +163,10 @@ def calculate_hold_head_tail(self, x1, y1, x2, y2, x3, y3, x4, y4, position, cla
         # 沿轨迹线获得距离为 dist 的两个点
         dx = dist / np.sqrt(1 + np.power(a, 2))
         dy = a * dx
-        p1x = self.screen_cx + dx
-        p1y = self.screen_cy + dy
-        p2x = self.screen_cx - dx
-        p2y = self.screen_cy - dy
+        p1x = shared_context.std_video_cx + dx
+        p1y = shared_context.std_video_cy + dy
+        p2x = shared_context.std_video_cx - dx
+        p2y = shared_context.std_video_cy - dy
         # 更接近原始点的就是新的点
         if abs(p1x - x) > abs(p2x - x):
             return p2x, p2y
@@ -198,29 +192,33 @@ def calculate_hold_head_tail(self, x1, y1, x2, y2, x3, y3, x4, y4, position, cla
         return None, None, None, None, None, None
         
     # 根据距离圆心的远近区分head和tail
-    dist1 = math.sqrt((intersections[0][0] - self.screen_cx)**2 + (intersections[0][1] - self.screen_cy)**2)
-    dist2 = math.sqrt((intersections[1][0] - self.screen_cx)**2 + (intersections[1][1] - self.screen_cy)**2)
+    dist1 = math.sqrt((intersections[0][0] - shared_context.std_video_cx)**2 + (intersections[0][1] - shared_context.std_video_cy)**2)
+    dist2 = math.sqrt((intersections[1][0] - shared_context.std_video_cx)**2 + (intersections[1][1] - shared_context.std_video_cy)**2)
     # 更远的是 head, 更近的是 tail
     head_x, head_y = intersections[0] if dist1 > dist2 else intersections[1]
     tail_x, tail_y = intersections[1] if dist1 > dist2 else intersections[0]
     dist_head = dist1 if dist1 > dist2 else dist2
     dist_tail = dist2 if dist1 > dist2 else dist1
-    # 根据 label_notes 定义，整个hold的一半宽度为 70x0.77 (ex再+5)
-    # 那么正六边形的端点到中心的距离约为 70x0.77 x 2/√3
-    width = 70 * 0.77 if class_id not in [17,18] else 75 * 0.77 + 5
+    # 根据 label_notes 定义，整个hold的一半宽度为 70x0.77 (1080p)
+    # ex / break_ex 再 +5 因为外面有一圈光晕
+    width = 70 * 0.77
+    if note_variant == NoteVariant.EX or note_variant == NoteVariant.BREAK_EX:
+        width += 5
+    width = width * shared_context.video_size / 1080 # 按视频尺寸缩放
+    # 那么正六边形的端点到中心的距离约为 x 2/√3
     offset = width * 2 / math.sqrt(3)
-    # 往回缩一点
+    # 从端点往回缩，定位到head和tail的中心位置
     new_dist_head = dist_head - offset
     new_dist_tail = dist_tail + offset
     # 防止越过起点和终点
-    if dist_head > self.judgeline_end:
-        dist_head = self.judgeline_end
-    if dist_head < self.judgeline_start:
-        dist_head = self.judgeline_start
-    if dist_tail > self.judgeline_end:
-        dist_tail = self.judgeline_end
-    if dist_tail < self.judgeline_start:
-        dist_tail = self.judgeline_start
+    if dist_head > shared_context.judgeline_end:
+        dist_head = shared_context.judgeline_end
+    if dist_head < shared_context.judgeline_start:
+        dist_head = shared_context.judgeline_start
+    if dist_tail > shared_context.judgeline_end:
+        dist_tail = shared_context.judgeline_end
+    if dist_tail < shared_context.judgeline_start:
+        dist_tail = shared_context.judgeline_start
     # 计算新的head和tail坐标
     new_head_x, new_head_y = get_point_by_dist_to_center(a, b, head_x, head_y, new_dist_head)
     new_tail_x, new_tail_y = get_point_by_dist_to_center(a, b, tail_x, tail_y, new_dist_tail)
