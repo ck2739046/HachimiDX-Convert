@@ -1,16 +1,22 @@
-def analyze_tap_reach_time(self, tap_data):
+import numpy as np
+
+from .shared_context import *
+
+
+
+def analyze_tap_reach_time(shared_context, tap_data):
 
     tap_info = {}
-    for (track_id, class_id, direction), path in tap_data.items():
+    for (track_id, note_type, note_varient, note_position), path in tap_data.items():
         # 平均所有轨迹的到达时间
         times = []
         for point in path:
             frame_num = point['frame']
             dist = point['dist']
-            reach_end_Msec = self.predict_note_reach_end_time(dist, frame_num)
+            reach_end_Msec = predict_note_reach_end_time(shared_context, dist, frame_num)
             times.append(reach_end_Msec)
         mean = np.mean(times)
-        tap_info[(track_id, class_id, direction)] = mean
+        tap_info[(track_id, note_type, note_varient, note_position)] = mean
 
         
         # min = np.min(times)
@@ -27,7 +33,7 @@ def analyze_tap_reach_time(self, tap_data):
 
 
 
-def predict_note_reach_end_time(self, cur_dist, cur_frame):
+def predict_note_reach_end_time(shared_context, cur_dist, cur_frame):
     '''
     正向:
     [dist_offset] = -1/120 * 总距离 * (OptionNotespeed/150f -1)
@@ -48,15 +54,15 @@ def predict_note_reach_end_time(self, cur_dist, cur_frame):
     -> reach_end_Msec = leave_start_Msec + DefaultMsec
     '''
 
-    cur_time = cur_frame / self.fps * 1000 # 转换为毫秒
-    total_dist = self.note_travel_dist
-    dist_offset = -1/120 * total_dist * (self.note_OptionNotespeed / 150 - 1)
-    #time_offset = (self.note_OptionNotespeed / 150 - 1) * (-0.5 / (self.note_OptionNotespeed / 150 - 1)) * 1.6 * 1000 / 60
-    start_pos = self.judgeline_start
+    cur_time = cur_frame / shared_context.fps * 1000 # 转换为毫秒
+    total_dist = shared_context.note_travel_dist
+    dist_offset = -1/120 * total_dist * (shared_context.note_OptionNotespeed / 150 - 1)
+    #time_offset = (shared_context.note_OptionNotespeed / 150 - 1) * (-0.5 / (shared_context.note_OptionNotespeed / 150 - 1)) * 1.6 * 1000 / 60
+    start_pos = shared_context.judgeline_start
 
     travelled_dist = cur_dist - start_pos - dist_offset
     time_progress = travelled_dist / total_dist
-    leave_start_Msec = cur_time - time_progress * self.note_DefaultMsec # + time_offset
-    reach_end_Msec = leave_start_Msec + self.note_DefaultMsec
+    leave_start_Msec = cur_time - time_progress * shared_context.note_DefaultMsec # + time_offset
+    reach_end_Msec = leave_start_Msec + shared_context.note_DefaultMsec
 
     return reach_end_Msec
