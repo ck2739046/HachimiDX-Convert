@@ -85,6 +85,70 @@ def analyze_slide_tail(shared_context, slide_tail_data):
 
 
 
+def guess_target_a_zone_by_inertia(shared_context, note_path, A_zone_endpoint_on_judgeline):
+    '''
+    根据倒数最后一段运动方向的惯性，猜测预测最终可能进入的A区。
+    '''
+    if len(note_path) < 2:
+        return None
+    
+    # 寻找倒序最后一点 (点A)
+    last_note = note_path[-1]
+    A_cx = last_note['cx']
+    A_cy = last_note['cy']
+    
+    # 倒序遍历寻找距离大于阈值的点 (点B)
+    B_cx, B_cy = None, None
+    min_dist = shared_context.std_video_size * 0.02
+    
+    for note in reversed(note_path[:-1]):
+        cx = note['cx']
+        cy = note['cy']
+        dist = np.sqrt((cx - A_cx)**2 + (cy - A_cy)**2)
+        if dist > min_dist:
+            B_cx, B_cy = cx, cy
+            break
+            
+    if B_cx is None or B_cy is None:
+        return None
+        
+    # 运动向量 BA (从B指向A)
+    BA_x = A_cx - B_cx
+    BA_y = A_cy - B_cy
+    BA_length = np.sqrt(BA_x**2 + BA_y**2)
+    if BA_length == 0: return None # 理论上不会发生AB重合
+        
+    # 过滤并找出距离射线最近的点
+    best_zone = None
+    min_distance_to_line = 999999
+    
+    for zone_id in range(1, 9):
+        zone_key = f'A{zone_id}'
+        P_cx, P_cy = A_zone_endpoint_on_judgeline[zone_key]
+        
+        # 目标向量 AP (从A指向P)
+        AP_x = P_cx - A_cx
+        AP_y = P_cy - A_cy
+        
+        # 1. 筛选排查：利用点乘 (Dot Product) 判断是否在相反方向
+        dot_product = BA_x * AP_x + BA_y * AP_y
+        if dot_product < 0:
+            continue  # 夹角 > 90度，说明目标点在跑过来的“背后”，排除
+            
+        # 2. 计算点到射线的距离：利用叉乘的绝对值 (Cross Product Area) / 底边长
+        cross_product = abs(BA_x * AP_y - BA_y * AP_x)
+        distance_to_line = cross_product / BA_length
+        
+        if distance_to_line < min_distance_to_line:
+            min_distance_to_line = distance_to_line
+            best_zone = zone_key
+            
+    return best_zone
+
+
+
+
+
 def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoint_on_judgeline):
     '''
     分析运动模式
@@ -215,13 +279,9 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
         # 考虑到有些星星速度太快，来不及进入A区就结束了
         # 需要根据惯性猜测最后可能进入哪个A区
         if not end_position.startswith('A'):
-            before_end_position = positions[-2]
-            # 以倒数第二个点为起点，终点为方向，做射线
-            # 看看这个射线离哪个A区最近，视为最终可能进入的A区
-
-
-
-
+            guessed_zone = guess_target_a_zone_by_inertia(shared_context, note_path, A_zone_endpoint_on_judgeline)
+            if guessed_zone and last_A_zone != guessed_zone:
+                A_zones.append(guessed_zone)
 
         # 检测这个A区路径里边是否包含一些圆弧，要单独拆分出来
         arc_segments = []
