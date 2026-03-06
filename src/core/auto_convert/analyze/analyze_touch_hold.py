@@ -1,31 +1,49 @@
-def analyze_touch_hold_reach_time(self, touch_hold_data):
+import numpy as np
+
+from .shared_context import *
+from .analyze_touch import predict_touch_reach_end_time
+
+
+def analyze_touch_hold_reach_time(shared_context, touch_hold_data):
+    """
+    返回：
+    dict{
+        key: 同 preprocess_touch_hold_data,
+        value: (time, percent_end_time)
+    }
+    """
 
     touch_hold_info = {}
     
-    for (track_id, class_id, position), path in touch_hold_data.items():
+    for key, path in touch_hold_data.items():
 
         dist_times = []
         percent_data = []
+
         for point in path:
             frame_num = point['frame']
             dist = point['dist']
             percent = point['percent']
+
             # 将 percent 数据单独处理
             if percent != -1:
-                cur_time = point['frame'] / self.fps * 1000 # 帧数转换为毫秒
+                cur_time = point['frame'] / shared_context.fps * 1000 # 帧数转换为毫秒
                 percent_data.append((cur_time, percent))
+
             # 将 dist 数据视为 touch note 处理
             if dist != -1:
-                reach_end_Msec = self.predict_touch_reach_end_time(dist, frame_num, total_dist=self.touch_hold_travel_dist)
+                reach_end_Msec = predict_touch_reach_end_time(shared_context, dist, frame_num, shared_context.touch_hold_travel_dist)
                 if reach_end_Msec != 0:
                     dist_times.append(reach_end_Msec)
 
-        percent_times, percent_speeds = self.predict_touch_hold_percent_reach_end_time(percent_data)
+        percent_times, percent_speeds = predict_touch_hold_percent_reach_end_time(percent_data)
 
         # 计算平均值
         mean_dist = np.mean(dist_times)
-        mean_percent = np.mean(percent_times)
-        touch_hold_info[(track_id, class_id, position)] = mean_dist, mean_percent
+        # 有极端值，使用中位数更稳定
+        median_percent = np.median(percent_times)
+        
+        touch_hold_info[key] = mean_dist, median_percent
 
         # print(f"Touch Hold ID {track_id} Position {position}:")
 
@@ -55,7 +73,7 @@ def analyze_touch_hold_reach_time(self, touch_hold_data):
 
 
 
-def predict_touch_hold_percent_reach_end_time(self, percent_data):
+def predict_touch_hold_percent_reach_end_time(percent_data):
 
     # 点配对并计算 speed
     speeds = []
