@@ -1,22 +1,20 @@
-def preprocess_touch_hold_data(self):
-    '''
-    收集所有touch_hold音符的数据
-    过滤轨迹过短的音符
-    计算音符方位
-    计算音符的三角到中心的距离 (精确)
-    过滤前后两端的数据 (距离10%-75%, 百分比3%-47%)
+import numpy as np
 
+from ..detect.note_definition import *
+from .tool import *
+from .shared_context import *
+
+
+
+def preprocess_touch_hold_data(shared_context: SharedContext):
+    '''
     返回格式:
     dict{
-        key: (track_id, class_id, position),
-        value: note path list
+        key: (track_id, note_type, note_varient, note_position),
+        value: note path
         [
             {
                 'frame': frame_num,
-                'x1': x1,
-                'y1': y1,
-                'x2': x2,
-                'y2': y2,
                 'dist': dist_to_center,
                 'percent': percent_of_hold
             },
@@ -27,47 +25,38 @@ def preprocess_touch_hold_data(self):
 
     touch_hold_data = {}
 
-    dist_end_tolerance = self.touch_hold_travel_dist * 0.25
-    dist_start_tolerance = self.touch_hold_travel_dist * 0.1
+    dist_end_tolerance = shared_context.touch_hold_travel_dist * 0.25
+    dist_start_tolerance = shared_context.touch_hold_travel_dist * 0.1
     valid_dist_end = 0 + dist_end_tolerance
-    valid_dist_start = self.touch_hold_travel_dist - dist_start_tolerance
+    valid_dist_start = shared_context.touch_hold_travel_dist - dist_start_tolerance
     percent_end_tolerance = 0.03
     percent_start_tolerance = 0.03
     valid_percent_end = 0.5 - percent_end_tolerance
     valid_percent_start = 0 + percent_start_tolerance
-    cap = cv2.VideoCapture(self.video_path)
+    cap = cv2.VideoCapture(shared_context.std_video_path)
 
     # read track data
-    for track_id, track_data in self.track_data.items():
+    for key, value in shared_context.track_data.items():
 
-        if 'path' not in track_data: continue
-        track_path = track_data['path']
-        if len(track_path) < 10: continue
-        class_id = round(track_data['class_id'])
-        if self.noteDetector.get_main_class_id(class_id) != 5:
-            continue # 5 = touch_hold，忽视非touch_hold音符
+        track_id, note_type = key
+        note_geometry_list = value
+
+        if note_type != NoteType.TOUCH_HOLD: continue
+        if len(note_geometry_list) < 10: continue
 
         counter = 0
         precent_counter = 0
 
         # read track path
         valid_track_path = []
-        for track_box in track_path:
+        for note in note_geometry_list:
 
-            print(f"preprocess_touch_hold_data: processing track_id {track_id}, frame_{counter}/{len(track_path)}   ", end='\r', flush=True)
+            print(f"preprocess_touch_hold_data: processing track_id {track_id}, frame_{counter}/{len(note_geometry_list)}   ", end='\r', flush=True)
             counter += 1
-
-            frame_num = track_box['frame']
-            x1 = track_box['x1'] # 左上角
-            y1 = track_box['y1'] # 左上角
-            x2 = track_box['x3'] # 右下角
-            y2 = track_box['y3'] # 右下角
-            cx = (x1 + x2) / 2
-            cy = (y1 + y2) / 2
 
             # 计算三角到中心的距离
             if precent_counter >= 5: break # 节省时间，hold阶段后半都不用计算了
-            dist, percent_of_hold = self.get_touch_hold_data(cx, cy, frame_num, cap)
+            dist, percent_of_hold = get_touch_hold_data(shared_context.std_video_size, note.cx, note.cy, note.frame, cap)
             # 过滤前后两端的数据
             if dist > valid_dist_start:
                 dist = -1 # 掐头
@@ -82,39 +71,44 @@ def preprocess_touch_hold_data(self):
             if dist == -1 and percent_of_hold == -1:
                 continue
             # 计算方位
-            position = self.calculate_all_position(cx, cy)
+            position = calculate_all_position(shared_context.touch_areas, note.cx, note.cy)
             # 添加轨迹点
-            valid_track_path.append((frame_num, x1, y1, x2, y2, position, dist, percent_of_hold))
+            valid_track_path.append((note.frame, position, dist, percent_of_hold))
+
 
 
         # 检查轨迹存在
         if not valid_track_path:
             print(f"preprocess_touch_hold_data: no valid_track_path for track_id {track_id}")
             continue
-        valid_track_path.sort(key=lambda x: x[0]) # 按frame排序
+        
         # 检验长度
         if len(valid_track_path) < 6:
             print(f"preprocess_touch_hold_data: path too short for track_id {track_id}, length: {len(valid_track_path)}")
             continue
+
         # 检验方位一致
         positions = [x[5] for x in valid_track_path]
         if len(set(positions)) != 1:
             print(f"preprocess_touch_hold_data: positions not consistent for track_id {track_id}")
             continue
-        # 添加到touch_hold_data
+        
+        # 按frame排序
+        valid_track_path.sort(key=lambda x: x[0])
+
+        # 检查通过，添加到touch_hold_data
+        note_varient = note_geometry_list[0].note_variant
+        position = positions[0]
+        key = (track_id, note_type, note_varient, position)
+
         path = []
-        for frame_num, x1, y1, x2, y2, position, dist, percent_of_hold in valid_track_path:
+        for frame_num, position, dist, percent_of_hold in valid_track_path:
             path.append({
                 'frame': frame_num,
-                'x1': x1,
-                'y1': y1,
-                'x2': x2,
-                'y2': y2,
                 'dist': dist,
                 'percent': percent_of_hold
             })
-        touch_hold_data[(track_id, class_id, positions[0])] = path
-
+        touch_hold_data[key] = path
 
     if not touch_hold_data:
         print("preprocess_touch_hold_data: no touch data")
@@ -126,8 +120,8 @@ def preprocess_touch_hold_data(self):
 
 
 
-@log_error
-def get_touch_hold_data(self, cx, cy, frame_num, cap):
+
+def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap):
 
     try:
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
@@ -138,18 +132,18 @@ def get_touch_hold_data(self, cx, cy, frame_num, cap):
 
         # 根据label-notes定义，touch_hold的整体尺寸是 (30+100) x 2/√3 (1080p下)
         # 保险起见变成 200x200
-        roi_radius = 100 * self.video_size / 1080
+        roi_radius = 100 * std_video_size / 1080
 
         # 提取ROI区域
         x_start = round(max(cx - roi_radius, 0))
         y_start = round(max(cy - roi_radius, 0))
-        x_end = round(min(cx + roi_radius, self.video_size - 1))
-        y_end = round(min(cy + roi_radius, self.video_size - 1))
+        x_end = round(min(cx + roi_radius, std_video_size - 1))
+        y_end = round(min(cy + roi_radius, std_video_size - 1))
         roi = frame[y_start:y_end, x_start:x_end]
         # 处理roi
-        transformed_roi = self.diamond_polar_transform(roi)
-        stretched_roi = self.stretch_transformed_image(transformed_roi)
-        final_roi = self.apply_hsv_threshold(stretched_roi)
+        transformed_roi = diamond_polar_transform(roi)
+        stretched_roi = stretch_transformed_image(transformed_roi)
+        final_roi = apply_hsv_threshold(stretched_roi)
         h, w = final_roi.shape[:2]
         # 计算 final_roi 上方 15% - 50% 区域中黑色像素的比例
         roi_top = final_roi[int(h * 0.15):int(h * 0.5), :, :]
@@ -195,7 +189,7 @@ def get_touch_hold_data(self, cx, cy, frame_num, cap):
             # 平均距离
             if distances:
                 dist = np.mean(distances)
-                dist -= roi_radius * 0.1 # 微调
+                dist -= roi_radius * 0.08 # 微调
 
             # # 显示窗口
             # print(f"frame {frame_num}: dist {dist:.2f}")
@@ -230,8 +224,8 @@ def get_touch_hold_data(self, cx, cy, frame_num, cap):
 
 
 
-@log_error
-def diamond_polar_transform(self, roi):
+
+def diamond_polar_transform(roi):
     """
     菱形极坐标变换
     """
@@ -280,8 +274,8 @@ def diamond_polar_transform(self, roi):
 
 
 
-@log_error
-def stretch_transformed_image(self, roi):
+
+def stretch_transformed_image(roi):
     """
     对菱形极坐标变换后的矩形进行后处理
     从左到右对每一列进行向下拉伸，消除底部的三角形背景区域
@@ -329,8 +323,8 @@ def stretch_transformed_image(self, roi):
 
 
 
-@log_error
-def apply_hsv_threshold(self, roi):
+
+def apply_hsv_threshold(roi):
     """
     采样展开后的矩形最上面一行的所有像素的平均饱和度和亮度
     设置饱和度和亮度阈值，过滤背景和黄色光晕特效
