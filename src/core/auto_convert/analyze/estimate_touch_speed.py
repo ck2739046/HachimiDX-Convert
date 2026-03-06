@@ -1,4 +1,9 @@
-def estimate_touch_DefaultMsec(self, touch_data):
+import numpy as np
+
+from .shared_context import *
+
+
+def estimate_touch_DefaultMsec(shared_context, touch_data):
     '''
     正向：
     根据 time_progress = (current_time - move_start_time) / DefaultMsec 获得 time_progress
@@ -44,20 +49,20 @@ def estimate_touch_DefaultMsec(self, touch_data):
 
     DefaultMsecs = []
 
-    for (track_id, class_id, position), path in touch_data.items():
+    for (track_id, note_type, note_varient, note_position), path in touch_data.items():
 
         # 过滤掉斜率较小的轨迹点
         big_slope_points = []
         for point in path:
             # 反推 location_progress (保留15%-85%的点)
             cur_dist = point['dist']
-            location_progress = 1 - cur_dist / self.touch_travel_dist
+            location_progress = 1 - cur_dist / shared_context.touch_travel_dist
             if location_progress < 0.15 or location_progress > 0.85:
                 continue
             # 反推 time_progress
             time_progress = reverse_function(location_progress)
             # 加入列表
-            cur_time = point['frame'] / self.fps * 1000 # 帧数转换为毫秒
+            cur_time = point['frame'] / shared_context.fps * 1000 # 帧数转换为毫秒
             big_slope_points.append((cur_time, time_progress))
 
         if len(big_slope_points) < 6:
@@ -88,14 +93,14 @@ def estimate_touch_DefaultMsec(self, touch_data):
     std_dev = np.std(DefaultMsecs)
     print(f"touch DefaultMsec {length}: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
-    touch_DefaultMsec, touch_OptionNotespeed = self.get_touch_DefaultMsec(median)
+    touch_DefaultMsec, touch_OptionNotespeed = get_touch_DefaultMsec(median)
     return touch_DefaultMsec, touch_OptionNotespeed
 
 
 
 
 
-def get_touch_DefaultMsec(self, detected_touch_DefaultMsec):
+def get_touch_DefaultMsec(detected_touch_DefaultMsec):
 
     def get_standard_touch_DefaultMsec(ui_speed):
         # 游戏源码实现

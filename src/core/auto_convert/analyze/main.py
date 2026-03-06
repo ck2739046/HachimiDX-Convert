@@ -5,6 +5,14 @@ from ...schemas.op_result import OpResult, ok, err
 from .tool import *
 from .shared_context import *
 
+from .preprocess_tap import preprocess_tap_data
+from .preprocess_touch import preprocess_touch_data
+from .preprocess_hold import preprocess_hold_data
+from .preprocess_touch_hold import preprocess_touch_hold_data
+from .preprocess_slide import preprocess_slide_head_data, preprocess_slide_tail_data
+
+from .estimate_tap_speed import estimate_tap_DefaultMsec
+from .estimate_touch_speed import estimate_touch_DefaultMsec
 
 
 def main(std_video_path: Path,

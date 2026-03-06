@@ -1,4 +1,10 @@
-def estimate_note_DefaultMsec(self, tap_data):
+import numpy as np
+
+from .shared_context import *
+
+
+
+def estimate_tap_DefaultMsec(shared_context, tap_data):
     """
     音符从起点移动到判定线需要耗时 DefaultMsec (ms)
     采样4个点（0%、25%、50%、100%）计算三个阶段性速度
@@ -42,14 +48,14 @@ def estimate_note_DefaultMsec(self, tap_data):
     std_dev = np.std(note_speeds)
     print(f"speed of {length} tap notes: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
-    note_DefaultMsec, note_OptionNotespeed = self.get_note_DefaultMsec(median)
+    note_DefaultMsec, note_OptionNotespeed = get_note_DefaultMsec(shared_context, median)
     return note_DefaultMsec, note_OptionNotespeed
 
 
 
 
 
-def get_note_DefaultMsec(self, detected_note_speed):
+def get_note_DefaultMsec(shared_context, detected_note_speed):
 
     def get_standard_note_DefaultMsec(ui_speed):
         # 游戏源码实现
@@ -58,9 +64,9 @@ def get_note_DefaultMsec(self, detected_note_speed):
         DefaultMsec = NoteSpeedForBeat * 4
         return DefaultMsec, OptionNotespeed
 
-    total_dist = self.note_travel_dist
-    detected_note_speed = detected_note_speed * self.fps / 1000 # pixel/frame to pixel/ms
-    note_lifetime = total_dist / detected_note_speed # 走完全程需要多少时间
+    total_dist = shared_context.note_travel_dist
+    detected_note_speed = detected_note_speed * shared_context.fps / 1000 # pixel/frame to pixel/ms
+    detected_note_DefaultMsec = total_dist / detected_note_speed # 走完全程需要多少时间 (lifetime)
 
     # 查找最接近的 DefaultMsec
     cloest_DefaultMsec = 0
@@ -71,12 +77,12 @@ def get_note_DefaultMsec(self, detected_note_speed):
 
         DefaultMsec, OptionNotespeed = get_standard_note_DefaultMsec(i)
 
-        if abs(DefaultMsec - note_lifetime) < abs(cloest_DefaultMsec - note_lifetime):
+        if abs(DefaultMsec - detected_note_DefaultMsec) < abs(cloest_DefaultMsec - detected_note_DefaultMsec):
             cloest_DefaultMsec = DefaultMsec
             cloest_i = i
             cloest_OptionNotespeed = OptionNotespeed
         i += 0.25
 
-    print(f"estimate note speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {note_lifetime:.3f}ms)")
+    print(f"estimate note speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {detected_note_DefaultMsec:.3f}ms)")
 
     return cloest_DefaultMsec, cloest_OptionNotespeed
