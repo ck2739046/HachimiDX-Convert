@@ -1,32 +1,42 @@
-def analyze_hold_reach_time(self, hold_data):
+import numpy as np
+
+from .shared_context import *
+from .analyze_tap import predict_tap_reach_end_time
+
+
+
+def analyze_hold_reach_time(shared_context, hold_data):
+    """
+    返回：
+    dict{
+        key: 同 preprocess_hold_data,
+        value: (head_time, tail_time)
+    }
+    """
 
     hold_info = {}
 
-    end_tolerance = self.note_travel_dist * 0.1
-    start_tolerance = self.note_travel_dist * 0.1
-    valid_judgeline_start = self.judgeline_start + start_tolerance
-    valid_judgeline_end = self.judgeline_end - end_tolerance
-
-    for (track_id, class_id, direction), path in hold_data.items():
+    for key, path in hold_data.items():
 
         head_times = []
         tail_times = []
+
         # 平均所有轨迹的到达时间
         for point in path:
             frame_num = point['frame']
             dist_head = point['dist-head']
             dist_tail = point['dist-tail']
-            # 过滤 head 和 tail (10%-90%)
-            if valid_judgeline_start <= dist_head <= valid_judgeline_end:
-                reach_end_Msec_head = self.predict_note_reach_end_time(dist_head, frame_num)
-                head_times.append(reach_end_Msec_head)
-            if valid_judgeline_start <= dist_tail <= valid_judgeline_end:
-                reach_end_Msec_tail = self.predict_note_reach_end_time(dist_tail, frame_num)
-                tail_times.append(reach_end_Msec_tail)
+
+            reach_end_Msec_head = predict_tap_reach_end_time(shared_context, dist_head, frame_num)
+            head_times.append(reach_end_Msec_head)
+
+            reach_end_Msec_tail = predict_tap_reach_end_time(shared_context, dist_tail, frame_num)
+            tail_times.append(reach_end_Msec_tail)
+        
         # 计算平均时间
         mean_head = np.mean(head_times)
         mean_tail = np.mean(tail_times)
-        hold_info[(track_id, class_id, direction)] = (mean_head, mean_tail)
+        hold_info[key] = (mean_head, mean_tail)
 
         # print(f"Hold ID {track_id} Direction {direction}:")
         # min1 = np.min(head_times)

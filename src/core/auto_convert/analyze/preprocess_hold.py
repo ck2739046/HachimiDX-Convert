@@ -57,6 +57,12 @@ def preprocess_hold_data(shared_context: SharedContext):
                 continue # 去尾
             # 计算头尾的坐标/距离
             x_head, y_head, x_tail, y_tail, dist_head, dist_tail = calculate_hold_head_tail(shared_context, note.x1, note.y1, note.x2, note.y2, note.x3, note.y3, note.x4, note.y4, note.note_variant, position)
+            # 重新过滤
+            normal_valid_judgeline_start = shared_context.judgeline_start + 2*start_tolerance
+            normal_valid_judgeline_end = shared_context.judgeline_end - 2*end_tolerance
+            if not (normal_valid_judgeline_start <= dist_head <= normal_valid_judgeline_end and
+                    normal_valid_judgeline_start <= dist_tail <= normal_valid_judgeline_end):
+                continue
             # 添加轨迹点
             valid_track_path.append((note.frame, position, dist_head, dist_tail))
 

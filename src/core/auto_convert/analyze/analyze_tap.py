@@ -5,18 +5,29 @@ from .shared_context import *
 
 
 def analyze_tap_reach_time(shared_context, tap_data):
+    """
+    返回:
+    dict{
+        key: 同 preprocess_tap_data,
+        value: time
+    }
+    """
 
     tap_info = {}
-    for (track_id, note_type, note_varient, note_position), path in tap_data.items():
-        # 平均所有轨迹的到达时间
+    for key, path in tap_data.items():
+
         times = []
+
+        # 平均所有轨迹的到达时间
         for point in path:
             frame_num = point['frame']
             dist = point['dist']
-            reach_end_Msec = predict_note_reach_end_time(shared_context, dist, frame_num)
+
+            reach_end_Msec = predict_tap_reach_end_time(shared_context, dist, frame_num)
             times.append(reach_end_Msec)
+
         mean = np.mean(times)
-        tap_info[(track_id, note_type, note_varient, note_position)] = mean
+        tap_info[key] = mean
 
         
         # min = np.min(times)
@@ -33,7 +44,7 @@ def analyze_tap_reach_time(shared_context, tap_data):
 
 
 
-def predict_note_reach_end_time(shared_context, cur_dist, cur_frame):
+def predict_tap_reach_end_time(shared_context, cur_dist, cur_frame):
     '''
     正向:
     [dist_offset] = -1/120 * 总距离 * (OptionNotespeed/150f -1)
