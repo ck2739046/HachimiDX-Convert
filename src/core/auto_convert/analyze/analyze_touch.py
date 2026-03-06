@@ -1,18 +1,35 @@
-def analyze_touch_reach_time(self, touch_data):
+import numpy as np
+
+from .shared_context import *
+
+
+
+def analyze_touch_reach_time(shared_context, touch_data):
+    """
+    返回：
+    dict{
+        key: 同 preprocess_touch_data,
+        value: time
+    }
+    """
 
     touch_info = {}
-    for (track_id, class_id, position), path in touch_data.items():
-        # 平均所有轨迹的到达时间
+
+    for key, path in touch_data.items():
+
         times = []
+
+        # 平均所有轨迹的到达时间
         for point in path:
             frame_num = point['frame']
             dist = point['dist']
-            reach_end_Msec = self.predict_touch_reach_end_time(dist, frame_num, total_dist=self.touch_travel_dist)
+
+            reach_end_Msec = predict_touch_reach_end_time(shared_context, dist, frame_num, shared_context.touch_travel_dist)
             if reach_end_Msec != 0:
                 times.append(reach_end_Msec)
                 
         mean = np.mean(times)
-        touch_info[(track_id, class_id, position)] = mean
+        touch_info[key] = mean
 
         # print(f"Touch ID {track_id} Position {position}:")
         # min = np.min(times)
@@ -28,7 +45,7 @@ def analyze_touch_reach_time(self, touch_data):
 
 
 
-def predict_touch_reach_end_time(self, dist, cur_frame, total_dist):
+def predict_touch_reach_end_time(shared_context, dist, cur_frame, total_dist):
     '''
     正向：
     根据 time_progress = (current_time - move_start_time) / DefaultMsec 获得 time_progress
@@ -66,8 +83,8 @@ def predict_touch_reach_end_time(self, dist, cur_frame, total_dist):
     # 反推 time_progress
     time_progress = reverse_function(location_progress)
     # 反推 move_start_time
-    cur_time = cur_frame / self.fps * 1000  # 转换为毫秒
-    move_start_time = cur_time - time_progress * self.touch_DefaultMsec
-    reach_end_time = move_start_time + self.touch_DefaultMsec
+    cur_time = cur_frame / shared_context.fps * 1000  # 转换为毫秒
+    move_start_time = cur_time - time_progress * shared_context.touch_DefaultMsec
+    reach_end_time = move_start_time + shared_context.touch_DefaultMsec
 
     return reach_end_time
