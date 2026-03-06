@@ -69,9 +69,10 @@ def analyze_slide_tail(shared_context, slide_tail_data):
         movement_syntax = analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoint_on_judgeline)
         if movement_syntax is None:
             continue
-        
+        end_position = 'A' + movement_syntax[-1]
+
         # 计算持续时间
-        start_time, end_time = analyze_slide_tail_start_end_time(shared_context, note_path, A_zone_endpoint_on_judgeline)
+        start_time, end_time = analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A_zone_endpoint_on_judgeline)
         if start_time is None or end_time is None:
             continue
 
@@ -99,7 +100,7 @@ def guess_target_a_zone_by_inertia(shared_context, note_path, A_zone_endpoint_on
     
     # 倒序遍历寻找距离大于阈值的点 (点B)
     B_cx, B_cy = None, None
-    min_dist = shared_context.std_video_size * 0.02
+    min_dist = shared_context.std_video_size * 0.02 # 1080p下约为20像素
     
     for note in reversed(note_path[:-1]):
         cx = note['cx']
@@ -339,7 +340,9 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
 
 
 
-def analyze_slide_tail_start_end_time(self, note_path, A_zone_endpoint_on_judgeline):
+
+
+def analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A_zone_endpoint_on_judgeline):
     '''
     粗略计算持续时间
 
@@ -361,19 +364,18 @@ def analyze_slide_tail_start_end_time(self, note_path, A_zone_endpoint_on_judgel
     last_cx = None
     last_cy = None
     last_frame = None
+    min_dist = shared_context.std_video_size * 0.04 # 1080p下约为40像素
     frame_speeds = []
-    for i in range(len(note_path)):
-        point = note_path[i]
+
+    for point in note_path:
         frame_num = point['frame']
-        x1 = point['x1']
-        y1 = point['y1']
-        x2 = point['x2']
-        y2 = point['y2']
-        cx = (x1 + x2) / 2
-        cy = (y1 + y2) / 2
+        cx = point['cx']
+        cy = point['cy']
 
         if last_cx is not None and last_cy is not None and last_frame is not None:
             dist = np.sqrt((cx - last_cx)**2 + (cy - last_cy)**2)
+            if dist < min_dist:
+                continue # 两点间距过短，不能可靠计算速度，跳过
             frame_diff = frame_num - last_frame
             if frame_diff > 0:
                 speed = dist / frame_diff
@@ -390,34 +392,31 @@ def analyze_slide_tail_start_end_time(self, note_path, A_zone_endpoint_on_judgel
     sorted_speeds = sorted(frame_speeds)
     note_speed = sorted_speeds[index]
 
-    # 定义起点和终点位置
+
+
+
+
+    # 起点
     point = A_zone_endpoint_on_judgeline.get(positions[0], None)
     if point is None:
         return None, None
     start_cx, start_cy = point
-    # 允许终点在A区或D区
-    temp_position_str = f'A{positions[-1][1]}'
-    point = A_zone_endpoint_on_judgeline.get(temp_position_str, None)
+    # 终点
+    point = A_zone_endpoint_on_judgeline.get(end_position, None)
     if point is None:
         return None, None
     end_cx, end_cy = point
 
     # 定义A区中心半径
-    self.note_travel_dist = 0
-    a_zone_radius = (self.note_travel_dist) / 7
+    a_zone_radius = (shared_context.note_travel_dist) / 7
 
     # 找到第一个离开起始A区的点
     start_move_frame = None
     dist_to_start = 0
-    for i in range(round(len(note_path)*0.5)): # 只搜索前半，从前往后
-        point = note_path[i]
+    for point in note_path:
         frame_num = point['frame']
-        x1 = point['x1']
-        y1 = point['y1']
-        x2 = point['x2']
-        y2 = point['y2']
-        cx = (x1 + x2) / 2
-        cy = (y1 + y2) / 2
+        cx = point['cx']
+        cy = point['cy']
         dist_to_start = np.sqrt((cx - start_cx)**2 + (cy - start_cy)**2)
         if dist_to_start > a_zone_radius:
             start_move_frame = frame_num
@@ -426,21 +425,17 @@ def analyze_slide_tail_start_end_time(self, note_path, A_zone_endpoint_on_judgel
     # 计算开始时间
     if start_move_frame is None:
         return None, None
-    time_to_start_Msec = (dist_to_start / note_speed) * (1000 / self.fps)
-    note_start_time_Msec = start_move_frame / self.fps * 1000 - time_to_start_Msec
+    time_to_start_Msec = (dist_to_start / note_speed) * (1000 / shared_context.fps)
+    note_start_time_Msec = start_move_frame / shared_context.fps * 1000 - time_to_start_Msec
 
     # 找到最后一个进入终点A区的点
     end_move_frame = None
     dist_to_end = 0
-    for i in range(len(note_path)-1, round(len(note_path)*0.5), -1): # 只搜索后半，从后往前
+    for i in range(len(note_path)-1, -1, -1): # 从后往前
         point = note_path[i]
         frame_num = point['frame']
-        x1 = point['x1']
-        y1 = point['y1']
-        x2 = point['x2']
-        y2 = point['y2']
-        cx = (x1 + x2) / 2
-        cy = (y1 + y2) / 2
+        cx = point['cx']
+        cy = point['cy']
         dist_to_end = np.sqrt((cx - end_cx)**2 + (cy - end_cy)**2)
         if dist_to_end > a_zone_radius:
             end_move_frame = frame_num
@@ -449,10 +444,12 @@ def analyze_slide_tail_start_end_time(self, note_path, A_zone_endpoint_on_judgel
     # 计算结束时间
     if end_move_frame is None:
         return None, None
-    time_to_end_Msec = (dist_to_end / note_speed) * (1000 / self.fps)
-    note_end_time_Msec = end_move_frame / self.fps * 1000 + time_to_end_Msec
+    time_to_end_Msec = (dist_to_end / note_speed) * (1000 / shared_context.fps)
+    note_end_time_Msec = end_move_frame / shared_context.fps * 1000 + time_to_end_Msec
 
     return note_start_time_Msec, note_end_time_Msec
+
+
 
 
 

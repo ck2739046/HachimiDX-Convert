@@ -150,10 +150,10 @@ def preprocess_slide_tail_data(shared_context: SharedContext):
         position = calculate_all_position(shared_context.touch_areas, start.cx, start.cy)
         if not position.startswith('A'):
             continue # 忽视非A区开头音符
-        end = note_geometry_list[-1]
-        position = calculate_all_position(shared_context.touch_areas, end.cx, end.cy)
-        if not position.startswith('A') and not position.startswith('D'):
-            continue # 忽视非A区或D区结尾音符
+        # end = note_geometry_list[-1]
+        # position = calculate_all_position(shared_context.touch_areas, end.cx, end.cy)
+        # if not position.startswith('A') and not position.startswith('D'):
+        #     continue # 忽视非A区或D区结尾音符
 
 
         # read track path
