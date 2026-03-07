@@ -9,7 +9,7 @@ def analyze_touch_hold_reach_time(shared_context, touch_hold_data):
     返回：
     dict{
         key: 同 preprocess_touch_hold_data,
-        value: (time, percent_end_time)
+        value: (time, duration)
     }
     """
 
@@ -42,8 +42,9 @@ def analyze_touch_hold_reach_time(shared_context, touch_hold_data):
         mean_dist = np.mean(dist_times)
         # 有极端值，使用中位数更稳定
         median_percent = np.median(percent_times)
-        
-        touch_hold_info[key] = mean_dist, median_percent
+
+        duration = median_percent - mean_dist
+        touch_hold_info[key] = (mean_dist, duration)
 
         # print(f"Touch Hold ID {track_id} Position {position}:")
 

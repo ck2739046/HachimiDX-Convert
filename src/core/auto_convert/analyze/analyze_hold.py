@@ -10,7 +10,7 @@ def analyze_hold_reach_time(shared_context, hold_data):
     返回：
     dict{
         key: 同 preprocess_hold_data,
-        value: (head_time, tail_time)
+        value: (time, duration)
     }
     """
 
@@ -36,7 +36,9 @@ def analyze_hold_reach_time(shared_context, hold_data):
         # 计算平均时间
         mean_head = np.mean(head_times)
         mean_tail = np.mean(tail_times)
-        hold_info[key] = (mean_head, mean_tail)
+
+        duration = mean_tail - mean_head
+        hold_info[key] = (mean_head, duration)
 
         # print(f"Hold ID {track_id} Direction {direction}:")
         # min1 = np.min(head_times)

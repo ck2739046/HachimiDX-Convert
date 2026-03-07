@@ -1,5 +1,7 @@
 import numpy as np
+from collections import defaultdict
 
+from ..detect.note_definition import *
 from .shared_context import *
 from .analyze_tap import analyze_tap_reach_time
 
@@ -453,15 +455,15 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A
 
 
 
-def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_index=0.25):
+def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, delay_index=0.25):
     '''
     合并slide头尾信息
-    输入: for (head_track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
-            for (tail_track_id, tail_class_id, tail_start_position): (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+    输入: for (head_track_id, note_type, note_varient, head_position), head_end_time in slide_head_info.items():
+          for (tail_track_id, note_type, note_varient, tail_start_position): (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
 
     将这两组进行匹配：
     delay = tail_start_time - head_end_time
-    规则1：head_position = tail_start_position (str)
+    规则1：head_position = tail_start_position
     规则2：min_delay < delay < max_delay
     规则3：一个tail最多只能匹配到一个head，但是一个head可以匹配多个tail
     规则4：如果tail与多个head都符合匹配条件，选择delay与std_delay最接近的head
@@ -469,31 +471,34 @@ def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_index=0.
     返回格式:
     dict{
         # 匹配的head_tail组合
-        key: (head_track_id, head_class_id, full_movement_syntax),
-        value: (head_end_time, tail_start_time, tail_end_time)
+        key: (head_track_id, note_type, note_varient, full_movement_syntax),
+        value: (time, duration)
+
         # 未匹配的head
-        key: (head_track_id, head_class_id, head_position),
-        value: head_end_time
+        key: (head_track_id, note_type, note_varient, head_position),
+        value: time
     }
     '''
 
-    def get_suffix(class_id, isSingleHead=False):
-        dict = {
-            20: '',    # slide
-            21: 'b',   # break-slide
-            22: 'x',   # ex-slide
-            23: 'bx',  # break-ex-slide
-        }
-        dict_single = {
-            20: '$',    # single-slide
-            21: 'b$',   # break-single-slide
-            22: 'x$',   # ex-single-slide
-            23: 'bx$',  # break-ex-single-slide
-        }
-        if isSingleHead:
-            return dict_single.get(class_id, '')
+    def get_suffix(note_varient: NoteVariant, isSingleHead=False):
+
+        if note_varient == NoteVariant.NORMAL:
+            suffix = ''
+        elif note_varient == NoteVariant.BREAK:
+            suffix = 'b'
+        elif note_varient == NoteVariant.EX:
+            suffix = 'x'
+        elif note_varient == NoteVariant.BREAK_EX:
+            suffix = 'bx'
         else:
-            return dict.get(class_id, '')
+            suffix = '?'
+        
+        if isSingleHead:
+            suffix += '$'
+
+        return suffix
+
+
 
 
     final_slide_info = {}
@@ -501,8 +506,8 @@ def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_index=0.
     # 标准延迟是0.25拍
     one_beat_Msec = 60 / bpm * 1000 * 4
     std_delay = one_beat_Msec * delay_index
-    max_delay = one_beat_Msec * delay_index * 1.2
-    min_delay = one_beat_Msec * delay_index * 0.6
+    max_delay = std_delay * 1.2
+    min_delay = std_delay * 0.8
 
     # print(f"\n=== Matching Parameters ===")
     # print(f"BPM: {bpm}, One Beat: {one_beat_Msec:.2f} ms")
@@ -514,28 +519,28 @@ def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_index=0.
     # 先按位置分组head数据
     # 这样后续tail查找head时，只会在对应位置的head中查找，减少计算量
     head_by_position = defaultdict(list)
-    for (track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
-        head_by_position[str(head_position)].append((track_id, head_class_id, head_position, head_end_time))
+    for (track_id, note_type, note_varient, head_position), head_end_time in slide_head_info.items():
+        head_by_position[str(head_position)].append((track_id, note_type, note_varient, head_position, head_end_time))
 
     # 记录哪些head_track_id被匹配了，使用set避免重复
     matched_head_track_ids = set()
 
     # 遍历所有tail，寻找匹配的head
     processed_tails = 0
-    for (tail_track_id, tail_class_id, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+    for (tail_track_id, tail_note_type, tail_note_varient, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
         processed_tails += 1
 
         # 先看看有没有任何与tail位置相同的head
         tail_start_position = str(tail_start_position)
-        if tail_start_position not in head_by_position:
-            print(f"{tail_track_id} Tail not match: No heads at position {tail_start_position}")
+        if tail_start_position not in head_by_position.keys():
+            print(f"[{tail_track_id}] Tail not match: No heads at position {tail_start_position}")
             continue
         # 如果有，遍历这些head，寻找符合delay条件的head
         # 条件1：min_delay < delay < max_delay
         # 条件2：与std_delay最接近
         best_head = None
         best_delay_diff = float('inf')
-        for head_track_id, head_class_id, head_position, head_end_time in head_by_position[tail_start_position]:
+        for head_track_id, head_note_type, head_note_varient, head_position, head_end_time in head_by_position[tail_start_position]:
             # 条件1
             delay = tail_start_time - head_end_time
             if not (min_delay < delay < max_delay):
@@ -544,29 +549,33 @@ def merge_slide_info(self, slide_head_info, slide_tail_info, bpm, delay_index=0.
             delay_diff = abs(delay - std_delay)
             if delay_diff < best_delay_diff:
                 best_delay_diff = delay_diff
-                best_head = (head_track_id, head_class_id, head_position, head_end_time)
+                best_head = (head_track_id, head_note_type, head_note_varient, head_position, head_end_time)
 
         if best_head is None:
-            print(f"{tail_track_id} Tail not match: No heads match delay at position {tail_start_position}")
+            print(f"[{tail_track_id}] Tail not match: No heads match delay at position {tail_start_position}")
             continue
 
         # 找到了匹配的head，进行记录
-        head_track_id, head_class_id, head_position, head_end_time = best_head
+        head_track_id, head_note_type, head_note_varient, head_position, head_end_time = best_head
         matched_head_track_ids.add(head_track_id)
-        # 由于未知原因，星星时长总是长了1/16拍，进行修正
-        tail_end_time -= one_beat_Msec / 16
+
+        # # 由于未知原因，星星时长总是长了1/16拍，进行修正
+        # tail_end_time -= one_beat_Msec / 16
+
         # 写入final_slide_info
-        full_movement_syntax = f"{tail_start_position}{get_suffix(head_class_id)}{tail_movement_syntax}{get_suffix(tail_class_id)}"
-        key = (head_track_id, head_class_id, full_movement_syntax)
-        value = (head_end_time, tail_start_time, tail_end_time)
+        full_movement_syntax = f"{tail_start_position}{get_suffix(head_note_varient)}{tail_movement_syntax}{get_suffix(tail_note_varient)}"
+        key = (head_track_id, head_note_type, head_note_varient, full_movement_syntax)
+        duration = tail_end_time - tail_start_time
+        value = (head_end_time, duration)
         final_slide_info[key] = value
 
 
+
     # 将未匹配的head也写入final_slide_info
-    for (head_track_id, head_class_id, head_position), head_end_time in slide_head_info.items():
+    for (head_track_id, head_note_type, head_note_varient, head_position), head_end_time in slide_head_info.items():
         if head_track_id not in matched_head_track_ids:
-            full_movement_syntax = f"{head_position}{get_suffix(head_class_id, isSingleHead=True)}"
-            key = (head_track_id, head_class_id, full_movement_syntax)
+            full_movement_syntax = f"{head_position}{get_suffix(head_note_varient, isSingleHead=True)}"
+            key = (head_track_id, head_note_type, head_note_varient, full_movement_syntax)
             value = head_end_time
             final_slide_info[key] = value
 
