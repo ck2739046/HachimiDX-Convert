@@ -14,6 +14,16 @@ from .preprocess_slide import preprocess_slide_head_data, preprocess_slide_tail_
 from .estimate_tap_speed import estimate_tap_DefaultMsec
 from .estimate_touch_speed import estimate_touch_DefaultMsec
 
+from .analyze_tap import analyze_tap_time
+from .analyze_touch import analyze_touch_time
+from .analyze_hold import analyze_hold_time
+from .analyze_touch_hold import analyze_touch_hold_time
+from .analyze_slide import analyze_slide_time
+
+from .generate_maidata import generate_maidata
+
+
+
 
 def main(std_video_path: Path,
          bpm: float,

@@ -4,7 +4,7 @@ from .shared_context import *
 
 
 
-def analyze_tap_reach_time(shared_context, tap_data):
+def analyze_tap_time(shared_context, tap_data):
     """
     返回:
     dict{

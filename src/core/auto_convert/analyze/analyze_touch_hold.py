@@ -4,7 +4,7 @@ from .shared_context import *
 from .analyze_touch import predict_touch_reach_end_time
 
 
-def analyze_touch_hold_reach_time(shared_context, touch_hold_data):
+def analyze_touch_hold_time(shared_context, touch_hold_data):
     """
     返回：
     dict{

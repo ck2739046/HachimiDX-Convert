@@ -3,14 +3,14 @@ from collections import defaultdict
 
 from ..detect.note_definition import *
 from .shared_context import *
-from .analyze_tap import analyze_tap_reach_time
+from .analyze_tap import analyze_tap_time
 
 
 
 def analyze_slide_time(shared_context, slide_head_data, slide_tail_data, bpm):
 
     # 处理星星头，视为 tap 处理
-    slide_head_info = analyze_tap_reach_time(shared_context, slide_head_data)
+    slide_head_info = analyze_tap_time(shared_context, slide_head_data)
     
     # 处理星星尾
     slide_tail_info = analyze_slide_tail(shared_context, slide_tail_data)

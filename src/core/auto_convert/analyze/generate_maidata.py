@@ -1,75 +1,22 @@
+import numpy as np
+import os
+import math
+from pathlib import Path
 
-def analyze_all_notes_info(self, bpm, chart_lv, base_denominator, duration_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
-
-
-    def get_best_numerator_denominator(diff_beat, input_denominator, enable_12):
-        """在12和输入分母中选择误差最小的分母"""
-
-        # 如果输入的分母 >=16，启用12作为备选分母
-        candidates = [input_denominator]
-        if input_denominator >= 16 and enable_12:
-            candidates.append(12)
-        
-        # 选择误差最小的分母
-        best_error = float('inf')
-        best_total_numerator = 0
-        best_denominator = input_denominator
-
-        for denom in candidates:
-            total_numerator = round(diff_beat * denom)
-            # 零间隔
-            if total_numerator == 0:
-                error = abs(diff_beat)
-                if error < best_error:
-                    best_error = error
-                    best_total_numerator = 0
-                    best_denominator = 1
-                continue
-            # 计算误差
-            fraction_value = total_numerator / denom
-            error = abs(diff_beat - fraction_value)
-            if error < best_error:
-                best_error = error
-                best_total_numerator = total_numerator
-                best_denominator = denom
-
-        return best_total_numerator, best_denominator
-        
-
-    def get_fraction(diff_beat, input_denominator, enable_12=True):
-        # 返回格式：分子，分母，整数
-        # 0.5  -> 1/2 + 0 -> 1, 2, 0
-        # 1.0  -> 0/1 + 1 -> 0, 1, 1
-        # 2.25 -> 1/4 + 2 -> 1, 4, 2
-        
-        raw_numerator, raw_denominator = get_best_numerator_denominator(diff_beat, input_denominator, enable_12)
-        if raw_numerator == 0: return 0, 1, 0 # 零间隔直接返回
-        # 获取整数和余数部分
-        one = raw_numerator // raw_denominator
-        remainder = raw_numerator % raw_denominator
-        # 是整数，直接返回，不需要约分余数
-        if remainder == 0: return 0, 1, one
-        # 是小数，约分余数部分
-        gcd_num = gcd(remainder, raw_denominator)
-        numerator = remainder // gcd_num
-        denominator = raw_denominator // gcd_num
-
-        return numerator, denominator, one
+from .shared_context import *
 
 
-
-
-
-
+def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denominator, duration_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
 
 
     # 准备输出txt文件
-    output_dir = os.path.dirname(self.video_path)
-    txt_path = os.path.join(output_dir, 'maidata.txt')
+    output_dir = shared_context.std_video_path.parent
+    txt_path = output_dir / "maidata.txt"
     if os.path.exists(txt_path):
         os.remove(txt_path)
+
     # 写入文件头
-    video_name = os.path.splitext(os.path.basename(self.video_path))[0].replace('_standardized', '')
+    video_name = output_dir.name
     with open(txt_path, 'w', encoding='utf-8') as f:
         f.write(f'&title={video_name}\n')
         f.write('&artist=default\n')
@@ -110,7 +57,7 @@ def analyze_all_notes_info(self, bpm, chart_lv, base_denominator, duration_denom
 
     # 计算最小公倍数分母用于累加
     if base_denominator >= 16:
-        lcm_denom = base_denominator * 12 // gcd(base_denominator, 12)
+        lcm_denom = base_denominator * 12 // math.gcd(base_denominator, 12)
     else:
         lcm_denom = base_denominator
 
@@ -267,3 +214,62 @@ def analyze_all_notes_info(self, bpm, chart_lv, base_denominator, duration_denom
     std_dev = np.std(time_deviations)
     print(f"Time deviations of {length} notes: Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
+
+
+
+
+def get_best_numerator_denominator(diff_beat, input_denominator, enable_12):
+    """在12和输入分母中选择误差最小的分母"""
+
+    # 如果输入的分母 >=16，启用12作为备选分母
+    candidates = [input_denominator]
+    if input_denominator >= 16 and enable_12:
+        candidates.append(12)
+    
+    # 选择误差最小的分母
+    best_error = float('inf')
+    best_total_numerator = 0
+    best_denominator = input_denominator
+
+    for denom in candidates:
+        total_numerator = round(diff_beat * denom)
+        # 零间隔
+        if total_numerator == 0:
+            error = abs(diff_beat)
+            if error < best_error:
+                best_error = error
+                best_total_numerator = 0
+                best_denominator = 1
+            continue
+        # 计算误差
+        fraction_value = total_numerator / denom
+        error = abs(diff_beat - fraction_value)
+        if error < best_error:
+            best_error = error
+            best_total_numerator = total_numerator
+            best_denominator = denom
+
+    return best_total_numerator, best_denominator
+
+
+
+
+def get_fraction(diff_beat, input_denominator, enable_12=True):
+        # 返回格式：分子，分母，整数
+        # 0.5  -> 1/2 + 0 -> 1, 2, 0
+        # 1.0  -> 0/1 + 1 -> 0, 1, 1
+        # 2.25 -> 1/4 + 2 -> 1, 4, 2
+        
+        raw_numerator, raw_denominator = get_best_numerator_denominator(diff_beat, input_denominator, enable_12)
+        if raw_numerator == 0: return 0, 1, 0 # 零间隔直接返回
+        # 获取整数和余数部分
+        one = raw_numerator // raw_denominator
+        remainder = raw_numerator % raw_denominator
+        # 是整数，直接返回，不需要约分余数
+        if remainder == 0: return 0, 1, one
+        # 是小数，约分余数部分
+        gcd_num = math.gcd(remainder, raw_denominator)
+        numerator = remainder // gcd_num
+        denominator = raw_denominator // gcd_num
+
+        return numerator, denominator, one

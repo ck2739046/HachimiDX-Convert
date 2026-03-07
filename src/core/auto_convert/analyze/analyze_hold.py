@@ -5,7 +5,7 @@ from .analyze_tap import predict_tap_reach_end_time
 
 
 
-def analyze_hold_reach_time(shared_context, hold_data):
+def analyze_hold_time(shared_context, hold_data):
     """
     返回：
     dict{
