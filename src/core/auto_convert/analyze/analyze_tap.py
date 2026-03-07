@@ -1,6 +1,26 @@
 import numpy as np
 
 from .shared_context import *
+from ..detect.note_definition import *
+
+
+
+def get_suffix(note_varient: NoteVariant):
+
+    if note_varient == NoteVariant.NORMAL:
+        suffix = ''
+    elif note_varient == NoteVariant.BREAK:
+        suffix = 'b'
+    elif note_varient == NoteVariant.EX:
+        suffix = 'x'
+    elif note_varient == NoteVariant.BREAK_EX:
+        suffix = 'bx'
+    else:
+        suffix = '?'
+    
+    return suffix
+
+
 
 
 
@@ -27,7 +47,12 @@ def analyze_tap_time(shared_context, tap_data):
             times.append(reach_end_Msec)
 
         mean = np.mean(times)
-        tap_info[key] = mean
+
+        track_id, note_type, note_varient, position = key
+        new_position = f"{position}{get_suffix(note_varient)}"
+        new_key = (track_id, note_type, note_varient, new_position)
+
+        tap_info[new_key] = mean
 
         
         # min = np.min(times)

@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from ..detect.note_definition import *
 from ...schemas.op_result import OpResult, ok, err
@@ -62,11 +63,44 @@ def main(std_video_path: Path,
         touch_hold_info = analyze_touch_hold_time(shared_context, touch_hold_data)
         slide_info = analyze_slide_time(shared_context, slide_head_data, slide_tail_data, bpm)
 
+        # merge/sort/save preprocess info
+        final_note_info = merge_preprocess_info(std_video_path, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
+
         # generate maidata
-        generate_maidata(shared_context, bpm, chart_lv, base_denominator, duration_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
+        generate_maidata(shared_context, bpm, chart_lv, base_denominator, duration_denominator, final_note_info)
 
         return ok()
     
     except Exception as e:
         return err(f"Unexpected error in auto_convert > analyze > main", e)
 
+
+
+
+
+
+def merge_preprocess_info(std_video_path, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
+
+    # 合并所有info
+    all_notes_info = {**tap_info, **slide_info, **touch_info, **hold_info, **touch_hold_info}
+    
+    # 按时间排序                                              kv = (key, value), kv[1] = value 
+    sorted_notes = sorted(all_notes_info.items(), key=lambda kv: kv[1][0] if isinstance(kv[1], tuple) else kv[1])
+
+    # 保存合并后的整体预处理数据到文件
+    note_preprocess_result_path = std_video_path.parent / 'note_preprocess_result.txt'
+    if os.path.exists(note_preprocess_result_path):
+        os.remove(note_preprocess_result_path)
+
+    with open(note_preprocess_result_path, 'w', encoding='utf-8') as f:
+        for (track_id, note_type, note_varient, position), time in sorted_notes:
+            # 将time元组转为字符串
+            if isinstance(time, tuple):
+                time = ','.join(str(item) for item in time)
+
+            # 写入格式：track_id, note_type, note_varient, position, time
+            f.write(f"{track_id}, {note_type}, {note_varient}, {position}, {time}\n")
+
+    print(f"note preprocess data saved to {note_preprocess_result_path}")
+
+    return sorted_notes

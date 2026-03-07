@@ -2,6 +2,26 @@ import numpy as np
 
 from .shared_context import *
 from .analyze_touch import predict_touch_reach_end_time
+from ..detect.note_definition import *
+
+
+
+def get_suffix(note_varient: NoteVariant):
+
+    if note_varient == NoteVariant.NORMAL:
+        suffix = 'h'
+    elif note_varient == NoteVariant.BREAK:
+        suffix = 'bh'
+    elif note_varient == NoteVariant.EX:
+        suffix = 'xh'
+    elif note_varient == NoteVariant.BREAK_EX:
+        suffix = 'bxh'
+    else:
+        suffix = '?'
+    
+    return suffix
+
+
 
 
 def analyze_touch_hold_time(shared_context, touch_hold_data):
@@ -44,7 +64,12 @@ def analyze_touch_hold_time(shared_context, touch_hold_data):
         median_percent = np.median(percent_times)
 
         duration = median_percent - mean_dist
-        touch_hold_info[key] = (mean_dist, duration)
+        
+        track_id, note_type, note_varient, position = key
+        new_position = f"{position}{get_suffix(note_varient)}"
+        new_key = (track_id, note_type, note_varient, new_position)
+
+        touch_hold_info[new_key] = (mean_dist, duration)
 
         # print(f"Touch Hold ID {track_id} Position {position}:")
 

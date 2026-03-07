@@ -2,6 +2,26 @@ import numpy as np
 
 from .shared_context import *
 from .analyze_tap import predict_tap_reach_end_time
+from ..detect.note_definition import *
+
+
+
+def get_suffix(note_varient: NoteVariant):
+
+    if note_varient == NoteVariant.NORMAL:
+        suffix = 'h'
+    elif note_varient == NoteVariant.BREAK:
+        suffix = 'bh'
+    elif note_varient == NoteVariant.EX:
+        suffix = 'xh'
+    elif note_varient == NoteVariant.BREAK_EX:
+        suffix = 'bxh'
+    else:
+        suffix = '?'
+    
+    return suffix
+
+
 
 
 
@@ -38,7 +58,12 @@ def analyze_hold_time(shared_context, hold_data):
         mean_tail = np.mean(tail_times)
 
         duration = mean_tail - mean_head
-        hold_info[key] = (mean_head, duration)
+        
+        track_id, note_type, note_varient, position = key
+        new_position = f"{position}{get_suffix(note_varient)}"
+        new_key = (track_id, note_type, note_varient, new_position)
+
+        hold_info[new_key] = (mean_head, duration)
 
         # print(f"Hold ID {track_id} Direction {direction}:")
         # min1 = np.min(head_times)

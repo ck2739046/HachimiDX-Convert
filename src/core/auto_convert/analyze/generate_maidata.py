@@ -6,7 +6,7 @@ from pathlib import Path
 from .shared_context import *
 
 
-def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denominator, duration_denominator, tap_info, slide_info, touch_info, hold_info, touch_hold_info):
+def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denominator, duration_denominator, notes_info):
 
 
     # 准备输出txt文件
@@ -22,8 +22,9 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
         f.write('&artist=default\n')
         f.write('&first=0\n')
         f.write(f'&des_{chart_lv}=default\n')
-        f.write(f'&lv_{chart_lv}=10\n')
+        f.write(f'&lv_{chart_lv}=15\n')
         f.write(f'&inote_{chart_lv}=({bpm})' + '{1},')
+
     # 打印基础信息
     level_label = ['zero', 'easy', 'basic', 'advanced', 'expert', 'master', 'remaster', 'special']
     print(f"\n{video_name} - {level_label[chart_lv]}")
@@ -31,51 +32,17 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
     base_resolution = one_beat_Msec / base_denominator
     print(f"bpm: {bpm}, one beat: {one_beat_Msec:.3f} ms, base resolution: {base_resolution:.3f} ms")
 
-    # 合并所有info
-    all_notes_info = {**tap_info, **slide_info, **touch_info, **hold_info, **touch_hold_info}
-    # 按时间排序
-    sorted_notes = sorted(all_notes_info.items(), key=lambda item: item[1][0] if isinstance(item[1], tuple) else item[1])
-    # 保存合并后的整体预处理数据到文件
-    note_preprocess_result_path = os.path.join(output_dir, 'note_preprocess_result.txt')
-    if os.path.exists(note_preprocess_result_path):
-        os.remove(note_preprocess_result_path)
-    with open(note_preprocess_result_path, 'w', encoding='utf-8') as f:
-        for (track_id, class_id, position), time in sorted_notes:
-            # 将time元组转为字符串
-            if isinstance(time, tuple):
-                time = ','.join(str(item) for item in time)
-            # 写入格式：track_id, class_id, position, time
-            f.write(f"{track_id}, {class_id}, {position}, {time}\n")
-    print(f"note preprocess data saved to {note_preprocess_result_path}")
 
 
 
 
 
-
-
-
-    # 计算最小公倍数分母用于累加
+    # 计算最小公倍数分母用于累加 (兼容1/12)
     if base_denominator >= 16:
         lcm_denom = base_denominator * 12 // math.gcd(base_denominator, 12)
     else:
         lcm_denom = base_denominator
 
-    # 定义后缀词典
-    position_suffix = {
-        11: 'b',    # break-tap
-        12: 'x',    # ex-tap
-        13: 'bx',   # break-ex-tap
-
-        # 没有星星，因为星星后缀在 merge_slide_info() 中处理过了
-
-        40: 'h',   # hold
-        41: 'bh',  # break-hold
-        42: 'xh',  # ex-hold
-        43: 'bxh', # break-ex-hold
-
-        50: 'h',   # touch-hold
-    }
 
     init_time = 0
     last_time = 0
@@ -84,11 +51,13 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
     last_denominator = 0
     time_deviations = []
 
-    with open(txt_path, 'a', encoding='utf-8') as f:
-        for (track_id, class_id, position), time in sorted_notes:
 
-            # 根据class_id设置position后缀
-            position = f"{position}{position_suffix.get(class_id, '')}"
+
+
+
+
+    with open(txt_path, 'a', encoding='utf-8') as f:
+        for (track_id, note_type, note_varient, position), time in notes_info.items():
 
             if isinstance(time, (float, int)):
                 # check time

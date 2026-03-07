@@ -480,7 +480,7 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
     }
     '''
 
-    def get_suffix(note_varient: NoteVariant, isSingleHead=False):
+    def get_suffix(note_varient: NoteVariant):
 
         if note_varient == NoteVariant.NORMAL:
             suffix = ''
@@ -493,9 +493,6 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
         else:
             suffix = '?'
         
-        if isSingleHead:
-            suffix += '$'
-
         return suffix
 
 
@@ -520,7 +517,9 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
     # 这样后续tail查找head时，只会在对应位置的head中查找，减少计算量
     head_by_position = defaultdict(list)
     for (track_id, note_type, note_varient, head_position), head_end_time in slide_head_info.items():
-        head_by_position[str(head_position)].append((track_id, note_type, note_varient, head_position, head_end_time))
+        # 此处的head_position是带有varient后缀的，如 1bx，需要去除
+        new_position = str(head_position[0])
+        head_by_position[new_position].append((track_id, note_type, note_varient, head_position, head_end_time))
 
     # 记录哪些head_track_id被匹配了，使用set避免重复
     matched_head_track_ids = set()
@@ -574,7 +573,7 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
     # 将未匹配的head也写入final_slide_info
     for (head_track_id, head_note_type, head_note_varient, head_position), head_end_time in slide_head_info.items():
         if head_track_id not in matched_head_track_ids:
-            full_movement_syntax = f"{head_position}{get_suffix(head_note_varient, isSingleHead=True)}"
+            full_movement_syntax = f"{head_position}$"
             key = (head_track_id, head_note_type, head_note_varient, full_movement_syntax)
             value = head_end_time
             final_slide_info[key] = value
