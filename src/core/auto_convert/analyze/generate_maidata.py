@@ -4,6 +4,7 @@ import math
 from pathlib import Path
 
 from .shared_context import *
+from ..detect.note_definition import *
 
 
 def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denominator, duration_denominator, notes_info):
@@ -59,50 +60,14 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
     with open(txt_path, 'a', encoding='utf-8') as f:
         for (track_id, note_type, note_varient, position), time in notes_info.items():
 
-            if isinstance(time, (float, int)):
-                # check time
-                if math.isnan(time) or time < 0:
-                    print(f"analyze_all_notes_info: invalid time value for track_id {track_id}, time: {time}")
-                    continue
-                # 赋值
-                note_time = time
-            elif isinstance(time, tuple):
-                # check time tuple
-                if len(time) == 0:
-                    print(f"analyze_all_notes_info: empty time tuple for track_id {track_id}")
-                    continue
-                valid = True
-                for i, t in enumerate(time):
-                    if not (isinstance(t, (float, int)) and not math.isnan(t) and t >= 0):
-                        print(f"analyze_all_notes_info: invalid time tuple element at index {i} for track_id {track_id}, value: {t}")
-                        valid = False
-                        break
-                if not valid:
-                    continue
-                # 赋值
-                note_time = time[0]
-            else:
-                print(f"analyze_all_notes_info: invalid time format for track_id {track_id}, time: {time}")
+            note_time = check_note_time(time, track_id)
+            if note_time is None:
                 continue
-
+            
+            # 对于 slide, hold, touch_hold 可能存在 duration 信息
             if isinstance(time, tuple) and len(time) >= 2:
-                # 处理 length 信息
-                note_length = time[-1] - time[-2]
-                length_beat = note_length / one_beat_Msec
-                # 分类处理: hold -> base_denominator，touch_hold/slide -> duration_denominator
-                denominator_to_use = duration_denominator \
-                    if self.noteDetector.get_main_class_id(class_id) in [2, 5] \
-                    else base_denominator
-                numerator, denominator, one = get_fraction(length_beat, denominator_to_use, enable_12=False)
-                # 将整数部分加入分子
-                if one > 0:
-                    numerator = numerator + one * denominator
-                # 异常情况默认变为1/1 (时值不能为0)
-                if numerator == 0 and denominator == 1 and one == 0:
-                    numerator = 1
-                    denominator = 1
-                position = f'{position}[{denominator}:{numerator}]'
-
+                duration_syntax = parse_note_duration(one_beat_Msec, note_type, time, base_denominator, duration_denominator)
+                position += duration_syntax
 
             if last_time == 0:
                 # 第一个音符
@@ -242,3 +207,68 @@ def get_fraction(diff_beat, input_denominator, enable_12=True):
         denominator = raw_denominator // gcd_num
 
         return numerator, denominator, one
+
+
+
+
+def check_note_time(time, track_id):
+
+    if isinstance(time, (float, int)):
+        # check time
+        if math.isnan(time) or time < 0:
+            print(f"analyze_all_notes_info: invalid time value for track_id {track_id}, time: {time}")
+            return None
+        # 赋值
+        return time
+
+    elif isinstance(time, tuple):
+        # check time tuple
+        if len(time) == 0:
+            print(f"analyze_all_notes_info: empty time tuple for track_id {track_id}")
+            return None
+        valid = True
+        for i, t in enumerate(time):
+            if not (isinstance(t, (float, int)) and not math.isnan(t) and t >= 0):
+                print(f"analyze_all_notes_info: invalid time tuple element at index {i} for track_id {track_id}, value: {t}")
+                valid = False
+                break
+        if not valid:
+            return None
+        # 赋值
+        return time[0]
+
+    else:
+        print(f"analyze_all_notes_info: invalid time format for track_id {track_id}, time: {time}")
+        return None
+
+
+
+
+def parse_note_duration(one_beat_Msec, note_type, time, base_denominator, duration_denominator) -> str:
+
+    # 提取 length 信息
+    note_length = time[-1] - time[-2]
+    length_beat = note_length / one_beat_Msec
+
+    # 分类处理
+    if note_type == NoteType.TOUCH_HOLD or note_type == NoteType.SLIDE:
+        # touch_hold / slide -> duration_denominator
+        denominator_to_use = duration_denominator
+    else:
+        # hold -> base_denominator
+        # 因为 hold 头尾视为两个 tap，所以时值按照 base_denominator 处理
+        denominator_to_use = base_denominator
+    
+    # 将 duration 变为分数形式
+    numerator, denominator, one = get_fraction(length_beat, denominator_to_use, enable_12=False)
+    # 将整数部分加入分子
+    if one > 0:
+        numerator = numerator + one * denominator
+    # 异常情况默认变为10/1 (时值不能为0)
+    if numerator == 0 and denominator == 1 and one == 0:
+        numerator = 10
+        denominator = 1
+
+    duration_syntax = f'[{denominator}:{numerator}]'
+
+    return duration_syntax
