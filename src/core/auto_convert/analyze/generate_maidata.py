@@ -69,37 +69,59 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
                 duration_syntax = parse_note_duration(one_beat_Msec, note_type, time, base_denominator, duration_denominator)
                 position += duration_syntax
 
+
+
+
+
             if last_time == 0:
                 # 第一个音符
                 init_time = note_time
                 last_time = note_time
                 last_position = position
-                print(f"[{note_time:.3f}] ", end='')
+                # 控制台打印
+                print(f"[{init_time:.3f}] ", end='')
                 continue
-            
+
+
+
+
+            # 计算与上一个音符的时间差，转为分数形式
             diff_Msec = note_time - last_time
             diff_beat = diff_Msec / one_beat_Msec
             numerator, denominator, one = get_fraction(diff_beat, base_denominator, enable_12=True)
 
-            # update last_time
+            # update base_numerator_counter
             # 使用最小公倍数分母进行累加 (为了兼容1/12)
-            # 采用 init_time + 总passed_beat
-            # 这是精确的谱面播放到此处的时间点，避免了累加误差
             base_numerator = round(diff_beat * lcm_denom)
             base_numerator_counter += base_numerator
+
+            # update last_time
+            # 采用 init_time + 总 passed_beat
+            # 这是精确的谱面播放到此处的时间点，避免了累加误差
             passed_beat = base_numerator_counter / lcm_denom
             passed_beat_Msec = passed_beat * one_beat_Msec
             last_time = passed_beat_Msec + init_time
 
             # 统计误差
-            real_time_diff = note_time - init_time
-            time_deviation = real_time_diff - passed_beat_Msec
+            # note_time 是通过分析得到的音符实际时间
+            # last_time 是通过分数化处理后计算得到的理论时间
+            time_deviation = note_time - last_time
             time_deviations.append(time_deviation)
+
+
+
+
 
             if numerator == 0 and one == 0:
                 # 零间隔，使用 '/' 与上一个音符连接 
-                last_position = f'{last_position}/{position}'
+                position = f'{last_position}/{position}'
+                # 跳过后续的处理，直接 continue
+                last_position = position
                 continue
+
+
+
+
             
             # 打印当前音符信息
             if one > 0:
@@ -109,10 +131,17 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
 
             # 生成逗号部分
             if numerator == 0 and denominator == 1 and one > 0:
+                # 特殊情况2：时间间隔是整数
+                # 逗号数量等于整数部分
                 commas = f'{"," * one}'
             elif one > 0:
+                # 特殊情况1：时间间隔是小数，但是 > 1
+                # 比如 11/4，正常来说是 {4},,,,,,,,,,, (x11)
+                # 现在简写成 {4},,,{1},,
+                # 使用带分数
                 commas = f'{"," * numerator}' + '{1}' + f'{"," * one}'
             else:
+                # 普通情况: 时间间隔是小数，并且 < 1
                 commas = f'{"," * numerator}'
 
             # 将当前音符写入txt
@@ -121,7 +150,9 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
             else:
                 f.write(f'{last_position}{commas}')
 
+            # 上面使用了带分数，所以现在是 1
             if one > 0: denominator = 1
+
             last_denominator = denominator
             last_position = position
             
@@ -137,7 +168,7 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
     # 添加结尾E
     print(f'{last_position}-E')
     with open(txt_path, 'a', encoding='utf-8') as f:
-        f.write(f'{last_position},\n' + '{1},E\n')
+        f.write(f'{last_position},\n' + '{1},,,E\n') # 结尾默认 3 拍延迟
 
     # 打印offset统计信息
     length = len(time_deviations)
@@ -146,7 +177,7 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
     max = np.max(time_deviations)
     median = np.median(time_deviations)
     std_dev = np.std(time_deviations)
-    print(f"Time deviations of {length} notes: Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
+    print(f"\nTime deviations of {length} notes: Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
 
 
@@ -189,10 +220,13 @@ def get_best_numerator_denominator(diff_beat, input_denominator, enable_12):
 
 
 def get_fraction(diff_beat, input_denominator, enable_12=True):
+        
+        # 将数字转为带分数形式
         # 返回格式：分子，分母，整数
-        # 0.5  -> 1/2 + 0 -> 1, 2, 0
-        # 1.0  -> 0/1 + 1 -> 0, 1, 1
-        # 2.25 -> 1/4 + 2 -> 1, 4, 2
+        
+        # 0.5   =  1/2 + 0  =  1, 2, 0
+        # 1.0   =  0/1 + 1  =  0, 1, 1
+        # 2.25  =  1/4 + 2  =  1, 4, 2
         
         raw_numerator, raw_denominator = get_best_numerator_denominator(diff_beat, input_denominator, enable_12)
         if raw_numerator == 0: return 0, 1, 0 # 零间隔直接返回
