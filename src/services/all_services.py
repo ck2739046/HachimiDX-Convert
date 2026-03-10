@@ -4,7 +4,7 @@ from src.core.schemas.op_result import OpResult, ok, err
 from .path_manage import PathManage
 from .settings_manage import SettingsManage
 from .i18n_manage import I18nManage
-from .pipeline import MediaPipeline
+from .pipeline import AutoConvertPipeline, MediaPipeline
 from .majdata_sync_server import VideoSyncServer
 import i18n
 
@@ -47,6 +47,12 @@ class AllServices:
             print("MediaPipeline initialization completed.")
         else:
             return err("Failed to initialize MediaPipeline.", inner=result)
+
+        result = AutoConvertPipeline.init()
+        if result.is_ok:
+            print("AutoConvertPipeline initialization completed.")
+        else:
+            return err("Failed to initialize AutoConvertPipeline.", inner=result)
 
 
         # Majdata sync server (global singleton)
