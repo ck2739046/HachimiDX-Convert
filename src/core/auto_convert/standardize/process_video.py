@@ -14,6 +14,7 @@ from src.services.pipeline import MediaPipeline
 
 
 def main(input_video: Path,
+         video_name: str,
          circle_center: Tuple[int, int],
          circle_radius: int,
          std_runner_id: str,
@@ -29,6 +30,7 @@ def main(input_video: Path,
 
     Args:
         input_video(Path): 输入视频路径
+        video_name(str): 视频名称（不带扩展名）
         circle_center(Tuple[int, int]): 圆心坐标
         circle_radius(int): 圆半径
         std_runner_id(str): 标准化任务的 Runner ID 预先生成
@@ -59,7 +61,7 @@ def main(input_video: Path,
 
         crop_size, crop_x, crop_y = calculate_crop_params(video_width, video_height, circle_center, circle_radius, target_res)
         
-        result = build_output_path(input_video)
+        result = build_output_path(video_name)
         if not result.is_ok:
             return result
         output_path = result.value
@@ -245,11 +247,10 @@ def is_input_already_standardized(crop_size: int,
 
 
 
-def build_output_path(input_video: Path) -> OpResult[Path]:
+def build_output_path(video_name: str) -> OpResult[Path]:
     
-    input_filename = input_video.stem
     output_dir = PathManage.TEMP_DIR
-    output_filename = f"{input_filename}_std.mp4"
+    output_filename = f"{video_name}_std.mp4"
     output_path = output_dir / output_filename
 
     return ok(output_path.resolve())
