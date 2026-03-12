@@ -28,7 +28,7 @@ def main(input_video: Path,
     Args:
         input_video(Path): 输入视频路径
         video_name(str): 视频名称（不带扩展名）
-        video_mode(str): 视频模式 source / camera footage
+        video_mode(str): 视频模式 source video / camera footage
         media_type(MediaType): 媒体类型 video_with_audio / video_without_audio
         duration(float): 视频总时长(秒)
         start_sec(float): 开始时间(秒)
