@@ -43,11 +43,10 @@ def main(std_video_path: Path,
             last_time = start_time
 
             # 模型推理
-            model = YOLO(model_path)
+            model = YOLO(model_path, task=name)
             imgsz = get_imgsz(name)
             yolo_results_generator = model.predict(
                 source=std_video_path,
-                task=name,
                 stream=True,
                 batch=batch_detect,
                 device=inference_device,

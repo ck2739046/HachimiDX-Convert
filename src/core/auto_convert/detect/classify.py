@@ -50,8 +50,8 @@ def main(std_video_path: Path,
         cls_results_all = []
         images_batch_buffer = []
 
-        cls_ex_model = YOLO(cls_ex_model_path)
-        cls_break_model = YOLO(cls_break_model_path)
+        cls_ex_model = YOLO(cls_ex_model_path, task="classify")
+        cls_break_model = YOLO(cls_break_model_path, task="classify")
         imgsz = get_imgsz('cls')
 
         total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
