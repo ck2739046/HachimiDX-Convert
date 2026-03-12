@@ -16,7 +16,6 @@ def main(input_video: Path,
          video_mode: str,
          media_type: MediaType,
          duration: float,
-         std_runner_id: str,
          start_sec: float = 0.0,
          end_sec: float = 0.0,
          skip_detect_circle: bool = False,
@@ -32,7 +31,6 @@ def main(input_video: Path,
         video_mode(str): 视频模式 source / camera footage
         media_type(MediaType): 媒体类型 video_with_audio / video_without_audio
         duration(float): 视频总时长(秒)
-        std_runner_id(str): 标准化任务的 Runner ID 预先生成
         start_sec(float): 开始时间(秒)
         end_sec(float): 结束时间(秒)
         skip_detect_circle(bool): 是否跳过圆心检测，默认 False
@@ -76,7 +74,6 @@ def main(input_video: Path,
             circle_radius=circle_radius,
             media_type=media_type,
             duration=duration,
-            std_runner_id=std_runner_id,
             start_sec=start_sec,
             end_sec=end_sec,
             target_res=target_res

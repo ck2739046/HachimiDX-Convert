@@ -2,12 +2,12 @@ from pathlib import Path
 from typing import Tuple
 import cv2
 import shutil
-from PyQt6.QtCore import QCoreApplication, QEventLoop
+import subprocess
 
 from ...schemas.op_result import OpResult, ok, err, print_op_result
 from src.core.schemas.media_config import MediaType, MediaConfig_Definition
 from src.core.schemas.media_config import MediaConfig_Definitions as M_Defs
-from src.services import PathManage, process_manager_api
+from src.services import PathManage
 from src.services.pipeline import MediaPipeline
 
 
@@ -17,7 +17,6 @@ def main(input_video: Path,
          video_name: str,
          circle_center: Tuple[int, int],
          circle_radius: int,
-         std_runner_id: str,
          media_type: MediaType,
          duration: float,
          start_sec: float = 0.0,
@@ -33,7 +32,6 @@ def main(input_video: Path,
         video_name(str): 视频名称（不带扩展名）
         circle_center(Tuple[int, int]): 圆心坐标
         circle_radius(int): 圆半径
-        std_runner_id(str): 标准化任务的 Runner ID 预先生成
         media_type(MediaType): 媒体类型 video_with_audio / video_without_audio
         duration(float): 视频总时长(秒)
         start_sec(float): 开始时间(秒)
@@ -137,20 +135,31 @@ def main(input_video: Path,
 
 
         # 实际运行 ffmpeg
-        result = MediaPipeline.run_now(params, std_runner_id)
-        if not result.is_ok:
-            return err(f"Failed to start process video.", inner = result)
-        result_rid, _ = result.value
-        if result_rid != std_runner_id:
-            return err(f"Runner ID mismatch when starting process video. expect {std_runner_id}, got {result_rid}.")
+        v_res = MediaPipeline.validate(params)
+        if not v_res.is_ok:
+            return err(f"Failed to validate process video parameters.", inner = v_res)
         
-        print(f"Process video...Start. (Runner ID = {std_runner_id})")
-
-        end_data = wait_ffmpeg_ended(std_runner_id)
-
-        result = parse_end_data(end_data)
-        if not result.is_ok:
-            return err(f"Process execution failed", inner = result)
+        cmd_res = MediaPipeline.build_cmd(v_res.value)
+        if not cmd_res.is_ok:
+            return err(f"Failed to build ffmpeg command.", inner = cmd_res)
+            
+        cmd = cmd_res.value
+        
+        print("Running FFmpeg command:", " ".join(cmd))
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=False,
+                text=True,
+                encoding='utf-8'
+            )
+            if result.returncode != 0:
+                error_msg = f'Standardize video process: ffmpeg failed with exit code: {result.returncode}'
+                return err(error_msg)
+            
+        except Exception as e:
+            raise Exception("FFmpeg processing failed", e)
         
         # 二次验证：确保输出文件存在且参数符合预期
         if not is_output_already_standardized(output_path, target_res, duration, start_sec, end_sec):
@@ -297,67 +306,3 @@ def is_output_already_standardized(output_path: Path,
         print(f"Warning: {e}")
         print('standardized video exists but invalid, will re-generate.')
         return False
-
-
-
-
-
-
-def wait_ffmpeg_ended(runner_id: str) -> object:
-    """阻塞式等待 ffmpeg 处理结束，返回结束时的对象数据"""
-
-    # 使用可变容器绕过作用域限制，允许内部函数对此变量赋值
-    ended_holder = {"data": None}
-    # 使用局部事件循环
-    loop = QEventLoop()  
-
-    def on_runner_ended(ended_runner_id: str, runner_ended_obj: object):
-        if ended_runner_id == runner_id:
-            ended_holder["data"] = runner_ended_obj
-            loop.quit()
-
-    process_manager_api.get_signals().runner_ended.connect(on_runner_ended)
-
-    loop.exec()
-
-    process_manager_api.get_signals().runner_ended.disconnect(on_runner_ended)
-
-    return ended_holder["data"]
-
-
-
-
-
-
-
-def parse_end_data(end_data: object) -> OpResult[None]:
-    """解析信号数据 (ProcessManager.RunnerEnded)"""
-
-    exit_code = getattr(end_data, "exit_code", None)
-    crashed = bool(getattr(end_data, "crashed", False))
-    cancelled = bool(getattr(end_data, "cancelled", False))
-    error_msg = getattr(end_data, "error_msg", None)
-    error_raw = getattr(end_data, "error_raw", None)
-
-    if exit_code is not None and exit_code == 0:
-        if not crashed and not cancelled:
-            return ok()
-        
-    error_msg = f'Standardize video process failed.\n'
-
-    if exit_code is not None:
-        error_msg += f'Exit code: {exit_code}\n'
-
-    if cancelled:
-        error_msg += f'Process was cancelled.\n'
-    
-    if crashed:
-        error_msg += f'Process crashed.\n'
-
-    if error_msg is not None:
-        error_msg += f'Error message: {error_msg}\n'
-
-    if error_raw is not None:
-        error_msg += f'Error raw: {str(error_raw)}'
-
-    return err(error_msg)

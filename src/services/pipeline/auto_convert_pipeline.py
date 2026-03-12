@@ -57,7 +57,7 @@ class AutoConvertPipeline:
 	@classmethod
 	def submit_task(cls, raw_data: dict[str, Any], task_name: str = "") -> OpResult[tuple[str, list[str]]]:
 		
-        if not cls._is_registered:
+		if not cls._is_registered:
 			return err("AutoConvertPipeline is not initialized (not registered)")
 		
 		v_res = cls.validate(raw_data)
