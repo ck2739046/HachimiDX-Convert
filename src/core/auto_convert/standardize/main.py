@@ -12,7 +12,7 @@ from . import process_video
 
 
 def main(input_video: Path,
-         video_name: str,
+         song_name: str,
          video_mode: str,
          media_type: MediaType,
          duration: float,
@@ -27,7 +27,7 @@ def main(input_video: Path,
 
     Args:
         input_video(Path): 输入视频路径
-        video_name(str): 视频名称（不带扩展名）
+        song_name(str): 歌曲名称（不带扩展名）
         video_mode(str): 视频模式 source video / camera footage
         media_type(MediaType): 媒体类型 video_with_audio / video_without_audio
         duration(float): 视频总时长(秒)
@@ -69,7 +69,7 @@ def main(input_video: Path,
         # 第三步：处理视频
         result = process_video.main(
             input_video=input_video,
-            video_name=video_name,
+            song_name=song_name,
             circle_center=circle_center,
             circle_radius=circle_radius,
             media_type=media_type,
@@ -87,8 +87,12 @@ def main(input_video: Path,
         if not result.is_ok:
             return err(f"Failed to get main output dir", inner = result)
         main_output_dir = result.value
-        final_output_path = main_output_dir / video_name
+
+        target_dir = main_output_dir / song_name
+        final_output_path = target_dir / temp_output_path.name
+
         try:
+            target_dir.mkdir(parents=True, exist_ok=True)
             temp_output_path.replace(final_output_path)
         except Exception as e:
             return err(f"Failed to move output video to main output dir.", error_raw=e)
