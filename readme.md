@@ -45,7 +45,7 @@
 
 如果还没有安装过 Python 本体，推荐去微软商店搜索 `Python 3.12` 下载
 
-![python312](src/doc/images/python312.png)
+![python312](src/resources/doc/images/python312.png)
 
 在 cmd 输入 `python --version`，如果有输出 `Python 3.xx`，代表 Python 已经成功安装了
 
@@ -86,11 +86,11 @@
     - 2025.11.11 [issue](https://github.com/ultralytics/yolov5/issues/2995)：当前 ultralytics 库原生不支持 DirectML 后端，需要修改源码
         - 修改 `.venv\Lib\site-packages\ultralytics\nn\autobackend.py`
 
-        ![python312](src/doc/images/dml_support_autobackend.png)
+        ![python312](src/resources/doc/images/dml_support_autobackend.png)
     
         - 修改 `.venv\Lib\site-packages\ultralytics\engine\exporter.py`
 
-        ![python312](src/doc/images/dml_support_exporter.png)
+        ![python312](src/resources/doc/images/dml_support_exporter.png)
 
 ### 5. 安装其他的库
 

@@ -3,7 +3,7 @@ import sys
 import os
 
 
-def convert_to_tensorRT(model_path, task, batch, workspace):
+def convert_to_tensorRT(model_path, task, batch):
     
     try:
         batch = int(batch)
@@ -11,13 +11,7 @@ def convert_to_tensorRT(model_path, task, batch, workspace):
             print("Batch size must be at least 1.")
             return
         
-        # workspace如果是auto视为None
-        if workspace == 'auto':
-            workspace = None
-        elif workspace is not None:
-            workspace = int(workspace)
-        
-        print(f"Converting to TensorRT with batch size {batch}, workspace {workspace}...")
+        print(f"Converting to TensorRT with batch size {batch}...")
 
         model = YOLO(model_path, task=task)
         model.export(format="engine",
@@ -36,18 +30,26 @@ def convert_to_tensorRT(model_path, task, batch, workspace):
 
 
 
-def convert_to_onnx(model_path, task):
-    
+def convert_to_onnx(model_path, task, batch):
+
     try:
+        batch = int(batch)
+        if batch < 1:
+            print("Batch size must be at least 1.")
+            return
+        
+        print(f"Converting to ONNX with batch size {batch}...")
+
         model = YOLO(model_path, task=task)
         model.export(format="onnx",
                     opset=20,
                     half=True,
                     dynamic=True,
-                    simplify=True)
-            
+                    simplify=True,
+                    batch=batch)
+        
         return True
-    
+        
     except Exception as e:
         print(f"Error during ONNX conversion: {e}")
         return False        
@@ -57,8 +59,8 @@ def convert_to_onnx(model_path, task):
 
 if __name__ == "__main__":
     
-    model_path = r"D:\git\aaa-HachimiDX-Convert\src\resources\models\obb.pt"
-    task = "obb"
+    model_path = r"D:\git\aaa-HachimiDX-Convert\src\resources\models\detect.pt"
+    task = "detect"
     batch = 4
 
     # 笔记本 12700h + rtx 3060 6g, ram 40g
@@ -76,7 +78,7 @@ if __name__ == "__main__":
     # batch 6 3.8g 3.6g
 
 
-    convert_to_tensorRT(model_path, task, batch, workspace=None)
+    convert_to_onnx(model_path, task, batch)
 
 
 # [03/13/2026-13:17:50] [TRT] [W] Requested amount of GPU memory (2833252352 bytes) could not be allocated. There may not be enough free memory for allocation to succeed.

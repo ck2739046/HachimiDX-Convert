@@ -204,10 +204,10 @@ if __name__ == "__main__":
 
     try:
         output_path = detect_video(
-            model_path=r"D:\git\aaa-HachimiDX-Convert\src\resources\models\detect.pt",
+            model_path=r"D:\git\aaa-HachimiDX-Convert\src\resources\models\detect1.onnx",
             video_path=r"D:\git\aaa-HachimiDX-Convert\test\初音ミクの暴走_standardized.mp4",
             output_path=r"D:\git\aaa-HachimiDX-Convert\test\初音ミクの暴走_standardized_out.mp4",
-            device="cuda",
+            device="0",
             show_progress=True,
             task="detect",
             batch=2
@@ -227,6 +227,12 @@ if __name__ == "__main__":
 # pt batch8, 27.5 fps, 2.7g
 # pt batch24, 25.5 fps, 5.2g
 
+# onnx_dml batch1, 21.4 fps, 1.3g
+# onnx_dml batch2, 23.9 fps, 1.7g (导出batch1的模型)
+# onnx_dml batch2, 22.7 fps, 1.7g (导出batch2的模型)
+# onnx_dml batch2, 24.0 fps, 1.7g (导出batch4的模型)
+# onnx_dml batch4, 23.7 fps, 2.2g
+
 # engine batch1, 41.1 fps, 1.9g
 # engine batch2, 47.0 fps, 2.0g
 # engine batch4, 45.2 fps, 3.6g
@@ -244,4 +250,5 @@ if __name__ == "__main__":
 # 结论
 # detect/obb 在 pt/engine 下都使用 batch 2
 # export 需求显存 4g
+# 在 onnx_dml 下使用 batch2 (export batch1)
 
