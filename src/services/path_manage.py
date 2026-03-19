@@ -16,6 +16,7 @@ class PathManage:
     TEMP_DIR: Path = DATA_DIR / "temp" # 如果为空自动创建
     RESOURCES_DIR: Path = ROOT_DIR / "src" / "resources"
     LOCALES_DIR: Path = RESOURCES_DIR / "locales"
+    WORKERS_DIR: Path = ROOT_DIR / "src" / "services" / "workers"
 
     APP_ICON_PATH: Path = RESOURCES_DIR / "icon.ico"
     CLICK_TEMPLATE_PATH: Path = RESOURCES_DIR / "click_template.aac"
@@ -33,6 +34,8 @@ class PathManage:
     OBB_PT_PATH: Path = MODELS_DIR / "obb.pt"
     CLS_BREAK_PT_PATH: Path = MODELS_DIR / "cls-break.pt"
     CLS_EX_PT_PATH: Path = MODELS_DIR / "cls-ex.pt"
+
+    AUTO_CONVERT_WORKER_PATH: Path = WORKERS_DIR / "auto_convert_worker.py"
 
     # 初始化时可以不存在的路径
 
@@ -53,7 +56,7 @@ class PathManage:
         """初始化检查一些必须存在的路径"""
         
         # 检查必须存在的目录
-        for dir_path in [cls.RESOURCES_DIR, cls.MODELS_DIR, cls.LOCALES_DIR]:
+        for dir_path in [cls.RESOURCES_DIR, cls.MODELS_DIR, cls.LOCALES_DIR, cls.WORKERS_DIR]:
             if not dir_path.is_dir():
                 error_msg = f"Critical Error: Required directory not found: {dir_path}"
                 return err(error_msg)
@@ -68,7 +71,8 @@ class PathManage:
                           cls.FFMPEG_EXE_PATH, cls.FFPROBE_EXE_PATH,
                           cls.MajdataView_EXE_PATH, cls.MajdataEdit_EXE_PATH,
                           cls.DETECT_PT_PATH, cls.OBB_PT_PATH,
-                          cls.CLS_BREAK_PT_PATH, cls.CLS_EX_PT_PATH]:
+                          cls.CLS_BREAK_PT_PATH, cls.CLS_EX_PT_PATH,
+                          cls.AUTO_CONVERT_WORKER_PATH]:
             if not file_path.is_file():
                 error_msg = f"Critical Error: Required file not found: {file_path}"
                 return err(error_msg)
