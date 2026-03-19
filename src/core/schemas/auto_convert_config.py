@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+
 from .op_result import OpResult, ok, err
 from ..tools import validate_windows_filename
+from .media_config import MediaType
 
 
 
@@ -14,8 +16,8 @@ class AutoConvertConfig_Definition:
 
     Attributes:
         key: str
-        type: Literal["int", "float", "path", "str", "bool", "enum(Standardize_VideoMode)"]
-        group: Literal["standardize", "detect", "analyze"]
+        type: Literal["int", "float", "path", "str", "bool", "enum"]
+        group: Literal["common", "standardize", "detect", "analyze"]
         default: any
         optional: bool
         constraints: dict | None
@@ -37,7 +39,7 @@ class AutoConvertConfig_Definition:
 
     key: str
     type: Literal["int", "float", "path", "str", "bool", "enum"]
-    group: Literal["standardize", "detect", "analyze"]
+    group: Literal["common", "standardize", "detect", "analyze"]
     default: any = None
     optional: bool = True
     constraints: dict | None = None
@@ -49,21 +51,48 @@ class AutoConvertConfig_Definition:
 class AutoConvertConfig_Definitions:
       
 
+
+	# common
+    
+	is_standardize_enabled = AutoConvertConfig_Definition(
+		key="is_standardize_enabled",
+		type="bool",
+		group="common",
+		default=True
+	)
+      
+	is_detect_enabled = AutoConvertConfig_Definition(
+		key="is_detect_enabled",
+		type="bool",
+		group="common",
+		default=True
+	)
+      
+	is_analyze_enabled = AutoConvertConfig_Definition(
+		key="is_analyze_enabled",
+		type="bool",
+		group="common",
+		default=True
+	)
+      
+
+
+
 	# standardize
     
-	input_video_path = AutoConvertConfig_Definition(
-		key="input_video_path",
+	standardize_input_video_path = AutoConvertConfig_Definition(
+		key="standardize_input_video_path",
 		type="path",
 		group="standardize",
 		optional=False, # 必选没有默认值
 		constraints={"must_exist": True} # 输入视频必须存在
 	)
-
-	video_name = AutoConvertConfig_Definition(
-		key="video_name",
+      
+	song_name = AutoConvertConfig_Definition(
+		key="song_name",
 		type="str",
 		group="standardize",
-		default=None, # 如果没有输入，使用 input_video_path 的文件名（不带扩展名）
+		optional=False, # 必选没有默认值
 	)
 
 	video_mode = AutoConvertConfig_Definition(
@@ -73,12 +102,21 @@ class AutoConvertConfig_Definitions:
 		default = "source video", # 默认模式
 		constraints={"options":["source video", "camera footage"]}
     )
+      
+	media_type = AutoConvertConfig_Definition(
+        key="media_type",
+        type="enum",
+        group="common",
+        optional=False, # 必选没有默认值
+        constraints={"options": [MediaType.VIDEO_WITH_AUDIO, MediaType.VIDEO_WITHOUT_AUDIO]}
+    )
 
 	duration = AutoConvertConfig_Definition(
 		key="duration",
 		type="float",
 		group="standardize",
 		optional=False, # 必选没有默认值
+        constraints={"gt": 0}
 	)
 
 	start_sec = AutoConvertConfig_Definition(
@@ -124,63 +162,6 @@ class AutoConvertConfig_Definitions:
 		constraints={"must_exist": True}
 	)
 
-	batch_detect = AutoConvertConfig_Definition(
-		key="batch_detect",
-		type="int",
-		group="detect",
-		default=2,
-		constraints={"options": [1, 2, 3, 4, 5, 6, 7, 8]}
-	)
-
-	batch_cls = AutoConvertConfig_Definition(
-		key="batch_cls",
-		type="int",
-		group="detect",
-		default=16,
-		constraints={"options": [1, 2, 4, 8, 16, 32, 64]}
-	)
-
-	inference_device = AutoConvertConfig_Definition(
-		key="inference_device",
-		type="str",
-		group="detect",
-		optional=False, # 必选没有默认值
-		# tensorRT -> "cuda"
-		# direct_ml -> "0"
-	)
-
-	detect_model_path = AutoConvertConfig_Definition(
-		key="detect_model_path",
-		type="path",
-		group="detect",
-		optional=False, # 必选没有默认值
-		constraints={"must_exist": True} # 模型路径必须存在
-	)
-
-	obb_model_path = AutoConvertConfig_Definition(
-		key="obb_model_path",
-		type="path",
-		group="detect",
-		optional=False, # 必选没有默认值
-		constraints={"must_exist": True} # 模型路径必须存在
-	)
-
-	cls_ex_model_path = AutoConvertConfig_Definition(
-		key="cls_ex_model_path",
-		type="path",
-		group="detect",
-		optional=False, # 必选没有默认值
-		constraints={"must_exist": True} # 模型路径必须存在
-	)
-
-	cls_break_model_path = AutoConvertConfig_Definition(
-		key="cls_break_model_path",
-		type="path",
-		group="detect",
-		optional=False, # 必选没有默认值
-		constraints={"must_exist": True} # 模型路径必须存在
-	)
-
 	skip_detect = AutoConvertConfig_Definition(
 		key="skip_detect",
 		type="bool",
@@ -220,6 +201,7 @@ class AutoConvertConfig_Definitions:
 		type="float",
 		group="analyze",
 		optional=False, # 必选没有默认值
+		constraints={"gt": 0}
 	)
 
 	chart_lv = AutoConvertConfig_Definition(
