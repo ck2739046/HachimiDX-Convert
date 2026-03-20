@@ -3,7 +3,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, FilePath, model_validator
 
 from .auto_convert_config import AutoConvertConfig_Definitions as AC_Defs
-from src.core.tools import validate_windows_filename
+from src.core.tools.validate_windows_filename import validate_windows_filename
 from .media_config import MediaType
 
 

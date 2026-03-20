@@ -1,22 +1,35 @@
-from .all_services import AllServices
+from importlib import import_module
 
-# from .i18n_manage import I18nManage
 from .path_manage import PathManage
 from .settings_manage import SettingsManage
+from .i18n_manage import I18nManage
 from .majdata_session import MajdataSession, static_shutdown_majdata, pause_majdata
 from .majdata_sync_server import VideoSyncServer
-
-from .pipeline import AutoConvertPipeline, MediaPipeline
 
 # 暴露接口模块作为命名空间，以区分同名函数（如 cancel, get_signals）
 from . import process_manager_api
 from . import task_scheduler_api
 
+
+# lazy loading，避免循环依赖
+def __getattr__(name: str):
+    if name == "AllServices":
+        module = import_module(".all_services", __name__)
+        return module.AllServices
+    if name == "AutoConvertPipeline":
+        module = import_module(".pipeline.auto_convert_pipeline", __name__)
+        return module.AutoConvertPipeline
+    if name == "MediaPipeline":
+        module = import_module(".pipeline.media_pipeline", __name__)
+        return module.MediaPipeline
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 __all__ = [
     "AllServices",
-    # "I18nManage",
     "PathManage",
     "SettingsManage",
+    "I18nManage",
     "MajdataSession", "static_shutdown_majdata", "pause_majdata",
     "VideoSyncServer",
 

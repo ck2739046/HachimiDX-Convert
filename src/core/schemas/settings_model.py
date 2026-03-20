@@ -1,7 +1,7 @@
 from typing import Literal, Annotated
 from pydantic import BaseModel, Field, field_validator
 
-from ..tools import validate_windows_filename
+from ..tools.validate_windows_filename import validate_windows_filename
 
 
 class SettingsModel(BaseModel):
