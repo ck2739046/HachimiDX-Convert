@@ -1,7 +1,7 @@
 .idea
+.vscode
 *__pycache__*
 .venv
-.venv_main
 
 legacy/aaa-result
 src/resources/majdata/
