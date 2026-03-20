@@ -17,6 +17,7 @@ from .ui_style import UI_Style
 from .pages.majdata_page import MajdataPage
 from .pages.media_tools_page import MediaToolsPage
 from .pages.tasks_page import TasksPage
+from .pages.auto_convert_page import AutoConvertPage
 
 import i18n
 from src.services import SettingsManage, PathManage, MajdataSession, VideoSyncServer
@@ -145,7 +146,8 @@ class RightPanel(QWidget):
         self.majdata_page = MajdataPage()
         self.stack.addWidget(self.majdata_page)
         # 1: Auto Convert (Placeholder)
-        self.stack.addWidget(self.create_placeholder("Auto Convert Page"))
+        self.stack.addWidget(AutoConvertPage())
+        #self.stack.addWidget(self.create_placeholder("Auto Convert Page"))
         # 2: Media Tools
         self.stack.addWidget(MediaToolsPage())
         # 3: Tasks (Placeholder)
