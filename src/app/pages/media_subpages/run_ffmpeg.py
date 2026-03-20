@@ -212,7 +212,11 @@ class RunFFmpegPage(BaseOutputPage):
         # 更新音频codec/bitrate可选项
         self.update_audio_format_combo_box()
         # 更新完整输出路径显示
-        self.update_output_full_path_display()
+        res = self.update_output_full_path_display(use_empty=True) # reset
+        # 因为默认输出文件名输入框是空的，更换文件后要更新一下提示用户
+        if res.is_ok:
+            final_output_filename = res.value
+            self.output_filename_line_edit.setText(final_output_filename)
 
     
     def _build_probe_result_text(self, result: FFprobeInspectResult) -> str:
@@ -361,10 +365,16 @@ class RunFFmpegPage(BaseOutputPage):
         self.audio_bitrate_combo_box.blockSignals(False)
 
 
-    def update_output_full_path_display(self) -> OpResult[None]:
-        """根据输出文件名，更新完整输出路径显示"""
+    def update_output_full_path_display(self, use_empty: bool = False) -> OpResult[str]:
+        """
+        根据输出文件名，更新完整输出路径显示
+        返回内容：最终输出文件名（不带路径）
+        """
 
-        output_filename = self.output_filename_line_edit.text().strip()
+        if use_empty is True:
+            output_filename = ""
+        else:
+            output_filename = self.output_filename_line_edit.text().strip()
 
         result = M_Defs.build_full_output_path(
             input_path = str(self.input_file_path_display.text()).strip(),
@@ -376,8 +386,9 @@ class RunFFmpegPage(BaseOutputPage):
             self.output_full_path_display.setText("")
             return err(result.error_msg, inner = result)
         
-        self.output_full_path_display.setText(str(result.value))
-        return ok()
+        final_output_path, final_output_filename = result.value
+        self.output_full_path_display.setText(final_output_path)
+        return ok(final_output_filename)
 
 
     def transfer_res(self, input_data):

@@ -297,7 +297,7 @@ class MediaConfig_Definitions:
 
 
     @staticmethod
-    def build_full_output_path(input_path: str, output_filename: str, audio_format: str) -> OpResult[str]:
+    def build_full_output_path(input_path: str, output_filename: str, audio_format: str) -> OpResult[tuple[str, str]]:
 
         """
         构建完整的输出文件路径
@@ -308,7 +308,7 @@ class MediaConfig_Definitions:
             audio_format: str，输出音频格式
 
         Returns:
-            OpResult[str]: 完整的输出文件路径
+            OpResult[tuple[str, str]]: (完整输出文件路径, 最终输出文件名)
 
         说明:
             - 首先检查 output_filename 是否符合 windows 标准
@@ -335,9 +335,10 @@ class MediaConfig_Definitions:
         input_dir = Path(input_path).resolve().parent
 
         if not output_filename:
-            input_stem = Path(input_path).stem # 如果空文件名，使用默认文件名
-            final_output_path = input_dir / f"{input_stem}_modified{output_extension}"
-        else:
-            final_output_path = input_dir / f"{output_filename}{output_extension}"
+            # 如果输入文件名为空，使用 文件名_modified
+            input_stem = Path(input_path).stem
+            output_filename = f"{input_stem}_modified"
 
-        return ok(final_output_path)
+        final_output_path = input_dir / f"{output_filename}{output_extension}"
+
+        return ok((str(final_output_path), output_filename))
