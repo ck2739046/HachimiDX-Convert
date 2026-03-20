@@ -7,10 +7,9 @@ from .base_output_page import BaseOutputPage
 from ..ui_style import UI_Style
 from ..widgets import *
 from src.services import process_manager_api
-from src.services.pipeline.auto_convert_pipeline import AutoConvertPipeline
-from src.core.tools import FFprobeInspect, FFprobeInspectResult, show_notify_dialog
+from src.services.pipeline import AutoConvertPipeline
+from src.core.tools import show_notify_dialog
 from src.core.schemas.op_result import OpResult, ok, err, print_op_result
-from src.core.schemas.media_config import MediaType
 from src.core.schemas.auto_convert_config import AutoConvertConfig_Definitions as AC_Defs
 import i18n
 
@@ -21,11 +20,6 @@ class AutoConvertPage(BaseOutputPage):
 
         self.content_layout = QVBoxLayout(self.content_area)
         self.content_layout.setContentsMargins(10, 10, 10, 10)
-        self.content_layout.setSpacing(UI_Style.widget_spacing)
-
-        # 需要用到的内部状态
-        self.selected_file_duration = None
-        self.selected_file_type = MediaType.UNKNOWN
 
         # Common 变量
         self.enable_standardize_cb = None
@@ -33,8 +27,7 @@ class AutoConvertPage(BaseOutputPage):
         self.enable_analyze_cb = None
 
         # Standardize 变量
-        self.std_input_file_display = None
-        self.probe_result_display = None
+        self.std_media_input = None
         self.song_name_line_edit = None
         self.video_mode_combo_box = None
         self.start_sec_line_edit = None
@@ -119,17 +112,11 @@ class AutoConvertPage(BaseOutputPage):
         divider = create_divider(i18n.t("app.auto_convert.standardize_divider", fallback="Standardize Settings"))
         layout.addWidget(divider)
         
-        # 1. Input File Select
-        std_input_btn, self.std_input_file_display, _ = create_file_selection_row(
-            button_text=i18n.t("app.auto_convert.std_select_video_btn", fallback="Select Input Video"),
-            on_button_clicked_handler=self.on_std_input_selected
-        )
-        self._create_panel_row(layout, std_input_btn, self.std_input_file_display)
-
-        # 2. Probe Result View
-        probe_prefix = create_label(text=i18n.t("app.auto_convert.probe_prefix", fallback="Media Info:"))
-        self.probe_result_display = create_label(expand=True)
-        self._create_panel_row(layout, probe_prefix, self.probe_result_display)
+        # 1 & 2. Input File Select & Probe Result View
+        self.std_media_input = MediaInputProbeWidget(
+            i18n.t("placeholder"))
+        self.std_media_input.media_loaded.connect(self.on_std_input_selected)
+        layout.addWidget(self.std_media_input)
         
         # 3. Settings Row 1
         song_name_label = create_label(i18n.t("app.auto_convert.song_name_label", fallback="Song Name"))
@@ -292,26 +279,16 @@ class AutoConvertPage(BaseOutputPage):
         self.analyze_input_file_widget.setVisible(not std_enabled)
 
 
-    def on_std_input_selected(self, selected_file_path: str) -> None:
-        """Standardize 视频选择，需使用 FFprobe 检测时长并推断 song_name"""
-        result = FFprobeInspect.inspect_media(selected_file_path)
-        if not result.is_ok:
-            show_notify_dialog("app.auto_convert", f"FFprobe Error: {print_op_result(result)}")
-            self.probe_result_display.setText(MediaType.UNKNOWN.name)
+    def on_std_input_selected(self, error_msg: str) -> None:
+        """Standardize 视频选择回调"""
+
+        if len(error_msg) > 0:
+            show_notify_dialog("app.auto_convert", error_msg)
             return
-            
-        ffprobe_result = result.value
-        self.selected_file_duration = ffprobe_result.duration
-        self.selected_file_type = ffprobe_result.media_type
-        
-        # 显示结果
-        audio_info = ffprobe_result.audio_stream.get("info_str", "None") or "None"
-        video_info = ffprobe_result.video_stream.get("info_str", "None") or "None"
-        self.probe_result_display.setText(f"Video: {video_info} \nAudio: {audio_info}")
-        
+
         # 补全 Song Name
         if not self.song_name_line_edit.text().strip():
-            self.song_name_line_edit.setText(Path(selected_file_path).stem)
+            self.song_name_line_edit.setText(Path(self.std_media_input.get_path()).stem)
 
 
     def on_submit_clicked(self) -> None:
@@ -335,15 +312,15 @@ class AutoConvertPage(BaseOutputPage):
 
             if raw_data[AC_Defs.is_standardize_enabled.key]:
                 raw_data.update({
-                    AC_Defs.standardize_input_video_path.key: self.std_input_file_display.text().strip() or None,
+                    AC_Defs.standardize_input_video_path.key: self.std_media_input.get_path() or None,
                     AC_Defs.song_name.key: self.song_name_line_edit.text().strip() or None,
                     AC_Defs.video_mode.key: self.video_mode_combo_box.currentText().strip() or None,
                     AC_Defs.start_sec.key: try_float(self.start_sec_line_edit.text().strip()),
                     AC_Defs.end_sec.key: try_float(self.end_sec_line_edit.text().strip()),
                     AC_Defs.target_res.key: try_int(self.target_res_combo_box.currentText()),
                     AC_Defs.skip_detect_circle.key: self.skip_detect_circle_check_box.isChecked(),
-                    AC_Defs.duration.key: try_float(self.selected_file_duration),
-                    AC_Defs.media_type.key: self.selected_file_type
+                    AC_Defs.duration.key: try_float(self.std_media_input.selected_file_duration),
+                    AC_Defs.media_type.key: self.std_media_input.selected_file_type
                 })
 
             if raw_data[AC_Defs.is_detect_enabled.key]:

@@ -51,6 +51,7 @@ class BaseOutputPage(QWidget):
     def create_row(self, *widgets, add_stretch=False):
         """
         创建一个水平布局行并添加所有传入的 widgets，然后自动将这个行加入页面。
+        会自动跳过 None 的 widget。
         
         Args:
             *widgets: 要添加到行中的 widgets
@@ -59,17 +60,37 @@ class BaseOutputPage(QWidget):
         Returns:
             QWidget: 包含所有 widgets 的行容器
         """
-        row = QWidget()
-        row_layout = QHBoxLayout(row)
-        row_layout.setSpacing(5)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        
-        for widget in widgets:
-            row_layout.addWidget(widget)
-        
-        if add_stretch:
-            row_layout.addStretch()
 
+        row = _create_row(*widgets, add_stretch=add_stretch)
         self.content_layout.addWidget(row)
-        
         return row
+
+
+
+
+
+def _create_row(*widgets, add_stretch=False):
+    """
+    创建一个水平布局行并添加所有传入的 widgets。
+    会自动跳过 None 的 widget。
+    
+    Args:
+        *widgets: 要添加到行中的 widgets
+        add_stretch: 是否在末尾添加弹性空间，默认 False
+    
+    Returns:
+        QWidget: 包含所有 widgets 的行容器
+    """
+    row = QWidget()
+    row_layout = QHBoxLayout(row)
+    row_layout.setSpacing(5)
+    row_layout.setContentsMargins(0, 0, 0, 0)
+    
+    for widget in widgets:
+        if widget is not None:
+            row_layout.addWidget(widget)
+    
+    if add_stretch:
+        row_layout.addStretch()
+
+    return row
