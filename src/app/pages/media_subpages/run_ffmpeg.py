@@ -5,9 +5,9 @@ from PyQt6.QtWidgets import QVBoxLayout
 from ..base_output_page import BaseOutputPage
 from ...ui_style import UI_Style
 from ...widgets import *
+
 from src.services import process_manager_api
 from src.services.pipeline import MediaPipeline
-from src.core.tools import FFprobeInspect, FFprobeInspectResult
 from src.core.tools import show_notify_dialog
 from src.core.schemas.op_result import OpResult, ok, err, print_op_result
 from src.core.schemas.media_config import MediaType, MediaConfig_Definition
@@ -24,10 +24,7 @@ class RunFFmpegPage(BaseOutputPage):
         self.content_layout.setContentsMargins(10, 10, 10, 10)
 
         # 需要用到的公共变量
-        self.input_file_path_display = None
-        self.probe_result_display = None
-        self.selected_file_duration = None
-        self.selected_file_type = MediaType.UNKNOWN
+        self.media_input = None
 
         # video widgets
         self.video_crf_combo_box = None
@@ -56,25 +53,13 @@ class RunFFmpegPage(BaseOutputPage):
 
 
 
-        # 第一行: 输入文件选择
+        # 第一/第二行: 输入文件选择与信息显示
         file_select_divider = create_divider(i18n.t("app.media_subpages.run_ffmpeg.ui_select_file_divider"))
         self.content_layout.addWidget(file_select_divider)
-        input_file_select_button, self.input_file_path_display, _ = create_file_selection_row(
-            button_text=i18n.t("app.media_subpages.run_ffmpeg.ui_select_input_file_button"),
-            on_button_clicked_handler=self.on_input_file_selected)
-        self.create_row(input_file_select_button,
-                        self.input_file_path_display)
         
-
-
-
-        # 第二行: 媒体文件检测结果显示
-        probe_result_display_prefix = create_label(text=i18n.t("app.media_subpages.run_ffmpeg.probe_result_display.ui_ffprobe_inspect_prefix"))
-        probe_result_display_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.probe_result_display.ui_ffprobe_inspect_help"))
-        self.probe_result_display = create_label(expand=True)
-        self.create_row(probe_result_display_prefix,
-                        probe_result_display_help,
-                        self.probe_result_display)
+        self.media_input = MediaInputProbeWidget()
+        self.media_input.media_loaded.connect(self.on_input_file_selected)
+        self.content_layout.addWidget(self.media_input)
         
 
 
@@ -191,24 +176,15 @@ class RunFFmpegPage(BaseOutputPage):
 
 
 
-    def on_input_file_selected(self, selected_file_path: str) -> None:
+    def on_input_file_selected(self, err_msg: str) -> None:
         """
         第一行. 文件选择按钮 on clicked hanlder
-        选择文件后检测媒体信息并显示结果
+        选择文件后检测媒体信息的后续逻辑
         """
-        result = FFprobeInspect.inspect_media(selected_file_path)
-        if not result.is_ok:
-            error_msg = i18n.t("app.media_subpages.run_ffmpeg.warning_ffprobe_inspect_failed", error_msg=print_op_result(result))
-            show_notify_dialog("app.media_subpages.run_ffmpeg", error_msg)
-            self.probe_result_display.setText(MediaType.UNKNOWN.name)
-            return
-        ffprobe_result = result.value
-        # 更新公共变量
-        self.selected_file_duration = ffprobe_result.duration
-        self.selected_file_type = ffprobe_result.media_type
-        # 显示检测结果
-        display_text = self._build_probe_result_text(ffprobe_result)
-        self.probe_result_display.setText(display_text)
+
+        if len(err_msg) > 0:
+            show_notify_dialog("app.media_subpages.run_ffmpeg", err_msg)
+
         # 更新音频codec/bitrate可选项
         self.update_audio_format_combo_box()
         # 更新完整输出路径显示
@@ -218,23 +194,6 @@ class RunFFmpegPage(BaseOutputPage):
             final_output_filename = res.value
             self.output_filename_line_edit.setText(final_output_filename)
 
-    
-    def _build_probe_result_text(self, result: FFprobeInspectResult) -> str:
-        """根据 FFprobe 检测结果构建显示文本"""
-
-        video_info = result.video_stream.get("info_str", "")
-        if video_info:
-            video_line = i18n.t("app.media_subpages.run_ffmpeg.probe_result_display.ui_video_stream_info_prefix") + video_info
-        else:
-            video_line = i18n.t("app.media_subpages.run_ffmpeg.probe_result_display.ui_no_video_stream_info")
-        
-        audio_info = result.audio_stream.get("info_str", "")
-        if audio_info:
-            audio_line = i18n.t("app.media_subpages.run_ffmpeg.probe_result_display.ui_audio_stream_info_prefix") + audio_info
-        else:
-            audio_line = i18n.t("app.media_subpages.run_ffmpeg.probe_result_display.ui_no_audio_stream_info")
-
-        return "\n".join([video_line, audio_line])
 
 
 
@@ -329,7 +288,7 @@ class RunFFmpegPage(BaseOutputPage):
     def update_audio_format_combo_box(self) -> None:
         """根据媒体类型，更新音频格式"""
 
-        media_type = self.selected_file_type
+        media_type = self.media_input.selected_file_type
         self.audio_format_combo_box.blockSignals(True)
         self.audio_format_combo_box.clear()
 
@@ -377,7 +336,7 @@ class RunFFmpegPage(BaseOutputPage):
             output_filename = self.output_filename_line_edit.text().strip()
 
         result = M_Defs.build_full_output_path(
-            input_path = str(self.input_file_path_display.text()).strip(),
+            input_path = self.media_input.get_path(),
             output_filename = output_filename,
             audio_format = self.audio_format_combo_box.currentText()
         )
@@ -464,8 +423,8 @@ class RunFFmpegPage(BaseOutputPage):
 
             raw_data: dict = {
                 # common
-                M_Defs.media_type.key: self.selected_file_type,
-                M_Defs.input_path.key: self.input_file_path_display.text().strip() or "",
+                M_Defs.media_type.key: self.media_input.selected_file_type,
+                M_Defs.input_path.key: self.media_input.get_path() or "",
                 M_Defs.output_path.key: self.output_full_path_display.text().strip() or "",
                 # video stream
                 M_Defs.video_crf.key: try_int(self.video_crf_combo_box.currentText().strip()),
@@ -480,7 +439,7 @@ class RunFFmpegPage(BaseOutputPage):
                 M_Defs.audio_volume.key: try_int(self.audio_volume_line_edit.text().strip()),
                 # common
                 M_Defs.clear_metadata.key: self.common_clear_metadata_check_box.isChecked(),
-                M_Defs.duration.key: try_float(self.selected_file_duration),
+                M_Defs.duration.key: try_float(self.media_input.selected_file_duration),
                 M_Defs.pad_start.key: try_float(self.common_pad_start_line_edit.text().strip()),
                 M_Defs.start.key: try_float(self.common_start_line_edit.text().strip()),
                 M_Defs.end.key: try_float(self.common_end_line_edit.text().strip()),

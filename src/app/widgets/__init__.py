@@ -12,6 +12,7 @@ from .line_edit import create_line_edit
 from .check_box import create_check_box
 from .divider import create_divider
 from .file_selection_row import create_file_selection_row
+from .media_input_probe_widget import MediaInputProbeWidget
 from .path_display import create_path_display
 from .button import create_stated_button, create_button
 from .floating_notification import create_floating_notification
@@ -27,6 +28,7 @@ __all__ = [
 	'create_check_box',
 	'create_divider',
 	'create_file_selection_row',
+	'MediaInputProbeWidget',
 	'create_path_display',
 	'create_button', 'create_stated_button',
 	'create_floating_notification',

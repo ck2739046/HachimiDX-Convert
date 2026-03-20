@@ -87,12 +87,36 @@ en_US:
   # ---- app ----
 
   app:
+
+    widgets:
+
+      # media_input_probe_widget
+      media_input_probe_widget:
+      
+        ui_select_input_file_button: "Select Media File"
+        warning_ffprobe_inspect_failed: "Media inspection failed. Error:\n%{error_msg}"
+        
+        ui_ffprobe_inspect_prefix: "Media Info"
+        ui_ffprobe_inspect_help: "Info detected by FFprobe"
+
+        ui_no_video_stream_info: "Video Stream:  No video stream detected"
+        ui_no_audio_stream_info: "Audio Stream:  No audio stream detected"
+        ui_video_stream_info_prefix: "Video Stream:  "
+        ui_audio_stream_info_prefix: "Audio Stream:  "
+
+
+
+
+
+
+
+
+
+
+
     media_subpages:
       run_ffmpeg:
         
-        ui_select_input_file_button: "Select Media File"
-        warning_ffprobe_inspect_failed: "Media inspection failed. Error:\n%{error_msg}"
-
         ui_select_file_divider: "File Selection"
         ui_video_divider: "Video Stream"
         ui_audio_divider: "Audio Stream"
@@ -185,17 +209,6 @@ en_US:
         warning_task_submit_failed: "Task submit failed.\n\n%{error}"
         notice_task_submit_success: "Task submitted: %{task_id}"
         warning_unexpected_submit_error: "Unexpected error during task submission:\n%{error}"
-
-        # other
-        probe_result_display:
-          ui_ffprobe_inspect_prefix: "Media Info"
-          ui_ffprobe_inspect_help: |
-            The program will call FFprobe to inspect the selected file,
-            and display the detected file information here.
-          ui_no_video_stream_info: "Video Stream:  No video stream detected"
-          ui_no_audio_stream_info: "Audio Stream:  No audio stream detected"
-          ui_video_stream_info_prefix: "Video Stream:  "
-          ui_audio_stream_info_prefix: "Audio Stream:  "
 
 
 

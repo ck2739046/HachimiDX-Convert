@@ -87,11 +87,35 @@ zh_CN:
   # ---- app ----
 
   app:
-    media_subpages:
-      run_ffmpeg:
-        
+
+    widgets:
+
+      # media_input_probe_widget
+      media_input_probe_widget:
+
         ui_select_input_file_button: "选择媒体文件"
         warning_ffprobe_inspect_failed: "媒体检测失败。错误信息：\n%{error_msg}"
+        
+        ui_ffprobe_inspect_prefix: "媒体信息"
+        ui_ffprobe_inspect_help: "使用 FFprobe 检测得到的信息。"
+
+        ui_no_video_stream_info: "视频流:  未检测到视频流"
+        ui_no_audio_stream_info: "音频流:  未检测到音频流"
+        ui_video_stream_info_prefix: "视频流:  "
+        ui_audio_stream_info_prefix: "音频流:  "
+
+
+
+
+
+
+
+
+
+
+
+    media_subpages:
+      run_ffmpeg:
         
         ui_select_file_divider: "文件选择"
         ui_video_divider: "视频设置"
@@ -185,17 +209,6 @@ zh_CN:
         warning_task_submit_failed: "任务提交失败。\n\n%{error}"
         notice_task_submit_success: "任务已提交: %{task_id}"
         warning_unexpected_submit_error: "任务提交时发生意外错误：\n%{error}"
-
-        # 其他
-        probe_result_display:
-          ui_ffprobe_inspect_prefix: "媒体信息"
-          ui_ffprobe_inspect_help: |
-            程序将调用 FFprobe 检测所选择的文件，
-            在此处显示检测到的文件信息。
-          ui_no_video_stream_info: "视频流:  未检测到视频流"
-          ui_no_audio_stream_info: "音频流:  未检测到音频流"
-          ui_video_stream_info_prefix: "视频流:  "
-          ui_audio_stream_info_prefix: "音频流:  "
 
 
 
