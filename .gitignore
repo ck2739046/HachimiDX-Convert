@@ -2,6 +2,7 @@
 .vscode
 *__pycache__*
 .venv
+*.sln
 
 legacy/aaa-result
 src/resources/majdata/

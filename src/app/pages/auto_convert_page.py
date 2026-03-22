@@ -21,37 +21,40 @@ class AutoConvertPage(BaseOutputPage):
         self.content_layout = QVBoxLayout(self.content_area)
         self.content_layout.setContentsMargins(10, 10, 10, 10)
 
-        # Common 变量
-        self.enable_standardize_cb = None
-        self.enable_detect_cb = None
-        self.enable_analyze_cb = None
+        # 1 & 2. Shared Input File Select & Probe Result View
+        self.std_media_input = MediaInputProbeWidget(
+            i18n.t("placeholder"))
+        self.std_media_input.media_loaded.connect(self.on_std_input_selected)
+        self.content_layout.addWidget(self.std_media_input)
 
-        # Standardize 变量
-        self.std_media_input = None
+        # Standardize
         self.song_name_line_edit = None
         self.video_mode_combo_box = None
         self.start_sec_line_edit = None
         self.end_sec_line_edit = None
-        self.target_res_combo_box = None
         self.skip_detect_circle_check_box = None
+        # target_res 暂时不设置
 
-        # Detect 变量
-        self.detect_input_file_widget = None
-        self.detect_input_file_display = None
+        # Detect
         self.skip_detect_check_box = None
         self.skip_cls_check_box = None
         self.skip_export_tracked_check_box = None
 
-        # Analyze 变量
-        self.analyze_input_file_widget = None
-        self.analyze_input_file_display = None
+        # Analyze
         self.bpm_line_edit = None
         self.chart_lv_combo_box = None
         self.base_denominator_combo_box = None
         self.duration_denominator_combo_box = None
 
+        # Common
+        self.media_file_input = None
+        self.enable_standardize_check_box = None
+        self.enable_detect_check_box = None
+        self.enable_analyze_check_box = None
         self.taskname_line_edit = None
         self.submit_button = None
+
+
 
         # ------------------- UI builders -------------------
         self._build_standardize_panel()
@@ -112,12 +115,6 @@ class AutoConvertPage(BaseOutputPage):
         divider = create_divider(i18n.t("app.auto_convert.standardize_divider", fallback="Standardize Settings"))
         layout.addWidget(divider)
         
-        # 1 & 2. Input File Select & Probe Result View
-        self.std_media_input = MediaInputProbeWidget(
-            i18n.t("placeholder"))
-        self.std_media_input.media_loaded.connect(self.on_std_input_selected)
-        layout.addWidget(self.std_media_input)
-        
         # 3. Settings Row 1
         song_name_label = create_label(i18n.t("app.auto_convert.song_name_label", fallback="Song Name"))
         self.song_name_line_edit = create_line_edit(length=180)
@@ -153,24 +150,13 @@ class AutoConvertPage(BaseOutputPage):
         self.content_layout.addWidget(self.standardize_panel)
 
 
+
     def _build_detect_panel(self):
         self.detect_panel = QWidget()
         layout = QVBoxLayout(self.detect_panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
         layout.addWidget(create_divider(i18n.t("app.auto_convert.detect_divider", fallback="Detect Settings")))
-
-        # Input file (只有 Standardize 关闭时显示此项输入)
-        self.detect_input_file_widget = QWidget()
-        det_input_layout = QVBoxLayout(self.detect_input_file_widget)
-        det_input_layout.setContentsMargins(0, 0, 0, 0)
-        
-        det_input_btn, self.detect_input_file_display, _ = create_file_selection_row(
-            button_text=i18n.t("app.auto_convert.det_select_video_btn", fallback="Select Std Video (Detect)"),
-            on_button_clicked_handler=lambda p: self.detect_input_file_display.setText(p)
-        )
-        self._create_panel_row(det_input_layout, det_input_btn, self.detect_input_file_display)
-        layout.addWidget(self.detect_input_file_widget)
 
         # Settings
         skip_det_label = create_label(i18n.t("app.auto_convert.skip_detect_label", fallback="Skip Detect"))
@@ -191,24 +177,13 @@ class AutoConvertPage(BaseOutputPage):
         self.content_layout.addWidget(self.detect_panel)
 
 
+
     def _build_analyze_panel(self):
         self.analyze_panel = QWidget()
         layout = QVBoxLayout(self.analyze_panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
         layout.addWidget(create_divider(i18n.t("app.auto_convert.analyze_divider", fallback="Analyze Settings")))
-
-        # Input file
-        self.analyze_input_file_widget = QWidget()
-        ana_input_layout = QVBoxLayout(self.analyze_input_file_widget)
-        ana_input_layout.setContentsMargins(0, 0, 0, 0)
-        
-        ana_input_btn, self.analyze_input_file_display, _ = create_file_selection_row(
-            button_text=i18n.t("app.auto_convert.ana_select_video_btn", fallback="Select Std Video (Analyze)"),
-            on_button_clicked_handler=lambda p: self.analyze_input_file_display.setText(p)
-        )
-        self._create_panel_row(ana_input_layout, ana_input_btn, self.analyze_input_file_display)
-        layout.addWidget(self.analyze_input_file_widget)
 
         # Settings
         bpm_label = create_label(i18n.t("app.auto_convert.bpm_label", fallback="BPM (*)"))
@@ -231,6 +206,7 @@ class AutoConvertPage(BaseOutputPage):
             add_stretch=True)
 
         self.content_layout.addWidget(self.analyze_panel)
+
 
 
     def _build_bottom_controls(self):
@@ -270,13 +246,7 @@ class AutoConvertPage(BaseOutputPage):
         det_enabled = self.enable_detect_cb.isChecked()
         ana_enabled = self.enable_analyze_cb.isChecked()
 
-        self.standardize_panel.setVisible(std_enabled)
-        self.detect_panel.setVisible(det_enabled)
-        self.analyze_panel.setVisible(ana_enabled)
 
-        # 当标准化未启用，需要让下级模块单独提供文件输入框以获取接力用的路径
-        self.detect_input_file_widget.setVisible(not std_enabled)
-        self.analyze_input_file_widget.setVisible(not std_enabled)
 
 
     def on_std_input_selected(self, error_msg: str) -> None:
@@ -325,7 +295,7 @@ class AutoConvertPage(BaseOutputPage):
 
             if raw_data[AC_Defs.is_detect_enabled.key]:
                 if not raw_data[AC_Defs.is_standardize_enabled.key]:
-                    raw_data[AC_Defs.std_video_path_detect.key] = self.detect_input_file_display.text().strip() or None
+                    raw_data[AC_Defs.std_video_path_detect.key] = self.std_media_input.get_path() or None
                 raw_data.update({
                     AC_Defs.skip_detect.key: self.skip_detect_check_box.isChecked(),
                     AC_Defs.skip_cls.key: self.skip_cls_check_box.isChecked(),
@@ -334,7 +304,7 @@ class AutoConvertPage(BaseOutputPage):
                 
             if raw_data[AC_Defs.is_analyze_enabled.key]:
                 if not raw_data[AC_Defs.is_standardize_enabled.key]:
-                    raw_data[AC_Defs.std_video_path_analyze.key] = self.analyze_input_file_display.text().strip() or None
+                    raw_data[AC_Defs.std_video_path_analyze.key] = self.std_media_input.get_path() or None
                 raw_data.update({
                     AC_Defs.bpm.key: try_float(self.bpm_line_edit.text().strip()),
                     AC_Defs.chart_lv.key: try_int(self.chart_lv_combo_box.currentText()),
