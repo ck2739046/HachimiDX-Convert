@@ -148,7 +148,7 @@ class AutoConvertPage(BaseOutputPage):
             add_stretch=True)
 
         self.content_layout.addWidget(self.standardize_panel)
-
+        self.std_overlay = OverlayWidget(self.standardize_panel)
 
 
     def _build_detect_panel(self):
@@ -175,7 +175,7 @@ class AutoConvertPage(BaseOutputPage):
             add_stretch=True)
 
         self.content_layout.addWidget(self.detect_panel)
-
+        self.det_overlay = OverlayWidget(self.detect_panel)
 
 
     def _build_analyze_panel(self):
@@ -206,7 +206,7 @@ class AutoConvertPage(BaseOutputPage):
             add_stretch=True)
 
         self.content_layout.addWidget(self.analyze_panel)
-
+        self.ana_overlay = OverlayWidget(self.analyze_panel)
 
 
     def _build_bottom_controls(self):
@@ -246,7 +246,9 @@ class AutoConvertPage(BaseOutputPage):
         det_enabled = self.enable_detect_cb.isChecked()
         ana_enabled = self.enable_analyze_cb.isChecked()
 
-
+        self.std_overlay.setVisible(not std_enabled)
+        self.det_overlay.setVisible(not det_enabled)
+        self.ana_overlay.setVisible(not ana_enabled)
 
 
     def on_std_input_selected(self, error_msg: str) -> None:
