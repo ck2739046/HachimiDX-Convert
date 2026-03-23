@@ -1,10 +1,9 @@
-from typing import Optional
 import sys
 
 from src.services.path_manage import PathManage
-from .schemas.media_config import MediaType
 from .schemas.auto_convert_model import AutoConvertModel
 from .schemas.auto_convert_config import AutoConvertConfig_Definitions as AC_Defs
+from .schemas.auto_convert_config import AutoConvertConfig_Definition
 
 from .schemas.op_result import OpResult, ok, err
 
@@ -59,19 +58,21 @@ def _parse_fields(data: AutoConvertModel, group: str) -> list[str]:
     """
     args = []
 
-    for field in AC_Defs.__dataclass_fields__.values():
-        
-        if field.group != group:
+    for definition in vars(AC_Defs).values():
+        if not isinstance(definition, AutoConvertConfig_Definition):
             continue
 
-        value = getattr(data, field.key)
+        if definition.group != group:
+            continue
+
+        value = getattr(data, definition.key)
         if value is None:
             continue
         
-        arg_key = f"--{field.key}"
-        if field.type == "bool":
+        arg_key = f"--{definition.key}"
+        if definition.type == "bool":
             arg_value = "true" if value else "false"
-        elif field.type == "enum":
+        elif definition.type == "enum":
             arg_value = value.value
         else:
             arg_value = str(value)
