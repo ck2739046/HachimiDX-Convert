@@ -78,6 +78,20 @@ class AutoConvertModel(BaseModel):
 
 	# model validators
 
+	# common
+
+	# 至少要启用一个模块
+	@model_validator(mode='after')
+	def validate_at_least_one_module_enabled(self):
+		if not (self.is_standardize_enabled or self.is_detect_enabled or self.is_analyze_enabled):
+			raise ValueError("At least one of standardize, detect, or analyze must be enabled.")
+		return self
+
+
+
+
+
+
 	# standardize
 
 	# 检查 input_video_path & song_name
