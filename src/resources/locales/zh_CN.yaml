@@ -230,3 +230,72 @@ zh_CN:
       ui_play_video_help: |
         勾选：视频会在左上 MajdataView 和左下视频播放器中都播放。
         不勾选：视频只在左下视频播放器中播放。
+
+
+
+
+    # ---- auto convert 页面 ----
+
+    auto_convert_page:
+      ui_select_file_divider: "文件选择"
+      ui_standardize_divider: "视频标准化"
+      ui_detect_divider: "音符识别"
+      ui_analyze_divider: "音符分析"
+      ui_common_divider: "通用设置"
+
+      ui_song_name_label: "歌曲名称: "
+      ui_video_mode_label: "视频形式: "
+      ui_video_mode_help: |
+        source video: 游戏原生画面
+        camera footage: 相机拍屏幕
+      ui_skip_detect_circle_label: "跳过圆形检测: "
+      ui_skip_detect_circle_help: |
+        程序会尝试自动检测圆形游戏屏幕的位置。
+        如果在当前谱面确认视频中，游戏画面已经是全屏并且在屏幕中心，可以跳过检测。
+
+      ui_skip_detect_label: "跳过检测: "
+      ui_skip_detect_help: "跳过逐帧检测视频中的音符，直接读取已经存在的检测结果 (detect_result.txt)。"
+      ui_skip_cls_label: "跳过分类: "
+      ui_skip_cls_help: "跳过音符分类: ex, break, ex-break。"
+      ui_skip_export_tracked_label: "跳过导出追踪视频: "
+      ui_skip_export_tracked_help: "跳过导出带有音符追踪信息的视频。"
+
+      ui_bpm_label: "BPM: "
+      ui_bpm_help: "仅支持静态 BPM (全程不变速)\n支持整数或最多三位小数"
+      ui_chart_lv_label: "谱面难度: "
+      ui_chart_lv_help: "1-easy\n2-basic\n3-normal\n4-expert\n5-master\n6-re:master\n7-utage"
+      ui_base_denominator_label: "音符间隔分辨率: "
+      ui_base_denominator_help: |
+        程序解析音符间隔的时间分辨率。
+        默认为 16，代表单位时间为 1/16 小节，在 sinmai 语法中写作 "{16},"
+        程序会将音符间隔对齐到单位时间
+        单位时间计算: 240000 / bpm / 分辨率 (ms)
+        建议单位时间 ≥30ms，如果 BPM 较高，需要适当降低分辨率以保证准确性。
+        
+        注: XX (12) 表示当分辨率 ≥16 时，额外支持 12 分音符。
+      ui_duration_denominator_label: "音符时值分辨率: "
+      ui_duration_denominator_help: |
+        程序解析音符时值的时间分辨率
+        默认为 8，代表单位时间为 1/8 小节，在 sinmai 语法中写作 "[8:x],"
+        程序会将音符时值对齐到单位时间
+        单位时间计算: 240000 / bpm / 分辨率 (ms)
+        建议单位时间 ≥30ms，如果 BPM 较高，需要适当降低分辨率以保证准确性。
+        
+        注: 此选项仅适用于 slide 和 touch-hold 音符的时值，
+             hold 音符的时值的分辨率与“音符间隔分辨率”相同。
+
+      ui_enable_standardize_label: "启用视频标准化模块: "
+      ui_enable_standardize_help: |
+        是否启用视频标准化模块。
+        启用: 对选择的谱面确认视频进行标准化处理 (裁剪\缩放\截取)
+        禁用: 跳过此步骤，后续操作直接使用已有的标准化视频
+      ui_enable_detect_label: "启用音符识别模块: "
+      ui_enable_detect_help: |
+        是否启用音符识别模块。
+        启用: 对标准化后的视频进行音符识别
+        禁用: 跳过此步骤，后续操作直接使用已有的音符识别结果
+      ui_enable_analyze_label: "启用音符分析模块: "
+      ui_enable_analyze_help: |
+        是否启用音符分析模块。
+        启用: 对音符识别结果进行分析，生成最终谱面
+        禁用: 跳过此步骤

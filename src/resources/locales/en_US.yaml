@@ -230,3 +230,73 @@ en_US:
       ui_play_video_help: |
         checked: The video will play in both the top-left MajdataView and the bottom-left video player.
         unchecked: The video will only play in the bottom-left video player.
+
+
+
+
+    # ---- auto convert 页面 ----
+
+    auto_convert_page:
+      ui_select_file_divider: "File Selection"
+      ui_standardize_divider: "Standardize Video"
+      ui_detect_divider: "Note Detection"
+      ui_analyze_divider: "Note Analysis"
+      ui_common_divider: "Common"
+
+      ui_song_name_label: "Song Name: "
+      ui_video_mode_label: "Video Mode: "
+      ui_video_mode_help: |
+        source video: native in-game footage
+        camera footage: camera recording of the screen
+      ui_skip_detect_circle_label: "Skip Circle Detect: "
+      ui_skip_detect_circle_help: |
+        The program tries to automatically detect the circular game screen area.
+        If the current chart confirmation video is already fullscreen and centered,
+        you can skip this detection.
+
+      ui_skip_detect_label: "Skip Detect: "
+      ui_skip_detect_help: "Skip frame-by-frame note detection and directly read the existing detection result (detect_result.txt)."
+      ui_skip_cls_label: "Skip Classify: "
+      ui_skip_cls_help: "Skip note classification: ex, break, ex-break."
+      ui_skip_export_tracked_label: "Skip Export Tracked: "
+      ui_skip_export_tracked_help: "Skip exporting the video with note tracking overlays."
+
+      ui_bpm_label: "BPM: "
+      ui_bpm_help: "Only static BPM is supported (no tempo changes).\nSupports integers or up to 3 decimal places"
+      ui_chart_lv_label: "Chart Level: "
+      ui_chart_lv_help: "1-easy\n2-basic\n3-normal\n4-expert\n5-master\n6-re:master\n7-utage"
+      ui_base_denominator_label: "Base Denominator: "
+      ui_base_denominator_help: |
+        Time resolution used to parse note intervals.
+        Default is 16, meaning one unit is 1/16 beat, written as "{16}," in sinmai syntax.
+        The program aligns note intervals to this time unit.
+        Unit time calculation: 240000 / bpm / denominator (ms)
+        Recommended unit time is >=30ms. If BPM is high, lower the denominator for better accuracy.
+
+        Note: XX (12) means 12th-note support is additionally enabled when denominator >=16.
+      ui_duration_denominator_label: "Duration Denominator: "
+      ui_duration_denominator_help: |
+        Time resolution used to parse note durations.
+        Default is 8, meaning one unit is 1/8 beat, written as "[8:x]," in sinmai syntax.
+        The program aligns note durations to this time unit.
+        Unit time calculation: 240000 / bpm / denominator (ms)
+        Recommended unit time is >=30ms. If BPM is high, lower the denominator for better accuracy.
+
+        Note: This option only applies to slide and touch-hold durations.
+             Hold duration uses the same denominator as "Base Denominator".
+
+      ui_enable_standardize_label: "Enable Video Standardization: "
+      ui_enable_standardize_help: |
+        Whether to enable the video standardization module.
+        Enabled: standardize the selected chart confirmation video (crop/scale/trim)
+        Disabled: skip this step and use the existing standardized video directly
+      ui_enable_detect_label: "Enable Note Detection: "
+      ui_enable_detect_help: |
+        Whether to enable the note detection module.
+        Enabled: run note detection on the standardized video
+        Disabled: skip this step and use existing note detection results directly
+      ui_enable_analyze_label: "Enable Note Analysis: "
+      ui_enable_analyze_help: |
+        Whether to enable the note analysis module.
+        Enabled: analyze note detection results and generate the final chart
+        Disabled: skip this step
