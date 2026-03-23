@@ -300,3 +300,38 @@ en_US:
         Whether to enable the note analysis module.
         Enabled: analyze note detection results and generate the final chart
         Disabled: skip this step
+
+
+    # ---- settings page ----
+
+    settings_page:
+      dialog_title: "Settings"
+
+      ui_model_divider: "Model Inference"
+      ui_model_backend_label: "Model Backend: "
+
+      ui_ffmpeg_divider: "FFmpeg Hardware Acceleration"
+      ui_ffmpeg_vp9_label: "VP9: "
+      ui_ffmpeg_h264_label: "H264: "
+
+      ui_general_divider: "General"
+      ui_language_label: "Language: "
+      ui_output_dir_label: "Output Directory Name: "
+
+      ui_window_divider: "Window Size"
+      ui_init_size_label: "Initial Size (W x H): "
+      ui_min_size_label: "Minimum Size (W x H): "
+
+      ui_actions_divider: "Actions"
+      ui_save_button: "Save"
+      ui_reset_button: "Reset"
+
+      ui_reset_confirm_title: "Reset Confirmation"
+      ui_reset_confirm_text: "Are you sure you want to reset all settings to defaults?"
+
+      warning_load_failed: "Failed to load setting: %{item_key}\n%{error}"
+      warning_save_item_failed: "Failed to save setting item: %{item_key}\n%{error}"
+      warning_reset_failed: "Reset failed\n%{error}"
+
+      notice_save_success: "Settings saved successfully"
+      notice_reset_success: "Settings reset to defaults"

@@ -299,3 +299,38 @@ zh_CN:
         是否启用音符分析模块。
         启用: 对音符识别结果进行分析，生成最终谱面
         禁用: 跳过此步骤
+
+
+    # ---- settings 页面 ----
+
+    settings_page:
+      dialog_title: "设置"
+
+      ui_model_divider: "模型推理"
+      ui_model_backend_label: "模型后端: "
+
+      ui_ffmpeg_divider: "FFmpeg 硬件加速"
+      ui_ffmpeg_vp9_label: "VP9: "
+      ui_ffmpeg_h264_label: "H264: "
+
+      ui_general_divider: "通用设置"
+      ui_language_label: "语言: "
+      ui_output_dir_label: "输出目录名: "
+
+      ui_window_divider: "窗口尺寸"
+      ui_init_size_label: "初始尺寸 (W x H): "
+      ui_min_size_label: "最小尺寸 (W x H): "
+
+      ui_actions_divider: "操作"
+      ui_save_button: "保存"
+      ui_reset_button: "重置"
+
+      ui_reset_confirm_title: "重置确认"
+      ui_reset_confirm_text: "确认将所有设置项重置为默认值吗？"
+
+      warning_load_failed: "读取设置失败: %{item_key}\n%{error}"
+      warning_save_item_failed: "保存配置项失败: %{item_key}\n%{error}"
+      warning_reset_failed: "重置失败\n%{error}"
+
+      notice_save_success: "设置保存成功"
+      notice_reset_success: "已重置为默认设置"

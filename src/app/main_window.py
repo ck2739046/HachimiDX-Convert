@@ -18,6 +18,7 @@ from .pages.majdata_page import MajdataPage
 from .pages.media_tools_page import MediaToolsPage
 from .pages.tasks_page import TasksPage
 from .pages.auto_convert_page import AutoConvertPage
+from .pages.settings_page import SettingsPage
 
 import i18n
 from src.services import SettingsManage, PathManage, MajdataSession, VideoSyncServer
@@ -152,8 +153,8 @@ class RightPanel(QWidget):
         self.stack.addWidget(MediaToolsPage())
         # 3: Tasks (Placeholder)
         self.stack.addWidget(TasksPage())
-        # 4: Settings (Placeholder)
-        self.stack.addWidget(self.create_placeholder("Settings Page"))
+        # 4: Settings
+        self.stack.addWidget(SettingsPage())
 
         # 连接信号
         self.nav_bar.currentChanged.connect(self.stack.setCurrentIndex)
