@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from src.services.path_manage import PathManage
+from .op_result import OpResult, ok, err
+
 
 @dataclass(slots=True)
 class SettingsConfig_Definition:
@@ -35,6 +38,40 @@ class SettingsConfig_Definitions:
         constraints={"options": ["CPU", "TensorRT", "DirectML"]},
     )
 
+    @staticmethod
+    def get_path_by_backend(backend) -> OpResult[list]:
+        if backend == "CPU":
+            paths = [
+                PathManage.DETECT_PT_PATH,
+                PathManage.OBB_PT_PATH,
+                PathManage.CLS_BREAK_PT_PATH,
+                PathManage.CLS_EX_PT_PATH,
+            ]
+        elif backend == "TensorRT":
+            paths = [
+                PathManage.DETECT_ENGINE_PATH,
+                PathManage.OBB_ENGINE_PATH,
+                PathManage.CLS_BREAK_ENGINE_PATH,
+                PathManage.CLS_EX_ENGINE_PATH,
+            ]
+        elif backend == "DirectML":
+            paths = [
+                PathManage.DETECT_ONNX_PATH,
+                PathManage.OBB_ONNX_PATH,
+                PathManage.CLS_BREAK_ONNX_PATH,
+                PathManage.CLS_EX_ONNX_PATH,
+            ]
+        else:
+            paths = []
+
+        if not paths:
+            return err(f"Unknown model backend: {backend}")
+        for path in paths:
+            if not path.exists():
+                return err(f"Model file not found for backend {backend}: {path}")
+        return ok(paths)
+
+
     predict_batch_size_detect_obb = SettingsConfig_Definition(
         key="predict_batch_size_detect_obb",
         type="int",
@@ -58,6 +95,17 @@ class SettingsConfig_Definitions:
         default="cuda",
         constraints={"options": ["cpu", "cuda", "0"]},
     )
+
+    @staticmethod
+    def get_inference_device_by_backend(backend):
+        if backend == "CPU":
+            return "cpu"
+        elif backend == "TensorRT":
+            return "cuda"
+        elif backend == "DirectML":
+            return "0"
+        else:
+            return "cpu" # default to cpu if unknown backend
 
     # ffmpeg
 

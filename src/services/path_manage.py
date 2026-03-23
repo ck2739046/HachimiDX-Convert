@@ -43,6 +43,10 @@ class PathManage:
     MajdataEdit_CONTROL_TXT_PATH: Path = RESOURCES_DIR / "majdata" / "HachimiDX_MajdataEdit_Control.txt"
 
     DETECT_ENGINE_PATH: Path = MODELS_DIR / "detect.engine"
+    OBB_ENGINE_PATH: Path = MODELS_DIR / "obb.engine"
+    CLS_BREAK_ENGINE_PATH: Path = MODELS_DIR / "cls-break.engine"
+    CLS_EX_ENGINE_PATH: Path = MODELS_DIR / "cls-ex.engine"
+
     DETECT_ONNX_PATH: Path = MODELS_DIR / "detect.onnx"
     OBB_ONNX_PATH: Path = MODELS_DIR / "obb.onnx"
     CLS_BREAK_ONNX_PATH: Path = MODELS_DIR / "cls-break.onnx"

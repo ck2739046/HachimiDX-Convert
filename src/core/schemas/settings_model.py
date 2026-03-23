@@ -30,6 +30,8 @@ class SettingsModel(BaseModel):
         Annotated[int, Field(ge=S_Defs.main_app_min_size.constraints["item_ge"], le=S_Defs.main_app_min_size.constraints["item_le"])],
     ] = S_Defs.main_app_min_size.default
 
+
+
     @field_validator("model_backend")
     @classmethod
     def validate_model_backend_options(cls, v: str) -> str:
@@ -37,6 +39,8 @@ class SettingsModel(BaseModel):
         if v not in allowed:
             raise ValueError(f"model_backend must be one of {allowed}")
         return v
+
+
 
     @field_validator("inference_device")
     @classmethod
@@ -46,6 +50,8 @@ class SettingsModel(BaseModel):
             raise ValueError(f"inference_device must be one of {allowed}")
         return v
 
+
+
     @field_validator("ffmpeg_hw_accel_vp9")
     @classmethod
     def validate_ffmpeg_hw_accel_vp9_options(cls, v: str) -> str:
@@ -53,6 +59,8 @@ class SettingsModel(BaseModel):
         if v not in allowed:
             raise ValueError(f"ffmpeg_hw_accel_vp9 must be one of {allowed}")
         return v
+
+
 
     @field_validator("ffmpeg_hw_accel_h264")
     @classmethod
@@ -62,6 +70,8 @@ class SettingsModel(BaseModel):
             raise ValueError(f"ffmpeg_hw_accel_h264 must be one of {allowed}")
         return v
 
+
+
     @field_validator("language")
     @classmethod
     def validate_language_options(cls, v: str) -> str:
@@ -70,15 +80,14 @@ class SettingsModel(BaseModel):
             raise ValueError(f"language must be one of {allowed}")
         return v
 
+
+
     @model_validator(mode="after")
     def sync_inference_device_with_backend(self):
-        backend_to_device = {
-            "CPU": "cpu",
-            "TensorRT": "cuda",
-            "DirectML": "0",
-        }
-        self.inference_device = backend_to_device[self.model_backend]
+        self.inference_device = S_Defs.get_inference_device_by_backend(self.model_backend)
         return self
+
+
 
     # 自定义校验逻辑
     @field_validator('main_output_dir_name')
