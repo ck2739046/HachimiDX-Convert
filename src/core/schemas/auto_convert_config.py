@@ -106,7 +106,7 @@ class AutoConvertConfig_Definitions:
 	media_type = AutoConvertConfig_Definition(
         key="media_type",
         type="enum",
-        group="common",
+        group="standardize",
         optional=False, # 必选没有默认值
         constraints={"options": [MediaType.VIDEO_WITH_AUDIO, MediaType.VIDEO_WITHOUT_AUDIO]}
     )
@@ -139,7 +139,7 @@ class AutoConvertConfig_Definitions:
 		key="skip_detect_circle",
 		type="bool",
 		group="standardize",
-		default=False
+		default=True
 	)
 
 	target_res = AutoConvertConfig_Definition(
