@@ -60,28 +60,43 @@ class SettingsManage:
             # 1. 文件存在：尝试读取并校验
             data = try_load_json()
             if data is not None:
-                result = validate_pydantic(SettingsModel, data)
-                if result.is_ok:
-                    return ok(result.value)
-                else:
-                    print(f"--Warning: failed to validate configuration. "
-                          f"Errors:\n{result.error_msg}\n{str(result.error_raw)}")
-                    
-            # 备份损坏的配置文件（如果存在）
-            if os.path.exists(SETTINGS_PATH):
-                backup_path = str(SETTINGS_PATH) + ".bak"
-                try:
-                    shutil.copy2(SETTINGS_PATH, backup_path)
-                    print(f"--Notice: Corrupted config backed up to {backup_path}")
-                except Exception as e:
-                    print(f"--Warning: Failed to backup corrupted config: {str(e)}")
+                need_return = True
+                has_changes, need_backup, new_data = cls._ckeck_data(data)
+
+                # 先备份损坏的配置文件
+                if need_backup:
+                    backup_path = str(SETTINGS_PATH) + ".bak"
+                    try:
+                        shutil.copy2(SETTINGS_PATH, backup_path)
+                        print(f"--Notice: Corrupted config backed up to {backup_path}")
+                    except Exception as e:
+                        print(f"--Warning: Failed to backup corrupted config: {str(e)}")
+
+                # 如果有变化，说明原数据有缺失或异常项
+                # new_data 是修复后的数据，尝试写入文件
+                if has_changes:
+                    print("--Notice: configuration file updated with per-item normalization.")
+                    save_result = cls._save_to_file(new_data)
+                    if not save_result.is_ok:
+                        print("--Warning: failed to save normalized configuration, fallback to recreate default config.")
+                        print(f"Error:\n{save_result.error_msg}\n{str(save_result.error_raw)}")
+                        need_return = False
+                        
+                # 无变化或者变化已成功保存，尝试返回校验后的模型
+                if need_return:
+                    result = validate_pydantic(SettingsModel, new_data)
+                    if result.is_ok:
+                        return ok(result.value)
+
+
 
             # 2. 文件不存在，或者文件存在但读取或校验失败：创建默认配置
+
             print(f"--Notice: create new configuration file at {SETTINGS_PATH}")
             if os.path.exists(SETTINGS_PATH):
                 os.remove(SETTINGS_PATH)
             default_model = SettingsModel()
-            result = cls._save_to_file(default_model)
+            result = cls._save_to_file(default_model.model_dump(mode='json'))
             if result.is_ok:
                 return ok(default_model)
             else:
@@ -89,16 +104,52 @@ class SettingsManage:
                     "Critical Error: Failed to create new configuration file.",
                     inner = result
                 )
-        
+    
+
+
+
+    @staticmethod
+    def _ckeck_data(input_data) -> tuple[bool, dict]:
+
+        new_input_data = {}
+        default_data = SettingsModel().model_dump(mode='json')
+        has_changes = False
+        need_backup = False
+
+        for key, default_value in default_data.items():
+
+            # 逐项检验：如果输入有缺失项，将此项设为默认值
+            if key not in input_data:
+                print(f"--Warning: missing required key '{key}', reset to default.")
+                new_input_data[key] = default_value
+                has_changes = True
+                continue
+
+            # 逐项校验：如果输入有异常项，将此项设为默认值
+            temp_default_data = default_data.copy()  # 创建默认值的副本
+            temp_default_data[key] = input_data[key] # 仅修改一项，如果没通过，一定是这一项有问题
+            temp_result = validate_pydantic(SettingsModel, temp_default_data)
+            if not temp_result.is_ok:
+                print(f"--Warning: invalid value for key '{key}', reset to default.")
+                new_input_data[key] = default_value
+                has_changes = True
+                need_backup = True
+                continue
+
+            # 该项正常，保留输入值
+            new_input_data[key] = input_data[key]
+
+        return has_changes, need_backup, new_input_data
+
         
 
     @staticmethod
-    def _save_to_file(model: SettingsModel) -> OpResult[None]:
-        """原子化保存到文件"""
+    def _save_to_file(data: dict[str, Any]) -> OpResult[None]:
+        """原子化保存字典到文件"""
         temp_path = None
         try:
             os.makedirs(TEMP_DIR, exist_ok=True)
-            data_json = model.model_dump_json(indent=4)
+            data_json = json.dumps(data, ensure_ascii=False, indent=4)
             
             with tempfile.NamedTemporaryFile(
                 mode='w', encoding='utf-8', dir=TEMP_DIR,
@@ -130,8 +181,8 @@ class SettingsManage:
                 os.remove(SETTINGS_PATH)
             # 创建默认配置
             default_model = SettingsModel()
-            result = cls._save_to_file(default_model)
-            if result.is_err:
+            result = cls._save_to_file(default_model.model_dump(mode='json'))
+            if not result.is_ok:
                 return err("Failed to reset configuration.", inner = result)
             # 更新内存配置
             cls._config = default_model
@@ -168,8 +219,8 @@ class SettingsManage:
             else:
                 return err("Failed to validate configuration.", inner = result)
             # 校验通过，保存到文件
-            result = cls._save_to_file(new_config)
-            if result.is_err:
+            result = cls._save_to_file(new_config.model_dump(mode='json'))
+            if not result.is_ok:
                 return err("Failed to save configuration.", inner = result)
             # 更新内存中的配置
             cls._config = new_config
