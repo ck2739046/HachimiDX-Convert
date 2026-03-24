@@ -3,7 +3,6 @@ import cv2
 import time
 import numpy as np
 from collections import defaultdict
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -242,12 +241,6 @@ def main(std_video_path: Path) -> OpResult[Path]:
         except Exception as e:
             print(f"Warning: Error adding audio to temp_track_video - {e}")
             os.rename(temp_track_video_path, final_track_video_path)
-
-        # 复制原始视频到输出目录
-        new_std_video_path = os.path.join(output_dir, f'{video_name}_standardized.mp4')
-        if os.path.exists(new_std_video_path):
-            os.remove(new_std_video_path)
-        shutil.copy(std_video_path, new_std_video_path)
 
         elapsed_time = time.time() - start_time
         print(f"追踪视频导出完成，总耗时{elapsed_time:.1f}s")
