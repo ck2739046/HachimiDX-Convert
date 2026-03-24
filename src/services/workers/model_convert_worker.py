@@ -23,10 +23,10 @@ from src.core.auto_convert.detect.note_definition import get_imgsz
 # 转换为 enigne 时，中间会转换出临时用的 onnx 文件
 # 这个要和正式的 onnx 文件区别开来
 models = [
-    "detect", PathManage.DETECT_PT_PATH, PathManage.DETECT_ONNX_PATH, PathManage.TEMP_DETECT_ONNX_PATH,
-    "obb", PathManage.OBB_PT_PATH, PathManage.OBB_ONNX_PATH, PathManage.TEMP_OBB_ONNX_PATH,
-    "classify", PathManage.CLS_BREAK_PT_PATH, PathManage.CLS_BREAK_ONNX_PATH, PathManage.TEMP_CLS_BREAK_ONNX_PATH,
-    "classify", PathManage.CLS_EX_PT_PATH, PathManage.CLS_EX_ONNX_PATH, PathManage.TEMP_CLS_EX_ONNX_PATH,
+    ("detect", PathManage.DETECT_PT_PATH, PathManage.DETECT_ONNX_PATH, PathManage.TEMP_DETECT_ONNX_PATH),
+    ("obb", PathManage.OBB_PT_PATH, PathManage.OBB_ONNX_PATH, PathManage.TEMP_OBB_ONNX_PATH),
+    ("classify", PathManage.CLS_BREAK_PT_PATH, PathManage.CLS_BREAK_ONNX_PATH, PathManage.TEMP_CLS_BREAK_ONNX_PATH),
+    ("classify", PathManage.CLS_EX_PT_PATH, PathManage.CLS_EX_ONNX_PATH, PathManage.TEMP_CLS_EX_ONNX_PATH),
 ]
 
 
@@ -148,5 +148,5 @@ if __name__ == "__main__":
         print("plz provide root, backend, detect_obb_batch, cls_batch in args")
         sys.exit(1)
 
-    result = main(sys.argv[2:])
+    result = main(sys.argv[2], sys.argv[3], sys.argv[4])
     sys.exit(0 if result else 1)
