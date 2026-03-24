@@ -5,15 +5,16 @@ import shutil
 import subprocess
 
 from ...schemas.op_result import OpResult, ok, err, print_op_result
-from src.core.schemas.media_config import MediaType, MediaConfig_Definition
+from src.core.schemas.media_config import MediaType
 from src.core.schemas.media_config import MediaConfig_Definitions as M_Defs
-from src.services import PathManage
 from src.services.pipeline import MediaPipeline
 
 
 
 
 def main(input_video: Path,
+         temp_output_path: Path,
+         final_output_path: Path,
          song_name: str,
          circle_center: Tuple[int, int],
          circle_radius: int,
@@ -29,6 +30,8 @@ def main(input_video: Path,
 
     Args:
         input_video(Path): 输入视频路径
+        temp_output_path(Path): 临时输出视频路径
+        final_output_path(Path): 最终输出视频路径
         song_name(str): 歌曲名称（不带扩展名）
         circle_center(Tuple[int, int]): 圆心坐标
         circle_radius(int): 圆半径
@@ -54,26 +57,24 @@ def main(input_video: Path,
         video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
 
-
-
-
         crop_size, crop_x, crop_y = calculate_crop_params(video_width, video_height, circle_center, circle_radius, target_res)
         
-        result = build_output_path(song_name)
-        if not result.is_ok:
-            return result
-        output_path = result.value
+        # 检查最终输出是否已经标准化
+        is_final_output_std = is_output_already_standardized(final_output_path, target_res, duration, start_sec, end_sec)
+        if is_final_output_std:
+            return ok(final_output_path) # 如果最终输出已经标准了，直接返回
 
-        is_output_std = is_output_already_standardized(output_path, target_res, duration, start_sec, end_sec)
+        # 检查临时输出是否已经标准化
+        is_output_std = is_output_already_standardized(temp_output_path, target_res, duration, start_sec, end_sec)
         if is_output_std:
-            return ok(output_path) # 如果输出已经标准了，直接返回
+            return ok(temp_output_path) # 如果输出已经标准了，直接返回
         
-        # 旧输出存在但无效时，需要先删除，否则 MediaModel 会拒绝已存在的 output_path。
-        if output_path.exists():
+        # 旧输出存在但无效时，先删除
+        if temp_output_path.exists():
             try:
-                output_path.unlink()
+                temp_output_path.unlink()
             except Exception as e:
-                return err(f"Failed to remove invalid standardized output: {output_path}", error_raw=e)
+                return err(f"Failed to remove invalid standardized output: {temp_output_path}", error_raw=e)
         
         is_input_std, need_crop, need_resize, need_trim_start, need_trim_end = is_input_already_standardized(crop_size, crop_x, crop_y, video_width, video_height, target_res, start_sec, end_sec)
         if is_input_std:
@@ -81,11 +82,11 @@ def main(input_video: Path,
             print("Input video already standardized, copy to output path.")
             try:
                 # 如果输出文件已存在，先删除
-                if output_path.exists():
-                    output_path.unlink()
+                if temp_output_path.exists():
+                    temp_output_path.unlink()
                 # 复制输入文件到输出路径
-                shutil.copy2(input_video, output_path)
-                return ok(output_path)
+                shutil.copy2(input_video, temp_output_path)
+                return ok(temp_output_path)
             except Exception as e:
                 return err(f"Failed to copy video file: {e}")
         
@@ -97,7 +98,7 @@ def main(input_video: Path,
         params = {
             M_Defs.media_type.key: media_type,
             M_Defs.input_path.key: str(input_video.resolve()),
-            M_Defs.output_path.key: str(output_path.resolve()),
+            M_Defs.output_path.key: str(temp_output_path.resolve()),
             M_Defs.duration.key: duration,
         }
 
@@ -169,12 +170,12 @@ def main(input_video: Path,
             raise Exception("FFmpeg processing failed", e)
         
         # 二次验证：确保输出文件存在且参数符合预期
-        if not is_output_already_standardized(output_path, target_res, duration, start_sec, end_sec, print_hint=False):
+        if not is_output_already_standardized(temp_output_path, target_res, duration, start_sec, end_sec, print_hint=False):
             return err("Output video is invalid after processing.")
         
         print("Process video...Ok")
 
-        return ok(output_path)
+        return ok(temp_output_path)
 
     except Exception as e:
         return err(f"Unexcepted error in process_video", error_raw = e)
@@ -257,19 +258,6 @@ def is_input_already_standardized(crop_size: int,
     
     return False, need_crop, need_resize, need_trim_start, need_trim_end
 
-
-
-
-
-
-
-def build_output_path(song_name: str) -> OpResult[Path]:
-    
-    output_dir = PathManage.TEMP_DIR
-    output_filename = f"{song_name}_std.mp4"
-    output_path = output_dir / output_filename
-
-    return ok(output_path.resolve())
 
 
 

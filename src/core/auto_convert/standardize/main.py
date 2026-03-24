@@ -66,9 +66,23 @@ def main(input_video: Path,
                 return err("Failed to manual adjust circle.", inner=result)
             circle_center, circle_radius = result.value
 
-        # 第三步：处理视频
+        # 第三步：构建输出路径
+        output_filename = f"{song_name}_std.mp4"
+        temp_output_path = PathManage.TEMP_DIR / output_filename
+
+        result = PathManage.get_main_output_dir()
+        if not result.is_ok:
+            return err(f"Failed to get main output dir", inner = result)
+        main_output_dir = result.value
+        
+        final_output_dir = main_output_dir / song_name
+        final_output_path = final_output_dir / output_filename
+
+        # 第四步：处理视频
         result = process_video.main(
             input_video=input_video,
+            temp_output_path=temp_output_path,
+            final_output_path=final_output_path,
             song_name=song_name,
             circle_center=circle_center,
             circle_radius=circle_radius,
@@ -80,22 +94,15 @@ def main(input_video: Path,
         )
         if not result.is_ok:
             return err("Failed to process video.", inner=result)
-        temp_output_path = result.value
+        std_output_path = result.value
 
-        # 第四步：从 temp 目录移动到正式输出目录
-        result = PathManage.get_main_output_dir()
-        if not result.is_ok:
-            return err(f"Failed to get main output dir", inner = result)
-        main_output_dir = result.value
-
-        target_dir = main_output_dir / song_name
-        final_output_path = target_dir / temp_output_path.name
-
-        try:
-            target_dir.mkdir(parents=True, exist_ok=True)
-            temp_output_path.replace(final_output_path)
-        except Exception as e:
-            return err(f"Failed to move output video to main output dir.", error_raw=e)
+        # 第五步：移动到正式输出目录
+        if std_output_path != final_output_path:
+            try:
+                final_output_dir.mkdir(parents=True, exist_ok=True)
+                std_output_path.replace(final_output_path)
+            except Exception as e:
+                return err(f"Failed to move output video to main output dir.", error_raw=e)
 
         return ok(final_output_path)
         
