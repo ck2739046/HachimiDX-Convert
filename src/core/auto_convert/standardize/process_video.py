@@ -68,6 +68,13 @@ def main(input_video: Path,
         if is_output_std:
             return ok(output_path) # 如果输出已经标准了，直接返回
         
+        # 旧输出存在但无效时，需要先删除，否则 MediaModel 会拒绝已存在的 output_path。
+        if output_path.exists():
+            try:
+                output_path.unlink()
+            except Exception as e:
+                return err(f"Failed to remove invalid standardized output: {output_path}", error_raw=e)
+        
         is_input_std, need_crop, need_resize, need_trim_start, need_trim_end = is_input_already_standardized(crop_size, crop_x, crop_y, video_width, video_height, target_res, start_sec, end_sec)
         if is_input_std:
             # 如果输入已经标准了，直接复制到输出路径
@@ -292,13 +299,13 @@ def is_output_already_standardized(output_path: Path,
         cap.release()
         
         if output_width != target_res or output_height != target_res:
-            raise(f'output resolution mismatch, expect {target_res}x{target_res}, got {output_width}x{output_height}.')
+            raise ValueError(f'output resolution mismatch, expect {target_res}x{target_res}, got {output_width}x{output_height}.')
         
         output_duration = output_total_frames / output_fps
         expect_duration = duration - start_sec if end_sec <=0 else end_sec - start_sec
         # 允许 0.5 秒误差
         if abs(output_duration - expect_duration) > 0.5:
-            raise(f'output duration mismatch, expect {expect_duration}s, got {output_duration}s.')
+            raise ValueError(f'output duration mismatch, expect {expect_duration}s, got {output_duration}s.')
 
         # 在二次确认时，不要打印这个提示，避免误导用户
         if print_hint:
