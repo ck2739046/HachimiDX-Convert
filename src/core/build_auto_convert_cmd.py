@@ -1,12 +1,14 @@
 import sys
 
 from src.services.path_manage import PathManage
+from src.services.settings_manage import SettingsManage
+
 from .schemas.auto_convert_model import AutoConvertModel
 from .schemas.auto_convert_config import AutoConvertConfig_Definitions as AC_Defs
 from .schemas.auto_convert_config import AutoConvertConfig_Definition
 from .schemas.op_result import OpResult, ok, err
-from src.services.settings_manage import SettingsManage
 from .schemas.settings_config import SettingsConfig_Definitions as SC_Defs
+from .tools.run_worker import build_cmd_head_python_exe
 
 
 def build_auto_convert_cmd(data: AutoConvertModel) -> OpResult[list[str]]:
@@ -21,8 +23,7 @@ def build_auto_convert_cmd(data: AutoConvertModel) -> OpResult[list[str]]:
     """
 
     try:
-        # call worker without buffer
-        cmd = [sys.executable, "-u", str(PathManage.AUTO_CONVERT_WORKER_PATH)]
+        cmd = build_cmd_head_python_exe(PathManage.AUTO_CONVERT_WORKER_PATH)
 
         # add common args
         cmd.append(f"--{AC_Defs.is_standardize_enabled.key}")

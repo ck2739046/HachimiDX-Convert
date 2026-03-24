@@ -1,7 +1,13 @@
 import sys
 from pathlib import Path
 
-root = str(Path(__file__).resolve().parents[3])
+if len(sys.argv) <= 1:
+    print("No args provided for auto_convert_worker. Exiting.")
+    sys.exit(1)
+
+# 第一个参数是项目根目录
+# 确保能正确使用间接导入
+root = str(Path(sys.argv[1]).resolve())
 if root not in sys.path:
     sys.path.insert(0, root)
 
@@ -32,4 +38,4 @@ def main(args: list[str]):
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main(sys.argv[2:]) # 跳过第一个参数（脚本路径）和第二个参数（root路径）
