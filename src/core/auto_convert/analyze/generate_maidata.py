@@ -58,7 +58,7 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
 
 
     with open(txt_path, 'a', encoding='utf-8') as f:
-        for (track_id, note_type, note_variant, position), time in notes_info.items():
+        for (track_id, note_type, note_variant, position), time in notes_info:
 
             note_time = check_note_time(time, track_id)
             if note_time is None:

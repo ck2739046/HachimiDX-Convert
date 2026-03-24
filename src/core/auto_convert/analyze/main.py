@@ -84,7 +84,8 @@ def merge_preprocess_info(std_video_path, tap_info, slide_info, touch_info, hold
     # 合并所有info
     all_notes_info = {**tap_info, **slide_info, **touch_info, **hold_info, **touch_hold_info}
     
-    # 按时间排序                                              kv = (key, value), kv[1] = value 
+    # 按时间排序                                              kv = (key, value), kv[1] = value
+    # 这里排序后是一个 list of tuple (key, value)
     sorted_notes = sorted(all_notes_info.items(), key=lambda kv: kv[1][0] if isinstance(kv[1], tuple) else kv[1])
 
     # 保存合并后的整体预处理数据到文件
