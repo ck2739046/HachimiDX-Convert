@@ -51,6 +51,14 @@ def _fail(message: str) -> bool:
     return False
 
 
+def _get_cfg(cfg: dict[str, str], key: str, parser=None):
+    raw = cfg.get(key)
+    if raw is None:
+        return None
+    if parser is None:
+        return raw
+    return parser(raw)
+
 
 def main(args: list[str]) -> bool:
     try:
@@ -65,59 +73,55 @@ def main(args: list[str]) -> bool:
 
         if is_standardize_enabled:
             result = standardize_main(
-                input_video=Path(cfg["standardize_input_video_path"]),
-                song_name=cfg["song_name"],
-                video_mode=cfg["video_mode"],
-                media_type=MediaType(cfg["media_type"]),
-                duration=float(cfg["duration"]),
-                start_sec=float(cfg["start_sec"]),
-                end_sec=float(cfg["end_sec"]),
-                skip_detect_circle=_as_bool(cfg["skip_detect_circle"]),
-                target_res=int(cfg["target_res"]),
+                input_video=_get_cfg(cfg, "standardize_input_video_path", Path),
+                song_name=_get_cfg(cfg, "song_name"),
+                video_mode=_get_cfg(cfg, "video_mode"),
+                media_type=_get_cfg(cfg, "media_type", MediaType),
+                duration=_get_cfg(cfg, "duration", float),
+                start_sec=_get_cfg(cfg, "start_sec", float),
+                end_sec=_get_cfg(cfg, "end_sec", float),
+                skip_detect_circle=_get_cfg(cfg, "skip_detect_circle", _as_bool),
+                target_res=_get_cfg(cfg, "target_res", int),
             )
             if not result.is_ok:
                 return _fail(print_op_result(result))
             std_video_path = result.value
 
-
-
         if is_detect_enabled:
-            std_video_for_detect = std_video_path or Path(cfg["std_video_path_detect"])
+            std_video_for_detect = std_video_path or _get_cfg(cfg, "std_video_path_detect", Path)
 
             result = detect_main(
                 std_video_path=std_video_for_detect,
-                batch_detect=int(cfg["predict_batch_size_detect_obb"]),
-                batch_cls=int(cfg["predict_batch_size_classify"]),
-                inference_device=cfg["inference_device"],
-                detect_model_path=Path(cfg["detect_model_path"]),
-                obb_model_path=Path(cfg["obb_model_path"]),
-                cls_ex_model_path=Path(cfg["cls_ex_model_path"]),
-                cls_break_model_path=Path(cfg["cls_break_model_path"]),
-                skip_detect=_as_bool(cfg["skip_detect"]),
-                skip_cls=_as_bool(cfg["skip_cls"]),
-                skip_export_tracked_video=_as_bool(cfg["skip_export_tracked_video"]),
+                batch_detect=_get_cfg(cfg, "predict_batch_size_detect_obb", int),
+                batch_cls=_get_cfg(cfg, "predict_batch_size_classify", int),
+                inference_device=_get_cfg(cfg, "inference_device"),
+                detect_model_path=_get_cfg(cfg, "detect_model_path", Path),
+                obb_model_path=_get_cfg(cfg, "obb_model_path", Path),
+                cls_ex_model_path=_get_cfg(cfg, "cls_ex_model_path", Path),
+                cls_break_model_path=_get_cfg(cfg, "cls_break_model_path", Path),
+                skip_detect=_get_cfg(cfg, "skip_detect", _as_bool),
+                skip_cls=_get_cfg(cfg, "skip_cls", _as_bool),
+                skip_export_tracked_video=_get_cfg(cfg, "skip_export_tracked_video", _as_bool),
             )
             if not result.is_ok:
                 return _fail(print_op_result(result))
             std_video_path = std_video_for_detect
 
-
-
         if is_analyze_enabled:
-            std_video_for_analyze = std_video_path or Path(cfg["std_video_path_analyze"])
+            std_video_for_analyze = std_video_path or _get_cfg(cfg, "std_video_path_analyze", Path)
 
             result = analyze_main(
                 std_video_path=std_video_for_analyze,
-                bpm=float(cfg["bpm"]),
-                chart_lv=int(cfg["chart_lv"]),
-                base_denominator=int(cfg["base_denominator"]),
-                duration_denominator=int(cfg["duration_denominator"]),
+                bpm=_get_cfg(cfg, "bpm", float),
+                chart_lv=_get_cfg(cfg, "chart_lv", int),
+                base_denominator=_get_cfg(cfg, "base_denominator", int),
+                duration_denominator=_get_cfg(cfg, "duration_denominator", int),
             )
             if not result.is_ok:
                 return _fail(print_op_result(result))
 
         return True
-    
+
     except Exception as e:
         return _fail(str(e))
 
