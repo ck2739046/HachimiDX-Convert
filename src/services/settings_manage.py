@@ -194,6 +194,12 @@ class SettingsManage:
     def get(cls, key: str) -> OpResult[Any]:
         """获取配置项"""
         with cls._lock:
+            # worker 子进程可能未走全局服务初始化，这里做懒初始化兜底。
+            if cls._config is None:
+                init_res = cls.init()
+                if not init_res.is_ok:
+                    return err("Failed to initialize settings before get", inner=init_res)
+
             try:
                 val = getattr(cls._config, key)
                 return ok(val)
