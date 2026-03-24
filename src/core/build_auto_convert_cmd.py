@@ -145,12 +145,12 @@ def _get_detect_model_paths() -> OpResult[list]:
     paths = res.value
 
     cmd.append(f"--detect_model_path")
-    cmd.append(str(paths[0]))
+    cmd.append(str(paths["detect"]))
     cmd.append(f"--obb_model_path")
-    cmd.append(str(paths[1]))
+    cmd.append(str(paths["obb"]))
     cmd.append(f"--cls_break_model_path")
-    cmd.append(str(paths[2]))
+    cmd.append(str(paths["cls_break"]))
     cmd.append(f"--cls_ex_model_path")
-    cmd.append(str(paths[3]))
+    cmd.append(str(paths["cls_ex"]))
 
     return ok(cmd)

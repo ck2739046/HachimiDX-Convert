@@ -39,34 +39,34 @@ class SettingsConfig_Definitions:
     )
 
     @staticmethod
-    def get_path_by_backend(backend) -> OpResult[list]:
+    def get_path_by_backend(backend) -> OpResult[dict]:
         if backend == "CPU":
-            paths = [
-                PathManage.DETECT_PT_PATH,
-                PathManage.OBB_PT_PATH,
-                PathManage.CLS_BREAK_PT_PATH,
-                PathManage.CLS_EX_PT_PATH,
-            ]
+            paths = {
+                "detect": PathManage.DETECT_PT_PATH,
+                "obb": PathManage.OBB_PT_PATH,
+                "cls_break": PathManage.CLS_BREAK_PT_PATH,
+                "cls_ex": PathManage.CLS_EX_PT_PATH,
+            }
         elif backend == "TensorRT":
-            paths = [
-                PathManage.DETECT_ENGINE_PATH,
-                PathManage.OBB_ENGINE_PATH,
-                PathManage.CLS_BREAK_ENGINE_PATH,
-                PathManage.CLS_EX_ENGINE_PATH,
-            ]
+            paths = {
+                "detect": PathManage.DETECT_ENGINE_PATH,
+                "obb": PathManage.OBB_ENGINE_PATH,
+                "cls_break": PathManage.CLS_BREAK_ENGINE_PATH,
+                "cls_ex": PathManage.CLS_EX_ENGINE_PATH,
+            }
         elif backend == "DirectML":
-            paths = [
-                PathManage.DETECT_ONNX_PATH,
-                PathManage.OBB_ONNX_PATH,
-                PathManage.CLS_BREAK_ONNX_PATH,
-                PathManage.CLS_EX_ONNX_PATH,
-            ]
+            paths = {
+                "detect": PathManage.DETECT_ONNX_PATH,
+                "obb": PathManage.OBB_ONNX_PATH,
+                "cls_break": PathManage.CLS_BREAK_ONNX_PATH,
+                "cls_ex": PathManage.CLS_EX_ONNX_PATH,
+            }
         else:
-            paths = []
+            paths = {}
 
         if not paths:
             return err(f"Unknown model backend: {backend}")
-        for path in paths:
+        for path in paths.values():
             if not path.exists():
                 return err(f"Model file not found for backend {backend}: {path}")
         return ok(paths)
