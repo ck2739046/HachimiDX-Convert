@@ -285,6 +285,7 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
                 arc_next = next_id
                 arc_end = next_id
                 j = i + 2
+                reverse_turn = False
                 while j < len(A_zones):
                     check_id = int(A_zones[j][1])
                     prev_id = int(A_zones[j - 1][1])
@@ -294,10 +295,17 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
                         arc_end = check_id
                         j += 1
                     else:
+                        # 连续但方向变化，说明遇到折返，下一段应从拐点重新开始
+                        if is_consec_next and dir_next != direction:
+                            reverse_turn = True
                         break
                 # 记录这个圆弧
                 arc_segments.append(('arc', (arc_start, arc_next, arc_end)))
-                i = j  # 跳过已处理的圆弧部分
+
+                if reverse_turn:
+                    i = j - 1 # 折返时保留拐点作为下一段起点；否则正常跳过
+                else:
+                    i = j # 跳过已处理的圆弧部分
                 continue
 
         # 不是圆弧的一部分，作为单独的点
@@ -306,17 +314,36 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
 
 
     # 将圆弧和单独的点组合成最终语法
-    syntax_parts = []
+    movement_syntax = ''
+    last_end_id = None
     for seg_type, seg_data in arc_segments:
+
         if seg_type == 'arc':
             start_id, next_id, end_id = seg_data
             start_position, next_position, end_position = f"A{start_id}", f"A{next_id}", f"A{end_id}"
             arc_syntax = get_outer_rotation_syntax(start_position, next_position, end_position)
-            syntax_parts.append(f"{start_id}{arc_syntax}")
+            new_syntax = f"{start_id}{arc_syntax}"
         else:  # single
-            syntax_parts.append(str(seg_data))
+            new_syntax = str(seg_data)
+            end_id = seg_data
 
-    movement_syntax = '-'.join(syntax_parts)
+        # 特例：首个语法直接添加，不需要连接符
+        if not movement_syntax:
+            movement_syntax = new_syntax
+            last_end_id = end_id
+            continue
+
+        # 特例：弧形折返，前一段终点与后一段起点相同，直接拼接
+        # 例如 6<3 + >6 -> 6<3>6
+        if seg_type == 'arc' and last_end_id == start_id:
+            movement_syntax += arc_syntax
+            last_end_id = end_id
+            continue
+        
+        # 普通场景
+        movement_syntax += f"-{new_syntax}"
+        last_end_id = end_id
+
     movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
 
     # print(f'{" ".join(azone for azone in A_zones)} -> {movement_syntax}')
