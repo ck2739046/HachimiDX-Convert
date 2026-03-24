@@ -119,7 +119,7 @@ def main(std_video_path: Path) -> OpResult[Path]:
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 
                 # 绘制标签
-                label = f'{note_type.name}.{note_variant} ID:{track_id}'
+                label = f'{note_type.name}.{note_variant.name} ID:{track_id}'
                 label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
                 
                 if is_obb(note_type):
@@ -211,11 +211,11 @@ def main(std_video_path: Path) -> OpResult[Path]:
         ffmpeg_args = [
             '-y', '-hide_banner', '-stats', '-loglevel', 'error',
             '-i', temp_track_video_path, # 无声的跟踪视频
-            '-i', std_video_path,  # 原始视频（有音频）
+            '-i', str(std_video_path),  # 原始视频（有音频）
             '-c:v', 'libx264',  '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
-            '-c:a', 'copy',    # 复制音频流
+            '-c:a', 'aac', '-b:a', '192k',  # 转为AAC
             '-map', '0:v:0',   # 使用第一个输入的视频流
-            '-map', '1:a:0',   # 使用第二个输入的音频流
+            '-map', '1:a:0?',  # 使用第二个输入的音频流 (允许无音频)
             '-shortest',       # 以最短的流为准
             final_track_video_path
         ]
@@ -237,11 +237,12 @@ def main(std_video_path: Path) -> OpResult[Path]:
             if result.returncode == 0:
                 os.remove(temp_track_video_path)
             else:
-                raise Exception("FFmpeg processing failed")
+                stderr = (result.stderr or '').strip()
+                raise Exception(f"FFmpeg processing failed: {stderr}")
         except Exception as e:
             print(f"Warning: Error adding audio to temp_track_video - {e}")
             os.rename(temp_track_video_path, final_track_video_path)
-        
+
         # 复制原始视频到输出目录
         new_std_video_path = os.path.join(output_dir, f'{video_name}_standardized.mp4')
         if os.path.exists(new_std_video_path):
