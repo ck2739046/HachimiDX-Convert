@@ -54,11 +54,16 @@ class PathManage:
     CLS_BREAK_ENGINE_PATH: Path = MODELS_DIR / "cls-break.engine"
     CLS_EX_ENGINE_PATH: Path = MODELS_DIR / "cls-ex.engine"
 
-    DETECT_ONNX_PATH: Path = MODELS_DIR / "detect.onnx"
-    OBB_ONNX_PATH: Path = MODELS_DIR / "obb.onnx"
-    CLS_BREAK_ONNX_PATH: Path = MODELS_DIR / "cls-break.onnx"
-    CLS_EX_ONNX_PATH: Path = MODELS_DIR / "cls-ex.onnx"
-    
+    DETECT_ONNX_PATH: Path = MODELS_DIR / "detect_a.onnx"
+    OBB_ONNX_PATH: Path = MODELS_DIR / "obb_a.onnx"
+    CLS_BREAK_ONNX_PATH: Path = MODELS_DIR / "cls-break_a.onnx"
+    CLS_EX_ONNX_PATH: Path = MODELS_DIR / "cls-ex_a.onnx"
+
+    TEMP_DETECT_ONNX_PATH: Path = MODELS_DIR / "detect.onnx"
+    TEMP_OBB_ONNX_PATH: Path = MODELS_DIR / "obb.onnx"
+    TEMP_CLS_BREAK_ONNX_PATH: Path = MODELS_DIR / "cls-break.onnx"
+    TEMP_CLS_EX_ONNX_PATH: Path = MODELS_DIR / "cls-ex.onnx"
+
 
 
     @classmethod
