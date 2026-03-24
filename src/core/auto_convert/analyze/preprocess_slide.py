@@ -186,7 +186,9 @@ def preprocess_slide_tail_data(shared_context: SharedContext):
         
         # 检查通过，添加到slide_data
         note_variant = note_geometry_list[0].note_variant
-        positions = [x[5] for x in valid_track_path]
+        positions = [x[3] for x in valid_track_path]
+        if not positions or len(positions[0]) < 2:
+            continue
         position = positions[0][1] # A1 -> 1
         key = (track_id, note_type, note_variant, position)
 

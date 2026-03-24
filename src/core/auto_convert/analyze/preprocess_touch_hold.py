@@ -88,7 +88,7 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
             continue
 
         # 检验方位一致
-        positions = [x[5] for x in valid_track_path]
+        positions = [x[1] for x in valid_track_path]
         if len(set(positions)) != 1:
             print(f"preprocess_touch_hold_data: positions not consistent for track_id {track_id}")
             continue
@@ -111,7 +111,7 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
         touch_hold_data[key] = path
 
     if not touch_hold_data:
-        print("preprocess_touch_hold_data: no touch data")
+        print("preprocess_touch_hold_data: no touch hold data")
         touch_hold_data = {}
     
     cap.release()
