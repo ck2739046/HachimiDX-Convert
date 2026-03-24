@@ -162,7 +162,7 @@ def main(input_video: Path,
             raise Exception("FFmpeg processing failed", e)
         
         # 二次验证：确保输出文件存在且参数符合预期
-        if not is_output_already_standardized(output_path, target_res, duration, start_sec, end_sec):
+        if not is_output_already_standardized(output_path, target_res, duration, start_sec, end_sec, print_hint=False):
             return err("Output video is invalid after processing.")
         
         print("Process video...Ok")
@@ -274,7 +274,8 @@ def is_output_already_standardized(output_path: Path,
                                    target_res: int,
                                    duration: float,
                                    start_sec: float,
-                                   end_sec: float
+                                   end_sec: float,
+                                   print_hint: bool = True
                                   ) -> bool:
     
     """如果视频已存在，检查分辨率+时长是否符合要求，如果符合则视为已标准化"""
@@ -299,7 +300,9 @@ def is_output_already_standardized(output_path: Path,
         if abs(output_duration - expect_duration) > 0.5:
             raise(f'output duration mismatch, expect {expect_duration}s, got {output_duration}s.')
 
-        print(f"Standardized video already exists")
+        # 在二次确认时，不要打印这个提示，避免误导用户
+        if print_hint:
+            print(f"Standardized video already exists")
         return True  
         
     except Exception as e:
