@@ -8,7 +8,7 @@ from .schemas.auto_convert_config import AutoConvertConfig_Definitions as AC_Def
 from .schemas.auto_convert_config import AutoConvertConfig_Definition
 from .schemas.op_result import OpResult, ok, err
 from .schemas.settings_config import SettingsConfig_Definitions as SC_Defs
-from .tools.run_worker import build_cmd_head_python_exe
+from .build_worker_cmd import build_cmd_head_python_exe
 
 
 def build_auto_convert_cmd(data: AutoConvertModel) -> OpResult[list[str]]:
