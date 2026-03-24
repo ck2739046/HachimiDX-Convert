@@ -10,6 +10,7 @@ src/resources/ffmpeg/
 src/resources/models/
 temp.py
 
+data/temp
 data/settings.json
 data/settings.json.bak
-data/1-output/
+data/111-output/

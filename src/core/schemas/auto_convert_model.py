@@ -36,7 +36,7 @@ class AutoConvertModel(BaseModel):
 
 	start_sec: Optional[float] = Field(default=AC_Defs.start_sec.default, ge=AC_Defs.start_sec.constraints["ge"])
 
-	end_sec: Optional[float] = Field(default=AC_Defs.end_sec.default, ge=AC_Defs.end_sec.constraints["ge"])
+	end_sec: Optional[float] = Field(default=AC_Defs.end_sec.default)
 
 	skip_detect_circle: Optional[bool] = Field(default=AC_Defs.skip_detect_circle.default)
 
@@ -166,15 +166,15 @@ class AutoConvertModel(BaseModel):
 			raise ValueError(f"duration must be greater than 0, got {self.duration}")
 		
 		if set_end:
-			self.end = self.duration + self.end_sec if self.end_sec < 0 else self.end_sec
+			self.end_sec = self.duration + self.end_sec if self.end_sec < 0 else self.end_sec
 		
 		# 确保 start < end < duration
 		if set_start and self.start_sec >= self.duration:
-			raise ValueError("'start' must be less than 'duration'.")
-		if set_end and self.end >= self.duration:
-			raise ValueError("'end' must be less than 'duration'.")
-		if set_start and set_end and self.start_sec >= self.end:
-			raise ValueError("'start' must be less than 'end'.")
+			raise ValueError("'start_sec' must be less than 'duration'.")
+		if set_end and self.end_sec >= self.duration:
+			raise ValueError("'end_sec' must be less than 'duration'.")
+		if set_start and set_end and self.start_sec >= self.end_sec:
+			raise ValueError("'start_sec' must be less than 'end_sec'.")
 
         # 统一设置为三位小数/None
 		self.start_sec = round(self.start_sec, 3) if set_start else None

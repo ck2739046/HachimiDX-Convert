@@ -131,8 +131,7 @@ class AutoConvertConfig_Definitions:
 		key="end_sec",
 		type="float",
 		group="standardize",
-		default=None,
-		constraints={"ge": 0.0}
+		default=None
 	)
 
 	skip_detect_circle = AutoConvertConfig_Definition(
