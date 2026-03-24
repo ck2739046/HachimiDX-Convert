@@ -6,15 +6,15 @@ from ..detect.note_definition import *
 
 
 
-def get_suffix(note_varient: NoteVariant):
+def get_suffix(note_variant: NoteVariant):
 
-    if note_varient == NoteVariant.NORMAL:
+    if note_variant == NoteVariant.NORMAL:
         suffix = 'h'
-    elif note_varient == NoteVariant.BREAK:
+    elif note_variant == NoteVariant.BREAK:
         suffix = 'bh'
-    elif note_varient == NoteVariant.EX:
+    elif note_variant == NoteVariant.EX:
         suffix = 'xh'
-    elif note_varient == NoteVariant.BREAK_EX:
+    elif note_variant == NoteVariant.BREAK_EX:
         suffix = 'bxh'
     else:
         suffix = '?'
@@ -65,9 +65,9 @@ def analyze_touch_hold_time(shared_context, touch_hold_data):
 
         duration = median_percent - mean_dist
         
-        track_id, note_type, note_varient, position = key
-        new_position = f"{position}{get_suffix(note_varient)}"
-        new_key = (track_id, note_type, note_varient, new_position)
+        track_id, note_type, note_variant, position = key
+        new_position = f"{position}{get_suffix(note_variant)}"
+        new_key = (track_id, note_type, note_variant, new_position)
 
         touch_hold_info[new_key] = (mean_dist, duration)
 

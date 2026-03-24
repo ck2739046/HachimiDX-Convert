@@ -11,7 +11,7 @@ def preprocess_hold_data(shared_context: SharedContext):
     '''
     返回格式:
     dict{
-        key: (track_id, note_type, note_varient, note_position),
+        key: (track_id, note_type, note_variant, note_position),
         value: note path
         [
             {
@@ -99,9 +99,9 @@ def preprocess_hold_data(shared_context: SharedContext):
             continue
         
         # 检查通过，添加到hold_data
-        note_varient = note_geometry_list[0].note_variant
+        note_variant = note_geometry_list[0].note_variant
         position = positions[0]
-        key = (track_id, note_type, note_varient, position)
+        key = (track_id, note_type, note_variant, position)
 
         path = []
         for frame_num, position, dist_head, dist_tail in valid_track_path:

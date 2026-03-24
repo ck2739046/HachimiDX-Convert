@@ -64,7 +64,7 @@ def main(std_video_path: Path) -> OpResult[Path]:
                 frame_tracks[note.frame].append({
                     'track_id': track_id,
                     'note_type': note_type,
-                    'note_varient': note.note_varient,
+                    'note_variant': note.note_variant,
                     'x1': note.x1,
                     'y1': note.y1,
                     'x2': note.x2,
@@ -99,7 +99,7 @@ def main(std_video_path: Path) -> OpResult[Path]:
             for track in current_tracks:
                 track_id = track['track_id']
                 note_type = track['note_type']
-                note_varient = track['note_varient']
+                note_variant = track['note_variant']
                 color = get_color_for_id(track_id)
                 
                 # 记录当前帧中存在的轨迹
@@ -119,7 +119,7 @@ def main(std_video_path: Path) -> OpResult[Path]:
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                 
                 # 绘制标签
-                label = f'{note_type.name}.{note_varient} ID:{track_id}'
+                label = f'{note_type.name}.{note_variant} ID:{track_id}'
                 label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
                 
                 if is_obb(note_type):

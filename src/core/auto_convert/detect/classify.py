@@ -317,8 +317,8 @@ def _classify_image_batch(consumed_batch, cls_ex_model, cls_break_model, inferen
 
 def _merge_cls_into_track_results(track_results, cls_results_all):
 
-    # 根据分类结果 is_ex, is_break 计算 note_varient，按 track_id 分组
-    note_varient_by_track = defaultdict(list)
+    # 根据分类结果 is_ex, is_break 计算 note_variant，按 track_id 分组
+    note_variant_by_track = defaultdict(list)
     for cls_result in cls_results_all:
         track_id = cls_result['track_id']
         is_ex = cls_result['is_ex']
@@ -326,38 +326,38 @@ def _merge_cls_into_track_results(track_results, cls_results_all):
         note_type = cls_result['note_type']
         
         if is_break and is_ex:
-            note_varient = NoteVariant.BREAK_EX
+            note_variant = NoteVariant.BREAK_EX
         elif is_ex and not is_break:
-            note_varient = NoteVariant.EX
+            note_variant = NoteVariant.EX
         elif not is_ex and is_break:
-            note_varient = NoteVariant.BREAK
+            note_variant = NoteVariant.BREAK
         else:
-            note_varient = NoteVariant.NORMAL
+            note_variant = NoteVariant.NORMAL
         
-        note_varient_by_track[track_id].append((note_varient, note_type))
+        note_variant_by_track[track_id].append((note_variant, note_type))
     
     # 每个音符有多个候选点和分类结果，采用最多的类别作为最终结果
-    for track_id, value in note_varient_by_track.items():
-        note_varients = [v[0] for v in value]
+    for track_id, value in note_variant_by_track.items():
+        note_variants = [v[0] for v in value]
         note_type = value[0][1] # 同一轨迹的note_type是一样的，取第一个就行了
-        if len(note_varients) == 0:
+        if len(note_variants) == 0:
             continue
         
-        # 统计每个note_varient的出现次数
+        # 统计每个note_variant的出现次数
         counts = {}
-        for note_varient in note_varients:
-            counts[note_varient] = counts.get(note_varient, 0) + 1
+        for note_variant in note_variants:
+            counts[note_variant] = counts.get(note_variant, 0) + 1
         
         max_count = max(counts.values())
         most_common = [k for k, v in counts.items() if v == max_count]
         
         if len(most_common) == 1:
             # 有明确的一个最多数
-            final_note_varient = most_common[0]
+            final_note_variant = most_common[0]
         else:
             # 没有明确的多数，默认 normal
-            final_note_varient = NoteVariant.NORMAL
-            print(f"警告: 轨迹 {track_id} 的采样点分类结果不一致，采用默认分类 {final_note_varient.name}")
+            final_note_variant = NoteVariant.NORMAL
+            print(f"警告: 轨迹 {track_id} 的采样点分类结果不一致，采用默认分类 {final_note_variant.name}")
 
         # 更新track_results的note_variant
         key = (track_id, note_type)
@@ -365,6 +365,6 @@ def _merge_cls_into_track_results(track_results, cls_results_all):
             continue
         note_geometry_list = track_results[key]
         for note_geometry in note_geometry_list:
-            note_geometry.note_variant = final_note_varient
+            note_geometry.note_variant = final_note_variant
 
     return track_results

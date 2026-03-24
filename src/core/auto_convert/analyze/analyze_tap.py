@@ -5,15 +5,15 @@ from ..detect.note_definition import *
 
 
 
-def get_suffix(note_varient: NoteVariant):
+def get_suffix(note_variant: NoteVariant):
 
-    if note_varient == NoteVariant.NORMAL:
+    if note_variant == NoteVariant.NORMAL:
         suffix = ''
-    elif note_varient == NoteVariant.BREAK:
+    elif note_variant == NoteVariant.BREAK:
         suffix = 'b'
-    elif note_varient == NoteVariant.EX:
+    elif note_variant == NoteVariant.EX:
         suffix = 'x'
-    elif note_varient == NoteVariant.BREAK_EX:
+    elif note_variant == NoteVariant.BREAK_EX:
         suffix = 'bx'
     else:
         suffix = '?'
@@ -48,9 +48,9 @@ def analyze_tap_time(shared_context, tap_data):
 
         mean = np.mean(times)
 
-        track_id, note_type, note_varient, position = key
-        new_position = f"{position}{get_suffix(note_varient)}"
-        new_key = (track_id, note_type, note_varient, new_position)
+        track_id, note_type, note_variant, position = key
+        new_position = f"{position}{get_suffix(note_variant)}"
+        new_key = (track_id, note_type, note_variant, new_position)
 
         tap_info[new_key] = mean
 

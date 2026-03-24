@@ -458,8 +458,8 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A
 def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, delay_index=0.25):
     '''
     合并slide头尾信息
-    输入: for (head_track_id, note_type, note_varient, head_position), head_end_time in slide_head_info.items():
-          for (tail_track_id, note_type, note_varient, tail_start_position): (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+    输入: for (head_track_id, note_type, note_variant, head_position), head_end_time in slide_head_info.items():
+          for (tail_track_id, note_type, note_variant, tail_start_position): (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
 
     将这两组进行匹配：
     delay = tail_start_time - head_end_time
@@ -471,24 +471,24 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
     返回格式:
     dict{
         # 匹配的head_tail组合
-        key: (head_track_id, note_type, note_varient, full_movement_syntax),
+        key: (head_track_id, note_type, note_variant, full_movement_syntax),
         value: (time, duration)
 
         # 未匹配的head
-        key: (head_track_id, note_type, note_varient, head_position),
+        key: (head_track_id, note_type, note_variant, head_position),
         value: time
     }
     '''
 
-    def get_suffix(note_varient: NoteVariant):
+    def get_suffix(note_variant: NoteVariant):
 
-        if note_varient == NoteVariant.NORMAL:
+        if note_variant == NoteVariant.NORMAL:
             suffix = ''
-        elif note_varient == NoteVariant.BREAK:
+        elif note_variant == NoteVariant.BREAK:
             suffix = 'b'
-        elif note_varient == NoteVariant.EX:
+        elif note_variant == NoteVariant.EX:
             suffix = 'x'
-        elif note_varient == NoteVariant.BREAK_EX:
+        elif note_variant == NoteVariant.BREAK_EX:
             suffix = 'bx'
         else:
             suffix = '?'
@@ -516,17 +516,17 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
     # 先按位置分组head数据
     # 这样后续tail查找head时，只会在对应位置的head中查找，减少计算量
     head_by_position = defaultdict(list)
-    for (track_id, note_type, note_varient, head_position), head_end_time in slide_head_info.items():
-        # 此处的head_position是带有varient后缀的，如 1bx，需要去除
+    for (track_id, note_type, note_variant, head_position), head_end_time in slide_head_info.items():
+        # 此处的head_position是带有variant后缀的，如 1bx，需要去除
         new_position = str(head_position[0])
-        head_by_position[new_position].append((track_id, note_type, note_varient, head_position, head_end_time))
+        head_by_position[new_position].append((track_id, note_type, note_variant, head_position, head_end_time))
 
     # 记录哪些head_track_id被匹配了，使用set避免重复
     matched_head_track_ids = set()
 
     # 遍历所有tail，寻找匹配的head
     processed_tails = 0
-    for (tail_track_id, tail_note_type, tail_note_varient, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+    for (tail_track_id, tail_note_type, tail_note_variant, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
         processed_tails += 1
 
         # 先看看有没有任何与tail位置相同的head
@@ -539,7 +539,7 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
         # 条件2：与std_delay最接近
         best_head = None
         best_delay_diff = float('inf')
-        for head_track_id, head_note_type, head_note_varient, head_position, head_end_time in head_by_position[tail_start_position]:
+        for head_track_id, head_note_type, head_note_variant, head_position, head_end_time in head_by_position[tail_start_position]:
             # 条件1
             delay = tail_start_time - head_end_time
             if not (min_delay < delay < max_delay):
@@ -548,22 +548,22 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
             delay_diff = abs(delay - std_delay)
             if delay_diff < best_delay_diff:
                 best_delay_diff = delay_diff
-                best_head = (head_track_id, head_note_type, head_note_varient, head_position, head_end_time)
+                best_head = (head_track_id, head_note_type, head_note_variant, head_position, head_end_time)
 
         if best_head is None:
             print(f"[{tail_track_id}] Tail not match: No heads match delay at position {tail_start_position}")
             continue
 
         # 找到了匹配的head，进行记录
-        head_track_id, head_note_type, head_note_varient, head_position, head_end_time = best_head
+        head_track_id, head_note_type, head_note_variant, head_position, head_end_time = best_head
         matched_head_track_ids.add(head_track_id)
 
         # # 由于未知原因，星星时长总是长了1/16拍，进行修正
         # tail_end_time -= one_beat_Msec / 16
 
         # 写入final_slide_info
-        full_movement_syntax = f"{tail_start_position}{get_suffix(head_note_varient)}{tail_movement_syntax}{get_suffix(tail_note_varient)}"
-        key = (head_track_id, head_note_type, head_note_varient, full_movement_syntax)
+        full_movement_syntax = f"{tail_start_position}{get_suffix(head_note_variant)}{tail_movement_syntax}{get_suffix(tail_note_variant)}"
+        key = (head_track_id, head_note_type, head_note_variant, full_movement_syntax)
         duration = tail_end_time - tail_start_time
         value = (head_end_time, duration)
         final_slide_info[key] = value
@@ -571,10 +571,10 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
 
 
     # 将未匹配的head也写入final_slide_info
-    for (head_track_id, head_note_type, head_note_varient, head_position), head_end_time in slide_head_info.items():
+    for (head_track_id, head_note_type, head_note_variant, head_position), head_end_time in slide_head_info.items():
         if head_track_id not in matched_head_track_ids:
             full_movement_syntax = f"{head_position}$"
-            key = (head_track_id, head_note_type, head_note_varient, full_movement_syntax)
+            key = (head_track_id, head_note_type, head_note_variant, full_movement_syntax)
             value = head_end_time
             final_slide_info[key] = value
 

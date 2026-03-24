@@ -49,7 +49,7 @@ def estimate_touch_DefaultMsec(shared_context, touch_data):
 
     DefaultMsecs = []
 
-    for (track_id, note_type, note_varient, note_position), path in touch_data.items():
+    for (track_id, note_type, note_variant, note_position), path in touch_data.items():
 
         # 过滤掉斜率较小的轨迹点
         big_slope_points = []

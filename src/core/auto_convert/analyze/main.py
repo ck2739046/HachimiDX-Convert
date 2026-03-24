@@ -93,13 +93,13 @@ def merge_preprocess_info(std_video_path, tap_info, slide_info, touch_info, hold
         os.remove(note_preprocess_result_path)
 
     with open(note_preprocess_result_path, 'w', encoding='utf-8') as f:
-        for (track_id, note_type, note_varient, position), time in sorted_notes:
+        for (track_id, note_type, note_variant, position), time in sorted_notes:
             # 将time元组转为字符串
             if isinstance(time, tuple):
                 time = ','.join(str(item) for item in time)
 
-            # 写入格式：track_id, note_type, note_varient, position, time
-            f.write(f"{track_id}, {note_type}, {note_varient}, {position}, {time}\n")
+            # 写入格式：track_id, note_type, note_variant, position, time
+            f.write(f"{track_id}, {note_type}, {note_variant}, {position}, {time}\n")
 
     print(f"note preprocess data saved to {note_preprocess_result_path}")
 
