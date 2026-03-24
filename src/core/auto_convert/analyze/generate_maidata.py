@@ -281,7 +281,7 @@ def check_note_time(time, track_id):
 def parse_note_duration(one_beat_Msec, note_type, time, base_denominator, duration_denominator) -> str:
 
     # 提取 length 信息
-    note_length = time[-1] - time[-2]
+    note_length = time[-1]
     length_beat = note_length / one_beat_Msec
 
     # 分类处理
