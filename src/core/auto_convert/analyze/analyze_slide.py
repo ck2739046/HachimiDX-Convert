@@ -69,13 +69,15 @@ def analyze_slide_tail(shared_context, slide_tail_data):
         # 计算运动语法
         # 期望的返回: >5 / <3 / -7
         movement_syntax = analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoint_on_judgeline)
-        if movement_syntax is None:
+        if not movement_syntax:
+            print(f"analyze_slide_tail: failed to analyze movement syntax for track id {key[0]}")
             continue
         end_position = 'A' + movement_syntax[-1]
 
         # 计算持续时间
         start_time, end_time = analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A_zone_endpoint_on_judgeline)
         if start_time is None or end_time is None:
+            print(f"analyze_slide_tail: failed to analyze start/end time for track id {key[0]}")
             continue
 
         slide_tail_info[key] = (movement_syntax, start_time, end_time)
@@ -248,95 +250,76 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
     start_position = positions[0]
     end_position = positions[-1]
 
-    # 如果只在A区或D区移动，视为旋转
-    if all(pos.startswith('A') or pos.startswith('D') for pos in positions):
+    # 获得音符经过的所有A区判定点
+    A_zones = []
+    last_A_zone = ''
+    for note in note_path:
+        pos = note['position']
+        if not pos.startswith('A'): continue
+        if pos == last_A_zone: continue
+        last_A_zone = pos
+        A_zones.append(pos)
 
-        # 找到第一个与起始点不同的位置
-        next_position = None
-        for pos in positions[1:]:
-            if pos != start_position:
-                next_position = pos
-                break
-        if next_position is None:
-            return None
+    if not A_zones: return None
 
-        movement_syntax = get_outer_rotation_syntax(start_position, next_position, end_position)
+    # 考虑到有些星星速度太快，来不及进入A区就结束了
+    # 需要根据惯性猜测最后可能进入哪个A区
+    if not end_position.startswith('A'):
+        guessed_zone = guess_target_a_zone_by_inertia(shared_context, note_path, A_zone_endpoint_on_judgeline)
+        if guessed_zone and last_A_zone != guessed_zone:
+            A_zones.append(guessed_zone)
+
+    # 检测这个A区路径里边是否包含一些圆弧，要单独拆分出来
+    arc_segments = []
+    i = 0
+    while i < len(A_zones):
+        current_id = int(A_zones[i][1])  # 'A7' -> 7
+        # 尝试检测从当前位置开始的圆弧
+        if i + 1 < len(A_zones):
+            next_id = int(A_zones[i + 1][1])
+            is_consec, direction = is_consecutive(current_id, next_id)
+
+            if is_consec:
+                # 找到圆弧的起点，继续向后查找相同方向的连续点
+                arc_start = current_id
+                arc_next = next_id
+                arc_end = next_id
+                j = i + 2
+                while j < len(A_zones):
+                    check_id = int(A_zones[j][1])
+                    prev_id = int(A_zones[j - 1][1])
+                    is_consec_next, dir_next = is_consecutive(prev_id, check_id)
+                    # 如果方向一致且连续，继续扩展圆弧
+                    if is_consec_next and dir_next == direction:
+                        arc_end = check_id
+                        j += 1
+                    else:
+                        break
+                # 记录这个圆弧
+                arc_segments.append(('arc', (arc_start, arc_next, arc_end)))
+                i = j  # 跳过已处理的圆弧部分
+                continue
+
+        # 不是圆弧的一部分，作为单独的点
+        arc_segments.append(('single', current_id))
+        i += 1
 
 
+    # 将圆弧和单独的点组合成最终语法
+    syntax_parts = []
+    for seg_type, seg_data in arc_segments:
+        if seg_type == 'arc':
+            start_id, next_id, end_id = seg_data
+            start_position, next_position, end_position = f"A{start_id}", f"A{next_id}", f"A{end_id}"
+            arc_syntax = get_outer_rotation_syntax(start_position, next_position, end_position)
+            syntax_parts.append(f"{start_id}{arc_syntax}")
+        else:  # single
+            syntax_parts.append(str(seg_data))
 
+    movement_syntax = '-'.join(syntax_parts)
+    movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
 
-
-    else:
-        # 获得音符经过的所有A区判定点
-        A_zones = []
-        last_A_zone = ''
-        for note in note_path:
-            cx = note['cx']
-            cy = note['cy']
-            pos = note['position']
-            if not pos.startswith('A'): continue
-            if pos == last_A_zone: continue
-            last_A_zone = pos
-            A_zones.append(pos)
-        
-        # 考虑到有些星星速度太快，来不及进入A区就结束了
-        # 需要根据惯性猜测最后可能进入哪个A区
-        if not end_position.startswith('A'):
-            guessed_zone = guess_target_a_zone_by_inertia(shared_context, note_path, A_zone_endpoint_on_judgeline)
-            if guessed_zone and last_A_zone != guessed_zone:
-                A_zones.append(guessed_zone)
-
-        # 检测这个A区路径里边是否包含一些圆弧，要单独拆分出来
-        arc_segments = []
-        i = 0
-        while i < len(A_zones):
-            current_id = int(A_zones[i][1])  # 'A7' -> 7
-            # 尝试检测从当前位置开始的圆弧
-            if i + 1 < len(A_zones):
-                next_id = int(A_zones[i + 1][1])
-                is_consec, direction = is_consecutive(current_id, next_id)
-
-                if is_consec:
-                    # 找到圆弧的起点，继续向后查找相同方向的连续点
-                    arc_start = current_id
-                    arc_next = next_id
-                    arc_end = next_id
-                    j = i + 2
-                    while j < len(A_zones):
-                        check_id = int(A_zones[j][1])
-                        prev_id = int(A_zones[j - 1][1])
-                        is_consec_next, dir_next = is_consecutive(prev_id, check_id)
-                        # 如果方向一致且连续，继续扩展圆弧
-                        if is_consec_next and dir_next == direction:
-                            arc_end = check_id
-                            j += 1
-                        else:
-                            break
-                    # 记录这个圆弧
-                    arc_segments.append(('arc', (arc_start, arc_next, arc_end)))
-                    i = j  # 跳过已处理的圆弧部分
-                    continue
-            
-            # 不是圆弧的一部分，作为单独的点
-            arc_segments.append(('single', current_id))
-            i += 1
-        
-        
-        # 将圆弧和单独的点组合成最终语法
-        syntax_parts = []
-        for seg_type, seg_data in arc_segments:
-            if seg_type == 'arc':
-                start_id, next_id, end_id = seg_data
-                start_position, next_position, end_position = f"A{start_id}", f"A{next_id}", f"A{end_id}"
-                arc_syntax = get_outer_rotation_syntax(start_position, next_position, end_position)
-                syntax_parts.append(f"{start_id}{arc_syntax}")
-            else:  # single
-                syntax_parts.append(str(seg_data))
-        
-        movement_syntax = '-'.join(syntax_parts)
-        movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
-
-        # print(f'{" ".join(azone for azone in A_zones)} -> {movement_syntax}')
+    # print(f'{" ".join(azone for azone in A_zones)} -> {movement_syntax}')
 
     return movement_syntax
 
