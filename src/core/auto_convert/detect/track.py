@@ -109,7 +109,7 @@ def _convert_detections_to_tracker_format(detections, frame_shape):
     n = len(detections)
     data = np.zeros((n, 7), dtype=np.float32)
 
-    # 填充数据: xywhr + conf + class_id(note_type enum int)
+    # 填充数据: xywhr + conf + class_id(note_type to int)
     for i, note_geometry in enumerate(detections):
         cx = note_geometry.cx
         cy = note_geometry.cy
@@ -117,7 +117,7 @@ def _convert_detections_to_tracker_format(detections, frame_shape):
         h = note_geometry.h
         r = note_geometry.r
         conf = note_geometry.conf
-        class_id = note_geometry.note_type.value
+        class_id = map_note_type_to_class_id(note_geometry.note_type)
         # 填充数据
         data[i] = [cx, cy, w, h, r, conf, class_id]
 

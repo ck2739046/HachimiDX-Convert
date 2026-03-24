@@ -53,6 +53,20 @@ def map_model_class_to_note_type(model_type, index) -> NoteType:
         if index == 3: return NoteType.HOLD
 
 
+def map_note_type_to_class_id(note_type: NoteType) -> int:
+    if note_type == NoteType.TAP:
+        return 0
+    if note_type == NoteType.SLIDE:
+        return 1
+    if note_type == NoteType.TOUCH:
+        return 2
+    if note_type == NoteType.HOLD:
+        return 3
+    if note_type == NoteType.TOUCH_HOLD:
+        return 4
+    return 0 # 不应该发生
+
+
 def is_obb(note_type: NoteType) -> bool:
     return note_type == NoteType.HOLD
 
