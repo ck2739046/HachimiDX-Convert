@@ -40,8 +40,8 @@ class PathManage:
     # worker 脚本
 
     AUTO_CONVERT_WORKER_PATH: Path = WORKERS_DIR / "auto_convert_worker.py"
-
-
+    CHECK_DEVICE_WORKER_PATH: Path = WORKERS_DIR / "check_device_worker.py"
+    MODEL_CONVERT_WORKER_PATH: Path = WORKERS_DIR / "model_convert_worker.py"
 
     # 初始化时可以不存在的路径
 
@@ -93,7 +93,9 @@ class PathManage:
                 return err(error_msg)
             
         # 检查 worker 是否存在
-        for file_path in [cls.AUTO_CONVERT_WORKER_PATH]:
+        for file_path in [cls.AUTO_CONVERT_WORKER_PATH,
+                          cls.CHECK_DEVICE_WORKER_PATH,
+                          cls.MODEL_CONVERT_WORKER_PATH]:
             if not file_path.is_file():
                 error_msg = f"Critical Error: Required worker script not found: {file_path}"
                 return err(error_msg)
