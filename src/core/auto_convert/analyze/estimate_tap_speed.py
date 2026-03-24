@@ -65,7 +65,7 @@ def get_note_DefaultMsec(shared_context, detected_note_speed):
         return DefaultMsec, OptionNotespeed
 
     total_dist = shared_context.note_travel_dist
-    detected_note_speed = detected_note_speed * shared_context.fps / 1000 # pixel/frame to pixel/ms
+    detected_note_speed = detected_note_speed * shared_context.std_video_fps / 1000 # pixel/frame to pixel/ms
     detected_note_DefaultMsec = total_dist / detected_note_speed # 走完全程需要多少时间 (lifetime)
 
     # 查找最接近的 DefaultMsec

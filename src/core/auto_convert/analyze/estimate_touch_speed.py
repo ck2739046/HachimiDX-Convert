@@ -62,7 +62,7 @@ def estimate_touch_DefaultMsec(shared_context, touch_data):
             # 反推 time_progress
             time_progress = reverse_function(location_progress)
             # 加入列表
-            cur_time = point['frame'] / shared_context.fps * 1000 # 帧数转换为毫秒
+            cur_time = point['frame'] / shared_context.std_video_fps * 1000 # 帧数转换为毫秒
             big_slope_points.append((cur_time, time_progress))
 
         if len(big_slope_points) < 6:

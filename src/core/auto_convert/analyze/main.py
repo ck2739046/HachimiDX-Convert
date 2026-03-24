@@ -52,7 +52,7 @@ def main(std_video_path: Path,
 
         # 分析音符流速
         if tap_data:
-            shared_context.tap_DefaultMsec, shared_context.tap_OptionNotespeed = estimate_tap_DefaultMsec(shared_context, tap_data)
+            shared_context.note_DefaultMsec, shared_context.note_OptionNotespeed = estimate_tap_DefaultMsec(shared_context, tap_data)
         if touch_data:
             shared_context.touch_DefaultMsec, shared_context.touch_OptionNotespeed = estimate_touch_DefaultMsec(shared_context, touch_data)
             

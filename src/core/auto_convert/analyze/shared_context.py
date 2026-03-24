@@ -26,8 +26,8 @@ class SharedContext:
     touch_hold_travel_dist: float
     
     # 速度常数
-    tap_DefaultMsec: float = 0.0
-    tap_OptionNotespeed: float = 0.0
+    note_DefaultMsec: float = 0.0
+    note_OptionNotespeed: float = 0.0
     touch_DefaultMsec: float = 0.0
     touch_OptionNotespeed: float = 0.0
     

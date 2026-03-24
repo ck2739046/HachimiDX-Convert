@@ -25,7 +25,7 @@ def preprocess_touch_data(shared_context: SharedContext):
     start_tolerance = shared_context.touch_travel_dist * 0.1
     valid_dist_end = 0 + end_tolerance
     valid_dist_start = shared_context.touch_travel_dist - start_tolerance
-    outer_size = 54 * shared_context.video_size / 1080 # 1080p下，外部尺寸为54
+    outer_size = 54 * shared_context.std_video_size / 1080 # 1080p下，外部尺寸为54
 
     # read track data
     for key, value in shared_context.track_data.items():

@@ -427,8 +427,8 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A
     # 计算开始时间
     if start_move_frame is None:
         return None, None
-    time_to_start_Msec = (dist_to_start / note_speed) * (1000 / shared_context.fps)
-    note_start_time_Msec = start_move_frame / shared_context.fps * 1000 - time_to_start_Msec
+    time_to_start_Msec = (dist_to_start / note_speed) * (1000 / shared_context.std_video_fps)
+    note_start_time_Msec = start_move_frame / shared_context.std_video_fps * 1000 - time_to_start_Msec
 
     # 找到最后一个进入终点A区的点
     end_move_frame = None
@@ -446,8 +446,8 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A
     # 计算结束时间
     if end_move_frame is None:
         return None, None
-    time_to_end_Msec = (dist_to_end / note_speed) * (1000 / shared_context.fps)
-    note_end_time_Msec = end_move_frame / shared_context.fps * 1000 + time_to_end_Msec
+    time_to_end_Msec = (dist_to_end / note_speed) * (1000 / shared_context.std_video_fps)
+    note_end_time_Msec = end_move_frame / shared_context.std_video_fps * 1000 + time_to_end_Msec
 
     return note_start_time_Msec, note_end_time_Msec
 

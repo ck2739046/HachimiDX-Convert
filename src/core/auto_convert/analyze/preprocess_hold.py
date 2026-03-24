@@ -204,7 +204,7 @@ def calculate_hold_head_tail(shared_context, x1, y1, x2, y2, x3, y3, x4, y4, not
     width = 70 * 0.77
     if note_variant == NoteVariant.EX or note_variant == NoteVariant.BREAK_EX:
         width += 5
-    width = width * shared_context.video_size / 1080 # 按视频尺寸缩放
+    width = width * shared_context.std_video_size / 1080 # 按视频尺寸缩放
     # 那么正六边形的端点到中心的距离约为 x 2/√3
     offset = width * 2 / math.sqrt(3)
     # 从端点往回缩，定位到head和tail的中心位置

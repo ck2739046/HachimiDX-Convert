@@ -47,7 +47,7 @@ def analyze_touch_hold_time(shared_context, touch_hold_data):
 
             # 将 percent 数据单独处理
             if percent != -1:
-                cur_time = point['frame'] / shared_context.fps * 1000 # 帧数转换为毫秒
+                cur_time = point['frame'] / shared_context.std_video_fps * 1000 # 帧数转换为毫秒
                 percent_data.append((cur_time, percent))
 
             # 将 dist 数据视为 touch note 处理
