@@ -167,8 +167,8 @@ def _save_detect_results(detections, output_dir):
             # 写入音符数据
             data = [
                 f"{detection.frame}",
-                f"{detection.note_type.name}",
-                f"{detection.note_variant.name}",
+                f"{detection.note_type.value}",
+                f"{detection.note_variant.value}",
                 f"{detection.conf:.4f}",
                 f"{detection.x1:.4f}", f"{detection.y1:.4f}",
                 f"{detection.x2:.4f}", f"{detection.y2:.4f}",

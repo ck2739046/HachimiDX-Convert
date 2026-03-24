@@ -156,13 +156,13 @@ def _save_track_results(tracks, output_dir, is_cls):
 
             if len(note_geometry_list) > 0:
                 # 写入轨迹头
-                f.write(f"track_id: {track_id}, note_type: {note_type.name}\n")
+                f.write(f"track_id: {track_id}, note_type: {note_type.value}\n")
                 # 写入轨迹路径
                 for note in note_geometry_list:
                     data = [
                         f"{note.frame}",
-                        f"{note.note_type.name}",
-                        f"{note.note_variant.name}",
+                        f"{note.note_type.value}",
+                        f"{note.note_variant.value}",
                         f"{note.conf:.4f}",
                         f"{note.x1:.4f}", f"{note.y1:.4f}",
                         f"{note.x2:.4f}", f"{note.y2:.4f}",
