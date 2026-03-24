@@ -36,6 +36,11 @@ def analyze_hold_time(shared_context, hold_data):
 
     hold_info = {}
 
+    end_tolerance = shared_context.note_travel_dist * 0.1
+    start_tolerance = shared_context.note_travel_dist * 0.1
+    valid_judgeline_start = shared_context.judgeline_start + start_tolerance
+    valid_judgeline_end = shared_context.judgeline_end - end_tolerance
+
     for key, path in hold_data.items():
 
         head_times = []
@@ -47,11 +52,14 @@ def analyze_hold_time(shared_context, hold_data):
             dist_head = point['dist-head']
             dist_tail = point['dist-tail']
 
-            reach_end_Msec_head = predict_tap_reach_end_time(shared_context, dist_head, frame_num)
-            head_times.append(reach_end_Msec_head)
+            # 再次过滤 head 和 tail (10%-90%)
+            if valid_judgeline_start <= dist_head <= valid_judgeline_end:
+                reach_end_Msec_head = predict_tap_reach_end_time(shared_context, dist_head, frame_num)
+                head_times.append(reach_end_Msec_head)
 
-            reach_end_Msec_tail = predict_tap_reach_end_time(shared_context, dist_tail, frame_num)
-            tail_times.append(reach_end_Msec_tail)
+            if valid_judgeline_start <= dist_tail <= valid_judgeline_end:
+                reach_end_Msec_tail = predict_tap_reach_end_time(shared_context, dist_tail, frame_num)
+                tail_times.append(reach_end_Msec_tail)
         
         # 计算平均时间
         mean_head = np.mean(head_times)
