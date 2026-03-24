@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 if len(sys.argv) <= 1:
-    print("No args provided for auto_convert_worker. Exiting.")
+    print("No root args provided. Exiting.")
     sys.exit(1)
 
 # 第一个参数是项目根目录
