@@ -179,7 +179,7 @@ def _extract_note_images_in_frame(frame, this_frame_sample_plan, frame_number, c
 
             # 对于普通矩形框，裁剪范围就是(x1, y1, x3, y3)
             if not is_obb(note.note_type):
-                x1, y1, x2, y2 = (note.x1), int(note.y1), int(note.x3), int(note.y3)
+                x1, y1, x2, y2 = note.x1, note.y1, note.x3, note.y3
                 target_frame = frame
 
             # obb需要先将检测框和图像旋转为水平
@@ -205,14 +205,16 @@ def _extract_note_images_in_frame(frame, this_frame_sample_plan, frame_number, c
                 # 计算旋转后的边界框
                 x_coords = rotated_points[:, 0]
                 y_coords = rotated_points[:, 1]
-                x1, y1 = int(np.min(x_coords)), int(np.min(y_coords))
-                x2, y2 = int(np.max(x_coords)), int(np.max(y_coords))
+                x1, y1 = np.min(x_coords), np.min(y_coords)
+                x2, y2 = np.max(x_coords), np.max(y_coords)
 
             # 稍微扩展一圈
             x1 -= crop_border
             y1 -= crop_border
             x2 += crop_border
             y2 += crop_border
+            # 转为整数
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
             # 裁剪范围边界检查
             x1 = max(0, x1)
             y1 = max(0, y1)
@@ -332,12 +334,10 @@ def _merge_cls_into_track_results(track_results, cls_results_all):
         else:
             note_varient = NoteVariant.NORMAL
         
-        note_varient_by_track[track_id].append(note_varient, note_type)
+        note_varient_by_track[track_id].append((note_varient, note_type))
     
     # 每个音符有多个候选点和分类结果，采用最多的类别作为最终结果
     for track_id, value in note_varient_by_track.items():
-        if track_id not in track_results:
-            continue
         note_varients = [v[0] for v in value]
         note_type = value[0][1] # 同一轨迹的note_type是一样的，取第一个就行了
         if len(note_varients) == 0:
