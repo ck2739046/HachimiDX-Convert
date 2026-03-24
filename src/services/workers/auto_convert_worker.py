@@ -1,4 +1,5 @@
 import sys
+import traceback
 from pathlib import Path
 
 if len(sys.argv) <= 1:
@@ -122,8 +123,8 @@ def main(args: list[str]) -> bool:
 
         return True
 
-    except Exception as e:
-        return _fail(str(e))
+    except Exception:
+        return _fail(traceback.format_exc())
 
 
 if __name__ == "__main__":

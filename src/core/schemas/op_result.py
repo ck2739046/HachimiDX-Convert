@@ -1,4 +1,6 @@
 import inspect
+import sys
+import traceback
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Optional, TypeVar, Generic
@@ -42,14 +44,33 @@ def _get_caller_context() -> str:
         # stack[1] 是 ok() 或 err()
         # stack[2] 是业务函数
         frame = inspect.stack()[2]
-        
-        # frame.filename 是全路径，只取文件名，比如 'logic.py'
-        filename = Path(frame.filename).name
-        func_name = frame.function
-        
-        return f"{filename}: {func_name}()"
+        return f"{frame.filename}, line {frame.lineno}, {frame.function}()"
     except Exception:
         return "unknown:unknown"
+
+
+
+def _normalize_error_raw(error_raw: Any) -> Any:
+    """
+    将 exception traceback 转为字符串
+    """
+    if isinstance(error_raw, BaseException):
+        return "".join(
+            traceback.format_exception(
+                type(error_raw),
+                error_raw,
+                error_raw.__traceback__,
+            )
+        ).rstrip()
+
+    if error_raw is None:
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        if exc_value is not None:
+            return "".join(
+                traceback.format_exception(exc_type, exc_value, exc_tb)
+            ).rstrip()
+
+    return error_raw
 
 
 
@@ -89,7 +110,7 @@ def err(error_msg: str = "",
         is_ok=False,
         source=_get_caller_context(),
         error_msg=error_msg,
-        error_raw=error_raw,
+        error_raw=_normalize_error_raw(error_raw),
         inner=inner
     )
 
