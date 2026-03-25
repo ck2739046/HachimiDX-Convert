@@ -11,7 +11,6 @@
 - 支持 tap, slide, touch, hold, touch-hold 全种类音符识别
 - 支持 ex-note, break-note, ex-break-note 全子类识别
 - 支持 slide, hold, touch-hold 时值的识别
-- 支持超大尺寸的 touch, touch-hold 音符识别 (常见于 basic 难度)
 - 支持基础的星星轨迹识别 (< > -)
 
 ## 当前的局限
@@ -22,9 +21,10 @@
 - touch, touch-hold:
     - 不支持在同一个位置重叠出现的 touch, touch-hold
     - 无法识别 touch, touch-hold 的烟花特效 (f)
+    - 不支持超大尺寸的 touch, touch-hold 音符识别 (常见于 basic 难度)
 
 - 仅支持 2^n 的时间分辨率，以及12分音符
-- slide, touch-hold 的时值不太准 (但是 hold 时值比较精准)
+- slide, touch-hold 的时值相对不太准 (但是 hold 时值比较精准)
 - 不支持变化的 BPM (一首歌的 BPM 必须全程不变)
 - 如果谱面确认视频是用相机拍屏幕，受到色偏影响，此时 ex-note, break-note, ex-break-note 的识别准确率可能会降低
 
@@ -53,8 +53,8 @@
 
 - 创建环境 - `python -m venv .venv`
 - 激活环境 - `.venv\Scripts\activate`
-- 更新依赖 - `python3 -m pip install --upgrade pip`
-- 更新依赖 - `python3 -m pip install wheel`
+- 更新依赖 - `python -m pip install --upgrade pip`
+- 更新依赖 - `python -m pip install wheel`
 
 ### 2. 安装 PyTorch
 
