@@ -164,7 +164,7 @@ class MajdataPage(QWidget):
         # scan txt and add to maidata_combo
         txt_files = [f for f in os.listdir(song_path)
                      if f.lower().endswith(".txt")
-                     and f.lower() not in ("track_result.txt", "detect_result.txt")]
+                     and f.lower() not in ("track_result.txt", "detect_result.txt", "note_preprocess_result.txt")]
         if txt_files:
             txt_files = sorted(txt_files)
             self._maidata_combo.addItems(txt_files)
