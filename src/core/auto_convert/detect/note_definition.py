@@ -50,7 +50,7 @@ def map_model_class_to_note_type(model_type, index) -> NoteType:
         if index == 0: return NoteType.TAP
         if index == 1: return NoteType.SLIDE
         if index == 2: return NoteType.TOUCH
-        if index == 3: return NoteType.HOLD
+        if index == 3: return NoteType.TOUCH_HOLD
 
 
 def map_note_type_to_class_id(note_type: NoteType) -> int:
