@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Tuple
 import cv2
 import shutil
-import subprocess
 
 from ...schemas.op_result import OpResult, ok, err, print_op_result
 from src.core.schemas.media_config import MediaType
@@ -143,31 +142,9 @@ def main(input_video: Path,
 
 
         # 实际运行 ffmpeg
-        v_res = MediaPipeline.validate(params)
-        if not v_res.is_ok:
-            return err(f"Failed to validate process video parameters.", inner = v_res)
-        
-        cmd_res = MediaPipeline.build_cmd(v_res.value)
-        if not cmd_res.is_ok:
-            return err(f"Failed to build ffmpeg command.", inner = cmd_res)
-            
-        cmd = cmd_res.value
-        
-        print("Running FFmpeg command:", " ".join(cmd))
-        
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=False,
-                text=True,
-                encoding='utf-8'
-            )
-            if result.returncode != 0:
-                error_msg = f'Standardize video process: ffmpeg failed with exit code: {result.returncode}'
-                return err(error_msg)
-            
-        except Exception as e:
-            raise Exception("FFmpeg processing failed", e)
+        run_res = MediaPipeline.run_now(params)
+        if not run_res.is_ok:
+            return err("Standardize video process failed.", inner=run_res)
         
         # 二次验证：确保输出文件存在且参数符合预期
         if not is_output_already_standardized(temp_output_path, target_res, duration, start_sec, end_sec, print_hint=False):

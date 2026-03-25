@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from typing import Any, Optional
 
 from src.core.schemas.op_result import OpResult, ok, err
@@ -8,7 +9,7 @@ from src.core.schemas.media_model import MediaModel
 from src.core.build_ffmpeg_cmd import build_ffmpeg_cmd
 
 from ..task_scheduler import TaskType
-from .. import task_scheduler_api, process_manager_api
+from .. import task_scheduler_api
 
 
 class MediaPipeline:
@@ -96,12 +97,12 @@ class MediaPipeline:
 
 
     @classmethod
-    def run_now(cls, raw_data: dict[str, Any], runner_id: Optional[str]) -> OpResult[tuple[str, list[str]]]:
+    def run_now(cls, raw_data: dict[str, Any]) -> OpResult[list[str]]:
         """
-        API (direct-run): validate -> build cmd -> ProcessManager.start.
+        API (direct-run): validate -> build cmd -> subprocess.run (blocking).
 
         Returns:
-            OpResult[]: tuple(runner_id, command list)
+            OpResult[]: command list
         """
 
         v_res = cls.validate(raw_data)
@@ -112,8 +113,20 @@ class MediaPipeline:
         if not cmd_res.is_ok:
             return err("Failed to build ffmpeg command", inner=cmd_res)
 
-        rid_res = process_manager_api.start(cmd_res.value, runner_id)
-        if not rid_res.is_ok:
-            return err("Failed to start process", inner=rid_res)
-        
-        return ok((rid_res.value, cmd_res.value))
+        cmd = cmd_res.value
+        print("Running FFmpeg command:", " ".join(cmd))
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=False,
+                text=True,
+                encoding='utf-8'
+            )
+        except Exception as e:
+            return err("Failed to run ffmpeg process", error_raw=e)
+
+        if result.returncode != 0:
+            return err(f"ffmpeg failed with exit code: {result.returncode}")
+
+        return ok(cmd)
