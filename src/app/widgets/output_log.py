@@ -22,6 +22,19 @@ class OutputLogWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._current_runner_id: set = set()
+
+        # 全局日志过滤：行中包含以下任一关键词时忽略该行
+        self._ignore_contains_filters: list[str] = [
+            
+            # TensorRT 日志
+            "[TRT] [I] Loaded engine size: ",
+            "[TRT] [I] [MemUsageChange] TensorRT-managed allocation in IExecutionContext creation: ",
+            "[TRT] [W] WARNING The logger passed into createInferRuntime differs from one already registered for an existing builder, runtime, or refitter. ",
+            "[TRT] [W] Requested amount of GPU memory ",
+            "[TRT] [W] UNSUPPORTED_STATE: Skipping tactic",
+            "[TRT] [E] [virtualMemoryBuffer.cpp::nvinfer1::StdVirtualMemoryBufferImpl::resizePhysical::154] Error Code",
+        ]
+
         # 保存的最大行数
         self.max_output_lines = 400
         # 标记最后一行是否可被替换 (用于处理 \r)
@@ -103,6 +116,9 @@ class OutputLogWidget(QWidget):
         :param replace_last: 是否替换最后一行（用于进度条更新，处理 \\r）
         """
         
+        if self._should_ignore_line(text):
+            return
+
         # 保存当前滚动条位置
         scrollbar = self.text_edit.verticalScrollBar()
         old_scroll_value = scrollbar.value()
@@ -244,6 +260,18 @@ class OutputLogWidget(QWidget):
     def _strip_ansi(self, text: str) -> str:
         """移除 ANSI 转义序列"""
         return self._ansi_escape.sub('', text)
+
+
+
+    def _should_ignore_line(self, text: str) -> bool:
+        """根据包含词过滤列表判断该行是否应忽略"""
+        if not text:
+            return False
+
+        for keyword in self._ignore_contains_filters:
+            if keyword and keyword in text:
+                return True
+        return False
 
 
 

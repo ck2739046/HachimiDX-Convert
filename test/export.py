@@ -91,20 +91,15 @@ if __name__ == "__main__":
 # [03/13/2026-13:19:13] [TRT] [E] [virtualMemoryBuffer.cpp::nvinfer1::StdVirtualMemoryBufferImpl::resizePhysical::154] Error Code 2: OutOfMemory (Requested size was 3541041152 bytes.)
 # [03/13/2026-13:19:13] [TRT] [E] [virtualMemoryBuffer.cpp::nvinfer1::StdVirtualMemoryBufferImpl::resizePhysical::141] Error Code 1: Cuda Driver (In nvinfer1::StdVirtualMemoryBufferImpl::resizePhysical at optimizer/builder/virtualMemoryBuffer.cpp:141)
 
-ignore1 = [
-    "[TRT] [E]",
-    "[virtualMemoryBuffer.cpp::nvinfer1::StdVirtualMemoryBufferImpl::resizePhysical"
-]
 
-ignore2 = [
-    "[TRT] [W]",
-    "UNSUPPORTED_STATE: Skipping tactic",
-    "due to insufficient memory on requested size of"
-]
+'''
+[03/24/2026-21:58:56] [TRT] [I] Loaded engine size: 14 MiB
 
-ignore3 = [
-    "[TRT] [W]",
-    "Requested amount of GPU memory",
-    "could not be allocated.",
-    "There may not be enough free memory for allocation to succeed."
-]
+[03/24/2026-21:58:56] [TRT] [I] [MemUsageChange] TensorRT-managed allocation in IExecutionContext creation: CPU +0, GPU +116, now: CPU 0, GPU 126 (MiB)
+
+[03/24/2026-21:58:57] [TRT] [W] WARNING The logger passed into createInferRuntime differs from one already registered for an existing builder, runtime, or refitter. So the current new logger is ignored, and TensorRT will use the existing one which is returned by nvinfer1::getLogger() instead.
+
+[03/24/2026-21:58:57] [TRT] [I] Loaded engine size: 14 MiB
+
+[03/24/2026-21:58:57] [TRT] [I] [MemUsageChange] TensorRT-managed allocation in IExecutionContext creation: CPU +0, GPU +121, now: CPU 0, GPU 258 (MiB)
+'''

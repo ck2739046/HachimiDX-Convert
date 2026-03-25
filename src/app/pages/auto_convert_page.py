@@ -284,6 +284,7 @@ class AutoConvertPage(BaseOutputPage):
         )
 
         # Row 2: Submit Button + Task Name Input
+        self.content_layout.addSpacing(UI_Style.widget_spacing)
         self.taskname_line_edit = create_line_edit(
             length=200, placeholder=i18n.t("app.media_subpages.run_ffmpeg.ui_taskname_placeholder"))
         self.submit_button = create_stated_button(i18n.t("app.media_subpages.run_ffmpeg.ui_submit_button"), isbig=True)
