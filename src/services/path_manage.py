@@ -21,7 +21,7 @@ class PathManage:
     # 资源文件
     
     APP_ICON_PATH: Path = RESOURCES_DIR / "icon.ico"
-    CLICK_TEMPLATE_PATH: Path = RESOURCES_DIR / "click_template.aac"
+    CLICK_TEMPLATE_PATH: Path = RESOURCES_DIR / "click_template.wav"
     TEST_H264_PATH: Path = RESOURCES_DIR / "test_h264.mp4"
     TEST_VP9_PATH: Path = RESOURCES_DIR / "test_vp9.webm"
 
@@ -48,6 +48,7 @@ class PathManage:
     SETTINGS_PATH: Path = DATA_DIR / "settings.json"
 
     MajdataEdit_CONTROL_TXT_PATH: Path = RESOURCES_DIR / "majdata" / "HachimiDX_MajdataEdit_Control.txt"
+    TEMP_WAV_IMAGE_PATH: Path = TEMP_DIR / "wav_image.png"
 
     DETECT_ENGINE_PATH: Path = MODELS_DIR / "detect.engine"
     OBB_ENGINE_PATH: Path = MODELS_DIR / "obb.engine"
