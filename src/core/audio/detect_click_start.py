@@ -40,9 +40,15 @@ def main(file_path, bpm, click_times, start_time_sec) -> OpResult[dict]:
         OpResult[dict]:
             - match_time: 匹配时间 (ms) 
             - generated_click_template_audio: 生成的启动拍音频 (44100Hz)
+            - graph_range_start: 波形图显示的起始时间 (ms)
+            - graph_range_end: 波形图显示的结束时间 (ms)
     """
 
     try:
+        bpm = float(bpm)
+        click_times = int(click_times)
+        start_time_sec = float(start_time_sec)
+
         # Load template and audio
         template_path = str(PathManage.CLICK_TEMPLATE_PATH)
         template_data, template_sr = _load_audio_file(template_path)
@@ -66,10 +72,19 @@ def main(file_path, bpm, click_times, start_time_sec) -> OpResult[dict]:
         # 转换为相对于原始音频起点的时间轴
         match_time_ms = segment_match_time_ms + float(start_time_sec) * 1000
 
+        # 计算波形图显示范围
+        interval_ms = 60 / bpm * 1000
+        graph_range_start = match_time_ms - interval_ms # 往前一拍
+        graph_range_end = match_time_ms + interval_ms * (click_times + 4) # 往后四拍
+        graph_range_start = max(0, graph_range_start) # 不允许负数
+        graph_range_end = max(graph_range_end, graph_range_start + 2000) # 至少显示2秒
+
         # 返回匹配时间，以及生成的模板音频用于可视化
         return ok({
             'match_time': match_time_ms,
             'generated_click_template_audio': full_template,
+            'graph_range_start': graph_range_start,
+            'graph_range_end': graph_range_end
         })    
     
     except Exception as e:
@@ -128,8 +143,6 @@ def generate_template(bpm, click_times, template_data, template_sr):
     基于 BPM 生成多个启动拍的完整模板
     """
 
-    bpm = float(bpm)
-    click_times = int(click_times)
     template_length = len(template_data)
 
     # 每个 click 的间隔 (以采样点为单位)

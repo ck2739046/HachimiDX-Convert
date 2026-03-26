@@ -15,7 +15,8 @@ def main(reference_audio,
          target_audio,
          template_match_offset,
          target_match_offset,
-         target_match_offset_mystery_offset) -> OpResult[Path]:
+         graph_range_start,
+         graph_range_end) -> OpResult[Path]:
     """
     绘制三行音频波形图
     
@@ -25,7 +26,8 @@ def main(reference_audio,
         target_audio: 目标音频数据 (44100Hz)
         template_match_offset: 模板与基准音频的匹配时间 (ms)
         target_match_offset: 目标与基准音频的对齐时间 (ms)
-        target_match_offset_mystery_offset: 修正偏移量 (ms)
+        graph_range_start: 波形图显示的起始时间 (ms)
+        graph_range_end: 波形图显示的结束时间 (ms)
 
     返回：
         OpResult[Path]: 生成的波形图路径
@@ -36,8 +38,8 @@ def main(reference_audio,
         sr = 44100
         
         # 计算显示时间范围
-        start_time = template_match_offset - 500  # 前0.5秒
-        end_time = template_match_offset + 2800   # 后2.8秒
+        start_time = graph_range_start
+        end_time = graph_range_end
         
         # 创建画布
         fig = plt.figure(figsize=(8, 2), dpi=100)  # 800px × 200px
@@ -69,8 +71,7 @@ def main(reference_audio,
             # template_match_offset 虚线
             ax.axvline(x=template_match_offset, color='red', linestyle='--', alpha=1, linewidth=1)
             # target_match_offset 虚线
-            final_target_match_offset = target_match_offset + target_match_offset_mystery_offset
-            ax.axvline(x=final_target_match_offset, color='green', linestyle='--', alpha=1, linewidth=1)
+            ax.axvline(x=target_match_offset, color='green', linestyle='--', alpha=1, linewidth=1)
         
         # 保存图片
         output_path = PathManage.TEMP_WAV_IMAGE_PATH

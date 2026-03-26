@@ -63,6 +63,8 @@ def main(reference_file: str,
         
         template_match_offset = res.value['match_time']
         generated_click_template_audio = res.value['generated_click_template_audio']
+        graph_range_start = res.value['graph_range_start']
+        graph_range_end = res.value['graph_range_end']
 
 
         # 2. 调用 align_audio 分析文件对齐
@@ -86,8 +88,7 @@ def main(reference_file: str,
 
 
         # 3. 计算最终结果
-        mystery_offset = 0 # 目前不需要了
-        final_offset = template_match_offset - target_match_offset + mystery_offset
+        final_offset = template_match_offset - target_match_offset
 
         # print(f"\n")
         # print(f"在基准文件中，启动拍从 {template_match_offset:.2f} ms 开始")
@@ -108,7 +109,8 @@ def main(reference_file: str,
                 target_audio,
                 template_match_offset,
                 target_match_offset,
-                mystery_offset
+                graph_range_start,
+                graph_range_end
               )
         if not res.is_ok:
             print("[AUDIO_ALIGN_WORKER] [ERROR] Error in draw_audio_wave")
