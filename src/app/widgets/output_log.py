@@ -33,6 +33,9 @@ class OutputLogWidget(QWidget):
             "[TRT] [W] Requested amount of GPU memory ",
             "[TRT] [W] UNSUPPORTED_STATE: Skipping tactic",
             "[TRT] [E] [virtualMemoryBuffer.cpp::nvinfer1::StdVirtualMemoryBufferImpl::resizePhysical::154] Error Code",
+
+            # Librosa 加载音频 (detect click start)
+            "error: No comment text / valid description?"
         ]
 
         # 保存的最大行数

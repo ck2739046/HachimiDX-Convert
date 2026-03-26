@@ -97,9 +97,9 @@ def main(reference_file: str,
         if abs(final_offset) < 10:
             print("Audio files are perfectly aligned (offset < 10 ms)")
         elif final_offset > 0:
-            print(f"Target file needs delay {round(final_offset)} ms")
+            print(f"Target file needs trim {round(final_offset)} ms")
         else:
-            print(f"Target file needs trim {abs(round(final_offset))} ms")
+            print(f"Target file needs delay {abs(round(final_offset))} ms")
 
 
         # 4. 生成音频波形图
