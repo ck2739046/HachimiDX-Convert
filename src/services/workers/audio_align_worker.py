@@ -1,0 +1,132 @@
+import sys
+import traceback
+from pathlib import Path
+
+
+
+
+if len(sys.argv) <= 1:
+    print("No root args provided. Exiting.")
+    sys.exit(1)
+
+# 第一个参数是项目根目录
+# 确保能正确使用间接导入
+root = str(Path(sys.argv[1]).resolve())
+if root not in sys.path:
+    sys.path.insert(0, root)
+
+
+from src.core.audio.detect_click_start import main as detect_click_start_main
+from src.core.audio.align_audio import main as align_audio_main
+from src.core.audio.draw_audio_wave import main as draw_audio_wave_main
+
+from src.core.schemas.op_result import print_op_result
+
+
+
+def main(reference_file: str,
+         target_file: str,
+         bpm: float,
+         click_count: int,
+         click_start_time: float) -> bool:
+    """
+    1. 先调用 detect_click_start_main 检测启动拍时间
+    2. 再调用 align_audio_main 计算对齐结果
+    3. 最后调用 draw_audio_wave_main 绘制波形图
+    
+    输入:
+        - reference_file (str): 基准文件路径（包含完整启动拍）
+        - target_file (str): 待对齐文件路径
+        - bpm (float): 启动拍的BPM值
+        - click_count (int): 启动拍数量
+        - click_start_time (float): 启动拍在 reference_file 中大致开始时间（秒）
+
+    返回:
+        offset_time (float): 目标文件的偏移值
+                             正值: 目标比基准文件更早，需要向后移动 (加延迟)
+                             负值: 目标比基准文件更晚，需要向前移动 (减延迟)
+    """
+
+    try:
+        print("    Calculating...", end='\r')
+        
+        # 1. 调用 detect_click_start 分析启动拍时间
+        res = detect_click_start_main(reference_file, bpm, click_count, click_start_time)
+        if not res.is_ok:
+            print("[AUDIO_ALIGN_WORKER] [ERROR] Error in detect_click_start")
+            print(print_op_result(res))
+            return False
+        
+        template_match_offset = res.value['match_time']
+        generated_click_template_audio = res.value['generated_click_template_audio']
+
+
+        # 2. 调用 align_audio 分析文件对齐
+        res = align_audio_main(reference_file, target_file)
+        if not res.is_ok:
+            print("[AUDIO_ALIGN_WORKER] [ERROR] Error in align_audio")
+            print(print_op_result(res))
+            return False
+        
+        target_match_offset = res.value['offset_ms']
+        reference_audio = res.value['reference_audio']
+        target_audio = res.value['target_audio']
+
+        # if target_match_offset == 0:
+        #     final_str = "reference equals target"
+        # elif target_match_offset > 0:
+        #     final_str = "target is earlier than reference"
+        # else:
+        #     final_str = "target is later than reference"
+        # print(f"offset: {target_match_offset:.2f} ms ({final_str})")
+
+
+        # 3. 计算最终结果
+        mystery_offset = 0 # 目前不需要了
+        final_offset = template_match_offset - target_match_offset + mystery_offset
+
+        # print(f"\n")
+        # print(f"在基准文件中，启动拍从 {template_match_offset:.2f} ms 开始")
+        # print(f"在基准文件中，目标文件从 {target_match_offset:.2f} ms 开始")
+
+        if abs(final_offset) < 10:
+            print("Audio files are perfectly aligned (offset < 10 ms)")
+        elif final_offset > 0:
+            print(f"Target file needs delay {round(final_offset)} ms")
+        else:
+            print(f"Target file needs trim {abs(round(final_offset))} ms")
+
+
+        # 4. 生成音频波形图
+        res = draw_audio_wave_main(
+                reference_audio,
+                generated_click_template_audio,
+                target_audio,
+                template_match_offset,
+                target_match_offset,
+                mystery_offset
+              )
+        if not res.is_ok:
+            print("[AUDIO_ALIGN_WORKER] [ERROR] Error in draw_audio_wave")
+            print(print_op_result(res))
+            return False
+        
+        audio_wave_image_path = res.value
+        # print(f"Audio wave image saved at: {str(audio_wave_image_path)}")
+        return True
+
+    except Exception as e:
+        print(f"Error in drawing audio wave: {e}")
+        traceback.print_exc()
+        return False
+
+
+
+if __name__ == "__main__":
+
+    if len(sys.argv) <= 6:
+        print("plz provide root, reference_file, target_file, bpm, click_count, click_start_time")
+        sys.exit(1)
+
+    result = main(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
+    sys.exit(0 if result else 1)
