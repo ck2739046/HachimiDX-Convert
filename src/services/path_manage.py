@@ -42,6 +42,7 @@ class PathManage:
     AUTO_CONVERT_WORKER_PATH: Path = WORKERS_DIR / "auto_convert_worker.py"
     CHECK_DEVICE_WORKER_PATH: Path = WORKERS_DIR / "check_device_worker.py"
     MODEL_CONVERT_WORKER_PATH: Path = WORKERS_DIR / "model_convert_worker.py"
+    AUDIO_ALIGN_WORKER_PATH: Path = WORKERS_DIR / "audio_align_worker.py"
 
     # 初始化时可以不存在的路径
 

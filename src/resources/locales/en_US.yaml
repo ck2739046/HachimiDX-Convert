@@ -115,6 +115,42 @@ en_US:
 
 
     media_subpages:
+      arcade_timing:
+        dialog_title: "Arcade Timing"
+
+        ui_select_file_divider: "File Selection"
+        ui_params_divider: "Parameters"
+        ui_preview_divider: "Wave Preview"
+
+        ui_reference_file_button: "Select Reference"
+        ui_reference_file_help: "Audio or video file that contains the startup click sequence."
+        ui_target_file_button: "Select Target"
+        ui_target_file_help: "Audio or video file to match arcade timing."
+
+        ui_bpm_label: "Initial BPM: "
+        ui_bpm_help: "BPM value of startup click sequence"
+        ui_click_count_label: "Click Count: "
+        ui_click_count_help: "Number of startup clicks."
+        ui_click_start_time_label: "Start Time: "
+        ui_click_start_time_help: "Approximate click start time in the reference file."
+
+        ui_run_button: "Analyze"
+
+        warning_reference_file_required: "Please select a reference file first."
+        warning_target_file_required: "Please select a target file first."
+        warning_invalid_bpm: "Invalid initial BPM value. Please input a number between 10 and 400."
+        warning_invalid_click_start_time: "Invalid start time. Please input a number >= 0."
+        warning_worker_start_failed: "Failed to start worker:\n%{error}"
+        warning_run_failed: "Analyze failed."
+        warning_wave_not_found: "Wave image file not found."
+        warning_wave_load_failed: "Failed to load wave image."
+
+        notice_run_start: "Start Arcade Timing Analyze..."
+        notice_run_cancelled: "Analyze cancelled."
+        notice_run_success: "Analyze completed."
+
+
+
       run_ffmpeg:
         
         ui_select_file_divider: "File Selection"

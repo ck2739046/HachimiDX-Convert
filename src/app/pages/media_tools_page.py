@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
 from ..ui_style import UI_Style
 from ..widgets import SegmentedNavBar
-from .media_subpages.match_first import MatchFirstPage
+from .media_subpages.arcade_timing import ArcadeTimingPage
 from .media_subpages.simple_align import SimpleAlignPage
 from .media_subpages.extract_game import ExtractGamePage
 from .media_subpages.run_ffmpeg import RunFFmpegPage
@@ -25,7 +25,7 @@ class MediaToolsPage(QWidget):
         layout.addSpacing(UI_Style.widget_spacing)
 
         # 1. 内部导航栏
-        nav_items = ["Match First",
+        nav_items = ["Arcade Timing",
                      "Simple Align",
                      "Extract Game",
                      "Run FFmpeg",
@@ -38,7 +38,7 @@ class MediaToolsPage(QWidget):
         layout.addWidget(self.stack)
 
         # 添加子页面
-        self.stack.addWidget(MatchFirstPage())
+        self.stack.addWidget(ArcadeTimingPage())
         self.stack.addWidget(SimpleAlignPage())
         self.stack.addWidget(ExtractGamePage())
         self.stack.addWidget(RunFFmpegPage())

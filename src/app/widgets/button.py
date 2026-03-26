@@ -99,6 +99,9 @@ def create_stated_button(text: str, isbig: bool = False, width: int = None) -> S
         
         大按钮默认高度: 35
         小按钮默认高度: element_height
+
+        大按钮默认宽度: 100
+        小按钮默认宽度: 无
     
     Returns:
         StatedButton: 按钮实例
@@ -112,6 +115,9 @@ def create_stated_button(text: str, isbig: bool = False, width: int = None) -> S
         height = 35
     else:
         height = UI_Style.element_height
+
+    if not width and isbig:
+        width = 100
 
     return StatedButton(text, isbig=isbig, width=width, height=height)
 

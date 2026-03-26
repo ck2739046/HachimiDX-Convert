@@ -115,6 +115,42 @@ zh_CN:
 
 
     media_subpages:
+      arcade_timing:
+        dialog_title: "Arcade Timing"
+
+        ui_select_file_divider: "文件选择"
+        ui_params_divider: "参数设置"
+        ui_preview_divider: "波形预览"
+
+        ui_reference_file_button: "选择基准文件"
+        ui_reference_file_help: "包含启动拍的音频或视频文件。"
+        ui_target_file_button: "选择目标文件"
+        ui_target_file_help: "需要匹配 arcade timing 的音频或视频文件。"
+
+        ui_bpm_label: "初始 BPM: "
+        ui_bpm_help: "启动拍的 BPM 值。"
+        ui_click_count_label: "启动拍数量: "
+        ui_click_count_help: "启动拍数量"
+        ui_click_start_time_label: "起始时间: "
+        ui_click_start_time_help: "启动拍在基准文件中的大致开始时间。"
+
+        ui_run_button: "分析"
+
+        warning_reference_file_required: "请先选择基准文件。"
+        warning_target_file_required: "请先选择目标文件。"
+        warning_invalid_bpm: "初始 BPM 参数无效，请输入在 10~400 之间的数字。"
+        warning_invalid_click_start_time: "起始时间无效，请输入大于等于 0 的数字。"
+        warning_worker_start_failed: "启动任务失败：\n%{error}"
+        warning_run_failed: "分析失败。"
+        warning_wave_not_found: "未找到波形图文件。"
+        warning_wave_load_failed: "波形图读取失败。"
+
+        notice_run_start: "开始执行 Arcade Timing 分析..."
+        notice_run_cancelled: "分析已取消。"
+        notice_run_success: "分析完成。"
+
+
+
       run_ffmpeg:
         
         ui_select_file_divider: "文件选择"
