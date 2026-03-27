@@ -33,6 +33,7 @@ class ArcadeTimingPage(BaseOutputPage):
         self.click_start_time_line_edit = None
 
         self.run_button = None
+        self.offset_label = None
         self.waveform_label = None
 
         self._active_runner_id = None
@@ -99,7 +100,10 @@ class ArcadeTimingPage(BaseOutputPage):
         self.run_button = create_stated_button(i18n.t(f"{I18N_Prefix}.ui_run_button"), isbig=True)
         self.run_button.clicked.connect(self.on_run_clicked)
 
-        self.create_row(self.run_button, add_stretch=True)
+        self.offset_label = create_label(bold=True)
+        self.offset_label.hide()
+
+        self.create_row(self.run_button, self.offset_label, add_stretch=True)
 
 
 
@@ -159,6 +163,8 @@ class ArcadeTimingPage(BaseOutputPage):
             return
 
         self.run_button.setEnabled(False)
+        self.offset_label.setText("")
+        self.offset_label.hide()
         self.waveform_label.hide()
         self.waveform_label.clear()
 
@@ -218,6 +224,8 @@ class ArcadeTimingPage(BaseOutputPage):
             return
 
         self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_run_success"))
+
+        self._try_parse_offset()
         self._try_show_wave_image()
 
 
@@ -242,3 +250,39 @@ class ArcadeTimingPage(BaseOutputPage):
                 wave_path.unlink()
         except Exception:
             pass
+
+
+
+    def _try_parse_offset(self) -> None:
+        offset_ms = None
+        recent_output = self.output_widget.get_recent_lines(6)
+        for line in reversed(recent_output.splitlines()):
+            line = line.strip()
+            if not line:
+                continue
+
+            if line == "Audio files are perfectly aligned (offset < 10 ms)":
+                offset_ms = 0
+                break
+
+            if line.startswith("Target file needs trim ") and line.endswith(" ms"):
+                value_text = line[len("Target file needs trim "):-len(" ms")].strip()
+                try:
+                    offset_ms = -1 * int(value_text)
+                    break
+                except Exception:
+                    continue
+
+            if line.startswith("Target file needs delay ") and line.endswith(" ms"):
+                value_text = line[len("Target file needs delay "):-len(" ms")].strip()
+                try:
+                    offset_ms = int(value_text)
+                    break
+                except Exception:
+                    continue
+
+        if offset_ms is not None:
+            self.offset_label.setText(f"  Offset: {offset_ms} ms") # 通过空格隔开
+            self.offset_label.show()
+        else:
+            self.output_widget.append_text("ui: failed to parse offset from output")

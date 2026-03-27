@@ -348,3 +348,17 @@ class OutputLogWidget(QWidget):
             else:
                 # 没有换行符也没有回车符，等待更多数据
                 break
+
+
+    def get_recent_lines(self, num_lines):
+        """
+        获取最近几行文本 (过滤空行)
+        
+        :param num_lines: 要获取的行数
+        :return: 最近几行文本的字符串
+        """
+        full_text = self.text_edit.toPlainText()
+        lines = full_text.split('\n')
+        # 获取最后 num_lines 行，过滤空行
+        recent_lines = [line for line in lines[-num_lines:] if line.strip()]
+        return '\n'.join(recent_lines)
