@@ -40,6 +40,8 @@ class ArcadeTimingPage(BaseOutputPage):
         self.edit_audio_button = None
 
         self.waveform_label = None
+        self._offset_action = None
+        self._offset_value_ms = None
 
         self._active_runner_id = None
 
@@ -182,6 +184,8 @@ class ArcadeTimingPage(BaseOutputPage):
         self.run_button.setEnabled(False)
         self.offset_label.setText("")
         self.offset_label.hide()
+        self._offset_action = None
+        self._offset_value_ms = None
         self.edit_audio_button.hide()
         self.waveform_label.hide()
         self.waveform_label.clear()
@@ -273,7 +277,8 @@ class ArcadeTimingPage(BaseOutputPage):
 
 
     def _try_parse_offset(self) -> None:
-        offset_ms = None
+        offset_action = None
+        offset_value_ms = None
         recent_output = self.output_widget.get_recent_lines(6)
         for line in reversed(recent_output.splitlines()):
             line = line.strip()
@@ -281,13 +286,15 @@ class ArcadeTimingPage(BaseOutputPage):
                 continue
 
             if line == "Audio files are perfectly aligned (offset < 10 ms)":
-                offset_ms = 0
+                offset_action = "aligned"
+                offset_value_ms = 0
                 break
 
             if line.startswith("Target file needs trim ") and line.endswith(" ms"):
                 value_text = line[len("Target file needs trim "):-len(" ms")].strip()
                 try:
-                    offset_ms = -1 * int(value_text)
+                    offset_action = "trim"
+                    offset_value_ms = int(value_text)
                     break
                 except Exception:
                     continue
@@ -295,19 +302,26 @@ class ArcadeTimingPage(BaseOutputPage):
             if line.startswith("Target file needs delay ") and line.endswith(" ms"):
                 value_text = line[len("Target file needs delay "):-len(" ms")].strip()
                 try:
-                    offset_ms = int(value_text)
+                    offset_action = "delay"
+                    offset_value_ms = int(value_text)
                     break
                 except Exception:
                     continue
 
-        if offset_ms:
-            self.offset_label.setText(f"  Offset: {offset_ms} ms ") # 通过空格隔开
+        if offset_action in ("trim", "delay") and offset_value_ms is not None:
+            self._offset_action = offset_action
+            self._offset_value_ms = offset_value_ms
+            self.offset_label.setText(f"  Offset: {offset_action} {offset_value_ms} ms ") # 通过空格隔开
             self.offset_label.show()
             self.edit_audio_button.show()
-        elif offset_ms == 0:
+        elif offset_action == "aligned":
+            self._offset_action = "aligned"
+            self._offset_value_ms = 0
             self.edit_audio_button.hide()
         else:
             self.output_widget.append_text("ui: failed to parse offset from output")
+            self._offset_action = None
+            self._offset_value_ms = None
             self.edit_audio_button.hide()
 
 
@@ -334,13 +348,11 @@ class ArcadeTimingPage(BaseOutputPage):
         if self._active_runner_id:
             return
 
-        offset_ms = self.offset_label.text().replace("Offset: ", "").replace(" ms", "").strip()
-        if offset_ms == "":
+        if self._offset_action is None or self._offset_value_ms is None:
             show_notify_dialog(i18n.t(f"{I18N_Prefix}.dialog_title"), i18n.t(f"{I18N_Prefix}.warning_offset_not_ready"))
             return
 
-        offset_ms = int(offset_ms)
-        if offset_ms == 0:
+        if self._offset_action == "aligned" or self._offset_value_ms == 0:
             self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_edit_audio_skip_zero_offset"))
             return
 
@@ -375,7 +387,7 @@ class ArcadeTimingPage(BaseOutputPage):
             return
         output_path = output_res.value
 
-        offset_sec = round(abs(offset_ms) / 1000.0, 3)
+        offset_sec = round(self._offset_value_ms / 1000.0, 3)
         raw_data = {
             M_Defs.media_type.key: target_media_type,
             M_Defs.duration.key: target_duration,
@@ -384,8 +396,8 @@ class ArcadeTimingPage(BaseOutputPage):
             M_Defs.output_path.key: str(output_path),
             M_Defs.audio_format.key: audio_format,
             
-            M_Defs.pad_start.key: offset_sec if offset_ms > 0 else None,
-            M_Defs.start.key: offset_sec if offset_ms < 0 else None,
+            M_Defs.pad_start.key: offset_sec if self._offset_action == "delay" else None,
+            M_Defs.start.key: offset_sec if self._offset_action == "trim" else None,
         }
 
         self.edit_audio_button.setEnabled(False)
