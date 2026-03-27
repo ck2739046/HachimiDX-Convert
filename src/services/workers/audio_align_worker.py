@@ -28,17 +28,14 @@ from src.core.schemas.op_result import print_op_result
 
 
 
-def main(reference_file: str,
-         target_file: str,
-         bpm: float,
-         click_count: int,
-         click_start_time: float) -> bool:
+def main(args: list[str]) -> bool:
     """
     1. 先调用 detect_click_start_main 检测启动拍时间
     2. 再调用 align_audio_main 计算对齐结果
     3. 最后调用 draw_audio_wave_main 绘制波形图
     
     输入:
+        - is_simply_align (str): 是否仅对齐，"true" / "false"
         - reference_file (str): 基准文件路径（包含完整启动拍）
         - target_file (str): 待对齐文件路径
         - bpm (float): 启动拍的BPM值
@@ -52,9 +49,49 @@ def main(reference_file: str,
     """
 
     try:
+        # parse args
+        is_simply_align = args[0]
+        reference_file = args[1]
+        target_file = args[2]
+
+        if is_simply_align.strip().lower() == "false":
+            if len(args) < 6:
+                print("Not enough args for non-simply align mode, exiting.")
+                return False
+            bpm = float(args[3])
+            click_count = int(args[4])
+            click_start_time = float(args[5])
+
+
+
         print("    Calculating...", end='\r')
         
-        # 1. 调用 detect_click_start 分析启动拍时间
+        # 1. 调用 align_audio 分析文件对齐
+        res = align_audio_main(reference_file, target_file)
+        if not res.is_ok:
+            print("[AUDIO_ALIGN_WORKER] [ERROR] Error in align_audio")
+            print(print_op_result(res))
+            return False
+        
+        target_match_offset = res.value['offset_ms']
+        reference_audio = res.value['reference_audio']
+        target_audio = res.value['target_audio']
+
+
+
+        # 不执行后续动作了
+        if is_simply_align.strip().lower() == "true":
+            if abs(target_match_offset) < 10:
+                print("Audio files are perfectly aligned (offset < 10 ms)")
+            elif target_match_offset > 0:
+                print(f"Target file needs delay {round(target_match_offset)} ms")
+            else:
+                print(f"Target file needs trim {abs(round(target_match_offset))} ms")
+            return True
+
+
+
+        # 2. 调用 detect_click_start 分析启动拍时间
         res = detect_click_start_main(reference_file, bpm, click_count, click_start_time)
         if not res.is_ok:
             print("[AUDIO_ALIGN_WORKER] [ERROR] Error in detect_click_start")
@@ -67,16 +104,6 @@ def main(reference_file: str,
         graph_range_end = res.value['graph_range_end']
 
 
-        # 2. 调用 align_audio 分析文件对齐
-        res = align_audio_main(reference_file, target_file)
-        if not res.is_ok:
-            print("[AUDIO_ALIGN_WORKER] [ERROR] Error in align_audio")
-            print(print_op_result(res))
-            return False
-        
-        target_match_offset = res.value['offset_ms']
-        reference_audio = res.value['reference_audio']
-        target_audio = res.value['target_audio']
 
         # if target_match_offset == 0:
         #     final_str = "reference equals target"
@@ -130,9 +157,9 @@ def main(reference_file: str,
 
 if __name__ == "__main__":
 
-    if len(sys.argv) <= 6:
-        print("plz provide root, reference_file, target_file, bpm, click_count, click_start_time")
+    if len(sys.argv) < 5: # 至少要5个
+        print("plz provide root, is_simply_align, reference_file, (target_file, bpm, click_count, click_start_time), exiting.")
         sys.exit(1)
 
-    result = main(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
+    result = main(sys.argv[2:])
     sys.exit(0 if result else 1)

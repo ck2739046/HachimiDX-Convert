@@ -195,6 +195,7 @@ class ArcadeTimingPage(BaseOutputPage):
 
             cmd = build_cmd_head_python_exe(PathManage.AUDIO_ALIGN_WORKER_PATH)
             cmd.extend([
+                "false", # is_simply_align
                 str(data["reference_file"]),
                 str(data["target_file"]),
                 str(data["bpm"]),
