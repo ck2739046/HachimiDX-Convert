@@ -159,6 +159,13 @@ zh_CN:
         notice_edit_audio_success: "音频编辑完成。\n输出文件：%{output_path}"
 
 
+      simply_align:
+        dialog_title: "Simply Align"
+
+        ui_reference_file_help: "音频或视频文件，是时间对齐的基准。"
+        ui_target_file_help: "音频或视频文件，需要与基准文件进行对齐。"
+
+
 
       run_ffmpeg:
         
