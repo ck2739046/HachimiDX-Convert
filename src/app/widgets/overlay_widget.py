@@ -21,7 +21,7 @@ class OverlayWidget(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        painter.fillRect(self.rect(), QColor(128, 128, 128, 128))
+        painter.fillRect(self.rect(), QColor(60, 60, 60, 170))
         
     def eventFilter(self, obj, event):
         if obj == self.parent():

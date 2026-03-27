@@ -1,8 +1,8 @@
 import os
 import traceback
-from PyQt6.QtWidgets import QVBoxLayout
+from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
-from ..base_output_page import BaseOutputPage
+from ..base_output_page import BaseOutputPage, _create_row
 from ...ui_style import UI_Style
 from ...widgets import *
 
@@ -32,11 +32,15 @@ class RunFFmpegPage(BaseOutputPage):
         self.video_fps_combo_box = None
         self.video_gop_optimize_check_box = None
         self.video_mute_check_box = None
+        self.video_panel = None
+        self.video_overlay = None
         # audio widgets
         self.audio_format_combo_box = None
         self.audio_bitrate_combo_box = None
         self.audio_sample_rate_combo_box = None
         self.audio_volume_line_edit = None
+        self.audio_panel = None
+        self.audio_overlay = None
         # common widgets
         self.common_pad_start_line_edit = None
         self.common_start_line_edit = None
@@ -84,13 +88,20 @@ class RunFFmpegPage(BaseOutputPage):
         video_fps_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_fps_help"))
         video_gop_optimize_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_gop_optimize_help"))
         video_mute_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_mute_help"))
-        # create rows
-        self.create_row(video_crf_label, self.video_crf_combo_box, video_crf_help,
-                        video_resolution_label, self.video_resolution_combo_box, video_resolution_help,
-                        video_fps_label, self.video_fps_combo_box, video_fps_help,
-                        video_gop_optimize_label, self.video_gop_optimize_check_box, video_gop_optimize_help,
-                        video_mute_label, self.video_mute_check_box, video_mute_help,
-                        add_stretch=True)
+        # create video panel + row
+        self.video_panel = QWidget()
+        video_layout = QVBoxLayout(self.video_panel)
+        video_layout.setContentsMargins(0, 0, 0, 0)
+        row = _create_row(video_crf_label, self.video_crf_combo_box, video_crf_help,
+                          video_resolution_label, self.video_resolution_combo_box, video_resolution_help,
+                          video_fps_label, self.video_fps_combo_box, video_fps_help,
+                          video_gop_optimize_label, self.video_gop_optimize_check_box, video_gop_optimize_help,
+                          video_mute_label, self.video_mute_check_box, video_mute_help,
+                          add_stretch=True)
+        video_layout.addWidget(row)
+        self.content_layout.addWidget(self.video_panel)
+        self.video_overlay = OverlayWidget(self.video_panel)
+        self.video_overlay.show()
         
         # 第四行: audio 参数
         audio_divider = create_divider(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_divider"))
@@ -105,12 +116,19 @@ class RunFFmpegPage(BaseOutputPage):
         audio_bitrate_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_bitrate_help"))
         audio_sample_rate_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_sample_rate_help"))
         audio_volume_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_volume_help"))
-        # create rows
-        self.create_row(audio_format_label, self.audio_format_combo_box, audio_format_help,
-                        audio_bitrate_label, self.audio_bitrate_combo_box, audio_bitrate_help,
-                        audio_sample_rate_label, self.audio_sample_rate_combo_box, audio_sample_rate_help,
-                        audio_volume_label, self.audio_volume_line_edit, audio_volume_help,
-                        add_stretch=True)
+        # create audio panel + row
+        self.audio_panel = QWidget()
+        audio_layout = QVBoxLayout(self.audio_panel)
+        audio_layout.setContentsMargins(0, 0, 0, 0)
+        row = _create_row(audio_format_label, self.audio_format_combo_box, audio_format_help,
+                          audio_bitrate_label, self.audio_bitrate_combo_box, audio_bitrate_help,
+                          audio_sample_rate_label, self.audio_sample_rate_combo_box, audio_sample_rate_help,
+                          audio_volume_label, self.audio_volume_line_edit, audio_volume_help,
+                          add_stretch=True)
+        audio_layout.addWidget(row)
+        self.content_layout.addWidget(self.audio_panel)
+        self.audio_overlay = OverlayWidget(self.audio_panel)
+        self.audio_overlay.show()
         
         # 第五行: common 参数
         common_divider = create_divider(i18n.t("app.media_subpages.run_ffmpeg.ui_common_divider"))
@@ -157,6 +175,7 @@ class RunFFmpegPage(BaseOutputPage):
 
         
         self.audio_format_combo_box.currentIndexChanged.connect(self.update_audio_bitrate_combo_box)
+        self.video_mute_check_box.toggled.connect(self.update_media_panel_state)
 
         self.output_filename_line_edit.textChanged.connect(self.update_output_full_path_display)
 
@@ -185,6 +204,15 @@ class RunFFmpegPage(BaseOutputPage):
         if len(err_msg) > 0:
             show_notify_dialog("app.media_subpages.run_ffmpeg", err_msg)
 
+        # reset first
+        self.video_mute_check_box.blockSignals(True)
+        self.video_mute_check_box.setChecked(False)
+        self.video_mute_check_box.blockSignals(False)
+        self.video_overlay.show()
+        self.audio_overlay.show()
+        # 根据媒体类型和 mute 状态刷新启用关系。
+        self.update_media_panel_state()
+
         # 更新音频codec/bitrate可选项
         self.update_audio_format_combo_box()
         # 更新完整输出路径显示
@@ -193,6 +221,29 @@ class RunFFmpegPage(BaseOutputPage):
         if res.is_ok:
             final_output_filename = res.value
             self.output_filename_line_edit.setText(final_output_filename)
+
+
+
+    def update_media_panel_state(self) -> None:
+        """根据 media_type 和 mute 刷新 video/audio 参数区可用状态。"""
+
+        media_type = self.media_input.selected_file_type
+
+        enable_video = media_type in (MediaType.VIDEO_WITH_AUDIO, MediaType.VIDEO_WITHOUT_AUDIO)
+        enable_audio = media_type in (MediaType.VIDEO_WITH_AUDIO, MediaType.AUDIO)
+
+        if enable_video and self.video_mute_check_box.isChecked():
+            enable_audio = False
+
+        if enable_video:
+            self.video_overlay.hide()
+        else:
+            self.video_overlay.show()
+
+        if enable_audio:
+            self.audio_overlay.hide()
+        else:
+            self.audio_overlay.show()
 
 
 
