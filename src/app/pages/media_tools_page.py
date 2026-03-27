@@ -3,7 +3,6 @@ from ..ui_style import UI_Style
 from ..widgets import SegmentedNavBar
 from .media_subpages.arcade_timing import ArcadeTimingPage
 from .media_subpages.simple_align import SimpleAlignPage
-from .media_subpages.extract_game import ExtractGamePage
 from .media_subpages.run_ffmpeg import RunFFmpegPage
 from .media_subpages.others import OthersPage
 
@@ -27,7 +26,6 @@ class MediaToolsPage(QWidget):
         # 1. 内部导航栏
         nav_items = ["Arcade Timing",
                      "Simple Align",
-                     "Extract Game",
                      "Run FFmpeg",
                      "Others"]
         self.nav_bar = SegmentedNavBar(nav_items, height=UI_Style.sub_navbar_height)
@@ -40,7 +38,6 @@ class MediaToolsPage(QWidget):
         # 添加子页面
         self.stack.addWidget(ArcadeTimingPage())
         self.stack.addWidget(SimpleAlignPage())
-        self.stack.addWidget(ExtractGamePage())
         self.stack.addWidget(RunFFmpegPage())
         self.stack.addWidget(OthersPage())
 
