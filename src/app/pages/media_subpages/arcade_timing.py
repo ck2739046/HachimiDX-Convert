@@ -10,8 +10,11 @@ from ...ui_style import UI_Style
 
 from src.core.build_worker_cmd import build_cmd_head_python_exe
 from src.core.schemas.op_result import OpResult, ok, err, print_op_result
+from src.core.schemas.media_config import MediaType
+from src.core.schemas.media_config import MediaConfig_Definitions as M_Defs
 from src.core.tools import show_notify_dialog
 from src.services import process_manager_api
+from src.services.pipeline import MediaPipeline
 from src.services.path_manage import PathManage
 import i18n
 
@@ -26,7 +29,7 @@ class ArcadeTimingPage(BaseOutputPage):
         self.content_layout.setContentsMargins(10, 10, 10, 10)
 
         self.reference_path_display = None
-        self.target_path_display = None
+        self.target_media_input = None
 
         self.bpm_line_edit = None
         self.click_count_combo_box = None
@@ -34,6 +37,8 @@ class ArcadeTimingPage(BaseOutputPage):
 
         self.run_button = None
         self.offset_label = None
+        self.edit_audio_button = None
+
         self.waveform_label = None
 
         self._active_runner_id = None
@@ -59,11 +64,16 @@ class ArcadeTimingPage(BaseOutputPage):
         )
         self.create_row(reference_button, reference_help, self.reference_path_display)
 
-        target_button, self.target_path_display, target_help = create_file_selection_row(
-            button_text=i18n.t(f"{I18N_Prefix}.ui_target_file_button"),
-            help_text=i18n.t(f"{I18N_Prefix}.ui_target_file_help"),
+        self.target_media_input = MediaInputProbeWidget(
+            select_file_button_help=i18n.t(f"{I18N_Prefix}.ui_target_file_help")
         )
-        self.create_row(target_button, target_help, self.target_path_display)
+        self.target_media_input.media_loaded.connect(self.on_target_input_selected)
+        self.content_layout.addWidget(self.target_media_input)
+
+    
+    def on_target_input_selected(self, error_msg: str) -> None:
+        if len(error_msg) > 0:
+            show_notify_dialog(i18n.t(f"{I18N_Prefix}.dialog_title"), error_msg)
 
 
 
@@ -103,7 +113,14 @@ class ArcadeTimingPage(BaseOutputPage):
         self.offset_label = create_label(bold=True)
         self.offset_label.hide()
 
-        self.create_row(self.run_button, self.offset_label, add_stretch=True)
+        self.edit_audio_button = create_stated_button(i18n.t(f"{I18N_Prefix}.ui_edit_audio_button"), width=100)
+        self.edit_audio_button.clicked.connect(self.on_edit_audio_clicked)
+        self.edit_audio_button.hide()
+
+        self.create_row(self.run_button,
+                        self.offset_label,
+                        self.edit_audio_button,
+                        add_stretch=True)
 
 
 
@@ -119,8 +136,8 @@ class ArcadeTimingPage(BaseOutputPage):
 
 
     def _parse_inputs(self) -> OpResult[dict]:
-        reference_file = (self.reference_path_display.text() if self.reference_path_display else "").strip()
-        target_file = (self.target_path_display.text() if self.target_path_display else "").strip()
+        reference_file = self.reference_path_display.text().strip()
+        target_file = self.target_media_input.get_path().strip()
 
         if not reference_file:
             return err(i18n.t(f"{I18N_Prefix}.warning_reference_file_required"))
@@ -165,6 +182,7 @@ class ArcadeTimingPage(BaseOutputPage):
         self.run_button.setEnabled(False)
         self.offset_label.setText("")
         self.offset_label.hide()
+        self.edit_audio_button.hide()
         self.waveform_label.hide()
         self.waveform_label.clear()
 
@@ -281,8 +299,109 @@ class ArcadeTimingPage(BaseOutputPage):
                 except Exception:
                     continue
 
-        if offset_ms is not None:
-            self.offset_label.setText(f"  Offset: {offset_ms} ms") # 通过空格隔开
+        if offset_ms:
+            self.offset_label.setText(f"  Offset: {offset_ms} ms ") # 通过空格隔开
             self.offset_label.show()
+            self.edit_audio_button.show()
+        elif offset_ms == 0:
+            self.edit_audio_button.hide()
         else:
             self.output_widget.append_text("ui: failed to parse offset from output")
+            self.edit_audio_button.hide()
+
+
+
+    @staticmethod
+    def _build_non_conflict_output_path(target_path: Path, audio_format: str) -> OpResult[Path]:
+        base_filename = f"{target_path.stem}_arcade_timing"
+
+        for i in range(0, 1000):
+            candidate_name = base_filename if i == 0 else f"{base_filename}_{i}"
+            path_res = M_Defs.build_full_output_path(str(target_path), candidate_name, audio_format)
+            if not path_res.is_ok:
+                return err("Failed to build output path", inner=path_res)
+
+            candidate_path = Path(path_res.value[0])
+            if not candidate_path.exists():
+                return ok(candidate_path)
+
+        return err("Failed to find non-conflicting output path")
+
+
+
+    def on_edit_audio_clicked(self) -> None:
+        if self._active_runner_id:
+            return
+
+        offset_ms = self.offset_label.text().replace("Offset: ", "").replace(" ms", "").strip()
+        if offset_ms == "":
+            show_notify_dialog(i18n.t(f"{I18N_Prefix}.dialog_title"), i18n.t(f"{I18N_Prefix}.warning_offset_not_ready"))
+            return
+
+        offset_ms = int(offset_ms)
+        if offset_ms == 0:
+            self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_edit_audio_skip_zero_offset"))
+            return
+
+        target_file = self.target_media_input.get_path().strip()
+        if not target_file:
+            show_notify_dialog(i18n.t(f"{I18N_Prefix}.dialog_title"), i18n.t(f"{I18N_Prefix}.warning_target_file_required"))
+            return
+
+        target_path = Path(target_file)
+        if not target_path.is_file():
+            show_notify_dialog(i18n.t(f"{I18N_Prefix}.dialog_title"), i18n.t(f"{I18N_Prefix}.warning_target_file_missing"))
+            return
+
+        target_media_type = self.target_media_input.selected_file_type
+        target_duration = self.target_media_input.selected_file_duration
+
+        if target_media_type == MediaType.UNKNOWN:
+            show_notify_dialog(i18n.t(f"{I18N_Prefix}.dialog_title"), i18n.t(f"{I18N_Prefix}.warning_offset_not_ready"))
+            return
+
+        res = M_Defs.get_audio_format_by_media_type(target_media_type)
+        audio_format, _ = res.value
+        if target_media_type == MediaType.AUDIO and target_path.suffix.lower() == ".mp3":
+            audio_format = "mp3"
+
+        output_res = self._build_non_conflict_output_path(target_path, audio_format)
+        if not output_res.is_ok:
+            show_notify_dialog(
+                i18n.t(f"{I18N_Prefix}.dialog_title"),
+                i18n.t(f"{I18N_Prefix}.warning_build_output_path_failed", error=print_op_result(output_res)),
+            )
+            return
+        output_path = output_res.value
+
+        offset_sec = round(abs(offset_ms) / 1000.0, 3)
+        raw_data = {
+            M_Defs.media_type.key: target_media_type,
+            M_Defs.duration.key: target_duration,
+
+            M_Defs.input_path.key: str(target_path),
+            M_Defs.output_path.key: str(output_path),
+            M_Defs.audio_format.key: audio_format,
+            
+            M_Defs.pad_start.key: offset_sec if offset_ms > 0 else None,
+            M_Defs.start.key: offset_sec if offset_ms < 0 else None,
+        }
+
+        self.edit_audio_button.setEnabled(False)
+        self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_edit_audio_start"))
+        
+        try:
+            run_res = MediaPipeline.run_now(raw_data)
+            if not run_res.is_ok:
+                show_notify_dialog(
+                    i18n.t(f"{I18N_Prefix}.dialog_title"),
+                    i18n.t(f"{I18N_Prefix}.warning_edit_audio_failed", error=print_op_result(run_res)),
+                )
+                self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.warning_edit_audio_failed_log"))
+                return
+
+            self.output_widget.append_text(
+                i18n.t(f"{I18N_Prefix}.notice_edit_audio_success", output_path=str(output_path))
+            )
+        finally:
+            self.edit_audio_button.setEnabled(True)
