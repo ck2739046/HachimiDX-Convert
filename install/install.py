@@ -131,6 +131,9 @@ def install():
     is_success = general_pip_install("Other dependencies", cmd)
     if not is_success: sys.exit(1)
 
+    # 解决 pywin32 导入错误
+    cmd = [sys.executable, "../python/Scripts/pywin32_postinstall.py", "-install"]
+    subprocess.run(cmd, capture_output=True) # 隐藏输出
     
 
 
