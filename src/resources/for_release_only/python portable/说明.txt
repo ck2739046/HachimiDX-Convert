@@ -1,0 +1,9 @@
+此 Python 便携包信息：
+
+创建于 2026.03.28
+
+基于 Python 3.13.11 Embed x64
+
+使用 James Thomas Moon 的脚本创建
+
+.\PythonEmbed4Win.ps1 -ZipFile "C:\python-3.13.11-embed-amd64.zip" -Path C:\Portable_Python
