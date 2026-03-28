@@ -1,0 +1,486 @@
+import sys
+import re
+import subprocess
+from pathlib import Path
+import shutil
+
+
+# 全局变量
+LANGUAGE = ""
+USE_QingHua_PIP = ""
+
+QingHua_PIP = "-i https://pypi.tuna.tsinghua.edu.cn/simple"
+
+
+
+
+def main():
+    global LANGUAGE
+
+    # generate by https://patorjk.com/software/taag using font "Terrace"
+    logo = """
+
+    ░██     ░██                       ░██        ░██                ░██     ░███████   ░██    ░██ 
+    ░██     ░██                       ░██                                   ░██   ░██   ░██  ░██  
+    ░██     ░██  ░██████    ░███████  ░████████  ░██░█████████████  ░██     ░██    ░██   ░██░██   
+    ░██████████       ░██  ░██    ░██ ░██    ░██ ░██░██   ░██   ░██ ░██     ░██    ░██    ░███    
+    ░██     ░██  ░███████  ░██        ░██    ░██ ░██░██   ░██   ░██ ░██     ░██    ░██   ░██░██   
+    ░██     ░██ ░██   ░██  ░██    ░██ ░██    ░██ ░██░██   ░██   ░██ ░██     ░██   ░██   ░██  ░██  
+    ░██     ░██  ░█████░██  ░███████  ░██    ░██ ░██░██   ░██   ░██ ░██     ░███████   ░██    ░██ 
+
+    """
+
+    print(logo)
+
+    # ask language
+    LANGUAGE = ask_language()
+
+    main_menu_en = """
+Please select an option:
+
+1. Install Hachimi DX (Default)
+
+2. Undo Ultralytics DirectML Modification
+
+3. Exit
+
+Please don't choose "2" if you don't know what it is.
+
+-> """
+    main_menu_zh = """
+请选择：
+
+1. 安装 Hachimi DX (默认)
+
+2. 撤销 Ultralytics DirectML 修改
+
+3. 退出
+
+如果你不清楚选项 2 是什么，请不要选择此选项。
+
+-> """
+    choice = input(main_menu_en if LANGUAGE == "en" else main_menu_zh).strip()
+    if choice == "1":
+        install()
+    elif choice == "2":
+        success = modify_ultralytics_for_dml(recover=True)
+        if success:
+            info_en = "Ultralytics has been restored to its original state."
+            info_zh = "Ultralytics 已恢复到原始状态。"
+            print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+        else:
+            info_en = "An error occurred while trying to restore ultralytics."
+            info_zh = "尝试恢复 ultralytics 时发生错误。"
+            print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+    elif choice == "3":
+        sys.exit(0)
+    else:
+        print("Defaulting to Install Hachimi DX.")
+        install()
+
+
+
+
+
+def install():
+    global USE_QingHua_PIP
+    
+    # ask if use QingHua PIP
+    USE_QingHua_PIP = ask_use_qinghua_pip()
+
+    # define pytorch version
+    torch_version = "cpu" # default
+    has_nvidia_gpu = ask_nvidia_gpu_installed()
+    if has_nvidia_gpu:
+        torch_cuda_version = detect_cuda_version_for_torch()
+        if torch_cuda_version:
+            torch_version = torch_cuda_version
+
+    # install pytorch
+    is_success = install_pytorch(torch_version)
+    if not is_success: sys.exit(1)
+
+    # install ultralytics + onnxruntime
+    is_success = install_ultralytics_onnx(has_nvidia_gpu)
+    if not is_success: sys.exit(1)
+
+    # model inference acceleration
+    if torch_version.startswith("cu"):
+        # install TensorRT
+        is_success = install_tensorrt(torch_version)
+        if not is_success: sys.exit(1)
+    else:
+        # install DirectML + onnxruntime + modify ultralytics
+        install_dml = ask_install_dml()
+        if install_dml:
+            is_success = install_directml_onnx()
+            if not is_success: sys.exit(1)
+        
+    # install others
+    pyqt6 = "PyQt6==6.10.2"
+    pywin32 = "pywin32==311"
+    librosa = "librosa==0.11.0"
+    pydantic = "pydantic==2.12.5"
+    i18n = "python-i18n==0.3.9"
+    nanoid = "nanoid==2.0.0"
+    cmd = f"{sys.executable} -m pip install {pyqt6} {pywin32} {librosa} {pydantic} {i18n} {nanoid} --no-warn-script-location"
+    if USE_QingHua_PIP:
+        cmd += f" {QingHua_PIP}"
+    is_success = general_pip_install("Other dependencies", cmd)
+    if not is_success: sys.exit(1)
+
+    
+
+
+
+
+
+def ask_language() -> str:
+    info = """
+Please select your language:
+1. English (Default)
+2. Simplified Chinese
+3. Exit
+
+请选择语言：
+1. 英语 (默认)
+2. 简体中文
+3. 退出
+
+-> """
+    language = input(info).strip()
+    if language == "1":
+        return "en"
+    elif language == "2":
+        return "zh"
+    elif language == "3":
+        sys.exit(0)
+    else:
+        print("Defaulting to English.")
+        return "en"
+    
+
+
+
+def ask_use_qinghua_pip() -> bool:
+    info_zh = """
+TUNA 可以显著国内的加速下载和安装。
+你是否想使用 TUNA ?
+
+如果你在中国大陆，强烈建议选择"是"。
+如果你在其他地区，请选择"否"。
+
+1. 是
+2. 否 (默认)
+3. 退出
+
+-> """
+    info_en = """
+TUNA can significantly speed up downloads and installations in China.
+Do you want to use TUNA?
+
+If you are in mainland China, it is highly recommended to choose "Yes".
+If you are in other regions, please choose "No".
+
+1. Yes
+2. No (Default)
+3. Exit
+
+-> """
+    use_qinghua = input(info_en if LANGUAGE == "en" else info_zh).strip()
+    if use_qinghua == "1":
+        return True
+    elif use_qinghua == "2":
+        return False
+    elif use_qinghua == "3":
+        sys.exit(0)
+    else:
+        print("Defaulting to No.")
+        return False
+
+
+
+
+def ask_nvidia_gpu_installed() -> bool:
+    info_zh = """
+你是否安装了 NVIDIA GPU ?
+1. 是
+2. 否 (默认)
+3. 退出
+
+-> """
+    info_en = """
+Do you have an NVIDIA GPU installed?
+1. Yes
+2. No (Default)
+3. Exit
+
+
+-> """
+    gpu_installed = input(info_en if LANGUAGE == "en" else info_zh).strip()
+    if gpu_installed == "1":
+        return True
+    elif gpu_installed == "2":
+        return False
+    elif gpu_installed == "3":
+        sys.exit(0)
+    else:
+        print("Defaulting to No.")
+        return False
+    
+
+
+
+def detect_cuda_version_for_torch() -> str | None:
+    print("")
+    # 通过 cmd 运行 nvidia-smi 命令来检测 CUDA 版本
+    try:
+        result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+        output = result.stdout
+        # 使用正则表达式提取 CUDA 版本
+        match = re.search(r"CUDA Version:\s+(\d+\.\d+)", output)
+        if match:
+            cuda_version = match.group(1).strip()
+            cuda_version_10x = round(float(cuda_version) * 10)
+        else:
+            info_en = "Could not detect CUDA version from nvidia-smi output."
+            info_zh = "无法从 nvidia-smi 输出中检测到 CUDA 版本。"
+            print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+            return None
+    except Exception as e:
+        print(f"Error running nvidia-smi: {e}")
+        return None
+    
+    info_en = f"Detected CUDA version: {cuda_version}"
+    info_zh = f"检测到 CUDA 版本: {cuda_version}"
+    print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+
+    if cuda_version_10x >= 130:
+        return "cu130"
+    elif cuda_version_10x >= 128:
+        return "cu128"
+    elif cuda_version_10x >= 126:
+        return "cu126"
+    elif cuda_version_10x >= 118:
+        return "cu118"
+    
+    info_en = "This CUDA version is outdated. Minimum requirement is CUDA 11.8+"
+    info_zh = "此 CUDA 版本已过时，最低要求为 CUDA 11.8+"
+    print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+    return None
+
+
+
+
+def install_pytorch(torch_version) -> bool:
+
+    # cuda 11.8 使用旧版 2.7.1
+    if torch_version == "cu118":
+        torch_cmd = "torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu118"
+    # 其他版本使用新版 2.10.0
+    elif torch_version == "cpu":
+        torch_cmd = "torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cpu"
+    else:
+        torch_cmd = f"torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/{torch_version}"
+
+    cmd = f"{sys.executable} -m pip install {torch_cmd} --no-warn-script-location"
+    if USE_QingHua_PIP:
+        cmd += f" {QingHua_PIP}"
+    
+    return general_pip_install(f"PyTorch ({torch_version})", cmd)
+
+
+
+
+def install_ultralytics_onnx(has_nvidia_gpu) -> bool:
+
+    # 安装 onnxruntime
+    libs = "onnx==1.20.1 onnxslim==0.1.90"
+    if has_nvidia_gpu:
+        libs += " onnxruntime-gpu==1.24.4"
+    cmd = f"{sys.executable} -m pip install {libs} --no-warn-script-location"
+    if USE_QingHua_PIP:
+        cmd += f" {QingHua_PIP}"
+    is_success = general_pip_install("ONNX Runtime", cmd)
+    if not is_success:
+        return False
+        
+    # 安装 ultralytics
+    cmd = f"{sys.executable} -m pip install ultralytics==8.4.24 --no-warn-script-location"
+    if USE_QingHua_PIP:
+        cmd += f" {QingHua_PIP}"
+    is_success = general_pip_install("Ultralytics 8.4.24", cmd)
+    if not is_success:
+        return False
+    
+    return True
+
+
+
+
+def install_tensorrt(torch_version) -> bool:
+
+    # 决定版本
+    if torch_version == "cu118":
+        tensorrt_version = "10.13.0.35" # last version support CUDA 11.8
+    else:
+        tensorrt_version = "10.15.1.29" # default
+
+    # 先安装 wheel-stub
+    cmd = f"{sys.executable} -m pip install wheel-stub==0.4.2 --no-warn-script-location"
+    if USE_QingHua_PIP:
+        cmd += f" {QingHua_PIP}"
+    is_success = general_pip_install("wheel-stub 0.4.2", cmd)
+    if not is_success:
+        return False
+
+    # 再安装 TensorRT
+    cmd = f"{sys.executable} -m pip install tensorrt=={tensorrt_version} --no-warn-script-location"
+    if USE_QingHua_PIP:
+        cmd += f" {QingHua_PIP}"
+    is_success = general_pip_install(f"NVIDIA TensorRT {tensorrt_version}", cmd)
+    if not is_success:
+        return False
+
+    # del tmp files
+    tmp_dir = Path(__file__).parent.parent / "_tmp_trt"
+    if tmp_dir.exists() and tmp_dir.is_dir():
+        try:
+            shutil.rmtree(tmp_dir)
+        except Exception as e:
+            print(f"Error deleting temporary directory {tmp_dir}: {e}")
+
+    return True
+
+
+
+def ask_install_dml() -> bool:
+    info_zh = """
+DirectML 能够调用 AMD Intel 的 核显/独显 进行硬件加速。
+你是否想安装 DirectML ?
+
+如果你有支持 DirectML 的 GPU，并且性能显著优于 CPU，强烈建议选择"是"。
+其他情况情选择"否"。
+
+1. 是
+2. 否 (默认)
+3. 退出
+
+-> """
+    info_en = """
+DirectML can leverage AMD and Intel integrated/discrete GPUs for hardware acceleration.
+Do you want to install DirectML?
+
+If you have a GPU that supports DirectML and offers significantly better performance than CPU, it is highly recommended to choose "Yes".
+In other cases, please choose "No".
+
+1. Yes
+2. No (Default)
+3. Exit
+
+-> """
+    install_dml = input(info_en if LANGUAGE == "en" else info_zh).strip()
+    if install_dml == "1":
+        return True
+    elif install_dml == "2":
+        return False
+    elif install_dml == "3":
+        sys.exit(0)
+    else:
+        print("Defaulting to No.")
+        return False
+    
+
+
+def install_directml_onnx() -> bool:
+
+    cmd = f"{sys.executable} -m pip install onnxruntime-directml==1.24.4 --no-warn-script-location"
+    if USE_QingHua_PIP:
+        cmd += f" {QingHua_PIP}"
+    is_success = general_pip_install("ONNX Runtime DirectML", cmd)
+    if not is_success:
+        return False
+    
+    is_success = modify_ultralytics_for_dml()
+    if not is_success:
+        return False
+    
+    return True
+    
+
+
+def modify_ultralytics_for_dml(recover = False) -> bool:
+
+    print("")
+    root = Path(__file__).parent.parent
+    ultralytics = root / "python" / "Lib" / "site-packages" / "ultralytics"
+    target_path_onnx = ultralytics / "nn" / "backends" / "onnx.py"
+    target_path_exporter = ultralytics / "engine" / "exporter.py"
+
+    modified_onnx = Path(__file__).parent / "dml_support" / "modified" / "onnx.py"
+    modified_exporter = Path(__file__).parent / "dml_support" / "modified" / "exporter.py"
+    original_onnx = Path(__file__).parent / "dml_support" / "original" / "onnx.py"
+    original_exporter = Path(__file__).parent / "dml_support" / "original" / "exporter.py"
+
+    # ckech file exists
+    for file in [target_path_onnx, target_path_exporter, modified_onnx, modified_exporter, original_onnx, original_exporter]:
+        if not file.exists() or not file.is_file():
+            info_en = f"modify_ultralytics_for_dml(): Error: Target file {file} does not exist."
+            info_zh = f"modify_ultralytics_for_dml(): 错误: 目标文件 {file} 不存在。。"
+            print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+            return False
+
+    if not recover:  
+        # replace target files with modified files
+        try:
+            shutil.copyfile(modified_onnx, target_path_onnx)
+            shutil.copyfile(modified_exporter, target_path_exporter)
+        except Exception as e:
+            info_en = f"modify_ultralytics_for_dml(): Error replacing with modified files: {e}"
+            info_zh = f"modify_ultralytics_for_dml(): 替换为修改后的文件时发生错误: {e}"
+            print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+            return False
+    else:
+        # replace target files with original files
+        try:
+            shutil.copyfile(original_onnx, target_path_onnx)
+            shutil.copyfile(original_exporter, target_path_exporter)
+        except Exception as e:
+            info_en = f"modify_ultralytics_for_dml(): Error replacing with original files: {e}"
+            info_zh = f"modify_ultralytics_for_dml(): 替换为原始文件时发生错误: {e}"
+            print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+            return False
+
+    return True
+
+
+
+def general_pip_install(package_name, cmd) -> bool:
+    
+    # 执行安装命令
+    print("")
+    info_en = f"Installing {package_name}...\n\n{cmd}"
+    info_zh = f"正在安装 {package_name}...\n\n{cmd}"
+    print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+    print("\n-----\n")
+
+    try:
+        subprocess.run(cmd, shell=True, check=True)
+        print("\n-----\n")
+        info_en = f"{package_name} installation completed successfully."
+        info_zh = f"{package_name} 安装成功完成。"
+        print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+        return True
+
+    except Exception as e:
+        print("\n-----\n")
+        info_en = f"Error occurred while installing {package_name}: {e}"
+        info_zh = f"安装 {package_name} 时发生错误: {e}"
+        print(f"{info_en if LANGUAGE == 'en' else info_zh}")
+        return False
+
+
+
+
+if __name__ == "__main__":
+    main()
