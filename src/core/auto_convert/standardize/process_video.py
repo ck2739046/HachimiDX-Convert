@@ -14,7 +14,6 @@ from src.services.pipeline import MediaPipeline
 def main(input_video: Path,
          temp_output_path: Path,
          final_output_path: Path,
-         song_name: str,
          circle_center: Tuple[int, int],
          circle_radius: int,
          media_type: MediaType,
@@ -31,7 +30,6 @@ def main(input_video: Path,
         input_video(Path): 输入视频路径
         temp_output_path(Path): 临时输出视频路径
         final_output_path(Path): 最终输出视频路径
-        song_name(str): 歌曲名称（不带扩展名）
         circle_center(Tuple[int, int]): 圆心坐标
         circle_radius(int): 圆半径
         media_type(MediaType): 媒体类型 video_with_audio / video_without_audio
@@ -47,6 +45,9 @@ def main(input_video: Path,
     try:
 
         print("Process video...")
+
+        start_sec = start_sec if start_sec is not None else 0.0
+        end_sec = end_sec if end_sec is not None else 0.0
 
         # 获取视频基本信息
         cap = cv2.VideoCapture(input_video)

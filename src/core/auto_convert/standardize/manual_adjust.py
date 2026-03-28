@@ -73,8 +73,11 @@ class ManualAdjust:
             total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS)
             
-            start_frame = round(self.start_sec * fps)
-            end_frame = round(self.end_sec * fps) if self.end_sec > 0 else total_frames
+            start_sec = self.start_sec if self.start_sec is not None else 0.0
+            end_sec = self.end_sec if self.end_sec is not None else 0.0
+            
+            start_frame = round(start_sec * fps)
+            end_frame = round(end_sec * fps) if end_sec > 0 else total_frames
             
             self.display_preview(cap, start_frame, end_frame, fps)
 
@@ -175,7 +178,7 @@ class ManualAdjust:
                 
             # 其他: 进入调整界面
             # 用户想要调整圆心和半径
-            else:
+            elif key != 255: # 255 是没有按键时的返回值
                 # 暂停并更新帧
                 is_playing = False
                 should_update_paused_frame = True
