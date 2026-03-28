@@ -395,8 +395,8 @@ en_US:
       warning_worker_start_failed: "Failed to start process\n%{error}"
       warning_cancel_failed: "Failed to cancel task\n%{error}"
 
-      notice_save_success: "Settings saved successfully"
-      notice_reset_success: "Settings reset to defaults"
+      notice_save_success: "Settings saved successfully, some settings may require restarting the program to take effect"
+      notice_reset_success: "Settings reset to defaults, some settings may require restarting the program to take effect"
       notice_check_start: "Start runtime check: backend=%{backend}"
       notice_check_pass: "1. Runtime check passed: %{backend}"
       notice_check_cancelled: "Runtime check cancelled: %{backend}"
