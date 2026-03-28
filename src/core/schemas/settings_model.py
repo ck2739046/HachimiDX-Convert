@@ -1,8 +1,9 @@
+import os
+from pathlib import Path
 from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .settings_config import SettingsConfig_Definitions as S_Defs
-from ..tools.validate_windows_filename import validate_windows_filename
 
 
 class SettingsModel(BaseModel):
@@ -19,7 +20,7 @@ class SettingsModel(BaseModel):
     # ffmpeg_hw_accel_h264: str = Field(default=S_Defs.ffmpeg_hw_accel_h264.default)
     # 应用通用设置
     language: str = Field(default=S_Defs.language.default)
-    main_output_dir_name: str = Field(default=S_Defs.main_output_dir_name.default)
+    main_output_dir: str = Field(default=S_Defs.main_output_dir.default)
     # 窗口大小
     main_app_init_size: tuple[
         Annotated[int, Field(ge=S_Defs.main_app_init_size.constraints["item_ge"], le=S_Defs.main_app_init_size.constraints["item_le"])],
@@ -90,10 +91,26 @@ class SettingsModel(BaseModel):
 
 
     # 自定义校验逻辑
-    @field_validator('main_output_dir_name')
+    @field_validator('main_output_dir')
     @classmethod
-    def check_filename(cls, v):
-        result = validate_windows_filename(v)
-        if not result.is_ok:
-            raise ValueError(result.error_msg)
-        return v
+    def check_main_output_dir(cls, v):
+        text = str(v).strip()
+        if not text:
+            raise ValueError("main_output_dir cannot be empty")
+
+        try:
+            normalized = Path(text).expanduser().resolve(strict=False)
+        except Exception as e:
+            raise ValueError(f"main_output_dir is invalid path: {e}") from e
+
+        if not normalized.is_absolute():
+            raise ValueError("main_output_dir must be an absolute path")
+        # 允许目录不存在，由运行时自动创建
+        # 如果目录已存在，则检查是否为目录且可读写
+        if normalized.exists():
+            if not normalized.is_dir():
+                raise ValueError("main_output_dir must be a directory")
+            if not os.access(normalized, os.R_OK | os.W_OK):
+                raise ValueError("main_output_dir is not readable/writable")
+
+        return str(normalized)

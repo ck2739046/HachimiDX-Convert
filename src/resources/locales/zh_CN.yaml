@@ -269,7 +269,7 @@ zh_CN:
 
     majdata_page:
       ui_song_help: |
-        程序会自动扫描 data/{main_output_dir} 目录下的子文件夹。
+        程序会自动扫描“输出目录”下的子文件夹。
         
         选择文件夹后，程序会查找三类文件:
         1. 谱面文件 (*.txt)
@@ -370,7 +370,8 @@ zh_CN:
 
       ui_general_divider: "通用设置"
       ui_language_label: "语言: "
-      ui_output_dir_label: "输出目录名: "
+      ui_output_dir_label: "输出目录路径: "
+      ui_output_dir_browse_button: "浏览..."
 
       ui_window_divider: "窗口尺寸"
       ui_init_size_label: "初始尺寸 (W x H): "

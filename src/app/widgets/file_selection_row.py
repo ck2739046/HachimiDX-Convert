@@ -19,7 +19,6 @@ def create_file_selection_row(button_text: str, help_text: str = None, on_button
     Returns:
         tuple: (button_widget, line_edit_widget, help_label_widget | None)
     """
-    colors = UI_Style.COLORS
 
     # 创建文件选择按钮
     button = create_button(button_text, 120)
@@ -51,11 +50,60 @@ def create_file_selection_row(button_text: str, help_text: str = None, on_button
                     on_button_clicked_handler(selected_file_path)
 
     # 连接按钮点击事件
-    if on_button_clicked_handler:
-        # 有自定义处理函数时，使用默认行为 + 自定义处理
-        button.clicked.connect(_default_file_select_handler)
-    else:
-        # 没有自定义处理函数时，只使用默认行为
-        button.clicked.connect(_default_file_select_handler)
+    button.clicked.connect(_default_file_select_handler)
+
+    return button, line_edit, help_label
+
+
+def create_directory_selection_row(button_text: str,
+                                   help_text: str = None,
+                                   button_length=120,
+                                   on_button_clicked_handler=None):
+    """
+    创建目录选择行UI组件
+
+    Args:
+        button_text: str，按钮显示文本
+        help_text: str，可选，默认None，不创建help_icon
+        button_length: int，可选，按钮长度，默认 120
+        on_button_clicked_handler: function，可选，按钮点击事件处理函数 (这个函数需要接受"选择的目录路径"作为参数)
+
+    Returns:
+        tuple: (button_widget, line_edit_widget, help_label_widget | None)
+    """
+
+    # 创建文件选择按钮
+    button = create_button(button_text, button_length)
+
+    # 创建可选的帮助图标
+    help_label = None
+    if help_text:
+        help_label = create_help_icon(help_text)
+
+    # 创建路径显示LineEdit
+    line_edit = create_path_display()
+
+    def _default_directory_select_handler():
+        """默认处理: 打开文件选择界面，更新 LineEdit 显示所选择的文件路径"""
+        start_dir = line_edit.text().strip() or os.getcwd()
+        selected_dir = QFileDialog.getExistingDirectory(
+            None,
+            button_text,
+            start_dir,
+            QFileDialog.Option.ShowDirsOnly
+        )
+        if not selected_dir:
+            return
+
+        selected_dir_path = os.path.normpath(os.path.abspath(selected_dir))
+        line_edit.setText(selected_dir_path)
+
+        # 如果有自定义处理函数，则调用它
+        # 闭包保存自定义处理函数的引用
+        if on_button_clicked_handler:
+            on_button_clicked_handler(selected_dir_path)
+
+    # 连接按钮点击事件
+    button.clicked.connect(_default_directory_select_handler)
 
     return button, line_edit, help_label

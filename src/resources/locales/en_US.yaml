@@ -269,7 +269,7 @@ en_US:
 
     majdata_page:
       ui_song_help: |
-        The program will automatically scan the subfolders under data/{main_output_dir}.
+        The program will automatically scan subfolders under the selected output directory.
         
         After selecting a folder, the program will look for three types of files:
         1. Chart files (*.txt)
@@ -371,7 +371,8 @@ en_US:
 
       ui_general_divider: "General"
       ui_language_label: "Language: "
-      ui_output_dir_label: "Output Directory Name: "
+      ui_output_dir_label: "Output Directory Path: "
+      ui_output_dir_browse_button: "Browse..."
 
       ui_window_divider: "Window Size"
       ui_init_size_label: "Initial Size (W x H): "
