@@ -17,6 +17,7 @@ data/settings.json.bak
 data/111-output/
 
 python/
-111-release/
+HachimiDX/
 
 HachimiDX.exe
+HachimiDX_*.7z

@@ -11,7 +11,7 @@ if root not in sys.path:
 from src.services.path_manage import PathManage
 
 
-RELEASE_DIR = PathManage.ROOT_DIR / "111-release"
+RELEASE_DIR = PathManage.ROOT_DIR / "HachimiDX"
 
 
 
