@@ -7,6 +7,7 @@
 src/resources/majdata/
 src/resources/ffmpeg/
 src/resources/models/
+src/resources/for_release_only/majdata/
 
 src/app/ui_code_conventions.md
 
@@ -16,5 +17,6 @@ data/settings.json.bak
 data/111-output/
 
 python/
+111-release/
 
 HachimiDX.exe
