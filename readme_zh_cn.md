@@ -1,8 +1,10 @@
 # <img src="src/resources/icon.ico" width="60px"> HachimiDX-Convert 🐱
 
+**README**: [English](readme.md)
+
 **小团体不拉我，拿不到最新最热，所以自己抄谱😡😡😡😭😭😭🤔🤔🤔😋😋😋**
 
-将音乐游戏 `maimai` 谱面确认视频自动转换成 simai 格式谱面 (`maidata.txt`) 。支持一键识别、编辑和导出。
+专门为音乐游戏 `maimai`设计的工具，将谱面确认视频一键转换为 simai 格式谱面 (`maidata.txt`) 。
 
 
 
