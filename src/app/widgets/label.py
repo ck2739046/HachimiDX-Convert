@@ -26,7 +26,7 @@ def create_label(text=None, color=None, font_size=None, bold=False, expand=False
         font_size = UI_Style.default_text_size
 
     label = QLabel(text)
-    label.setWordWrap(True)  # 支持自动换行和多行文本
+    label.setWordWrap(False)  # 始终显示为一行，不换行
     
     # 设置大小策略，让 QLabel 能够充分利用水平方向上的可用空间
     if expand:
