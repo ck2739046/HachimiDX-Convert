@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    
+    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
+    <AssemblyName>HachimiDX</AssemblyName>
+    <AssemblyTitle>HachimiDX</AssemblyTitle>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>HachimiDX</Product>
+    <Company>HachimiDX</Company>
+    <Copyright>ck2739046</Copyright>
+  </PropertyGroup>
+
+</Project>
