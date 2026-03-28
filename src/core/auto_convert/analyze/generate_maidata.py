@@ -179,6 +179,8 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
     std_dev = np.std(time_deviations)
     print(f"\nTime deviations of {length} notes: Median {median:.3f}, Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
 
+    # 打印生成的 maidata.txt 路径
+    print(f"\nmaidata.txt: {txt_path}")
 
 
 
