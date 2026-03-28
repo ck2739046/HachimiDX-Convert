@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-import win32gui
+try:
+    import win32gui
+except ImportError:
+    from win32 import win32gui
 import subprocess
 import psutil
 import time

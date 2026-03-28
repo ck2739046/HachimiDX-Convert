@@ -1,9 +1,17 @@
 import cv2
 from typing import Tuple, Optional
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 from pathlib import Path
 import time
+
+from src.services.path_manage import PathManage
+
+# 设置 Tcl 库路径（便携版 Python 需要）
+_tcl_path = PathManage.ROOT_DIR / "python" / "Lib" / "site-packages" / "tcl" / "tcl8.6"
+if _tcl_path.exists():
+    os.environ["TCL_LIBRARY"] = str(_tcl_path)
 
 from ...schemas.op_result import OpResult, ok, err, print_op_result
 

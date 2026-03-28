@@ -123,7 +123,8 @@ def install():
     pydantic = "pydantic==2.12.5"
     i18n = "python-i18n==0.3.9"
     nanoid = "nanoid==2.0.0"
-    cmd = f"{sys.executable} -m pip install {pyqt6} {pywin32} {librosa} {pydantic} {i18n} {nanoid} --no-warn-script-location"
+    tkinter = "tkinter-embed==3.13.0"
+    cmd = f"{sys.executable} -m pip install {pyqt6} {pywin32} {librosa} {pydantic} {i18n} {nanoid} {tkinter} --no-warn-script-location"
     if USE_QingHua_PIP:
         cmd += f" {QingHua_PIP}"
     is_success = general_pip_install("Other dependencies", cmd)
@@ -284,8 +285,9 @@ def install_pytorch(torch_version) -> bool:
         torch_cmd = f"torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/{torch_version}"
 
     cmd = f"{sys.executable} -m pip install {torch_cmd} --no-warn-script-location"
-    if USE_QingHua_PIP:
-        cmd += f" {QingHua_PIP}"
+    # 已经指定 PyTorch 源了，不能再重复指定清华源
+    # if USE_QingHua_PIP:
+        # cmd += f" {QingHua_PIP}"
     
     return general_pip_install(f"PyTorch ({torch_version})", cmd)
 
@@ -310,6 +312,15 @@ def install_ultralytics_onnx(has_nvidia_gpu) -> bool:
     if USE_QingHua_PIP:
         cmd += f" {QingHua_PIP}"
     is_success = general_pip_install("Ultralytics 8.4.24", cmd)
+    if not is_success:
+        return False
+    
+    # 安装其他依赖
+    libs = "lap==0.5.13 numpy==2.4.3"
+    cmd = f"{sys.executable} -m pip install {libs} --no-warn-script-location"
+    if USE_QingHua_PIP:
+        cmd += f" {QingHua_PIP}"
+    is_success = general_pip_install("lap, numpy", cmd)
     if not is_success:
         return False
     

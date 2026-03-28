@@ -1,4 +1,11 @@
 import sys
+from pathlib import Path
+
+# 定义 ROOT
+project_root = Path(__file__).parent.resolve()
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 from PyQt6.QtWidgets import QApplication
 from src.core.schemas.op_result import print_op_result
 from src.app import MainWindow
