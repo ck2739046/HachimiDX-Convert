@@ -1,0 +1,50 @@
+================================================================================
+                        HachimiDX - Install Guide
+================================================================================
+
+
+Step 1: Install Dependencies (One-time Setup)
+
+1. Open the "install" folder
+2. Double-click to run install.bat
+3. Wait for the installation to complete
+4. Close the window when installation is finished
+
+Note: Installation only needs to be done once, no need to run it again
+
+
+--------------------------------------------------------------------------------
+
+Step 2: Launch the Application
+
+
+1. Return to the project root directory
+2. Double-click HachimiDX.exe to launch the application
+
+
+--------------------------------------------------------------------------------
+
+Step 3: Model Configuration (One-time Setup)
+
+
+First-time setup requires configuring the model inference backend:
+
+1. Go to the "Settings" page
+2. In the "Model Inference" section, find the "Model Backend" option
+3. Select an appropriate backend:
+
+   - CPU:      Slowest, but no GPU required, works on any computer
+   - TensorRT: Fastest, requires NVIDIA GPU
+   - DirectML: Medium speed, requires compatible GPU (NVIDIA/AMD/Intel)
+   
+4. Click the "Check" button to verify your environment
+5. Click the "Convert Model" button
+6. Wait for the conversion to complete  (this may take 10 minutes)
+
+Note: This step only needs to be performed once. After successful model 
+conversion, you can use the software normally.
+
+
+--------------------------------------------------------------------------------
+
+Done!

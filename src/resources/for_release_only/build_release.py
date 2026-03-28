@@ -68,6 +68,12 @@ def copy_app_resources():
     majdata_target_path = RELEASE_DIR / "src" / "resources" / "majdata"
     copy_to_release(majdata_dir, majdata_target_path)
 
+    # 安装指南
+    install_guide_cn = PathManage.RESOURCES_DIR / "for_release_only" / "1_安装指南.txt"
+    copy_to_release(install_guide_cn, RELEASE_DIR / "1_安装指南.txt")
+    install_guide_us = PathManage.RESOURCES_DIR / "for_release_only" / "1_Installation Guide.txt"
+    copy_to_release(install_guide_us, RELEASE_DIR / "1_Installation Guide.txt")
+
 
 
 
@@ -128,7 +134,7 @@ def copy_to_release(input_path: Path, target_path: Path = None):
             dest_file = RELEASE_DIR / relative_path
         else:
             dest_file = target_path
-        # 在 release 目录下创建相同的目录结构    
+        # 在 release 目录下创建相同的目录结构
         dest_file.parent.mkdir(parents=True, exist_ok=True)
         # 复制
         dest_file.write_bytes(input_path.read_bytes())
