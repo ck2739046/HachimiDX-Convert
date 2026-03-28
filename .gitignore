@@ -4,11 +4,9 @@
 .venv
 *.sln
 
-legacy/aaa-result
 src/resources/majdata/
 src/resources/ffmpeg/
 src/resources/models/
-temp.py
 
 data/temp
 data/settings.json
