@@ -7,9 +7,10 @@ import shutil
 
 # 全局变量
 LANGUAGE = ""
-USE_QingHua_PIP = ""
+USE_PyPI_Mirror = ""
 
-QingHua_PIP = "-i https://pypi.tuna.tsinghua.edu.cn/simple"
+QingHua_PyPI_Mirror = "-i https://pypi.tuna.tsinghua.edu.cn/simple"
+
 
 
 
@@ -83,10 +84,10 @@ Please don't choose "2" if you don't know what it is.
 
 
 def install():
-    global USE_QingHua_PIP
+    global USE_PyPI_Mirror
     
     # ask if use QingHua PIP
-    USE_QingHua_PIP = ask_use_qinghua_pip()
+    USE_PyPI_Mirror = ask_use_pypi_mirror()
 
     # define pytorch version
     torch_version = "cpu" # default
@@ -125,8 +126,8 @@ def install():
     nanoid = "nanoid==2.0.0"
     tkinter = "tkinter-embed==3.13.0"
     cmd = f"{sys.executable} -m pip install {pyqt6} {pywin32} {librosa} {pydantic} {i18n} {nanoid} {tkinter} --no-warn-script-location"
-    if USE_QingHua_PIP:
-        cmd += f" {QingHua_PIP}"
+    if USE_PyPI_Mirror:
+        cmd += f" {QingHua_PyPI_Mirror}"
     is_success = general_pip_install("Other dependencies", cmd)
     if not is_success: sys.exit(1)
 
@@ -163,10 +164,10 @@ Please select your language:
 
 
 
-def ask_use_qinghua_pip() -> bool:
+def ask_use_pypi_mirror() -> bool:
     info_zh = """
-TUNA 可以显著国内的加速下载和安装。
-你是否想使用 TUNA ?
+清华/阿里云的 PyPI 镜像可以显著加速国内的下载和安装。
+你是否想使用 PyPI 镜像?
 
 如果你在中国大陆，强烈建议选择"是"。
 如果你在其他地区，请选择"否"。
@@ -177,8 +178,8 @@ TUNA 可以显著国内的加速下载和安装。
 
 -> """
     info_en = """
-TUNA can significantly speed up downloads and installations in China.
-Do you want to use TUNA?
+THU/Aliyun PyPI mirrors can significantly speed up downloads and installations in China.
+Do you want to use PyPI mirror?
 
 If you are in mainland China, it is highly recommended to choose "Yes".
 If you are in other regions, please choose "No".
@@ -275,19 +276,24 @@ def detect_cuda_version_for_torch() -> str | None:
 
 def install_pytorch(torch_version) -> bool:
 
+    # 清华源没有 pytorch cuda 本体，但是有其他的包
+    # 阿里源仅有 pytorch cuda 本体，但没有其他的包
+    # 两者结合使用
+    if USE_PyPI_Mirror:
+        url = f"{QingHua_PyPI_Mirror} --find-links https://mirrors.aliyun.com/pytorch-wheels"
+    else:
+        url = "--index-url https://download.pytorch.org/whl"
+
     # cuda 11.8 使用旧版 2.7.1
     if torch_version == "cu118":
-        torch_cmd = "torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu118"
+        torch_cmd = f"torch==2.7.1 torchvision==0.22.1 {url}/cu118"
     # 其他版本使用新版 2.10.0
     elif torch_version == "cpu":
-        torch_cmd = "torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cpu"
+        torch_cmd = f"torch==2.10.0 torchvision==0.25.0 {url}/cpu"
     else:
-        torch_cmd = f"torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/{torch_version}"
+        torch_cmd = f"torch==2.10.0 torchvision==0.25.0 {url}/{torch_version}"
 
     cmd = f"{sys.executable} -m pip install {torch_cmd} --no-warn-script-location"
-    # 已经指定 PyTorch 源了，不能再重复指定清华源
-    # if USE_QingHua_PIP:
-        # cmd += f" {QingHua_PIP}"
     
     return general_pip_install(f"PyTorch ({torch_version})", cmd)
 
@@ -301,16 +307,16 @@ def install_ultralytics_onnx(has_nvidia_gpu) -> bool:
     if has_nvidia_gpu:
         libs += " onnxruntime-gpu==1.24.4"
     cmd = f"{sys.executable} -m pip install {libs} --no-warn-script-location"
-    if USE_QingHua_PIP:
-        cmd += f" {QingHua_PIP}"
+    if USE_PyPI_Mirror:
+        cmd += f" {QingHua_PyPI_Mirror}"
     is_success = general_pip_install("ONNX Runtime", cmd)
     if not is_success:
         return False
         
     # 安装 ultralytics
     cmd = f"{sys.executable} -m pip install ultralytics==8.4.24 --no-warn-script-location"
-    if USE_QingHua_PIP:
-        cmd += f" {QingHua_PIP}"
+    if USE_PyPI_Mirror:
+        cmd += f" {QingHua_PyPI_Mirror}"
     is_success = general_pip_install("Ultralytics 8.4.24", cmd)
     if not is_success:
         return False
@@ -318,8 +324,8 @@ def install_ultralytics_onnx(has_nvidia_gpu) -> bool:
     # 安装其他依赖
     libs = "lap==0.5.13 numpy==2.4.3"
     cmd = f"{sys.executable} -m pip install {libs} --no-warn-script-location"
-    if USE_QingHua_PIP:
-        cmd += f" {QingHua_PIP}"
+    if USE_PyPI_Mirror:
+        cmd += f" {QingHua_PyPI_Mirror}"
     is_success = general_pip_install("lap, numpy", cmd)
     if not is_success:
         return False
@@ -339,16 +345,16 @@ def install_tensorrt(torch_version) -> bool:
 
     # 先安装 wheel-stub
     cmd = f"{sys.executable} -m pip install wheel-stub==0.4.2 --no-warn-script-location"
-    if USE_QingHua_PIP:
-        cmd += f" {QingHua_PIP}"
+    if USE_PyPI_Mirror:
+        cmd += f" {QingHua_PyPI_Mirror}"
     is_success = general_pip_install("wheel-stub 0.4.2", cmd)
     if not is_success:
         return False
 
     # 再安装 TensorRT
     cmd = f"{sys.executable} -m pip install tensorrt=={tensorrt_version} --no-warn-script-location"
-    if USE_QingHua_PIP:
-        cmd += f" {QingHua_PIP}"
+    if USE_PyPI_Mirror:
+        cmd += f" {QingHua_PyPI_Mirror}"
     is_success = general_pip_install(f"NVIDIA TensorRT {tensorrt_version}", cmd)
     if not is_success:
         return False
@@ -406,8 +412,8 @@ In other cases, please choose "No".
 def install_directml_onnx() -> bool:
 
     cmd = f"{sys.executable} -m pip install onnxruntime-directml==1.24.4 --no-warn-script-location"
-    if USE_QingHua_PIP:
-        cmd += f" {QingHua_PIP}"
+    if USE_PyPI_Mirror:
+        cmd += f" {QingHua_PyPI_Mirror}"
     is_success = general_pip_install("ONNX Runtime DirectML", cmd)
     if not is_success:
         return False
