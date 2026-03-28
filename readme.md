@@ -1,6 +1,10 @@
 # <img src="src/resources/icon.ico" width="60px"> HachimiDX-Convert 🐱
 
-**README**: [中文](readme_zh_cn.md)
+🔗 [**Project URL**](https://github.com/ck2739046/HachimiDX-Convert)
+&nbsp;•&nbsp;
+📖 [**中文 README**](readme_zh_cn.md)
+
+
 
 A tool designed for the rhythm game `maimai`. Accepts chart confirmation videos and automatically outputs simai-format charts (`maidata.txt`).
 

@@ -1,6 +1,10 @@
 # <img src="src/resources/icon.ico" width="60px"> HachimiDX-Convert 🐱
 
-**README**: [English](readme.md)
+🔗 [**项目地址**](https://github.com/ck2739046/HachimiDX-Convert)
+&nbsp;•&nbsp;
+📖 [**English README**](readme.md)
+
+
 
 **小团体不拉我，拿不到最新最热，所以自己抄谱😡😡😡😭😭😭🤔🤔🤔😋😋😋**
 
