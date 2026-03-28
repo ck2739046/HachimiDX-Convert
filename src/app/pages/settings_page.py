@@ -75,6 +75,7 @@ class SettingsPage(BaseOutputPage):
 
         backend_label = create_label(i18n.t(f"{I18N_Prefix}.ui_model_backend_label"))
         self.model_backend_combo_box = self._create_combo_from_definition(S_Defs.model_backend, length=100)
+        backend_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_model_backend_help"))
         self.check_model_button = create_stated_button(i18n.t(f"{I18N_Prefix}.ui_check_model_button"))
         self.convert_model_button = create_stated_button(i18n.t(f"{I18N_Prefix}.ui_convert_model_button"), width=120)
         self.cancel_convert_model_button = create_stated_button(i18n.t(f"{I18N_Prefix}.ui_cancel_convert_model_button"))
@@ -84,6 +85,7 @@ class SettingsPage(BaseOutputPage):
         row = _create_row(
             backend_label,
             self.model_backend_combo_box,
+            backend_help,
             self.check_model_button,
             self.convert_model_button,
             self.cancel_convert_model_button,

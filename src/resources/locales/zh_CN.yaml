@@ -360,6 +360,10 @@ zh_CN:
 
       ui_model_divider: "模型推理"
       ui_model_backend_label: "模型后端: "
+      ui_model_backend_help: |
+        CPU:        最慢，不需要 GPU。
+        TensorRT: 最快，需要 NVIDIA GPU。
+        DirectML: 中等，需要兼容的 GPU（NVIDIA、AMD、Intel）。
       ui_check_model_button: "检测"
       ui_convert_model_button: "转换模型"
       ui_cancel_convert_model_button: "取消"
@@ -370,12 +374,12 @@ zh_CN:
 
       ui_general_divider: "通用设置"
       ui_language_label: "语言: "
-      ui_output_dir_label: "输出目录路径: "
+      ui_output_dir_label: "输出文件夹: "
       ui_output_dir_browse_button: "浏览..."
 
       ui_window_divider: "窗口尺寸"
-      ui_init_size_label: "初始尺寸 (W x H): "
-      ui_min_size_label: "最小尺寸 (W x H): "
+      ui_init_size_label: "初始窗口尺寸 (W x H): "
+      ui_min_size_label: "最小窗口尺寸 (W x H): "
 
       ui_actions_divider: "操作"
       ui_save_button: "保存"

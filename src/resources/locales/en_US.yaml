@@ -361,6 +361,10 @@ en_US:
 
       ui_model_divider: "Model Inference"
       ui_model_backend_label: "Model Backend: "
+      ui_model_backend_help: |
+        CPU:        slowest, no GPU required.
+        TensorRT: fastest, requires NVIDIA GPU.
+        DirectML: medium, requires compatible GPU (NVIDIA, AMD, Intel).
       ui_check_model_button: "Check"
       ui_convert_model_button: "Convert Model"
       ui_cancel_convert_model_button: "Cancel"
@@ -371,12 +375,12 @@ en_US:
 
       ui_general_divider: "General"
       ui_language_label: "Language: "
-      ui_output_dir_label: "Output Directory Path: "
+      ui_output_dir_label: "Output Directory: "
       ui_output_dir_browse_button: "Browse..."
 
       ui_window_divider: "Window Size"
-      ui_init_size_label: "Initial Size (W x H): "
-      ui_min_size_label: "Minimum Size (W x H): "
+      ui_init_size_label: "Initial Window Size (W x H): "
+      ui_min_size_label: "Minimum Window Size (W x H): "
 
       ui_actions_divider: "Actions"
       ui_save_button: "Save"
