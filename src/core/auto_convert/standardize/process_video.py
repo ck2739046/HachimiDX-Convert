@@ -57,7 +57,7 @@ def main(input_video: Path,
         video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
 
-        crop_size, crop_x, crop_y = calculate_crop_params(video_width, video_height, circle_center, circle_radius, target_res)
+        crop_size, crop_x, crop_y = calculate_crop_params(video_width, video_height, circle_center, circle_radius)
         
         # 检查最终输出是否已经标准化
         is_final_output_std = is_output_already_standardized(final_output_path, target_res, duration, start_sec, end_sec)
@@ -164,18 +164,13 @@ def main(input_video: Path,
 def calculate_crop_params(video_width: int,
                           video_height: int,
                           circle_center: Tuple[int, int],
-                          circle_radius: int,
-                          target_res: int
+                          circle_radius: int
                         ) -> Tuple[int, int, int]:
     
     video_size = min(video_width, video_height)
-    tolerance = video_size / 360
 
     # 计算最后裁剪出的视频的尺寸
     crop_size = circle_radius * 2
-    if abs(crop_size - target_res) < tolerance*2:
-        # 如果接近目标分辨率，则直接设为目标分辨率
-        crop_size = target_res
 
     # 计算裁剪区域左上角坐标（允许越界，由 ffmpeg 处理黑色填充）
     crop_x = round(circle_center[0] - circle_radius)
