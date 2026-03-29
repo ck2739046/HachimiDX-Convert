@@ -388,7 +388,9 @@ class SettingsPage(BaseOutputPage):
         backend = self.model_backend_combo_box.currentText().strip()
 
         # 特例：cpu 不应该触发转换按钮
-        if backend == "CPU": return
+        if backend == "CPU":
+            self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_cpu_don't_need_convert_model"))
+            return
 
         detect_batch_result = SettingsManage.get(S_Defs.predict_batch_size_detect_obb.key)
         if not detect_batch_result.is_ok:
@@ -494,6 +496,9 @@ class SettingsPage(BaseOutputPage):
         path_result = S_Defs.get_path_by_backend(backend)
         if path_result.is_ok:
             self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_model_ready", backend=backend))
+            # 特例 cpu 提示无需转换
+            if backend == "CPU":
+                self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_cpu_don't_need_convert_model"))
             return
 
         # 模型检查失败

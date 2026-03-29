@@ -409,3 +409,4 @@ zh_CN:
       notice_convert_success: "模型转换完成并通过复检: %{backend}"
       notice_convert_cancelled: "模型转换已取消: %{backend}"
       notice_cancel_requested: "已发送取消请求，等待进程结束..."
+      notice_cpu_don't_need_convert_model: "-\n提示：CPU 不需要转换模型，可以直接使用。"

@@ -410,3 +410,4 @@ en_US:
       notice_convert_success: "Model conversion finished and passed validation: %{backend}"
       notice_convert_cancelled: "Model conversion cancelled: %{backend}"
       notice_cancel_requested: "Cancel requested. Waiting for process to stop..."
+      notice_cpu_don't_need_convert_model: "-\nNotice: CPU do not need to convert models, you can use it directly."
