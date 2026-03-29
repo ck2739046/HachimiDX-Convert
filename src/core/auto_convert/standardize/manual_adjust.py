@@ -40,7 +40,8 @@ class ManualAdjust:
         self.end_sec = end_sec
 
         self.operation_history = []
-        self.operation_history.append((circle_center, circle_radius))
+        # 存储格式: ((center_x, center_y), radius, scale_x, scale_y)
+        self.operation_history.append((circle_center, circle_radius, 1.0, 1.0))
 
         self.video_width = 0
         self.video_height = 0
@@ -51,16 +52,16 @@ class ManualAdjust:
 
 
 
-    def main(self) -> OpResult[Tuple[Tuple[int, int], int]]:
+    def main(self) -> OpResult[Tuple[Tuple[int, int], int, float, float]]:
         """
         如果没有跳过 initial detection
         那么需要人工确认是否识别正确
         显示预览窗口，绘制原始图像帧和圆形
         
         Returns:
-            OpResult -> (circle_center, circle_radius)
+            OpResult -> (circle_center, circle_radius, scale_x, scale_y)
         """
-
+        
         try:
             print("Manual check circle...", end="\r")
 
@@ -82,9 +83,11 @@ class ManualAdjust:
             self.display_preview(cap, start_frame, end_frame, fps)
 
             print("Manual check circle...ok")
-            print(f"  Circle center: {self.operation_history[-1][0]}, radius: {self.operation_history[-1][1]}")
+            last_op = self.operation_history[-1]
+            circle_center, circle_radius, scale_x, scale_y = last_op
+            print(f"  Circle center: {circle_center}, radius: {circle_radius}, scale: ({scale_x}, {scale_y})")
 
-            return ok(self.operation_history[-1])
+            return ok(last_op)
             
         except Exception as e:
             return err(f"Error in display_preview", error_raw = e)
@@ -203,16 +206,22 @@ class ManualAdjust:
             处理后的帧
         """
 
-        (circle_cx, circle_cy), circle_r = self.operation_history[-1]
+        # 获取当前操作参数
+        last_op = self.operation_history[-1]
+        (circle_cx, circle_cy), circle_r, scale_x, scale_y = last_op
 
         font_size = 0.7
         font_thickness = 2
         
+        # 计算拉伸后的裁剪区域（基于 scale_x 和 scale_y）
+        half_w = round(circle_r * scale_x)  # 水平方向半宽
+        half_h = round(circle_r * scale_y)  # 垂直方向半高
+        
         # 裁剪帧坐标
-        x1 = circle_cx - circle_r
-        x2 = circle_cx + circle_r
-        y1 = circle_cy - circle_r
-        y2 = circle_cy + circle_r
+        x1 = circle_cx - half_w
+        x2 = circle_cx + half_w
+        y1 = circle_cy - half_h
+        y2 = circle_cy + half_h
 
         # 计算目标区域尺寸
         target_width = x2 - x1
@@ -240,7 +249,8 @@ class ManualAdjust:
 
         raw_frame = cropped_frame
 
-        # 缩放到 800x800
+        # 缩放到正方形显示（保持 800x800）
+        # 无论原始裁剪区域是长方形还是正方形，都缩放到 800x800
         new_frame_size = 800
         resized_frame = cv2.resize(raw_frame, (new_frame_size, new_frame_size))
 
@@ -285,7 +295,7 @@ class ManualAdjust:
             )
         
         # 第2行：圆形坐标和半径
-        circle_info = f"Center: ({circle_cx}, {circle_cy}), Radius: {circle_r}"
+        circle_info = f"Center: ({circle_cx}, {circle_cy}), R: {circle_r}, Scale: ({scale_x:.2f}, {scale_y:.2f})"
         cv2.putText(
             img = resized_frame,
             text = circle_info,
@@ -303,7 +313,7 @@ class ManualAdjust:
 
 
 
-    def on_submit(self, entry_x, entry_y, entry_radius, dialog) -> None:
+    def on_submit(self, entry_x, entry_y, entry_radius, entry_scale_x, entry_scale_y, dialog) -> None:
         """
         gui handler
     
@@ -327,8 +337,20 @@ class ManualAdjust:
         except Exception:
             messagebox.showerror("错误", "Radius 输入无效")
             return
+        try:
+            scale_x = float(entry_scale_x.get())
+        except Exception:
+            messagebox.showerror("错误", "X scale 输入无效")
+            return
+        try:
+            scale_y = float(entry_scale_y.get())
+        except Exception:
+            messagebox.showerror("错误", "Y scale 输入无效")
+            return
         
-        (circle_cx, circle_cy), circle_r = self.operation_history[-1]
+        # 获取当前参数
+        last_op = self.operation_history[-1]
+        (circle_cx, circle_cy), circle_r, old_scale_x, old_scale_y = last_op
         
         # 计算新的圆心坐标（当前坐标 + 用户输入的偏移量）
         new_x = circle_cx + x_offset
@@ -365,9 +387,17 @@ class ManualAdjust:
             messagebox.showerror("错误", f"新半径 {new_radius} 太小（最小值为 100）")
             return
         
+        # 验证 scale 参数
+        if not (0.8 <= scale_x <= 1.2):
+            messagebox.showerror("错误", "X scale 必须在 0.8-1.2 之间")
+            return
+        if not (0.8 <= scale_y <= 1.2):
+            messagebox.showerror("错误", "Y scale 必须在 0.8-1.2 之间")
+            return
+        
         # 所有验证通过，保存调整结果并关闭窗口
-        self.operation_history.append(((new_x, new_y), new_radius))
-        print(f"Adjustment applied: New center ({new_x}, {new_y}), New radius {new_radius}")
+        self.operation_history.append(((new_x, new_y), new_radius, scale_x, scale_y))
+        print(f"Adjustment applied: New center ({new_x}, {new_y}), New radius {new_radius}, Scale ({scale_x}, {scale_y})")
         dialog.destroy()
             
 
@@ -382,12 +412,14 @@ class ManualAdjust:
     def create_dialog(self) -> None:
         """创建 gui 弹窗，供用户调整圆心和半径"""
 
-        (circle_cx, circle_cy), circle_r = self.operation_history[-1]
+        # 获取当前参数
+        last_op = self.operation_history[-1]
+        (circle_cx, circle_cy), circle_r, current_scale_x, current_scale_y = last_op
 
         # ========== 创建GUI窗口 ==========
         dialog = tk.Tk()
         dialog.title("Adjust circle")
-        dialog.geometry("400x300")
+        dialog.geometry("400x400")
         dialog.resizable(False, False)
         
         # 将窗口显示在屏幕中央
@@ -395,16 +427,17 @@ class ManualAdjust:
         screen_width = dialog.winfo_screenwidth()
         screen_height = dialog.winfo_screenheight()
         x = (screen_width - 400) // 2
-        y = (screen_height - 300) // 2
-        dialog.geometry(f"400x300+{x}+{y}")
+        y = (screen_height - 400) // 2
+        dialog.geometry(f"400x400+{x}+{y}")
 
         # ========== 上半部分：显示当前圆心和半径信息 ==========
         info_frame = ttk.LabelFrame(dialog, text="Current", padding="10")
         info_frame.pack(fill=tk.X, padx=10, pady=5)
         
+        current_info_text = f"Center: ({circle_cx}, {circle_cy})   Radius: {circle_r}\nScale: ({current_scale_x}, {current_scale_y})"
         current_info = ttk.Label(
             info_frame,
-            text=f"Center: ({circle_cx}, {circle_cy})   Radius: {circle_r}"
+            text=current_info_text
         )
         current_info.pack()
         
@@ -439,19 +472,37 @@ class ManualAdjust:
         entry_radius.insert(0, "1.0")
         ttk.Label(radius_frame, text="0.5-1.5: scale, ≥100: set exact value").pack(side=tk.LEFT, padx=(10, 0))
         
+        # X Scale 输入框
+        scale_x_frame = ttk.Frame(input_frame)
+        scale_x_frame.pack(fill=tk.X, pady=6)
+        ttk.Label(scale_x_frame, text="X Scale:", width=7).pack(side=tk.LEFT, padx=(0, 10))
+        entry_scale_x = ttk.Entry(scale_x_frame, width=6)
+        entry_scale_x.pack(side=tk.LEFT)
+        entry_scale_x.insert(0, str(current_scale_x))
+        ttk.Label(scale_x_frame, text="0.8-1.2 (1.0 = no stretch)").pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Y Scale 输入框
+        scale_y_frame = ttk.Frame(input_frame)
+        scale_y_frame.pack(fill=tk.X, pady=6)
+        ttk.Label(scale_y_frame, text="Y Scale:", width=7).pack(side=tk.LEFT, padx=(0, 10))
+        entry_scale_y = ttk.Entry(scale_y_frame, width=6)
+        entry_scale_y.pack(side=tk.LEFT)
+        entry_scale_y.insert(0, str(current_scale_y))
+        ttk.Label(scale_y_frame, text="0.8-1.2 (1.0 = no stretch)").pack(side=tk.LEFT, padx=(10, 0))
+        
         # ========== 下半部分：按钮区域 ==========
         button_frame = ttk.Frame(dialog, padding="10")
         button_frame.pack(fill=tk.X)
         
         ttk.Button(button_frame, text="OK", width=10,
-                   command=lambda: self.on_submit(entry_x, entry_y, entry_radius, dialog)
+                   command=lambda: self.on_submit(entry_x, entry_y, entry_radius, entry_scale_x, entry_scale_y, dialog)
                   ).pack(side=tk.RIGHT, padx=5)
         
         # 焦点设置到第一个输入框
         entry_x.focus()
         
         # 绑定快捷键：回车键=按下 OK 按钮
-        dialog.bind('<Return>', lambda e: self.on_submit(entry_x, entry_y, entry_radius, dialog))
+        dialog.bind('<Return>', lambda e: self.on_submit(entry_x, entry_y, entry_radius, entry_scale_x, entry_scale_y, dialog))
 
         # 显示窗口并等待用户操作
         dialog.mainloop()
