@@ -141,7 +141,9 @@ def _build_video_filter(size: Optional[int],
                         crop: tuple[Optional[int], Optional[int], Optional[int], Optional[int]],
                         pad: Optional[float],
                         start: Optional[float],
-                        end: Optional[float]
+                        end: Optional[float],
+                        video_width: Optional[int] = None,
+                        video_height: Optional[int] = None
                        ) -> Optional[str]:
     """构建视频滤镜"""
 
@@ -157,9 +159,43 @@ def _build_video_filter(size: Optional[int],
         filters.append(f"trim={':'.join(trim_kv)}")
         filters.append("setpts=PTS-STARTPTS")
 
-    # Crop
+    # Crop (支持越界，超出部分用黑色填充)
     if all(v is not None for v in crop):
         w, h, x, y = crop
+        
+        # 计算是否需要扩展画布以容纳整个 crop 区域
+        # crop 区域范围: [x, x+w] 水平方向, [y, y+h] 垂直方向
+        # 原视频范围: [0, iw] 水平方向, [0, ih] 垂直方向
+        
+        # 向左/上偏移量（当 x<0 或 y<0 时）
+        left_pad = abs(min(x, 0))  # 如果 x<0, left_pad=-x; 否则为 0
+        top_pad = abs(min(y, 0))   # 如果 y<0, top_pad=-y; 否则为 0
+        
+        # 构建 FFmpeg 表达式来处理动态边界计算
+        # 向右扩展量 = max(0, x + w - iw)  当 x>=0
+        # 向右扩展量 = max(0, x + w - iw + left_pad) 当 x<0 (因为 iw 在新画布中是 iw+left_pad，相对位置变了)
+        # 实际上更简单：计算 crop 区域右边界超出原视频右边界的量
+        # 新画布中，原视频位于 (left_pad, top_pad)，右边界是 left_pad + iw
+        # crop 区域右边界是 left_pad + x + w
+        # 超出量 = max(0, left_pad + x + w - (left_pad + iw)) = max(0, x + w - iw)
+        right_pad_expr = f"max(0\,{x}+{w}-iw)"
+        bottom_pad_expr = f"max(0\,{y}+{h}-ih)"
+        
+        # 计算 pad 后的画布大小
+        pad_w_expr = f"{left_pad}+iw+{right_pad_expr}"
+        pad_h_expr = f"{top_pad}+ih+{bottom_pad_expr}"
+        
+        # 原视频在新画布中的位置
+        pad_x = left_pad
+        pad_y = top_pad
+        
+        # 添加 pad 滤镜（使用表达式动态计算）
+        filters.append(f"pad={pad_w_expr}:{pad_h_expr}:{pad_x}:{pad_y}:black")
+        
+        # 调整 crop 坐标到新画布坐标系
+        x = x + left_pad
+        y = y + top_pad
+        
         filters.append(f"crop={w}:{h}:{x}:{y}")
 
     # Resize

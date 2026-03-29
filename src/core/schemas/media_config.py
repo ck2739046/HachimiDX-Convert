@@ -258,9 +258,7 @@ class MediaConfig_Definitions:
         type="int",
         group="video",
         default=None,
-        constraints={
-            "ge": 0
-        }
+        constraints={}
     )
 
     video_crop_y = MediaConfig_Definition(
@@ -268,9 +266,7 @@ class MediaConfig_Definitions:
         type="int",
         group="video",
         default=None,
-        constraints={
-            "ge": 0
-        }
+        constraints={}
     )
 
     video_crop_w = MediaConfig_Definition(

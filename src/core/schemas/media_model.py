@@ -66,8 +66,8 @@ class MediaModel(BaseModel):
 
     video_mute: Optional[bool] = Field(default=M_Defs.video_mute.default)
     
-    video_crop_x: Optional[int] = Field(default=M_Defs.video_crop_x.default, ge=M_Defs.video_crop_x.constraints["ge"])
-    video_crop_y: Optional[int] = Field(default=M_Defs.video_crop_y.default, ge=M_Defs.video_crop_y.constraints["ge"])
+    video_crop_x: Optional[int] = Field(default=M_Defs.video_crop_x.default)
+    video_crop_y: Optional[int] = Field(default=M_Defs.video_crop_y.default)
     video_crop_w: Optional[int] = Field(default=M_Defs.video_crop_w.default, gt=M_Defs.video_crop_w.constraints["gt"])
     video_crop_h: Optional[int] = Field(default=M_Defs.video_crop_h.default, gt=M_Defs.video_crop_h.constraints["gt"])
     

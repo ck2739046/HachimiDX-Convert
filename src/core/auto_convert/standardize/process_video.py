@@ -176,20 +176,10 @@ def calculate_crop_params(video_width: int,
     if abs(crop_size - target_res) < tolerance*2:
         # 如果接近目标分辨率，则直接设为目标分辨率
         crop_size = target_res
-    crop_size = min(crop_size, video_size) # 确保不越界
 
-    # 计算裁剪区域左上角坐标
+    # 计算裁剪区域左上角坐标（允许越界，由 ffmpeg 处理黑色填充）
     crop_x = round(circle_center[0] - circle_radius)
     crop_y = round(circle_center[1] - circle_radius)
-    # 避免坐标越界
-    if crop_x < 0:
-        crop_x = 0
-    if crop_y < 0:
-        crop_y = 0
-    if crop_x + crop_size > video_width:
-        crop_x = video_width - crop_size
-    if crop_y + crop_size > video_height:
-        crop_y = video_height - crop_size
 
     return crop_size, crop_x, crop_y
 
