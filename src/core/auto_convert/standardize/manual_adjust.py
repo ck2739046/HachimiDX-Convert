@@ -213,14 +213,32 @@ class ManualAdjust:
         x2 = circle_cx + circle_r
         y1 = circle_cy - circle_r
         y2 = circle_cy + circle_r
-        # 确保不越界
-        if x1 < 0: x1 = 0
-        if y1 < 0: y1 = 0
-        if x2 > self.video_width: x2 = self.video_width
-        if y2 > self.video_height: y2 = self.video_height
-        # 检查是否需要裁剪
-        if x1 != 0 or y1 != 0 or x2 != self.video_width or y2 != self.video_height:
-            raw_frame = raw_frame[y1:y2, x1:x2] # 裁剪
+
+        # 计算目标区域尺寸
+        target_width = x2 - x1
+        target_height = y2 - y1
+
+        # 计算实际可用的视频区域
+        src_x1 = max(0, x1)
+        src_y1 = max(0, y1)
+        src_x2 = min(self.video_width, x2)
+        src_y2 = min(self.video_height, y2)
+
+        # 计算在目标帧中的偏移量（用于填充黑色区域）
+        dst_x1 = max(0, -x1)
+        dst_y1 = max(0, -y1)
+
+        # 创建黑色背景的目标帧
+        import numpy as np
+        cropped_frame = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+
+        # 如果有有效视频区域，复制过来
+        if src_x1 < src_x2 and src_y1 < src_y2:
+            video_slice = raw_frame[src_y1:src_y2, src_x1:src_x2]
+            slice_height, slice_width = video_slice.shape[:2]
+            cropped_frame[dst_y1:dst_y1+slice_height, dst_x1:dst_x1+slice_width] = video_slice
+
+        raw_frame = cropped_frame
 
         # 缩放到 800x800
         new_frame_size = 800
