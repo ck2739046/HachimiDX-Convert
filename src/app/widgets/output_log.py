@@ -26,10 +26,18 @@ class OutputLogWidget(QWidget):
         # 全局日志过滤：行中包含以下任一关键词时忽略该行
         self._ignore_contains_filters: list[str] = [
             
-            # TensorRT 日志
+            # TensorRT 推理 detect/obb
             "[TRT] [I] Loaded engine size: ",
             "[TRT] [I] [MemUsageChange] TensorRT-managed allocation in IExecutionContext creation: ",
             "[TRT] [W] WARNING The logger passed into createInferRuntime differs from one already registered for an existing builder, runtime, or refitter. ",
+            
+            # TensorRT 推理 classify
+            "[TRT] [I] [MS] Running engine with multi stream info",
+            "[TRT] [I] [MS] Number of aux streams is",
+            "[TRT] [I] [MS] Number of total worker streams is",
+            "[TRT] [I] [MS] The main stream provided by execute/enqueue calls is the first worker stream",
+            
+            # TensorRT 转换模型
             "[TRT] [W] Requested amount of GPU memory ",
             "[TRT] [W] UNSUPPORTED_STATE: Skipping tactic",
             "[TRT] [E] [virtualMemoryBuffer.cpp::nvinfer1::StdVirtualMemoryBufferImpl::resizePhysical::154] Error Code",
