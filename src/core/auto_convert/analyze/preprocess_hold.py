@@ -57,6 +57,9 @@ def preprocess_hold_data(shared_context: SharedContext):
                 continue # 去尾
             # 计算头尾的坐标/距离
             x_head, y_head, x_tail, y_tail, dist_head, dist_tail = calculate_hold_head_tail(shared_context, note.x1, note.y1, note.x2, note.y2, note.x3, note.y3, note.x4, note.y4, note.note_variant, position)
+            if any(v is None for v in [x_head, y_head, x_tail, y_tail, dist_head, dist_tail]):
+                print(f"calculate_hold_head_tail failed for track_id {track_id} at frame {note.frame}, skip this point")
+                continue
             # 添加轨迹点
             valid_track_path.append((note.frame, position, dist_head, dist_tail))
 
