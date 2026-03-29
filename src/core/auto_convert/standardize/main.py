@@ -52,6 +52,7 @@ def main(input_video: Path,
         if not result.is_ok:
             return err("Failed to detect circle.", inner=result)
         circle_center, circle_radius = result.value
+        scale_x, scale_y = 1.0, 1.0
 
         # 第二步：手动微调圆心和半径
         if not skip_detect_circle:
@@ -64,8 +65,7 @@ def main(input_video: Path,
             ).main()
             if not result.is_ok:
                 return err("Failed to manual adjust circle.", inner=result)
-            circle_center, circle_radius = result.value
-
+            circle_center, circle_radius, scale_x, scale_y = result.value
         # 第三步：构建输出路径
         output_filename = f"{song_name}_std.mp4"
         temp_output_path = PathManage.TEMP_DIR / output_filename
@@ -85,6 +85,8 @@ def main(input_video: Path,
             final_output_path=final_output_path,
             circle_center=circle_center,
             circle_radius=circle_radius,
+            scale_x=scale_x,
+            scale_y=scale_y,
             media_type=media_type,
             duration=duration,
             start_sec=start_sec,

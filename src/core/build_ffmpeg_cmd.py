@@ -126,7 +126,9 @@ def _build_video_args(data: MediaModel) -> OpResult[list[str]]:
         crop = (data.video_crop_w, data.video_crop_h, data.video_crop_x, data.video_crop_y),
         pad = data.pad_start,
         start = data.start,
-        end = data.end
+        end = data.end,
+        scale_x = data.video_scale_x,
+        scale_y = data.video_scale_y
     )
     if vf:
         args.extend(["-vf", vf])
@@ -142,6 +144,8 @@ def _build_video_filter(size: Optional[int],
                         pad: Optional[float],
                         start: Optional[float],
                         end: Optional[float],
+                        scale_x: Optional[float] = None,
+                        scale_y: Optional[float] = None,
                         video_width: Optional[int] = None,
                         video_height: Optional[int] = None
                        ) -> Optional[str]:
@@ -198,13 +202,20 @@ def _build_video_filter(size: Optional[int],
         
         filters.append(f"crop={w}:{h}:{x}:{y}")
 
+
     # Resize
     if size:
-        # Scale while keeping aspect ratio
-        # Pad to square with black borders
-        scale_expr = f"if(gt(iw,ih),{size},-1):if(gt(iw,ih),-1,{size})".replace(",", r"\,") # 对逗号转义
-        pad_expr = f"{size}:{size}:(ow-iw)/2:(oh-ih)/2:black"
-        filters.append(f"scale={scale_expr},pad={pad_expr}")
+        # 检查是否应用了 X/Y 缩放
+        scale_applied = (scale_x is not None and abs(scale_x - 1.0) > 1e-9) or (scale_y is not None and abs(scale_y - 1.0) > 1e-9)
+        if scale_applied:
+            # 如果应用了缩放，直接拉伸到正方形（不保持宽高比）
+            filters.append(f"scale={size}:{size}")
+        else:
+            # Scale while keeping aspect ratio
+            # Pad to square with black borders
+            scale_expr = f"if(gt(iw,ih),{size},-1):if(gt(iw,ih),-1,{size})".replace(",", r"\,") # 对逗号转义
+            pad_expr = f"{size}:{size}:(ow-iw)/2:(oh-ih)/2:black"
+            filters.append(f"scale={scale_expr},pad={pad_expr}")
 
     # Pad start
     if pad:

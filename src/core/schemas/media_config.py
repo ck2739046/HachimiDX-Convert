@@ -289,6 +289,28 @@ class MediaConfig_Definitions:
         }
     )
 
+    video_scale_x = MediaConfig_Definition(
+        key="video_scale_x",
+        type="float",
+        group="video",
+        default=1.0,
+        constraints={
+            "ge": 0.5,
+            "le": 2.0
+        }
+    )
+
+    video_scale_y = MediaConfig_Definition(
+        key="video_scale_y",
+        type="float",
+        group="video",
+        default=1.0,
+        constraints={
+            "ge": 0.5,
+            "le": 2.0
+        }
+    )
+
 
 
 

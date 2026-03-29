@@ -16,13 +16,15 @@ def main(input_video: Path,
          final_output_path: Path,
          circle_center: Tuple[int, int],
          circle_radius: int,
+         scale_x: float,
+         scale_y: float,
          media_type: MediaType,
          duration: float,
          start_sec: float = 0.0,
          end_sec: float = 0.0,
          target_res: int = 1080
         ) -> OpResult[Path]:
-    
+
     """
     生成标准化视频 主入口
 
@@ -32,6 +34,8 @@ def main(input_video: Path,
         final_output_path(Path): 最终输出视频路径
         circle_center(Tuple[int, int]): 圆心坐标
         circle_radius(int): 圆半径
+        scale_x(float): X轴缩放系数
+        scale_y(float): Y轴缩放系数
         media_type(MediaType): 媒体类型 video_with_audio / video_without_audio
         duration(float): 视频总时长(秒)
         start_sec(float): 开始时间(秒)
@@ -57,8 +61,8 @@ def main(input_video: Path,
         video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
 
-        crop_size, crop_x, crop_y = calculate_crop_params(video_width, video_height, circle_center, circle_radius)
-        
+        crop_w, crop_h, crop_x, crop_y = calculate_crop_params(video_width, video_height, circle_center, circle_radius, scale_x, scale_y)
+
         # 检查最终输出是否已经标准化
         is_final_output_std = is_output_already_standardized(final_output_path, target_res, duration, start_sec, end_sec)
         if is_final_output_std:
@@ -68,15 +72,15 @@ def main(input_video: Path,
         is_output_std = is_output_already_standardized(temp_output_path, target_res, duration, start_sec, end_sec)
         if is_output_std:
             return ok(temp_output_path) # 如果输出已经标准了，直接返回
-        
+
         # 旧输出存在但无效时，先删除
         if temp_output_path.exists():
             try:
                 temp_output_path.unlink()
             except Exception as e:
                 return err(f"Failed to remove invalid standardized output: {temp_output_path}", error_raw=e)
-        
-        is_input_std, need_crop, need_resize, need_trim_start, need_trim_end = is_input_already_standardized(crop_size, crop_x, crop_y, video_width, video_height, target_res, start_sec, end_sec)
+
+        is_input_std, need_crop, need_resize, need_trim_start, need_trim_end = is_input_already_standardized(crop_w, crop_h, crop_x, crop_y, video_width, video_height, target_res, start_sec, end_sec)
         if is_input_std:
             # 如果输入已经标准了，直接复制到输出路径
             print("Input video already standardized, copy to output path.")
@@ -104,10 +108,12 @@ def main(input_video: Path,
 
         if need_crop:
             params.update({
-                M_Defs.video_crop_w.key: crop_size,
-                M_Defs.video_crop_h.key: crop_size,
+                M_Defs.video_crop_w.key: crop_w,
+                M_Defs.video_crop_h.key: crop_h,
                 M_Defs.video_crop_x.key: crop_x,
                 M_Defs.video_crop_y.key: crop_y,
+                M_Defs.video_scale_x.key: scale_x,
+                M_Defs.video_scale_y.key: scale_y,
             })
 
         if need_resize:
@@ -128,7 +134,7 @@ def main(input_video: Path,
         change_hint = ''
 
         if need_crop:
-            change_hint += f'  crop to {crop_size}:{crop_size}:{crop_x}:{crop_y} (w:h:x:y)\n'
+            change_hint += f'  crop to {crop_w}:{crop_h}:{crop_x}:{crop_y} (w:h:x:y)\n'
         if need_resize:
             change_hint += f'  resize to {target_res}x{target_res}\n'
         if need_trim_start:
@@ -164,26 +170,32 @@ def main(input_video: Path,
 def calculate_crop_params(video_width: int,
                           video_height: int,
                           circle_center: Tuple[int, int],
-                          circle_radius: int
-                        ) -> Tuple[int, int, int]:
-    
-    video_size = min(video_width, video_height)
+                          circle_radius: int,
+                          scale_x: float = 1.0,
+                          scale_y: float = 1.0
+                        ) -> Tuple[int, int, int, int]:
 
-    # 计算最后裁剪出的视频的尺寸
-    crop_size = circle_radius * 2
+    # 根据 scale 计算水平和垂直方向的半长
+    half_w = round(circle_radius * scale_x)
+    half_h = round(circle_radius * scale_y)
+
+    # 计算裁剪区域的宽度和高度
+    crop_w = half_w * 2
+    crop_h = half_h * 2
 
     # 计算裁剪区域左上角坐标（允许越界，由 ffmpeg 处理黑色填充）
-    crop_x = round(circle_center[0] - circle_radius)
-    crop_y = round(circle_center[1] - circle_radius)
+    crop_x = round(circle_center[0] - half_w)
+    crop_y = round(circle_center[1] - half_h)
 
-    return crop_size, crop_x, crop_y
-
-
+    return crop_w, crop_h, crop_x, crop_y
 
 
 
 
-def is_input_already_standardized(crop_size: int,
+
+
+def is_input_already_standardized(crop_w: int,
+                                  crop_h: int,
                                   crop_x: int,
                                   crop_y: int,
                                   video_width: int,
@@ -202,11 +214,14 @@ def is_input_already_standardized(crop_size: int,
     need_trim_end = True
 
     # 如果裁剪画面尺寸≈实际视频尺寸，并且裁剪中心≈实际视频中心，则不裁剪
-    if abs(crop_size - video_size) < tolerance*2 and crop_x < tolerance and crop_y < tolerance:
+    # 使用 max(crop_w, crop_h) 来判断是否接近视频尺寸
+    if abs(crop_w - video_size) < tolerance*2 and \
+       abs(crop_h - video_size) < tolerance*2 and \
+       crop_x < tolerance and crop_y < tolerance:
         need_crop = False
 
-    # resize
-    if crop_size == target_res:
+    # resize (如果 crop 后的尺寸等于目标分辨率，则不需要 resize)
+    if crop_w == crop_h == target_res:
         need_resize = False
 
     # trim
@@ -214,11 +229,11 @@ def is_input_already_standardized(crop_size: int,
         need_trim_start = False
     if end_sec <= 0:
         need_trim_end = False
-    
+
     if not need_crop and not need_resize and not need_trim_start and not need_trim_end:
         print("Video already standardized.")
         return True, False, False, False, False
-    
+
     return False, need_crop, need_resize, need_trim_start, need_trim_end
 
 

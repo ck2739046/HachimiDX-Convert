@@ -70,6 +70,17 @@ class MediaModel(BaseModel):
     video_crop_y: Optional[int] = Field(default=M_Defs.video_crop_y.default)
     video_crop_w: Optional[int] = Field(default=M_Defs.video_crop_w.default, gt=M_Defs.video_crop_w.constraints["gt"])
     video_crop_h: Optional[int] = Field(default=M_Defs.video_crop_h.default, gt=M_Defs.video_crop_h.constraints["gt"])
+
+    video_scale_x: Optional[float] = Field(
+        default=M_Defs.video_scale_x.default,
+        ge=M_Defs.video_scale_x.constraints["ge"],
+        le=M_Defs.video_scale_x.constraints["le"]
+    )
+    video_scale_y: Optional[float] = Field(
+        default=M_Defs.video_scale_y.default,
+        ge=M_Defs.video_scale_y.constraints["ge"],
+        le=M_Defs.video_scale_y.constraints["le"]
+    )
     
     
     
