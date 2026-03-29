@@ -260,14 +260,22 @@ class ManualAdjust:
                    radius = 4,
                    color = (0, 0, 255),
                    thickness = 2)
+        
+        # 绘制判定线圆圈 (供参考)
+        # 1080p 下，判定线半径是 480
+        # 新窗口 800，判定线对应 355.5
+        cv2.circle(img = resized_frame,
+                   center = (new_frame_size // 2, new_frame_size // 2),
+                   radius = 356,
+                   color = (0, 255, 0), # 绿色
+                   thickness = 2)
 
         # 左上角提示
         instructions = [
-            "Press SPACE to pause/play video",
-            "Press Esc/Enter to quit",
-            "Press R to undo",
-            "If circle is incorrect,",
-            "press any other key to adjust"
+            "SPACE -> pause/play",
+            "Esc/Enter -> quit",
+            "R -> undo",
+            "Any other key -> adjust circle"
         ]
         
         for i, instruction in enumerate(instructions):
