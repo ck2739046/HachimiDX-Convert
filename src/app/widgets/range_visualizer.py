@@ -76,22 +76,26 @@ class RangeVisualizer(QWidget):
         # 计算位置
         def value_to_x(value: float) -> int:
             ratio = value / self.total
+            if not 0 < ratio < 1.1:
+                return None
             return int(line_start_x + ratio * line_length)
         
         # 绘制 start 竖线（绿色）
         if self.start is not None and self.start >= 0:
             start_x = value_to_x(self.start)
-            pen = QPen(Qt.GlobalColor.green)
-            pen.setWidth(2)
-            painter.setPen(pen)
-            painter.drawLine(start_x, line_y - self.indicator_height // 2, start_x, line_y + self.indicator_height // 2)
+            if start_x is not None:
+                pen = QPen(Qt.GlobalColor.green)
+                pen.setWidth(2)
+                painter.setPen(pen)
+                painter.drawLine(start_x, line_y - self.indicator_height // 2, start_x, line_y + self.indicator_height // 2)
         
         # 绘制 end 竖线（红色）
         if self.end is not None and self.end >= 0:
             end_x = value_to_x(self.end)
-            pen = QPen(Qt.GlobalColor.red)
-            pen.setWidth(2)
-            painter.setPen(pen)
-            painter.drawLine(end_x, line_y - self.indicator_height // 2, end_x, line_y + self.indicator_height // 2)
+            if end_x is not None:
+                pen = QPen(Qt.GlobalColor.red)
+                pen.setWidth(2)
+                painter.setPen(pen)
+                painter.drawLine(end_x, line_y - self.indicator_height // 2, end_x, line_y + self.indicator_height // 2)
         
         painter.end()
