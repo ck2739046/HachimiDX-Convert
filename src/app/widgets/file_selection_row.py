@@ -7,12 +7,16 @@ from .help_icon import create_help_icon
 from .path_display import create_path_display
 from .button import create_button
 
-def create_file_selection_row(button_text: str, help_text: str = None, on_button_clicked_handler=None):
+def create_file_selection_row(button_text: str,
+                              button_length: int = None,
+                              help_text: str = None,
+                              on_button_clicked_handler=None):
     """
     创建文件选择行UI组件
 
     Args:
         button_text: str，按钮显示文本
+        button_length: int，可选，按钮长度，默认 120
         help_text: str，可选，默认None，不创建help_icon
         on_button_clicked_handler: function，可选，按钮点击事件处理函数 (这个函数需要接受"选择的文件路径"作为参数)
 
@@ -20,8 +24,10 @@ def create_file_selection_row(button_text: str, help_text: str = None, on_button
         tuple: (button_widget, line_edit_widget, help_label_widget | None)
     """
 
+    if button_length is None: button_length = 120
+
     # 创建文件选择按钮
-    button = create_button(button_text, 120)
+    button = create_button(button_text, button_length)
 
     # 创建可选的帮助图标
     help_label = None

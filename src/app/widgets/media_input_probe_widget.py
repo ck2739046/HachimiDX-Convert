@@ -24,7 +24,11 @@ class MediaInputProbeWidget(QWidget):
     media_loaded = pyqtSignal(str)
     
 
-    def __init__(self, select_file_button_help: str = None, parent=None):
+    def __init__(self, parent=None,
+                 select_file_button_help: str = None,
+                 select_file_button_text: str = None,
+                 select_file_button_length: int = None):
+
         super().__init__(parent)
 
         # widgets
@@ -35,14 +39,19 @@ class MediaInputProbeWidget(QWidget):
         self.selected_file_duration = None
         self.selected_file_type = MediaType.UNKNOWN
         
-        self._init_ui(select_file_button_help)
+        self._init_ui(select_file_button_help,
+                      select_file_button_text,
+                      select_file_button_length)
         
 
 
 
 
 
-    def _init_ui(self, select_file_button_help: str):
+    def _init_ui(self,
+                 select_file_button_help: str,
+                 select_file_button_text: str,
+                 select_file_button_length: int):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -52,9 +61,10 @@ class MediaInputProbeWidget(QWidget):
          self.input_file_path_display_line_edit,
          select_file_help,
         ) = create_file_selection_row(
-            button_text = i18n.t(f"{I18N_Prefix}.ui_select_input_file_button"),
+            button_text = select_file_button_text or i18n.t(f"{I18N_Prefix}.ui_select_input_file_button"),
+            button_length = select_file_button_length,
             help_text = select_file_button_help,
-            on_button_clicked_handler = self._on_input_file_selected,
+            on_button_clicked_handler = self._on_input_file_selected
         )
 
         row1 = _create_row(select_file_button,
