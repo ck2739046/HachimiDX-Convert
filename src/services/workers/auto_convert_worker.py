@@ -68,6 +68,7 @@ def main(args: list[str]) -> bool:
         is_standardize_enabled = _as_bool(cfg["is_standardize_enabled"])
         is_detect_enabled = _as_bool(cfg["is_detect_enabled"])
         is_analyze_enabled = _as_bool(cfg["is_analyze_enabled"])
+        std_video_path = _get_cfg(cfg, "std_video_path", Path)
 
 
 
@@ -75,7 +76,7 @@ def main(args: list[str]) -> bool:
             result = standardize_main(
                 input_video=_get_cfg(cfg, "standardize_input_video_path", Path),
                 temp_output_path=_get_cfg(cfg, "standardize_temp_output_path", Path),
-                final_output_path=_get_cfg(cfg, "standardize_final_output_path", Path),
+                final_output_path=std_video_path,
                 video_mode=_get_cfg(cfg, "video_mode"),
                 media_type=_get_cfg(cfg, "media_type", MediaType),
                 duration=_get_cfg(cfg, "duration", float),
@@ -91,13 +92,8 @@ def main(args: list[str]) -> bool:
 
         if is_detect_enabled:
 
-            if is_standardize_enabled:
-                std_video_for_detect = _get_cfg(cfg, "standardize_final_output_path", Path)
-            else:
-                std_video_for_detect = _get_cfg(cfg, "std_video_path_detect", Path)
-
             result = detect_main(
-                std_video_path=std_video_for_detect,
+                std_video_path=std_video_path,
                 batch_detect=_get_cfg(cfg, "predict_batch_size_detect_obb", int),
                 batch_cls=_get_cfg(cfg, "predict_batch_size_classify", int),
                 inference_device=_get_cfg(cfg, "inference_device"),
@@ -116,13 +112,8 @@ def main(args: list[str]) -> bool:
 
         if is_analyze_enabled:
 
-            if is_standardize_enabled:
-                std_video_for_analyze = _get_cfg(cfg, "standardize_final_output_path", Path)
-            else:
-                std_video_for_analyze = _get_cfg(cfg, "std_video_path_analyze", Path)
-
             result = analyze_main(
-                std_video_path=std_video_for_analyze,
+                std_video_path=std_video_path,
                 bpm=_get_cfg(cfg, "bpm", float),
                 chart_lv=_get_cfg(cfg, "chart_lv", int),
                 base_denominator=_get_cfg(cfg, "base_denominator", int),
