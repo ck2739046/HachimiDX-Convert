@@ -7,7 +7,7 @@ from .nav_bar import SegmentedNavBar
 from .output_log import OutputLogWidget
 from .help_icon import create_help_icon
 from .label import create_label
-from .combo_box import create_combo_box, create_folder_combo_box
+from .combo_box import create_combo_box
 from .line_edit import create_line_edit
 from .check_box import create_check_box
 from .divider import create_divider
@@ -25,7 +25,7 @@ __all__ = [
 	'OutputLogWidget',
 	'create_help_icon',
 	'create_label',
-	'create_combo_box', 'create_folder_combo_box',
+	'create_combo_box',
 	'create_line_edit',
 	'create_check_box',
 	'create_divider',
