@@ -4,16 +4,15 @@ import cv2
 import shutil
 
 from ...schemas.op_result import OpResult, ok, err, print_op_result
-from src.core.schemas.media_config import MediaType
-from src.core.schemas.media_config import MediaConfig_Definitions as M_Defs
+from ...schemas.media_config import MediaType
+from ...schemas.media_config import MediaConfig_Definitions as M_Defs
 from src.services.pipeline import MediaPipeline
 
 
 
 
 def main(input_video: Path,
-         temp_output_path: Path,
-         final_output_path: Path,
+         output_path: Path,
          circle_center: Tuple[int, int],
          circle_radius: int,
          scale_x: float,
@@ -23,15 +22,14 @@ def main(input_video: Path,
          start_sec: float = 0.0,
          end_sec: float = 0.0,
          target_res: int = 1080
-        ) -> OpResult[Path]:
+        ) -> OpResult[None]:
 
     """
     生成标准化视频 主入口
 
     Args:
         input_video(Path): 输入视频路径
-        temp_output_path(Path): 临时输出视频路径
-        final_output_path(Path): 最终输出视频路径
+        output_path(Path): 输出视频路径
         circle_center(Tuple[int, int]): 圆心坐标
         circle_radius(int): 圆半径
         scale_x(float): X轴缩放系数
@@ -43,7 +41,7 @@ def main(input_video: Path,
         target_res(int): 目标分辨率(边长)，默认 1080
 
     Returns:
-        OpResult[Path]: 标准化后的视频的完整路径
+        OpResult[None]
     """
 
     try:
@@ -63,34 +61,17 @@ def main(input_video: Path,
 
         crop_w, crop_h, crop_x, crop_y = calculate_crop_params(video_width, video_height, circle_center, circle_radius, scale_x, scale_y)
 
-        # 检查最终输出是否已经标准化
-        is_final_output_std = is_output_already_standardized(final_output_path, target_res, duration, start_sec, end_sec)
-        if is_final_output_std:
-            return ok(final_output_path) # 如果最终输出已经标准了，直接返回
-
-        # 检查临时输出是否已经标准化
-        is_output_std = is_output_already_standardized(temp_output_path, target_res, duration, start_sec, end_sec)
-        if is_output_std:
-            return ok(temp_output_path) # 如果输出已经标准了，直接返回
-
-        # 旧输出存在但无效时，先删除
-        if temp_output_path.exists():
-            try:
-                temp_output_path.unlink()
-            except Exception as e:
-                return err(f"Failed to remove invalid standardized output: {temp_output_path}", error_raw=e)
-
         is_input_std, need_crop, need_resize, need_trim_start, need_trim_end = is_input_already_standardized(crop_w, crop_h, crop_x, crop_y, video_width, video_height, target_res, start_sec, end_sec)
         if is_input_std:
             # 如果输入已经标准了，直接复制到输出路径
             print("Input video already standardized, copy to output path.")
             try:
                 # 如果输出文件已存在，先删除
-                if temp_output_path.exists():
-                    temp_output_path.unlink()
+                if output_path.exists():
+                    output_path.unlink()
                 # 复制输入文件到输出路径
-                shutil.copy2(input_video, temp_output_path)
-                return ok(temp_output_path)
+                shutil.copy2(input_video, output_path)
+                return ok(output_path)
             except Exception as e:
                 return err(f"Failed to copy video file: {e}")
         
@@ -102,7 +83,7 @@ def main(input_video: Path,
         params = {
             M_Defs.media_type.key: media_type,
             M_Defs.input_path.key: str(input_video.resolve()),
-            M_Defs.output_path.key: str(temp_output_path.resolve()),
+            M_Defs.output_path.key: str(output_path.resolve()),
             M_Defs.duration.key: duration,
         }
 
@@ -152,18 +133,16 @@ def main(input_video: Path,
         run_res = MediaPipeline.run_now(params)
         if not run_res.is_ok:
             return err("Standardize video process failed.", inner=run_res)
-        
-        # 二次验证：确保输出文件存在且参数符合预期
-        if not is_output_already_standardized(temp_output_path, target_res, duration, start_sec, end_sec, print_hint=False):
-            return err("Output video is invalid after processing.")
-        
+
         print("Process video...Ok")
 
-        return ok(temp_output_path)
+        return ok()
 
     except Exception as e:
         return err(f"Unexcepted error in process_video", error_raw = e)
     
+
+
 
 
 
@@ -235,50 +214,3 @@ def is_input_already_standardized(crop_w: int,
         return True, False, False, False, False
 
     return False, need_crop, need_resize, need_trim_start, need_trim_end
-
-
-
-
-
-
-
-
-def is_output_already_standardized(output_path: Path,
-                                   target_res: int,
-                                   duration: float,
-                                   start_sec: float,
-                                   end_sec: float,
-                                   print_hint: bool = True
-                                  ) -> bool:
-    
-    """如果视频已存在，检查分辨率+时长是否符合要求，如果符合则视为已标准化"""
-    
-    if not output_path.exists():
-        return False
-    
-    try:
-        cap = cv2.VideoCapture(output_path)
-        output_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        output_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        output_total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        output_fps = cap.get(cv2.CAP_PROP_FPS)
-        cap.release()
-        
-        if output_width != target_res or output_height != target_res:
-            raise ValueError(f'output resolution mismatch, expect {target_res}x{target_res}, got {output_width}x{output_height}.')
-        
-        output_duration = output_total_frames / output_fps
-        expect_duration = duration - start_sec if end_sec <=0 else end_sec - start_sec
-        # 允许 0.5 秒误差
-        if abs(output_duration - expect_duration) > 0.5:
-            raise ValueError(f'output duration mismatch, expect {expect_duration}s, got {output_duration}s.')
-
-        # 在二次确认时，不要打印这个提示，避免误导用户
-        if print_hint:
-            print(f"Standardized video already exists")
-        return True  
-        
-    except Exception as e:
-        print(f"Warning: {e}")
-        print('standardized video exists but invalid, will re-generate.')
-        return False

@@ -2,7 +2,6 @@ from pathlib import Path
 
 from ...schemas.op_result import OpResult, ok, err, print_op_result
 from ...schemas.media_model import MediaType
-from src.services import PathManage
 
 from . import detect_circle
 from .manual_adjust import ManualAdjust
@@ -12,7 +11,8 @@ from . import process_video
 
 
 def main(input_video: Path,
-         song_name: str,
+         temp_output_path: Path,
+         final_output_path: Path,
          video_mode: str,
          media_type: MediaType,
          duration: float,
@@ -20,14 +20,15 @@ def main(input_video: Path,
          end_sec: float = 0.0,
          skip_detect_circle: bool = False,
          target_res: int = 1080
-        ) -> OpResult[Path]:
-    
+        ) -> OpResult[None]:
+
     """
     规范化视频 主入口
 
     Args:
         input_video(Path): 输入视频路径
-        song_name(str): 歌曲名称（不带扩展名）
+        temp_output_path(Path): 临时输出视频路径
+        final_output_path(Path): 最终输出视频路径
         video_mode(str): 视频模式 source video / camera footage
         media_type(MediaType): 媒体类型 video_with_audio / video_without_audio
         duration(float): 视频总时长(秒)
@@ -37,7 +38,7 @@ def main(input_video: Path,
         target_res(int): 目标分辨率(边长)，默认 1080
 
     Returns:
-        OpResult[Path]: 标准化后的视频的完整路径
+        OpResult[None]
     """
     
     try:
@@ -66,23 +67,11 @@ def main(input_video: Path,
             if not result.is_ok:
                 return err("Failed to manual adjust circle.", inner=result)
             circle_center, circle_radius, scale_x, scale_y = result.value
-        # 第三步：构建输出路径
-        output_filename = f"{song_name}_std.mp4"
-        temp_output_path = PathManage.TEMP_DIR / output_filename
 
-        result = PathManage.get_main_output_dir()
-        if not result.is_ok:
-            return err(f"Failed to get main output dir", inner = result)
-        main_output_dir = result.value
-        
-        final_output_dir = main_output_dir / song_name
-        final_output_path = final_output_dir / output_filename
-
-        # 第四步：处理视频
+        # 第三步：处理视频
         result = process_video.main(
             input_video=input_video,
-            temp_output_path=temp_output_path,
-            final_output_path=final_output_path,
+            output_path=temp_output_path,
             circle_center=circle_center,
             circle_radius=circle_radius,
             scale_x=scale_x,
@@ -95,17 +84,16 @@ def main(input_video: Path,
         )
         if not result.is_ok:
             return err("Failed to process video.", inner=result)
-        std_output_path = result.value
 
-        # 第五步：移动到正式输出目录
-        if std_output_path != final_output_path:
+        # 第四步：移动到正式输出目录
+        if temp_output_path != final_output_path:
             try:
-                final_output_dir.mkdir(parents=True, exist_ok=True)
-                std_output_path.replace(final_output_path)
+                final_output_path.parent.mkdir(parents=True, exist_ok=True)
+                temp_output_path.replace(final_output_path)
             except Exception as e:
-                return err(f"Failed to move output video to main output dir.", error_raw=e)
+                return err(f"Failed to move output video from temp dir to main output dir.", error_raw=e)
 
-        return ok(final_output_path)
+        return ok()
         
     except Exception as e:
         return err(f"Unexcepted error in Standardize.main().", error_raw = e)
