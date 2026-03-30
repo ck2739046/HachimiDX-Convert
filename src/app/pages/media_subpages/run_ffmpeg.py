@@ -32,14 +32,12 @@ class RunFFmpegPage(BaseOutputPage):
         self.video_fps_combo_box = None
         self.video_gop_optimize_check_box = None
         self.video_mute_check_box = None
-        self.video_panel = None
         self.video_overlay = None
         # audio widgets
         self.audio_format_combo_box = None
         self.audio_bitrate_combo_box = None
         self.audio_sample_rate_combo_box = None
         self.audio_volume_line_edit = None
-        self.audio_panel = None
         self.audio_overlay = None
         # common widgets
         self.common_pad_start_line_edit = None
@@ -89,8 +87,8 @@ class RunFFmpegPage(BaseOutputPage):
         video_gop_optimize_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_gop_optimize_help"))
         video_mute_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_mute_help"))
         # create video panel + row
-        self.video_panel = QWidget()
-        video_layout = QVBoxLayout(self.video_panel)
+        video_panel = QWidget()
+        video_layout = QVBoxLayout(video_panel)
         video_layout.setContentsMargins(0, 0, 0, 0)
         row = _create_row(video_crf_label, self.video_crf_combo_box, video_crf_help,
                           video_resolution_label, self.video_resolution_combo_box, video_resolution_help,
@@ -99,8 +97,8 @@ class RunFFmpegPage(BaseOutputPage):
                           video_mute_label, self.video_mute_check_box, video_mute_help,
                           add_stretch=True)
         video_layout.addWidget(row)
-        self.content_layout.addWidget(self.video_panel)
-        self.video_overlay = OverlayWidget(self.video_panel)
+        self.content_layout.addWidget(video_panel)
+        self.video_overlay = OverlayWidget(video_panel)
         self.video_overlay.show()
         
         # 第四行: audio 参数
@@ -117,8 +115,8 @@ class RunFFmpegPage(BaseOutputPage):
         audio_sample_rate_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_sample_rate_help"))
         audio_volume_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_audio_volume_help"))
         # create audio panel + row
-        self.audio_panel = QWidget()
-        audio_layout = QVBoxLayout(self.audio_panel)
+        audio_panel = QWidget()
+        audio_layout = QVBoxLayout(audio_panel)
         audio_layout.setContentsMargins(0, 0, 0, 0)
         row = _create_row(audio_format_label, self.audio_format_combo_box, audio_format_help,
                           audio_bitrate_label, self.audio_bitrate_combo_box, audio_bitrate_help,
@@ -126,8 +124,8 @@ class RunFFmpegPage(BaseOutputPage):
                           audio_volume_label, self.audio_volume_line_edit, audio_volume_help,
                           add_stretch=True)
         audio_layout.addWidget(row)
-        self.content_layout.addWidget(self.audio_panel)
-        self.audio_overlay = OverlayWidget(self.audio_panel)
+        self.content_layout.addWidget(audio_panel)
+        self.audio_overlay = OverlayWidget(audio_panel)
         self.audio_overlay.show()
         
         # 第五行: common 参数

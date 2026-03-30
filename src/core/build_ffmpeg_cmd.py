@@ -234,10 +234,14 @@ def _build_audio_args(data: MediaModel) -> OpResult[list[str]]:
 
     args = []
 
-    if not(data.media_type == MediaType.AUDIO or \
-           data.media_type == MediaType.VIDEO_WITH_AUDIO or \
-           data.video_mute == False):
-        
+    # 有音频考虑 video mute
+    if data.media_type == MediaType.VIDEO_WITH_AUDIO:
+        if data.video_mute:
+            args.extend(["-an"])  # 无音频输出
+            return ok(args)
+    
+    # 没音频直接静音
+    if data.media_type in [MediaType.VIDEO_WITHOUT_AUDIO]:
         args.extend(["-an"])  # 无音频输出
         return ok(args)
     
