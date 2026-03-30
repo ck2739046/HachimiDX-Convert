@@ -25,7 +25,7 @@ def create_divider(text, up_margin=5, down_margin=5):
     if text:
         line_left = QFrame()
         line_left.setFrameShape(QFrame.Shape.HLine)
-        line_left.setFixedSize(18, 20) # 固定宽度18像素
+        line_left.setFixedSize(18, 15) # 固定宽度18像素
         line_left.setStyleSheet(f"color: {colors['grey']};")
         divider_layout.addWidget(line_left)
 
@@ -36,7 +36,7 @@ def create_divider(text, up_margin=5, down_margin=5):
 
         line_right = QFrame()
         line_right.setFrameShape(QFrame.Shape.HLine)
-        line_right.setFixedHeight(20) # 无固定宽度
+        line_right.setFixedHeight(15) # 无固定宽度
         line_right.setStyleSheet(f"color: {colors['grey']};")
         # 设置大小策略，让 QLabel 能够充分利用水平方向上的可用空间
         line_right.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)

@@ -179,13 +179,20 @@ class AutoConvertConfig_Definitions:
 		optional=False, # 必选没有默认值
 		constraints={"gt": 0}
 	)
+      
+	is_big_touch = AutoConvertConfig_Definition(
+		key="is_big_touch",
+		type="bool",
+		group="detect",
+		default=False
+	)
 
 	chart_lv = AutoConvertConfig_Definition(
 		key="chart_lv",
 		type="int",
 		group="analyze",
 		default=5, # master
-		constraints={"options": [0, 1, 2, 3, 4, 5, 6, 7]}
+		constraints={"options": [1, 2, 3, 4, 5, 6, 7]}
 	)
 
 	base_denominator = AutoConvertConfig_Definition(

@@ -115,6 +115,7 @@ def main(args: list[str]) -> bool:
             result = analyze_main(
                 std_video_path=std_video_path,
                 bpm=_get_cfg(cfg, "bpm", float),
+                is_big_touch=_get_cfg(cfg, "is_big_touch", _as_bool),
                 chart_lv=_get_cfg(cfg, "chart_lv", int),
                 base_denominator=_get_cfg(cfg, "base_denominator", int),
                 duration_denominator=_get_cfg(cfg, "duration_denominator", int),

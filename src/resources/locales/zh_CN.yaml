@@ -294,7 +294,6 @@ zh_CN:
 
     auto_convert_page:
       ui_select_file_divider: "文件选择"
-      ui_settings_divider: "设置"
       ui_standardize_divider: "视频标准化"
       ui_detect_divider: "音符识别"
       ui_analyze_divider: "音符分析"
@@ -329,6 +328,10 @@ zh_CN:
 
       ui_bpm_label: "BPM: "
       ui_bpm_help: "仅支持静态 BPM (全程不变速)\n支持整数或最多三位小数"
+      ui_is_big_touch_label: "大尺寸 touch: "
+      ui_is_big_touch_help: |
+        在 Basic/Advanced 难度中，
+        touch/touch-hold 音符的尺寸通常会更大。
       ui_chart_lv_label: "谱面难度: "
       ui_chart_lv_help: "1-easy\n2-basic\n3-normal\n4-expert\n5-master\n6-re:master\n7-utage"
       ui_base_denominator_label: "音符间隔分辨率: "

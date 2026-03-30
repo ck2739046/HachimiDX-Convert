@@ -29,14 +29,6 @@ class AutoConvertPage(BaseOutputPage):
         self.overlay_detect = None
         self.overlay_analyze = None
 
-        # divider
-        self.file_selection_divider = None
-        self.settings_divider = None # basic
-        self.standardize_divider = None # adv
-        self.detect_divider = None # adv
-        self.analyze_divider = None # adv
-        self.common_divider = None # adv
-
         # file selection panel
         self.chart_confirm_video_input = None
         self.select_output_dir_row = None # 包含button + display，std模块禁用时显示
@@ -52,6 +44,7 @@ class AutoConvertPage(BaseOutputPage):
         # target_res 暂时不设置
 
         # detect panel
+        self.detect_divider = None # adv
         self.detect_row = None # adv 包含以下三个勾选框
         self.skip_detect_check_box = None # adv 由row控制
         self.skip_cls_check_box = None # adv 由row控制
@@ -59,6 +52,7 @@ class AutoConvertPage(BaseOutputPage):
 
         # analyze panel
         self.bpm_line_edit = None
+        self.is_big_touch_check_box = None
         self.chart_lv_combo_box = None
         self.base_denominator_combo_box = None
         self.duration_denominator_combo_box = None
@@ -79,10 +73,6 @@ class AutoConvertPage(BaseOutputPage):
         # ------------------- UI builders -------------------
 
         self._build_file_selection_panel()
-
-        self.settings_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_settings_divider"))
-        self.content_layout.addWidget(self.settings_divider)
-
         self._build_standardize_panel()
         self._build_detect_panel()
         self._build_analyze_panel()
@@ -112,8 +102,8 @@ class AutoConvertPage(BaseOutputPage):
     def _build_file_selection_panel(self):
 
         # divider
-        self.file_selection_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_select_file_divider"))
-        self.content_layout.addWidget(self.file_selection_divider)
+        file_selection_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_select_file_divider"))
+        self.content_layout.addWidget(file_selection_divider)
 
         # select chart confirm
         self.chart_confirm_video_input = MediaInputProbeWidget(
@@ -168,8 +158,8 @@ class AutoConvertPage(BaseOutputPage):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # divider
-        self.standardize_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_standardize_divider"))
-        layout.addWidget(self.standardize_divider)
+        standardize_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_standardize_divider"))
+        layout.addWidget(standardize_divider)
         
         # Row 1
         song_name_label = create_label(i18n.t(f"{I18N_Prefix}.ui_song_name_label"))
@@ -309,14 +299,24 @@ class AutoConvertPage(BaseOutputPage):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # divider
-        self.analyze_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_analyze_divider"))
-        layout.addWidget(self.analyze_divider)
+        analyze_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_analyze_divider"))
+        layout.addWidget(analyze_divider)
 
-        # Settings
+        # Row 1
         bpm_label = create_label(i18n.t(f"{I18N_Prefix}.ui_bpm_label"))
         self.bpm_line_edit = create_line_edit(length=70, validator='float')
         bpm_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_bpm_help"))
 
+        is_big_touch_label = create_label(i18n.t(f"{I18N_Prefix}.ui_is_big_touch_label"))
+        self.is_big_touch_check_box = create_check_box(AC_Defs.is_big_touch.default)
+        is_big_touch_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_is_big_touch_help"))
+        
+        row = _create_row(bpm_label, self.bpm_line_edit, bpm_help,
+                          is_big_touch_label, self.is_big_touch_check_box, is_big_touch_help,
+                          add_stretch=True)
+        layout.addWidget(row)
+
+        # Row 2
         chart_lv_label = create_label(i18n.t(f"{I18N_Prefix}.ui_chart_lv_label"))
         self.chart_lv_combo_box = self._create_combobox_with_options(AC_Defs.chart_lv, length=45)
         chart_lv_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_chart_lv_help"))
@@ -329,8 +329,7 @@ class AutoConvertPage(BaseOutputPage):
         self.duration_denominator_combo_box = self._create_combobox_with_options(AC_Defs.duration_denominator, length=45)
         dd_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_duration_denominator_help"))
 
-        row = _create_row(bpm_label, self.bpm_line_edit, bpm_help,
-                          chart_lv_label, self.chart_lv_combo_box, chart_lv_help,
+        row = _create_row(chart_lv_label, self.chart_lv_combo_box, chart_lv_help,
                           bd_label, self.base_denominator_combo_box, bd_help,
                           dd_label, self.duration_denominator_combo_box, dd_help,
                           add_stretch=True)
@@ -353,8 +352,8 @@ class AutoConvertPage(BaseOutputPage):
     def _build_common_panel(self):
 
         # divider
-        self.common_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_common_divider"))
-        self.content_layout.addWidget(self.common_divider)
+        common_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_common_divider"))
+        self.content_layout.addWidget(common_divider)
 
         # Row 1: Enable Modules
         enable_standardize_label = create_label(i18n.t(f"{I18N_Prefix}.ui_enable_standardize_label"))
@@ -444,15 +443,8 @@ class AutoConvertPage(BaseOutputPage):
 
         is_advanced_mode = self.advanced_mode_check_box.isChecked()
 
-        # basic mode
-        self.settings_divider.setVisible(not is_advanced_mode)
-
         # advanced mode
-        self.standardize_divider.setVisible(is_advanced_mode)
         self.detect_divider.setVisible(is_advanced_mode)
-        self.analyze_divider.setVisible(is_advanced_mode)
-        self.common_divider.setVisible(is_advanced_mode)
-
         self.detect_row.setVisible(is_advanced_mode)
         self.enable_modules_row.setVisible(is_advanced_mode)
 
@@ -522,6 +514,7 @@ class AutoConvertPage(BaseOutputPage):
             if raw_data[AC_Defs.is_analyze_enabled.key]:
                 raw_data.update({
                     AC_Defs.bpm.key: try_float(self.bpm_line_edit.text().strip()),
+                    AC_Defs.is_big_touch.key: self.is_big_touch_check_box.isChecked(),
                     AC_Defs.chart_lv.key: try_int(self.chart_lv_combo_box.currentText()),
                     AC_Defs.base_denominator.key: try_int(self._transfer_base_denominator(self.base_denominator_combo_box.currentText())),
                     AC_Defs.duration_denominator.key: try_int(self.duration_denominator_combo_box.currentText()),

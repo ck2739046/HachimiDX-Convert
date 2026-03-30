@@ -59,6 +59,8 @@ class AutoConvertModel(BaseModel):
 
 	bpm: Optional[float] = Field(default=None) # 必需参数 没有默认值
 
+	is_big_touch: Optional[bool] = Field(default=AC_Defs.is_big_touch.default)
+
 	chart_lv: Optional[int] = Field(default=AC_Defs.chart_lv.default)
 
 	base_denominator: Optional[int] = Field(default=AC_Defs.base_denominator.default)

@@ -294,7 +294,6 @@ en_US:
 
     auto_convert_page:
       ui_select_file_divider: "File Selection"
-      ui_settings_divider: "Settings"
       ui_standardize_divider: "Standardize Video"
       ui_detect_divider: "Note Detection"
       ui_analyze_divider: "Note Analysis"
@@ -329,6 +328,10 @@ en_US:
 
       ui_bpm_label: "BPM: "
       ui_bpm_help: "Only static BPM is supported (no tempo changes).\nSupports integers or up to 3 decimal places"
+      ui_is_big_touch_label: "Larger Touch: "
+      ui_is_big_touch_help: |
+        In Basic/Advanced level,
+        touch/touch-hold notes are usually larger in size.
       ui_chart_lv_label: "Chart Level: "
       ui_chart_lv_help: "1-easy\n2-basic\n3-normal\n4-expert\n5-master\n6-re:master\n7-utage"
       ui_base_denominator_label: "Base Denominator: "
