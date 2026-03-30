@@ -4,6 +4,11 @@ import os
 from pathlib import Path
 from typing import Optional
 
+try:
+    import win32gui
+except ImportError:
+    from win32 import win32gui
+
 from PyQt6.QtCore import QUrl, pyqtSlot
 from PyQt6.QtGui import QWindow
 from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
@@ -32,6 +37,9 @@ class MajdataPage(QWidget):
         self._track_combo = None
         self._video_combo = None
         self._play_video_checkbox = None
+
+        # 存储 MajdataEdit 窗口句柄引用
+        self._edit_hwnd: Optional[int] = None
 
         self._setup_ui()
 
@@ -68,6 +76,7 @@ class MajdataPage(QWidget):
         #         w.setParent(None)
         #         w.deleteLater()
 
+        self._edit_hwnd = hwnd
         win = QWindow.fromWinId(hwnd)
         container = QWidget.createWindowContainer(win, self) # parent = self
         self._majdataedit_placeholder.layout().addWidget(container, 1)
@@ -124,6 +133,20 @@ class MajdataPage(QWidget):
         load_btn.clicked.connect(self.on_load_clicked)
 
         return bar
+
+
+    def showEvent(self, event) -> None:
+        """页面显示时启用 MajdataEdit 窗口输入."""
+        super().showEvent(event)
+        if self._edit_hwnd:
+            win32gui.EnableWindow(self._edit_hwnd, True)
+
+
+    def hideEvent(self, event) -> None:
+        """页面隐藏时禁用 MajdataEdit 窗口输入，防止拦截其他页面的键盘输入."""
+        super().hideEvent(event)
+        if self._edit_hwnd:
+            win32gui.EnableWindow(self._edit_hwnd, False)
 
 
 
