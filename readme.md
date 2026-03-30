@@ -87,7 +87,6 @@ Code lives in `src/`, organized in three layers:
 
 - **Touch / Touch-Hold**
     - Overlapping notes at the same spot are not supported.
-    - Extra-large notes are not supported (common in `basic` level).
     - Fireworks effects (`f`) are not supported.
 
 - Songs are assumed to have a fixed BPM throughout and do not support BPM changes.
