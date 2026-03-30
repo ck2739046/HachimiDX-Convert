@@ -290,20 +290,31 @@ zh_CN:
 
     auto_convert_page:
       ui_select_file_divider: "文件选择"
+      ui_settings_divider: "设置"
       ui_standardize_divider: "视频标准化"
       ui_detect_divider: "音符识别"
       ui_analyze_divider: "音符分析"
       ui_common_divider: "通用设置"
 
+      ui_select_chart_confirm_video_button: "选择 maimai 谱面确认视频"
+      ui_selected_output_dir_button: "选择文件夹"
+      ui_selected_output_dir_help: |
+        所选择的文件夹 <可能> 需要包含以下文件:
+        - <folder_name>_std.mp4
+        - detect_result.txt
+        - track_result.txt
+        - preprocess_result.txt
+
       ui_song_name_label: "歌曲名称: "
       ui_video_mode_label: "视频形式: "
       ui_video_mode_help: |
         source video: 游戏原生画面
-        camera footage: 相机拍屏幕
-      ui_skip_detect_circle_label: "跳过圆形检测: "
-      ui_skip_detect_circle_help: |
-        程序会尝试自动检测圆形游戏屏幕的位置。
-        如果在当前谱面确认视频中，游戏画面已经是全屏并且在屏幕中心，可以跳过检测。
+        camera footage: 相机直接拍摄街机屏幕
+      ui_need_manual_adjust_label: "手动调整: "
+      ui_need_manual_adjust_help: |
+        在谱面确认视频中，
+        如果圆形游戏画面不是全屏居中的，
+        请启用此选项，手动调整位置。
 
       ui_skip_detect_label: "跳过检测: "
       ui_skip_detect_help: "跳过逐帧检测视频中的音符，直接读取已经存在的检测结果 (detect_result.txt)。"
@@ -339,7 +350,7 @@ zh_CN:
       ui_enable_standardize_label: "启用视频标准化模块: "
       ui_enable_standardize_help: |
         是否启用视频标准化模块。
-        启用: 对选择的谱面确认视频进行标准化处理 (裁剪\缩放\截取)
+        启用: 对选择的谱面确认视频进行标准化处理 (拉伸/裁剪/缩放/截取)
         禁用: 跳过此步骤，后续操作直接使用已有的标准化视频
       ui_enable_detect_label: "启用音符识别模块: "
       ui_enable_detect_help: |
@@ -351,6 +362,8 @@ zh_CN:
         是否启用音符分析模块。
         启用: 对音符识别结果进行分析，生成最终谱面
         禁用: 跳过此步骤
+
+      ui_advanced_mode_label: "高级模式: "
 
 
     # ---- settings 页面 ----

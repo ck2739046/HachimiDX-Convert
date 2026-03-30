@@ -290,21 +290,31 @@ en_US:
 
     auto_convert_page:
       ui_select_file_divider: "File Selection"
+      ui_settings_divider: "Settings"
       ui_standardize_divider: "Standardize Video"
       ui_detect_divider: "Note Detection"
       ui_analyze_divider: "Note Analysis"
       ui_common_divider: "Common"
 
+      ui_select_chart_confirm_video_button: "Select Chart Confirmation"
+      ui_selected_output_dir_button: "Select folder"
+      ui_selected_output_dir_help: |
+        The selected folder <may> need to contain the following files:
+        - <folder_name>_std.mp4
+        - detect_result.txt
+        - track_result.txt
+        - preprocess_result.txt
+
       ui_song_name_label: "Song Name: "
       ui_video_mode_label: "Video Mode: "
       ui_video_mode_help: |
         source video: native in-game footage
-        camera footage: camera recording of the screen
-      ui_skip_detect_circle_label: "Skip Circle Detect: "
-      ui_skip_detect_circle_help: |
-        The program tries to automatically detect the circular game screen area.
-        If the current chart confirmation video is already fullscreen and centered,
-        you can skip this detection.
+        camera footage: camera directly filming the arcade screen
+      ui_need_manual_adjust_label: "Manual Adjustment: "
+      ui_need_manual_adjust_help: |
+        In the chart confirmation video,
+        if the circular game screen is not full-screen centered,
+        enable this option for manual position adjustment.
 
       ui_skip_detect_label: "Skip Detect: "
       ui_skip_detect_help: "Skip frame-by-frame note detection and directly read the existing detection result (detect_result.txt)."
@@ -340,7 +350,7 @@ en_US:
       ui_enable_standardize_label: "Enable Video Standardization: "
       ui_enable_standardize_help: |
         Whether to enable the video standardization module.
-        Enabled: standardize the selected chart confirmation video (crop/scale/trim)
+        Enabled: standardize the selected chart confirmation video (stretch/crop/scale/trim)
         Disabled: skip this step and use the existing standardized video directly
       ui_enable_detect_label: "Enable Note Detection: "
       ui_enable_detect_help: |
@@ -352,6 +362,8 @@ en_US:
         Whether to enable the note analysis module.
         Enabled: analyze note detection results and generate the final chart
         Disabled: skip this step
+
+      ui_advanced_mode_label: "Advanced Mode: "
 
 
     # ---- settings page ----

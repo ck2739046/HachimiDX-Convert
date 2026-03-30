@@ -1,7 +1,7 @@
-import os
 import traceback
 from pathlib import Path
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QWidget
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QVBoxLayout, QWidget
 
 from .base_output_page import BaseOutputPage, _create_row
 from ..ui_style import UI_Style
@@ -23,117 +23,153 @@ class AutoConvertPage(BaseOutputPage):
         self.content_layout = QVBoxLayout(self.content_area)
         self.content_layout.setContentsMargins(10, 10, 10, 10)
 
-        # panels
-        self.standardize_panel = None
-        self.std_overlay = None
-        self.detect_panel = None
-        self.det_overlay = None
-        self.analyze_panel = None
-        self.ana_overlay = None
+        # overlay
+        # 覆盖在对应模块上，提示用户当前模块是否已被禁用
+        self.overlay_standardize = None
+        self.overlay_detect = None
+        self.overlay_analyze = None
 
-        # Standardize
+        # divider
+        self.file_selection_divider = None
+        self.settings_divider = None # basic
+        self.standardize_divider = None # adv
+        self.detect_divider = None # adv
+        self.analyze_divider = None # adv
+        self.common_divider = None # adv
+
+        # file selection panel
+        self.chart_confirm_video_input = None
+        self.select_output_dir_row = None # 包含button + display，std模块禁用时显示
+        self.selected_output_dir_display = None # 由row控制
+
+        # standardize panel
         self.song_name_line_edit = None
         self.video_mode_combo_box = None
+        self.need_manual_adjust_check_box = None
         self.start_sec_line_edit = None
         self.end_sec_line_edit = None
-        self.skip_detect_circle_check_box = None
+        self.video_range_visualizer = None
         # target_res 暂时不设置
 
-        # Detect
-        self.skip_detect_check_box = None
-        self.skip_cls_check_box = None
-        self.skip_export_tracked_check_box = None
+        # detect panel
+        self.detect_row = None # adv 包含以下三个勾选框
+        self.skip_detect_check_box = None # adv 由row控制
+        self.skip_cls_check_box = None # adv 由row控制
+        self.skip_export_tracked_check_box = None # adv 由row控制
 
-        # Analyze
+        # analyze panel
         self.bpm_line_edit = None
         self.chart_lv_combo_box = None
         self.base_denominator_combo_box = None
         self.duration_denominator_combo_box = None
 
-        # Common
-        self.media_file_input = None
-        self.enable_standardize_check_box = None
-        self.enable_detect_check_box = None
-        self.enable_analyze_check_box = None
+        # common panel
+        self.enable_modules_row = None # adv 包含以下三个勾选框
+        self.enable_standardize_check_box = None # adv 由row控制
+        self.enable_detect_check_box = None # adv 由row控制
+        self.enable_analyze_check_box = None # adv 由row控制
         self.taskname_line_edit = None
         self.submit_button = None
+
+        # advance mode
+        self.advanced_mode_check_box = None
 
 
 
         # ------------------- UI builders -------------------
 
-        # Shared Input File Select & Probe Result View
-        file_select_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_select_file_divider"))
-        self.content_layout.addWidget(file_select_divider)
-        self.media_file_input = MediaInputProbeWidget("placeholder")
-        self.content_layout.addWidget(self.media_file_input)
+        self._build_file_selection_panel()
+
+        self.settings_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_settings_divider"))
+        self.content_layout.addWidget(self.settings_divider)
 
         self._build_standardize_panel()
         self._build_detect_panel()
         self._build_analyze_panel()
-        self._build_common_controls()
-
+        self._build_common_panel()
+        self._build_advanced_mode_panel()
 
 
         # ------------------- 业务事件绑定 -------------------
-        self.media_file_input.media_loaded.connect(self.on_std_input_selected)
-
-        self.enable_standardize_check_box.stateChanged.connect(self._update_panels_visibility)
-        self.enable_detect_check_box.stateChanged.connect(self._update_panels_visibility)
-        self.enable_analyze_check_box.stateChanged.connect(self._update_panels_visibility)
         
-        self.submit_button.clicked.connect(self.on_submit_clicked)
-
         process_manager_api.get_signals().runner_output.connect(self.output_widget.handle_process_output)
         process_manager_api.get_signals().runner_ended.connect(self.output_widget.handle_process_ended)
 
         # 初始化显示状态
         self._update_panels_visibility()
+        # 默认关闭高级模式，隐藏相关设置
+        self.swtich_advanced_mode()
 
-        self.content_layout.addStretch()
+    
 
 
+
+
+
+
+
+
+    def _build_file_selection_panel(self):
+
+        # divider
+        self.file_selection_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_select_file_divider"))
+        self.content_layout.addWidget(self.file_selection_divider)
+
+        # select chart confirm
+        self.chart_confirm_video_input = MediaInputProbeWidget(
+            select_file_button_text=i18n.t(f"{I18N_Prefix}.ui_select_chart_confirm_video_button"),
+            select_file_button_length=170)
+        self.content_layout.addWidget(self.chart_confirm_video_input)
+
+        # select output dir
+        (select_output_dir_button,
+         self.selected_output_dir_display,
+         select_output_dir_help
+        ) = create_file_selection_row(
+            button_text=i18n.t(f"{I18N_Prefix}.ui_selected_output_dir_button"),
+            help_text=i18n.t(f"{I18N_Prefix}.ui_selected_output_dir_help")
+        )
+        # 此处手动创建是要保存 row 引用，以便后续控制 显示/隐藏
+        self.select_output_dir_row = _create_row(
+            select_output_dir_button,
+            select_output_dir_help,
+            self.selected_output_dir_display
+        )
+        self.content_layout.addWidget(self.select_output_dir_row)
+
+        # 连接信号
+        self.chart_confirm_video_input.media_loaded.connect(self.on_std_input_selected)
+
+
+
+    def on_std_input_selected(self, error_msg: str) -> None:
+        # Show error in popup window
+        if len(error_msg) > 0:
+            show_notify_dialog("app.auto_convert", error_msg)
+            return
+        # 更新 Song Name
+        self.song_name_line_edit.setText(Path(self.chart_confirm_video_input.get_path()).stem)
+        # 更新视频范围可视化器
+        self._update_video_range_visualizer()
 
 
 
 
 
     
-    def _create_combobox_with_options(self, param, length = None, transfer_fn = None):
-        options = param.constraints["options"]
-        default_val = param.default
-        default_index = options.index(default_val)
-        if transfer_fn:
-            options = transfer_fn(options)
-        return create_combo_box(length=length, items=options, default_index=default_index)
 
-
-    def _transfer_base_denominator(self, input):
-
-        if "(12)" in str(input):
-            return input.replace(" (12)", "").strip()
-        
-        if isinstance(input, list):
-            output = []
-            for item in input:
-                if int(item) >= 12:
-                    output.append(f"{item} (12)")
-                else:
-                    output.append(item)
-            return output
-
-        return input
 
 
 
     def _build_standardize_panel(self):
 
-        self.standardize_panel = QWidget()
-        layout = QVBoxLayout(self.standardize_panel)
+        standardize_panel = QWidget()
+        layout = QVBoxLayout(standardize_panel)
         layout.setContentsMargins(0, 0, 0, 0)
-        
-        divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_standardize_divider"))
-        layout.addWidget(divider)
+
+        # divider
+        self.standardize_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_standardize_divider"))
+        layout.addWidget(self.standardize_divider)
         
         # Row 1
         song_name_label = create_label(i18n.t(f"{I18N_Prefix}.ui_song_name_label"))
@@ -147,35 +183,68 @@ class AutoConvertPage(BaseOutputPage):
         self.video_mode_combo_box = self._create_combobox_with_options(AC_Defs.video_mode, length=125)
         video_mode_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_video_mode_help"))
 
-        start_end_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_start_end_label"))
-        start_end_label_between = create_label("→")  # between start and end
-        self.start_sec_line_edit = create_line_edit(length=60, validator='float')
-        self.end_sec_line_edit = create_line_edit(length=60, validator='float')
-        start_end_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_start_end_help"))
-
-        skip_detect_rect_label = create_label(i18n.t(f"{I18N_Prefix}.ui_skip_detect_circle_label"))
-        self.skip_detect_circle_check_box = create_check_box(AC_Defs.skip_detect_circle.default)
-        skip_detect_rect_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_skip_detect_circle_help"))
+        need_manual_adjust_label = create_label(i18n.t(f"{I18N_Prefix}.ui_need_manual_adjust_label"))
+        self.need_manual_adjust_check_box = create_check_box(AC_Defs.need_manual_adjust.default)
+        need_manual_adjust_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_need_manual_adjust_help"))
 
         row = _create_row(video_mode_label,
                           self.video_mode_combo_box,
                           video_mode_help,
 
-                          start_end_label,
-                          self.start_sec_line_edit,
-                          start_end_label_between,
-                          self.end_sec_line_edit,
-                          start_end_help,
-
-                          skip_detect_rect_label,
-                          self.skip_detect_circle_check_box,
-                          skip_detect_rect_help,
+                          need_manual_adjust_label,
+                          self.need_manual_adjust_check_box,
+                          need_manual_adjust_help,
 
                           add_stretch=True)
         layout.addWidget(row)
 
-        self.content_layout.addWidget(self.standardize_panel)
-        self.std_overlay = OverlayWidget(self.standardize_panel)
+        # Row 3
+        start_end_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_start_end_label"))
+        start_end_label_between = create_label("→")  # between start and end
+        self.start_sec_line_edit = create_line_edit(length=60, validator='float')
+        self.end_sec_line_edit = create_line_edit(length=60, validator='float')
+        start_end_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_start_end_help"))
+        self.video_range_visualizer = RangeVisualizer()
+
+        row = _create_row(start_end_label,
+                          self.start_sec_line_edit,
+                          start_end_label_between,
+                          self.end_sec_line_edit,
+                          start_end_help,
+                          self.video_range_visualizer,
+                          add_stretch=True)
+        layout.addWidget(row)
+
+        self.content_layout.addWidget(standardize_panel)
+        self.overlay_standardize = OverlayWidget(standardize_panel)
+
+        # 连接输入框信号到可视化器更新
+        self.start_sec_line_edit.textChanged.connect(self._update_video_range_visualizer)
+        self.end_sec_line_edit.textChanged.connect(self._update_video_range_visualizer)
+
+        
+
+    def _update_video_range_visualizer(self):
+
+        duration, start_sec, end_sec = None, None, None
+
+        try: duration = float(self.chart_confirm_video_input.selected_file_duration)
+        except Exception: duration = None
+        try: start_sec = float(self.start_sec_line_edit.text().strip())
+        except Exception: start_sec = None
+        try: end_sec = float(self.end_sec_line_edit.text().strip())
+        except Exception: end_sec = None
+
+        self.video_range_visualizer.update_val(duration, start_sec, end_sec)
+        
+
+
+
+
+
+    
+
+
 
 
 
@@ -184,17 +253,18 @@ class AutoConvertPage(BaseOutputPage):
 
     def _build_detect_panel(self):
 
-        self.detect_panel = QWidget()
-        layout = QVBoxLayout(self.detect_panel)
+        detect_panel = QWidget()
+        layout = QVBoxLayout(detect_panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_detect_divider"))
-        layout.addWidget(divider)
+        # divider
+        self.detect_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_detect_divider"))
+        layout.addWidget(self.detect_divider)
 
         # Settings
-        skip_det_label = create_label(i18n.t(f"{I18N_Prefix}.ui_skip_detect_label"))
+        skip_detect_label = create_label(i18n.t(f"{I18N_Prefix}.ui_skip_detect_label"))
         self.skip_detect_check_box = create_check_box(AC_Defs.skip_detect.default)
-        skip_det_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_skip_detect_help"))
+        skip_detect_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_skip_detect_help"))
 
         skip_cls_label = create_label(i18n.t(f"{I18N_Prefix}.ui_skip_cls_label"))
         self.skip_cls_check_box = create_check_box(AC_Defs.skip_cls.default)
@@ -204,14 +274,28 @@ class AutoConvertPage(BaseOutputPage):
         self.skip_export_tracked_check_box = create_check_box(AC_Defs.skip_export_tracked_video.default)
         skip_export_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_skip_export_tracked_help"))
 
-        row = _create_row(skip_det_label, self.skip_detect_check_box, skip_det_help,
-                          skip_cls_label, self.skip_cls_check_box, skip_cls_help,
-                          skip_export_label, self.skip_export_tracked_check_box, skip_export_help,
-                          add_stretch=True)
-        layout.addWidget(row)
+        # 此处手动创建是要保存 row 引用，以便后续控制 显示/隐藏
+        self.detect_row = _create_row(skip_detect_label, self.skip_detect_check_box, skip_detect_help,
+                                      skip_cls_label, self.skip_cls_check_box, skip_cls_help,
+                                      skip_export_label, self.skip_export_tracked_check_box, skip_export_help,
+                                      add_stretch=True)
+        layout.addWidget(self.detect_row)
 
-        self.content_layout.addWidget(self.detect_panel)
-        self.det_overlay = OverlayWidget(self.detect_panel)
+        self.content_layout.addWidget(detect_panel)
+        self.overlay_detect = OverlayWidget(detect_panel)
+
+
+
+    def _reset_detect_row(self):
+        self.skip_detect_check_box.setChecked(AC_Defs.skip_detect.default)
+        self.skip_cls_check_box.setChecked(AC_Defs.skip_cls.default)
+        self.skip_export_tracked_check_box.setChecked(AC_Defs.skip_export_tracked_video.default)
+
+
+
+
+
+
 
 
 
@@ -220,12 +304,13 @@ class AutoConvertPage(BaseOutputPage):
 
     def _build_analyze_panel(self):
 
-        self.analyze_panel = QWidget()
-        layout = QVBoxLayout(self.analyze_panel)
+        analyze_panel = QWidget()
+        layout = QVBoxLayout(analyze_panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_analyze_divider"))
-        layout.addWidget(divider)
+        # divider
+        self.analyze_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_analyze_divider"))
+        layout.addWidget(self.analyze_divider)
 
         # Settings
         bpm_label = create_label(i18n.t(f"{I18N_Prefix}.ui_bpm_label"))
@@ -251,37 +336,47 @@ class AutoConvertPage(BaseOutputPage):
                           add_stretch=True)
         layout.addWidget(row)
 
-        self.content_layout.addWidget(self.analyze_panel)
-        self.ana_overlay = OverlayWidget(self.analyze_panel)
+        self.content_layout.addWidget(analyze_panel)
+        self.overlay_analyze = OverlayWidget(analyze_panel)
 
 
 
 
 
-    def _build_common_controls(self):
 
-        divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_common_divider"))
-        self.content_layout.addWidget(divider)
+
+    
+
+
+
+
+    def _build_common_panel(self):
+
+        # divider
+        self.common_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_common_divider"))
+        self.content_layout.addWidget(self.common_divider)
 
         # Row 1: Enable Modules
-        en_std_label = create_label(i18n.t(f"{I18N_Prefix}.ui_enable_standardize_label"))
+        enable_standardize_label = create_label(i18n.t(f"{I18N_Prefix}.ui_enable_standardize_label"))
         self.enable_standardize_check_box = create_check_box(default_checked=AC_Defs.is_standardize_enabled.default)
-        en_std_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_enable_standardize_help"))
+        enable_standardize_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_enable_standardize_help"))
         
-        en_det_label = create_label(i18n.t(f"{I18N_Prefix}.ui_enable_detect_label"))
+        enable_detect_label = create_label(i18n.t(f"{I18N_Prefix}.ui_enable_detect_label"))
         self.enable_detect_check_box = create_check_box(default_checked=AC_Defs.is_detect_enabled.default)
-        en_det_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_enable_detect_help"))
+        enable_detect_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_enable_detect_help"))
 
-        en_ana_label = create_label(i18n.t(f"{I18N_Prefix}.ui_enable_analyze_label"))
+        enable_analyze_label = create_label(i18n.t(f"{I18N_Prefix}.ui_enable_analyze_label"))
         self.enable_analyze_check_box = create_check_box(default_checked=AC_Defs.is_analyze_enabled.default)
-        en_ana_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_enable_analyze_help"))
+        enable_analyze_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_enable_analyze_help"))
 
-        self.create_row(
-            en_std_label, self.enable_standardize_check_box, en_std_help,
-            en_det_label, self.enable_detect_check_box, en_det_help,
-            en_ana_label, self.enable_analyze_check_box, en_ana_help,
+        # 此处手动创建是要保存 row 引用，以便后续控制 显示/隐藏
+        self.enable_modules_row = _create_row(
+            enable_standardize_label, self.enable_standardize_check_box, enable_standardize_help,
+            enable_detect_label, self.enable_detect_check_box, enable_detect_help,
+            enable_analyze_label, self.enable_analyze_check_box, enable_analyze_help,
             add_stretch=True
         )
+        self.content_layout.addWidget(self.enable_modules_row)
 
         # Row 2: Submit Button + Task Name Input
         self.content_layout.addSpacing(UI_Style.widget_spacing)
@@ -290,37 +385,95 @@ class AutoConvertPage(BaseOutputPage):
         self.submit_button = create_stated_button(i18n.t("app.media_subpages.run_ffmpeg.ui_submit_button"), isbig=True)
         self.create_row(self.submit_button, self.taskname_line_edit, add_stretch=True)
 
-
+        # 连接信号
+        self.enable_standardize_check_box.stateChanged.connect(self._update_panels_visibility)
+        self.enable_detect_check_box.stateChanged.connect(self._update_panels_visibility)
+        self.enable_analyze_check_box.stateChanged.connect(self._update_panels_visibility)
+        self.submit_button.clicked.connect(self.on_submit_clicked)
 
 
 
     def _update_panels_visibility(self):
-        """根据启用的模块复选框更新 UI 区块的可见性。"""
+
         std_enabled = self.enable_standardize_check_box.isChecked()
         det_enabled = self.enable_detect_check_box.isChecked()
         ana_enabled = self.enable_analyze_check_box.isChecked()
 
-        self.std_overlay.setVisible(not std_enabled)
-        self.det_overlay.setVisible(not det_enabled)
-        self.ana_overlay.setVisible(not ana_enabled)
+        self.overlay_standardize.setVisible(not std_enabled)
+        self.overlay_detect.setVisible(not det_enabled)
+        self.overlay_analyze.setVisible(not ana_enabled)
+
+        self.select_output_dir_row.setVisible(not std_enabled)
+        self.chart_confirm_video_input.setVisible(std_enabled)
+
+
+
+    def _reset_enable_modules_row(self):
+        self.enable_standardize_check_box.setChecked(AC_Defs.is_standardize_enabled.default)
+        self.enable_detect_check_box.setChecked(AC_Defs.is_detect_enabled.default)
+        self.enable_analyze_check_box.setChecked(AC_Defs.is_analyze_enabled.default)
 
 
 
 
-    def on_std_input_selected(self, error_msg: str) -> None:
-        """Standardize 视频选择回调"""
-        # Show error in popup window
-        if len(error_msg) > 0:
-            show_notify_dialog("app.auto_convert", error_msg)
-            return
-        # 更新 Song Name
-        self.song_name_line_edit.setText(Path(self.media_file_input.get_path()).stem)
+
+
+
+
+
+
+
+
+
+
+
+    def _build_advanced_mode_panel(self):
+        # 先 add stretch 让本模块始终在最底部
+        self.content_layout.addStretch()
+
+        advanced_label = create_label(i18n.t(f"{I18N_Prefix}.ui_advanced_mode_label"))
+        self.advanced_mode_check_box = create_check_box(False)
+        row = _create_row(advanced_label, self.advanced_mode_check_box)
+        self.content_layout.addWidget(row, alignment=Qt.AlignmentFlag.AlignRight)
+
+        self.advanced_mode_check_box.stateChanged.connect(self.swtich_advanced_mode)
+
+
+
+    def swtich_advanced_mode(self):
+
+        is_advanced_mode = self.advanced_mode_check_box.isChecked()
+
+        # basic mode
+        self.settings_divider.setVisible(not is_advanced_mode)
+
+        # advanced mode
+        self.standardize_divider.setVisible(is_advanced_mode)
+        self.detect_divider.setVisible(is_advanced_mode)
+        self.analyze_divider.setVisible(is_advanced_mode)
+        self.common_divider.setVisible(is_advanced_mode)
+
+        self.detect_row.setVisible(is_advanced_mode)
+        self.enable_modules_row.setVisible(is_advanced_mode)
+
+        # reset checkbox
+        if not is_advanced_mode:
+            self._reset_detect_row()
+            self._reset_enable_modules_row()
+
+        
+
+
+
+
+
+    
+
 
 
 
 
     def on_submit_clicked(self) -> None:
-        """收集数据提交转档任务"""
 
         def try_int(value) -> int | None:
             if value is None: return None
@@ -344,20 +497,20 @@ class AutoConvertPage(BaseOutputPage):
 
             if raw_data[AC_Defs.is_standardize_enabled.key]:
                 raw_data.update({
-                    AC_Defs.standardize_input_video_path.key: self.media_file_input.get_path() or None,
+                    AC_Defs.standardize_input_video_path.key: self.chart_confirm_video_input.get_path() or None,
                     AC_Defs.song_name.key: self.song_name_line_edit.text().strip() or None,
                     AC_Defs.video_mode.key: self.video_mode_combo_box.currentText().strip(),
                     AC_Defs.start_sec.key: try_float(self.start_sec_line_edit.text().strip()),
                     AC_Defs.end_sec.key: try_float(self.end_sec_line_edit.text().strip()),
                     AC_Defs.target_res.key: 1080, # 暂时不修改
                     AC_Defs.skip_detect_circle.key: self.skip_detect_circle_check_box.isChecked(),
-                    AC_Defs.duration.key: try_float(self.media_file_input.selected_file_duration),
-                    AC_Defs.media_type.key: self.media_file_input.selected_file_type
+                    AC_Defs.duration.key: try_float(self.chart_confirm_video_input.selected_file_duration),
+                    AC_Defs.media_type.key: self.chart_confirm_video_input.selected_file_type
                 })
 
             if raw_data[AC_Defs.is_detect_enabled.key]:
                 if not raw_data[AC_Defs.is_standardize_enabled.key]:
-                    raw_data[AC_Defs.std_video_path_detect.key] = self.media_file_input.get_path() or None
+                    raw_data[AC_Defs.std_video_path_detect.key] = self.chart_confirm_video_input.get_path() or None
                 raw_data.update({
                     AC_Defs.skip_detect.key: self.skip_detect_check_box.isChecked(),
                     AC_Defs.skip_cls.key: self.skip_cls_check_box.isChecked(),
@@ -366,7 +519,7 @@ class AutoConvertPage(BaseOutputPage):
                 
             if raw_data[AC_Defs.is_analyze_enabled.key]:
                 if not raw_data[AC_Defs.is_standardize_enabled.key]:
-                    raw_data[AC_Defs.std_video_path_analyze.key] = self.media_file_input.get_path() or None
+                    raw_data[AC_Defs.std_video_path_analyze.key] = self.chart_confirm_video_input.get_path() or None
                 raw_data.update({
                     AC_Defs.bpm.key: try_float(self.bpm_line_edit.text().strip()),
                     AC_Defs.chart_lv.key: try_int(self.chart_lv_combo_box.currentText()),
@@ -403,3 +556,30 @@ class AutoConvertPage(BaseOutputPage):
         finally:
             self.submit_button.setEnabled(True)
 
+
+
+    def _create_combobox_with_options(self, param, length = None, transfer_fn = None):
+        options = param.constraints["options"]
+        default_val = param.default
+        default_index = options.index(default_val)
+        if transfer_fn:
+            options = transfer_fn(options)
+        return create_combo_box(length=length, items=options, default_index=default_index)
+
+
+
+    def _transfer_base_denominator(self, input):
+
+        if "(12)" in str(input):
+            return input.replace(" (12)", "").strip()
+        
+        if isinstance(input, list):
+            output = []
+            for item in input:
+                if int(item) >= 12:
+                    output.append(f"{item} (12)")
+                else:
+                    output.append(item)
+            return output
+
+        return input
