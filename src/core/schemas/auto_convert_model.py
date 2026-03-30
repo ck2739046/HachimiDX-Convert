@@ -38,7 +38,7 @@ class AutoConvertModel(BaseModel):
 
 	end_sec: Optional[float] = Field(default=AC_Defs.end_sec.default)
 
-	skip_detect_circle: Optional[bool] = Field(default=AC_Defs.skip_detect_circle.default)
+	need_manual_adjust: Optional[bool] = Field(default=AC_Defs.need_manual_adjust.default)
 
 	target_res: Optional[int] = Field(default=AC_Defs.target_res.default, gt=AC_Defs.target_res.constraints["gt"])
 

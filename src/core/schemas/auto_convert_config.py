@@ -134,11 +134,11 @@ class AutoConvertConfig_Definitions:
 		default=None
 	)
 
-	skip_detect_circle = AutoConvertConfig_Definition(
-		key="skip_detect_circle",
+	need_manual_adjust = AutoConvertConfig_Definition(
+		key="need_manual_adjust",
 		type="bool",
 		group="standardize",
-		default=True
+		default=False
 	)
 
 	target_res = AutoConvertConfig_Definition(
