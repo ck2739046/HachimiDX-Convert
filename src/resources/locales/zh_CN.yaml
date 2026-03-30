@@ -59,6 +59,10 @@ zh_CN:
 
   task_scheduler:
     notice_user_terminated_task: "任务 %{task_id} 被用户中止。"
+    status_pending: "等待中"
+    status_running: "运行中"
+    status_ended: "已完成"
+    ui_task_status_tooltip: "任务状态: %{status}"
 
   media_task_launcher:
     error_unsupported_config: "不支持的媒体任务配置。"

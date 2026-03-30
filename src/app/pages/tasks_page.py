@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Iterable, Optional, Tuple
 
+import i18n
 from PyQt6.QtCore import Qt, QTimer, qInstallMessageHandler, QtMsgType
 from PyQt6.QtWidgets import (
     QFrame,
@@ -154,6 +155,11 @@ class TasksPage(BaseOutputPage):
             }}
             """
         )
+
+        # 设置 tooltip 显示任务状态
+        status_text = self._get_status_display_text(task.status)
+        tooltip_text = i18n.t("task_scheduler.ui_task_status_tooltip", status=status_text)
+        card.setToolTip(tooltip_text)
 
         # 左右布局：左边显示task信息，右边显示取消按钮
         row = QHBoxLayout(card)
@@ -375,6 +381,16 @@ class TasksPage(BaseOutputPage):
         if status == TaskStatus.RUNNING:
             return UI_Style.COLORS["task_running"]
         return UI_Style.COLORS["task_ended"]
+
+
+    def _get_status_display_text(self, status: TaskStatus) -> str:
+        """获取任务状态的显示文本"""
+        status_map = {
+            TaskStatus.PENDING: i18n.t("task_scheduler.status_pending"),
+            TaskStatus.RUNNING: i18n.t("task_scheduler.status_running"),
+            TaskStatus.ENDED: i18n.t("task_scheduler.status_ended"),
+        }
+        return status_map.get(status, str(status))
 
 
     def _qt_message_filter(self, msg_type: QtMsgType, msg_log_context: object, msg: str) -> None:
