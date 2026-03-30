@@ -104,34 +104,6 @@ class PathManage:
 
         return ok()
 
-
-
-    @classmethod
-    def get_main_output_dir(cls) -> OpResult[Path]:
-        """获取主输出目录路径"""
-
-        # 临时导入 SettingsManager 避免循环依赖
-        from .settings_manage import SettingsManage
-
-        result = SettingsManage.get("main_output_dir")
-        if result.is_ok:
-            output_dir = Path(result.value)
-            if not output_dir.is_absolute():
-                return err("main_output_dir in settings must be absolute path")
-            # 目录不存在时自动创建
-            if not output_dir.exists():
-                try:
-                    output_dir.mkdir(parents=True, exist_ok=True)
-                except Exception as e:
-                    return err(f"Failed to create main output directory: {output_dir}", error_raw=e)
-            if not output_dir.is_dir():
-                return err(f"main_output_dir is not a directory: {output_dir}")
-            return ok(output_dir)
-        else:
-            error_msg = f"Failed to get main output directory from settings"
-            return err(error_msg, inner=result)
-
-
     @classmethod
     def _module_to_path(cls, module) -> Path:
         return cls.ROOT_DIR / f"{module.replace('.', '/')}.py"

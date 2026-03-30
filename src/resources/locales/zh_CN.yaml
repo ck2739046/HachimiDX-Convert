@@ -387,8 +387,6 @@ zh_CN:
 
       ui_general_divider: "通用设置"
       ui_language_label: "语言: "
-      ui_output_dir_label: "输出文件夹: "
-      ui_output_dir_browse_button: "浏览..."
 
       ui_window_divider: "窗口尺寸"
       ui_init_size_label: "初始窗口尺寸 (W x H): "

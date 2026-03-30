@@ -387,8 +387,6 @@ en_US:
 
       ui_general_divider: "General"
       ui_language_label: "Language: "
-      ui_output_dir_label: "Output Directory: "
-      ui_output_dir_browse_button: "Browse..."
 
       ui_window_divider: "Window Size"
       ui_init_size_label: "Initial Window Size (W x H): "

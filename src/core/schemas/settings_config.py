@@ -135,13 +135,6 @@ class SettingsConfig_Definitions:
         constraints={"options": ["zh_CN", "en_US"]},
     )
 
-    main_output_dir = SettingsConfig_Definition(
-        key="main_output_dir",
-        type="str",
-        group="general",
-        default=str(PathManage.DATA_DIR / "111-output"),
-    )
-
     # window
 
     main_app_init_size = SettingsConfig_Definition(

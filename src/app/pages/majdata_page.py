@@ -13,7 +13,6 @@ from ..ui_style import UI_Style
 from ..widgets import *
 import i18n
 from src.core.tools import show_notify_dialog
-from src.core.schemas.op_result import OpResult, ok, err, print_op_result
 
 
 
@@ -25,8 +24,6 @@ class MajdataPage(QWidget):
         self._media_player = media_player # QMediaPlayer 实例，用于控制视频播放
         self._majdataedit_placeholder: Optional[QWidget] = None
 
-        self._main_output_dir: Optional[Path] = None
-        self._main_output_dir_error: Optional[str] = None
         self._control_txt: Path = None
 
         self._select_song_button = None
@@ -79,13 +76,6 @@ class MajdataPage(QWidget):
 
     def _setup_control_bar(self) -> QWidget:
 
-        result = PathManage.get_main_output_dir()
-        if result.is_ok:
-            self._main_output_dir = result.value
-        else:
-            self._main_output_dir = None # 后续会通过 load 提示
-            self._main_output_dir_error = print_op_result(result)
-        
         self._control_txt = PathManage.MajdataEdit_CONTROL_TXT_PATH
 
         bar = QWidget()
@@ -190,13 +180,6 @@ class MajdataPage(QWidget):
     @pyqtSlot()
     def on_load_clicked(self) -> None:
 
-        if self._main_output_dir is None:
-            show_notify_dialog(
-                "app.majdata_page.load_button",
-                self._main_output_dir_error
-            )
-            return
-        
         # Check if song directory is selected
         if self._selected_song_path is None:
             self.reset_majdataview()

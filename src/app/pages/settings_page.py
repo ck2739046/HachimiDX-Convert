@@ -33,8 +33,6 @@ class SettingsPage(BaseOutputPage):
         # self.ffmpeg_h264_combo_box = None
 
         self.language_combo_box = None
-        self.main_output_dir_line_edit = None
-        self.main_output_dir_button = None
 
         self.init_width_line_edit = None
         self.init_height_line_edit = None
@@ -49,7 +47,6 @@ class SettingsPage(BaseOutputPage):
             # S_Defs.ffmpeg_hw_accel_vp9.key,
             #S_Defs.ffmpeg_hw_accel_h264.key,
             S_Defs.language.key,
-            S_Defs.main_output_dir.key,
             S_Defs.main_app_init_size.key,
             S_Defs.main_app_min_size.key,
         ]
@@ -129,17 +126,9 @@ class SettingsPage(BaseOutputPage):
         language_label = create_label(i18n.t(f"{I18N_Prefix}.ui_language_label"))
         self.language_combo_box = self._create_combo_from_definition(S_Defs.language, length=80)
 
-        output_dir_label = create_label(i18n.t(f"{I18N_Prefix}.ui_output_dir_label"))
-        self.main_output_dir_button, self.main_output_dir_line_edit, _ = create_directory_selection_row(
-            button_text=i18n.t(f"{I18N_Prefix}.ui_output_dir_browse_button"), button_length=80)
-        self.main_output_dir_line_edit.setFixedWidth(320)
-
         row = _create_row(
             language_label,
             self.language_combo_box,
-            output_dir_label,
-            self.main_output_dir_button,
-            self.main_output_dir_line_edit,
             add_stretch=True,
         )
         self.content_layout.addWidget(row)
@@ -222,7 +211,6 @@ class SettingsPage(BaseOutputPage):
         # _set_combo_value(self.ffmpeg_vp9_combo_box, settings[S_Defs.ffmpeg_hw_accel_vp9.key])
         # _set_combo_value(self.ffmpeg_h264_combo_box, settings[S_Defs.ffmpeg_hw_accel_h264.key])
         _set_combo_value(self.language_combo_box, settings[S_Defs.language.key])
-        self.main_output_dir_line_edit.setText(str(settings[S_Defs.main_output_dir.key]))
 
         init_size = settings[S_Defs.main_app_init_size.key]
         min_size = settings[S_Defs.main_app_min_size.key]
@@ -242,7 +230,6 @@ class SettingsPage(BaseOutputPage):
             # S_Defs.ffmpeg_hw_accel_vp9.key: self.ffmpeg_vp9_combo_box.currentText().strip(),
             # S_Defs.ffmpeg_hw_accel_h264.key: self.ffmpeg_h264_combo_box.currentText().strip(),
             S_Defs.language.key: self.language_combo_box.currentText().strip(),
-            S_Defs.main_output_dir.key: self.main_output_dir_line_edit.text().strip(),
             S_Defs.main_app_init_size.key: (
                 self.init_width_line_edit.text().strip(),
                 self.init_height_line_edit.text().strip(),
