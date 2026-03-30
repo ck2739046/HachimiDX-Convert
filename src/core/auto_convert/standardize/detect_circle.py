@@ -10,7 +10,7 @@ from ...schemas.op_result import OpResult, ok, err, print_op_result
 
 def main(input_video: Path,
          mode: str,
-         skip_detect_circle: bool
+         need_manual_adjust: bool
         ) -> OpResult[Tuple[Tuple[int, int], int]]:
     """
     检测视频中的圆形判定线
@@ -18,7 +18,7 @@ def main(input_video: Path,
     Args:
         input_video(Path): 输入视频路径
         mode(str): 视频模式（'source video'或'camera footage'）
-        skip_detect_circle(bool): 是否跳过圆心检测
+        need_manual_adjust(bool): 是否需要手动调整
 
     Returns:
         OpResult -> (circle_center, circle_radius)
@@ -34,7 +34,7 @@ def main(input_video: Path,
         total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         # 如果跳过检测，直接返回屏幕中心点
-        if skip_detect_circle:
+        if not need_manual_adjust:
             print("Detect circle...skip")
             # 默认已经全屏并且在屏幕中心
             circle_center = (video_width // 2, video_height // 2)
