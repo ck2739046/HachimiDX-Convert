@@ -500,17 +500,19 @@ class AutoConvertPage(BaseOutputPage):
                     AC_Defs.standardize_input_video_path.key: self.chart_confirm_video_input.get_path() or None,
                     AC_Defs.song_name.key: self.song_name_line_edit.text().strip() or None,
                     AC_Defs.video_mode.key: self.video_mode_combo_box.currentText().strip(),
+                    AC_Defs.media_type.key: self.chart_confirm_video_input.selected_file_type,
+                    AC_Defs.duration.key: try_float(self.chart_confirm_video_input.selected_file_duration),
                     AC_Defs.start_sec.key: try_float(self.start_sec_line_edit.text().strip()),
                     AC_Defs.end_sec.key: try_float(self.end_sec_line_edit.text().strip()),
+                    AC_Defs.need_manual_adjust.key: self.need_manual_adjust_check_box.isChecked(),
                     AC_Defs.target_res.key: 1080, # 暂时不修改
-                    AC_Defs.skip_detect_circle.key: self.skip_detect_circle_check_box.isChecked(),
-                    AC_Defs.duration.key: try_float(self.chart_confirm_video_input.selected_file_duration),
-                    AC_Defs.media_type.key: self.chart_confirm_video_input.selected_file_type
+                })
+            else:
+                raw_data.update({
+                    AC_Defs.selected_folder.key: self.selected_output_dir_display.text().strip() or None
                 })
 
             if raw_data[AC_Defs.is_detect_enabled.key]:
-                if not raw_data[AC_Defs.is_standardize_enabled.key]:
-                    raw_data[AC_Defs.std_video_path_detect.key] = self.chart_confirm_video_input.get_path() or None
                 raw_data.update({
                     AC_Defs.skip_detect.key: self.skip_detect_check_box.isChecked(),
                     AC_Defs.skip_cls.key: self.skip_cls_check_box.isChecked(),
@@ -518,8 +520,6 @@ class AutoConvertPage(BaseOutputPage):
                 })
                 
             if raw_data[AC_Defs.is_analyze_enabled.key]:
-                if not raw_data[AC_Defs.is_standardize_enabled.key]:
-                    raw_data[AC_Defs.std_video_path_analyze.key] = self.chart_confirm_video_input.get_path() or None
                 raw_data.update({
                     AC_Defs.bpm.key: try_float(self.bpm_line_edit.text().strip()),
                     AC_Defs.chart_lv.key: try_int(self.chart_lv_combo_box.currentText()),
