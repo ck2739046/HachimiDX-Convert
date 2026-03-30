@@ -1,4 +1,7 @@
 import sys
+from pathlib import Path
+import os
+import cv2
 
 from src.services.path_manage import PathManage
 from src.services.settings_manage import SettingsManage
@@ -8,6 +11,7 @@ from .schemas.auto_convert_config import AutoConvertConfig_Definitions as AC_Def
 from .schemas.auto_convert_config import AutoConvertConfig_Definition
 from .schemas.op_result import OpResult, ok, err
 from .schemas.settings_config import SettingsConfig_Definitions as SC_Defs
+from .tools.popup_dialog import show_confirm_dialog
 from .build_worker_cmd import build_cmd_head_python_exe
 
 
@@ -26,22 +30,45 @@ def build_auto_convert_cmd(data: AutoConvertModel) -> OpResult[list[str]]:
         cmd = build_cmd_head_python_exe(PathManage.AUTO_CONVERT_WORKER_PATH)
 
         # add common args
-        cmd.append(f"--{AC_Defs.is_standardize_enabled.key}")
-        cmd.append("true" if data.is_standardize_enabled else "false")
         cmd.append(f"--{AC_Defs.is_detect_enabled.key}")
         cmd.append("true" if data.is_detect_enabled else "false")
         cmd.append(f"--{AC_Defs.is_analyze_enabled.key}")
         cmd.append("true" if data.is_analyze_enabled else "false")
 
-        # add standardize args
+        std_video_path = None
+
+        # standardize
         if data.is_standardize_enabled:
-            cmd.extend(_parse_fields(data, "standardize"))
+            # 检查输出路径
+            res = _build_standardize_output_path(data)
+            if not res.is_ok:
+                return err("Failed to build standardize output path arg", inner=res)
+            is_enable_standardize, temp_output, std_video_path = res.value
+            if is_enable_standardize:
+                # 启用标准化模块
+                cmd.append(f"--{AC_Defs.is_standardize_enabled.key}")
+                cmd.append("true")
+                # 正常写入其他参数
+                cmd.extend(_parse_fields(data, "standardize"))
+                # 将 temp_output 加入参数
+                cmd.append(f"--{AC_Defs.standardize_temp_output_path.key}")
+                cmd.append(str(temp_output.resolve()))
+            else:
+                # 禁用标准化模块
+                cmd.append(f"--{AC_Defs.is_standardize_enabled.key}")
+                cmd.append("false")
+        else:
+            # 禁用标准化模块
+            cmd.append(f"--{AC_Defs.is_standardize_enabled.key}")
+            cmd.append("false")
+
+
 
         # add detect args
         if data.is_detect_enabled:
             cmd.extend(_parse_fields(data, "detect"))
 
-            # 增加一些额外的参数
+            # 增加模型推理参数
             res = _get_detect_args_from_settings()
             if not res.is_ok:
                 return err("Failed to get detect args from settings", inner=res)
@@ -57,6 +84,18 @@ def build_auto_convert_cmd(data: AutoConvertModel) -> OpResult[list[str]]:
         # add analyze args
         if data.is_analyze_enabled:
             cmd.extend(_parse_fields(data, "analyze"))
+
+
+
+        # handle std video path
+        if std_video_path is None:
+            filename = f"{data.selected_folder.name}_std.mp4"
+            std_video_path = data.selected_folder / filename
+            if not _is_video_already_standardized(std_video_path, data):
+                return err(f"Selected folder doesn't contain a valid standardized video, should be: {std_video_path}")
+
+        cmd.append(f"--{AC_Defs.std_video_path.key}")
+        cmd.append(str(std_video_path.resolve()))
 
         return ok(cmd)
     
@@ -98,6 +137,127 @@ def _parse_fields(data: AutoConvertModel, group: str) -> list[str]:
     return args
 
 
+
+
+
+
+
+
+
+
+def _build_standardize_output_path(data: AutoConvertModel) -> OpResult[tuple[bool, list]]:
+
+    """构建并检查标准化模块的输出路径参数，返回 OpResult: (是否启用标准化模块, temp_output, final_output)"""
+
+    try:
+        # 构建 temp output path
+        output_filename = f"{data.song_name}_std.mp4"
+        standardize_temp_output_path = PathManage.TEMP_DIR / output_filename
+        # 如果已存在，删除
+        if standardize_temp_output_path.exists():
+            try:
+                standardize_temp_output_path.unlink()
+            except Exception as e:
+                return err(f"Failed to delete existing temp standardized video: {standardize_temp_output_path}", e)
+
+        # 构建 standardize_final_output_path
+        output_dir = data.standardize_input_video_path.parent
+        standardize_final_output_path = output_dir / data.song_name / output_filename
+
+        if _use_existing_standardized_video(standardize_final_output_path, data):
+            # 如果使用已有视频，禁用标准化模块
+            return ok((False, standardize_temp_output_path, standardize_final_output_path))
+        else:
+            # 如果不用已有视频，启用标准化模块
+            return ok((True, standardize_temp_output_path, standardize_final_output_path))
+    
+    except Exception as e:
+        return err("Unexpected error in _build_standardize_output_path", e)
+
+
+
+
+def _use_existing_standardized_video(file_path, data) -> bool:
+
+    # 检查该视频是否有效
+    if _is_video_already_standardized(file_path, data):
+        # 询问用户是否删除
+        is_delete = show_confirm_dialog(
+            title="Auto Convert",
+            prompt_text=f"Standardized video already exists:\n\n{file_path}\n\nDo you want to delete it and generate a new one?"
+        )
+        if is_delete:
+            # 用户选择删除文件
+            try:
+                file_path.unlink()
+            except Exception as e:
+                print(f'Failed to delete "{file_path}": {e}')
+            # 视为不使用已有文件
+            return False
+        else:
+            # 用户选择不删除
+            print("Standardized module will be disabled.")
+            print(f'Using existing standardized video: {file_path}')
+            # 视为使用已有文件
+            return True
+    
+    # 视为不使用已有文件
+    if file_path.exists() and file_path.is_file():
+        try:
+            file_path.unlink()
+        except Exception as e:
+            print(f'Failed to delete "{file_path}": {e}')
+
+    return False
+    
+
+
+
+def _is_video_already_standardized(video_path: Path, data: AutoConvertModel) -> bool:
+
+    if not video_path.exists() or not video_path.is_file(): return False
+
+    # 获取视频数据
+    try:
+        cap = cv2.VideoCapture(str(video_path))
+        video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        video_total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_fps = cap.get(cv2.CAP_PROP_FPS)
+        cap.release()
+    except Exception as e:
+        print(f"Failed to read video file: {video_path}, error: {e}")
+        return False
+
+    # 检查分辨率
+    if video_width != data.target_res or video_height != data.target_res:
+        print(f'video resolution mismatch, expect {data.target_res}x{data.target_res}, got {video_width}x{video_height}.')
+        return False
+
+    # 计算时长
+    set_duration = data.duration is not None and data.duration != 0
+    if not set_duration:
+        return True # 如果没有设置时长，就不检查时长
+    
+    set_start = data.start_sec is not None and data.start_sec !=  0
+    set_end = data.end_sec is not None and data.end_sec != 0
+    if set_start and set_end:
+        expect_duration = data.end_sec - data.start_sec
+    elif set_start and not set_end:
+        expect_duration = data.duration - data.start_sec
+    elif not set_start and set_end:
+        expect_duration = data.end_sec
+    else:
+        expect_duration = data.duration
+
+    video_duration = video_total_frames / video_fps
+
+    # 允许时长相差半秒
+    if abs(video_duration - expect_duration) > 0.5:
+        print(f'video duration mismatch, expect {expect_duration}s, got {video_duration}s.')
+        return False
+
+    return True
 
 
 
