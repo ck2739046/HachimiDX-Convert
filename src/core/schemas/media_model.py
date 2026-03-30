@@ -3,6 +3,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, FilePath, field_validator, model_validator
 from .media_config import MediaType
 from .media_config import MediaConfig_Definitions as M_Defs
+from ..tools.popup_dialog import show_confirm_dialog
 
 class MediaModel(BaseModel):
     """
@@ -243,7 +244,16 @@ class MediaModel(BaseModel):
             raise ValueError("output_path cannot be the same as input_path.")
 
         # 输出不能已存在
-        if self.output_path.exists():
-            raise ValueError(f"Output path already exists. Please delete it first:\n{output_resolved}")
+        if self.output_path.exists() and self.output_path.is_file():
+            # 如果输出文件已存在，弹窗询问是否删除
+            if show_confirm_dialog(title="run_ffmepg", prompt_text="Output file already exists. Do you want to delete it first?"):
+                # 用户同意删除
+                try:
+                    self.output_path.unlink()
+                except Exception as e:
+                    raise ValueError(f"Failed to delete existing output file: {e}")
+            else:
+                # 用户不同意删除，直接返回
+                raise ValueError("Output file already exists and user chose not to delete it.")
         
         return self
