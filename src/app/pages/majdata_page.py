@@ -28,10 +28,9 @@ class MajdataPage(QWidget):
         self._main_output_dir: Optional[Path] = None
         self._main_output_dir_error: Optional[str] = None
         self._control_txt: Path = None
-        self._option_placeholder = "---"
-        self._last_selected_song: str = ""
 
-        self._song_combo = None
+        self._select_song_button = None
+        self._selected_song_path: Optional[Path] = None
         self._maidata_combo = None
         self._track_combo = None
         self._video_combo = None
@@ -91,24 +90,28 @@ class MajdataPage(QWidget):
 
         bar = QWidget()
         bar.setFixedHeight(50)
-        bar.setStyleSheet(f"background-color: {UI_Style.COLORS['text_secondary']};")
+        bar.setStyleSheet(f"background-color: {UI_Style.COLORS['grey_hover']};")
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Folder editable combobox
-        self._song_combo = create_folder_combo_box(str(self._main_output_dir), self._option_placeholder, 240)
-        layout.addWidget(self._song_combo)
-        _song_combo_help = create_help_icon(i18n.t("app.majdata_page.ui_song_help"))
-        layout.addWidget(_song_combo_help)
+        # Directory selection button (only button, no path display)
+        self._select_song_button, _, _song_button_help = create_directory_selection_row(
+            button_text = i18n.t("app.majdata_page.ui_select_song_button"),
+            help_text=i18n.t("app.majdata_page.ui_song_help"),
+            button_length=100,
+            on_button_clicked_handler=self._on_song_directory_selected
+        )
+        layout.addWidget(self._select_song_button)
+        layout.addWidget(_song_button_help)
         # Maidata choose
-        self._maidata_combo = create_combo_box(140, show_tooltip = True)
+        self._maidata_combo = create_combo_box(120, show_tooltip = True)
         layout.addWidget(self._maidata_combo)
         # Track choose
-        self._track_combo = create_combo_box(140, show_tooltip = True)
+        self._track_combo = create_combo_box(200, show_tooltip = True)
         layout.addWidget(self._track_combo)
         # Video choose
-        self._video_combo = create_combo_box(140, show_tooltip = True)
+        self._video_combo = create_combo_box(230, show_tooltip = True)
         layout.addWidget(self._video_combo)
         # CheckBox: play video in MajdataView
         self._play_video_checkbox = create_check_box(True)
@@ -128,7 +131,6 @@ class MajdataPage(QWidget):
         layout.addWidget(load_btn)
 
         # connect
-        self._song_combo.currentTextChanged.connect(self.on_song_changed)
         load_btn.clicked.connect(self.on_load_clicked)
 
         return bar
@@ -139,22 +141,15 @@ class MajdataPage(QWidget):
 
 
 
-    def on_song_changed(self) -> None:
-        """Scan and update maidata, track, video comboboxes when song changes."""
+    def _on_song_directory_selected(self, song_dir_path: str) -> None:
+        """Scan and update maidata, track, video comboboxes when song directory is selected."""
 
-        if self._main_output_dir is None:
+        song_path = Path(song_dir_path)
+        if not song_path.exists() or not song_path.is_dir():
             return
 
-        # Check song
-        song = self._song_combo.currentText()
-        if not song or song == self._option_placeholder or song == self._last_selected_song:
-            return
-        song_path = self._main_output_dir / song
-        if not song_path.exists():
-            return
-
-        # Update last selection
-        self._last_selected_song = song
+        # Update selected song path
+        self._selected_song_path = song_path
 
         # Clear combobox
         self._maidata_combo.clear()
@@ -202,10 +197,8 @@ class MajdataPage(QWidget):
             )
             return
         
-        selected_song = self._song_combo.currentText()
-
-        # Special case for options placeholder
-        if selected_song == self._option_placeholder:
+        # Check if song directory is selected
+        if self._selected_song_path is None:
             self.reset_majdataview()
             return
         
@@ -214,7 +207,8 @@ class MajdataPage(QWidget):
         selected_video = self._video_combo.currentText()
         is_play_video = self._play_video_checkbox.isChecked()
 
-        if not selected_song or not selected_maidata or not selected_track:
+        if not selected_maidata or not selected_track:
+            self.reset_majdataview()
             return
 
         majdataview_has_video = bool(selected_video and is_play_video)
@@ -225,8 +219,7 @@ class MajdataPage(QWidget):
             self._media_player.setSource(QUrl())
 
         # Create a control txt for MajdataEdit
-        song_path = self._main_output_dir / selected_song
-        control_text = f"folder: {song_path}\nmaidata: {selected_maidata}\ntrack: {selected_track}"
+        control_text = f"folder: {self._selected_song_path}\nmaidata: {selected_maidata}\ntrack: {selected_track}"
         if majdataview_has_video:
             control_text += f"\nmovie: {selected_video}"
 
@@ -240,7 +233,7 @@ class MajdataPage(QWidget):
         if not selected_video:
             return
 
-        video_path = song_path / selected_video
+        video_path = self._selected_song_path / selected_video
         if self._media_player is not None:
             self._media_player.setSource(QUrl.fromLocalFile(str(video_path)))
             self._media_player.pause()
@@ -262,7 +255,7 @@ class MajdataPage(QWidget):
         self._track_combo.clear()
         self._video_combo.clear()
 
-        # 4. Reset last selected song
-        self._last_selected_song = ""
+        # 4. Reset selected song path
+        self._selected_song_path = None
 
         return

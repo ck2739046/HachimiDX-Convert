@@ -268,17 +268,17 @@ en_US:
     # ---- majdata page ----
 
     majdata_page:
+      ui_select_song_button: "Select Song"
       ui_song_help: |
-        The program will automatically scan subfolders under the selected output directory.
-        
-        After selecting a folder, the program will look for three types of files:
+        Program will look for three types of files:
+
         1. Chart files (*.txt)
         2. Audio files (*.mp3, *.ogg)
         3. Video files (*.mp4)
 
-        If "---" is selected:
-        1. The video player in the bottom-left stops playing video
-        2. MajdataView/MajdataEdit pauses playback
+        To clear the bottom-left video player,
+        simply select any folder that does not contain the above three types of files,
+        then click the "Load" button.
       ui_play_video_help: |
         checked: The video will play in both the top-left MajdataView and the bottom-left video player.
         unchecked: The video will only play in the bottom-left video player.
