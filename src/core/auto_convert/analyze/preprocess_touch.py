@@ -25,7 +25,7 @@ def preprocess_touch_data(shared_context: SharedContext):
     start_tolerance = shared_context.touch_travel_dist * 0.1
     valid_dist_end = 0 + end_tolerance
     valid_dist_start = shared_context.touch_travel_dist - start_tolerance
-    outer_size = 54 * shared_context.std_video_size / 1080 # 1080p下，外部尺寸为54
+    outer_size = shared_context.touch_outer_size
 
     # read track data
     for key, value in shared_context.track_data.items():
@@ -40,7 +40,6 @@ def preprocess_touch_data(shared_context: SharedContext):
         valid_track_path = []
         for note in note_geometry_list:
 
-            # touch音符的整体边长 = (dist_to_center + 54) x 2，1080p下
             # 反推得出三角到中心的距离
             avg_touch_size = (note.w + note.h) / 2
             dist = avg_touch_size / 2 - outer_size

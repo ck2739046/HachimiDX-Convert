@@ -28,13 +28,14 @@ from .generate_maidata import generate_maidata
 
 def main(std_video_path: Path,
          bpm: float,
+         is_big_touch: bool,
          chart_lv: int,
          base_denominator: int,
          duration_denominator: int
         ) -> OpResult[None]:
     
     try:
-        shared_context = create_shared_context(std_video_path)
+        shared_context = create_shared_context(std_video_path, is_big_touch)
 
         tap_info = {}
         touch_info = {}

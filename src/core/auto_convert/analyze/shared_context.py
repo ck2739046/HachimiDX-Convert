@@ -23,7 +23,9 @@ class SharedContext:
     
     note_travel_dist: float
     touch_travel_dist: float
+    touch_outer_size: float
     touch_hold_travel_dist: float
+    touch_hold_max_size: float
     
     # 速度常数
     note_DefaultMsec: float = 0.0
@@ -38,7 +40,7 @@ class SharedContext:
 
 
 
-def create_shared_context(std_video_path: Path) -> SharedContext:
+def create_shared_context(std_video_path: Path, is_big_touch: bool) -> SharedContext:
 
     # 获取视频信息
     cap = cv2.VideoCapture(str(std_video_path))
@@ -55,7 +57,14 @@ def create_shared_context(std_video_path: Path) -> SharedContext:
     
     note_travel_dist = judgeline_end - judgeline_start
     touch_travel_dist = 34 * std_video_size / 1080       # 1080p下，touch移动距离为34像素
-    touch_hold_travel_dist = 30 * std_video_size / 1080  # 1080p下，touch_hold移动距离为30像素
+    touch_outer_size = 54 * std_video_size / 1080        # 1080p下，touch外部尺寸为54
+    touch_hold_travel_dist = 31 * std_video_size / 1080  # 1080p下，touch_hold移动距离为31像素
+    touch_hold_max_size = 200 * std_video_size / 1080    # 1080p下，touch_hold最大尺寸约为200
+    if is_big_touch:
+        touch_travel_dist = touch_travel_dist * 1.3
+        touch_outer_size = touch_outer_size * 1.3
+        touch_hold_travel_dist = touch_hold_travel_dist * 1.3
+        touch_hold_max_size = touch_hold_max_size * 1.3
     
     touch_areas = get_touch_areas(std_video_size, std_video_cx, std_video_cy)
     track_data = _load_track_results(std_video_path.parent)
@@ -73,7 +82,9 @@ def create_shared_context(std_video_path: Path) -> SharedContext:
 
         note_travel_dist=note_travel_dist,
         touch_travel_dist=touch_travel_dist,
+        touch_outer_size=touch_outer_size,
         touch_hold_travel_dist=touch_hold_travel_dist,
+        touch_hold_max_size=touch_hold_max_size,
 
         touch_areas=touch_areas,
         track_data=track_data,

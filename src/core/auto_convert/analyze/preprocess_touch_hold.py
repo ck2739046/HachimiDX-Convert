@@ -29,6 +29,7 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
     dist_start_tolerance = shared_context.touch_hold_travel_dist * 0.1
     valid_dist_end = 0 + dist_end_tolerance
     valid_dist_start = shared_context.touch_hold_travel_dist - dist_start_tolerance
+    touch_hold_max_size = shared_context.touch_hold_max_size
     percent_end_tolerance = 0.03
     percent_start_tolerance = 0.03
     valid_percent_end = 0.5 - percent_end_tolerance
@@ -56,7 +57,7 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
 
             # 计算三角到中心的距离
             if precent_counter >= 5: break # 节省时间，hold阶段后半都不用计算了
-            dist, percent_of_hold = get_touch_hold_data(shared_context.std_video_size, note.cx, note.cy, note.frame, cap)
+            dist, percent_of_hold = get_touch_hold_data(shared_context.std_video_size, note.cx, note.cy, note.frame, cap, touch_hold_max_size)
             # 过滤前后两端的数据
             if dist > valid_dist_start:
                 dist = -1 # 掐头
@@ -121,7 +122,7 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
 
 
 
-def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap):
+def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap, touch_hold_max_size):
 
     try:
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
@@ -130,9 +131,7 @@ def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap):
             print(f"get_touch_hold_data: failed to read frame {frame_num}")
             return -1, -1
 
-        # 根据label-notes定义，touch_hold的整体尺寸是 (30+100) x 2/√3 (1080p下)
-        # 保险起见变成 200x200
-        roi_radius = 100 * std_video_size / 1080
+        roi_radius = touch_hold_max_size / 2
 
         # 提取ROI区域
         x_start = round(max(cx - roi_radius, 0))
@@ -189,7 +188,7 @@ def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap):
             # 平均距离
             if distances:
                 dist = np.mean(distances)
-                dist -= roi_radius * 0.08 # 微调
+                dist -= roi_radius * 0.08 # 减去尖头的圆球的尺寸
 
             # # 显示窗口
             # print(f"frame {frame_num}: dist {dist:.2f}")
