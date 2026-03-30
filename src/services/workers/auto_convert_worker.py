@@ -26,12 +26,6 @@ if root not in sys.path:
 # 解决方法是先导入 torch 再导入 pyqt6
 import torch
 
-# 不能使用 python -m 启动此 worker
-# 因为 python -m 启动后，import torch 无法解决上述问题
-# 原因不清楚，可能和 python -m 的模块导入机制有关？
-# 只能通过传统 python xxx.py 启动
-# 不管了，反正现在这样能正常工作了
-# 以后哪天此问题修复了再改回 python -m 启动吧
 
 
 from src.core.auto_convert.standardize.main import main as standardize_main
@@ -50,7 +44,6 @@ def _as_bool(raw: str) -> bool:
         return False
     else:
         raise ValueError(f"Invalid bool value: {raw}")
-
 
 
 def _fail(message: str) -> bool:
@@ -76,26 +69,32 @@ def main(args: list[str]) -> bool:
         is_detect_enabled = _as_bool(cfg["is_detect_enabled"])
         is_analyze_enabled = _as_bool(cfg["is_analyze_enabled"])
 
-        std_video_path: Path | None = None
+
 
         if is_standardize_enabled:
             result = standardize_main(
                 input_video=_get_cfg(cfg, "standardize_input_video_path", Path),
-                song_name=_get_cfg(cfg, "song_name"),
+                temp_output_path=_get_cfg(cfg, "standardize_temp_output_path", Path),
+                final_output_path=_get_cfg(cfg, "standardize_final_output_path", Path),
                 video_mode=_get_cfg(cfg, "video_mode"),
                 media_type=_get_cfg(cfg, "media_type", MediaType),
                 duration=_get_cfg(cfg, "duration", float),
                 start_sec=_get_cfg(cfg, "start_sec", float),
                 end_sec=_get_cfg(cfg, "end_sec", float),
-                skip_detect_circle=_get_cfg(cfg, "skip_detect_circle", _as_bool),
+                need_manual_adjust=_get_cfg(cfg, "need_manual_adjust", _as_bool),
                 target_res=_get_cfg(cfg, "target_res", int),
             )
             if not result.is_ok:
-                return _fail(print_op_result(result))
-            std_video_path = result.value
+                return _fail(print_op_result(result))     
+
+
 
         if is_detect_enabled:
-            std_video_for_detect = std_video_path or _get_cfg(cfg, "std_video_path_detect", Path)
+
+            if is_standardize_enabled:
+                std_video_for_detect = _get_cfg(cfg, "standardize_final_output_path", Path)
+            else:
+                std_video_for_detect = _get_cfg(cfg, "std_video_path_detect", Path)
 
             result = detect_main(
                 std_video_path=std_video_for_detect,
@@ -112,10 +111,15 @@ def main(args: list[str]) -> bool:
             )
             if not result.is_ok:
                 return _fail(print_op_result(result))
-            std_video_path = std_video_for_detect
+
+
 
         if is_analyze_enabled:
-            std_video_for_analyze = std_video_path or _get_cfg(cfg, "std_video_path_analyze", Path)
+
+            if is_standardize_enabled:
+                std_video_for_analyze = _get_cfg(cfg, "standardize_final_output_path", Path)
+            else:
+                std_video_for_analyze = _get_cfg(cfg, "std_video_path_analyze", Path)
 
             result = analyze_main(
                 std_video_path=std_video_for_analyze,
