@@ -125,7 +125,7 @@ class AutoConvertPage(BaseOutputPage):
         (select_output_dir_button,
          self.selected_output_dir_display,
          select_output_dir_help
-        ) = create_file_selection_row(
+        ) = create_directory_selection_row(
             button_text=i18n.t(f"{I18N_Prefix}.ui_selected_output_dir_button"),
             help_text=i18n.t(f"{I18N_Prefix}.ui_selected_output_dir_help")
         )

@@ -63,7 +63,7 @@ def create_file_selection_row(button_text: str,
 
 def create_directory_selection_row(button_text: str,
                                    help_text: str = None,
-                                   button_length=120,
+                                   button_length = None,
                                    on_button_clicked_handler=None):
     """
     创建目录选择行UI组件
@@ -77,6 +77,8 @@ def create_directory_selection_row(button_text: str,
     Returns:
         tuple: (button_widget, line_edit_widget, help_label_widget | None)
     """
+
+    if button_length is None: button_length = 120
 
     # 创建文件选择按钮
     button = create_button(button_text, button_length)
