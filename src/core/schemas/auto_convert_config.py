@@ -17,7 +17,7 @@ class AutoConvertConfig_Definition:
     Attributes:
         key: str
         type: Literal["int", "float", "path", "str", "bool", "enum"]
-        group: Literal["common", "standardize", "detect", "analyze"]
+        group: Literal["common", "standardize", "detect", "analyze", "other"]
         default: any
         optional: bool
         constraints: dict | None
@@ -39,7 +39,7 @@ class AutoConvertConfig_Definition:
 
     key: str
     type: Literal["int", "float", "path", "str", "bool", "enum"]
-    group: Literal["common", "standardize", "detect", "analyze"]
+    group: Literal["common", "standardize", "detect", "analyze", "other"]
     default: any = None
     optional: bool = True
     constraints: dict | None = None
@@ -79,20 +79,13 @@ class AutoConvertConfig_Definitions:
 
 
 	# standardize
-    
+      
 	standardize_input_video_path = AutoConvertConfig_Definition(
 		key="standardize_input_video_path",
 		type="path",
 		group="standardize",
 		optional=False, # 必选没有默认值
 		constraints={"must_exist": True} # 输入视频必须存在
-	)
-      
-	song_name = AutoConvertConfig_Definition(
-		key="song_name",
-		type="str",
-		group="standardize",
-		optional=False, # 必选没有默认值
 	)
 
 	video_mode = AutoConvertConfig_Definition(
@@ -153,14 +146,6 @@ class AutoConvertConfig_Definitions:
 
 	# detect
 
-	std_video_path_detect = AutoConvertConfig_Definition(
-		key="std_video_path_detect",
-		type="path",
-		group="detect",
-		optional=False, # 必选没有默认值
-		constraints={"must_exist": True}
-	)
-
 	skip_detect = AutoConvertConfig_Definition(
 		key="skip_detect",
 		type="bool",
@@ -186,14 +171,6 @@ class AutoConvertConfig_Definitions:
 
 
 	# analyze
-
-	std_video_path_analyze = AutoConvertConfig_Definition(
-		key="std_video_path_analyze",
-		type="path",
-		group="analyze",
-		optional=False,
-		constraints={"must_exist": True}
-	)
 
 	bpm = AutoConvertConfig_Definition(
 		key="bpm",
@@ -228,3 +205,39 @@ class AutoConvertConfig_Definitions:
 	 )
 
 
+
+
+
+
+	# 其他分类
+	
+	# ui 提供后会转变为其他参数，不是最终需要的
+      
+	song_name = AutoConvertConfig_Definition(
+		key="song_name",
+		type="str",
+		group="other",
+		optional=False, # 必选没有默认值
+	)
+      
+	selected_folder = AutoConvertConfig_Definition(
+		key="selected_folder",
+		type="path",
+		group="other",
+		optional=False, # 必选没有默认值
+		constraints={"must_exist": True} # 选择的文件夹必须存在
+	)
+      
+	# 不由 ui 提供，但是方便统一 key
+      
+	std_video_path = AutoConvertConfig_Definition(
+		key="std_video_path",
+		type="path",
+		group="other",
+	)
+
+	standardize_temp_output_path = AutoConvertConfig_Definition(
+		key="standardize_temp_output_path",
+		type="path",
+		group="other",
+	)

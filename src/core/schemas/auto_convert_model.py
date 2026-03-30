@@ -1,4 +1,5 @@
 from typing import Optional, Literal, Any
+import os
 from pathlib import Path
 from pydantic import BaseModel, Field, FilePath, model_validator
 
@@ -26,8 +27,6 @@ class AutoConvertModel(BaseModel):
 
 	standardize_input_video_path: Optional[FilePath] = Field(default=None) # 必需参数 没有默认值
 	
-	song_name: Optional[str] = Field(default=AC_Defs.song_name.default)
-	
 	video_mode: Optional[str] = Field(default=AC_Defs.video_mode.default)
 
 	duration: Optional[float] = Field(default=None) # 必需参数 没有默认值
@@ -47,8 +46,6 @@ class AutoConvertModel(BaseModel):
 
 	# detect group
 
-	std_video_path_detect: Optional[FilePath] = Field(default=None) # 必需参数 没有默认值
-
 	skip_detect: Optional[bool] = Field(default=AC_Defs.skip_detect.default)
 
 	skip_cls: Optional[bool] = Field(default=AC_Defs.skip_cls.default)
@@ -60,8 +57,6 @@ class AutoConvertModel(BaseModel):
 
 	# analyze group
 
-	std_video_path_analyze: Optional[FilePath] = Field(default=None) # 必需参数 没有默认值
-
 	bpm: Optional[float] = Field(default=None) # 必需参数 没有默认值
 
 	chart_lv: Optional[int] = Field(default=AC_Defs.chart_lv.default)
@@ -72,6 +67,13 @@ class AutoConvertModel(BaseModel):
 
 
 
+
+
+	# other
+	
+	song_name: Optional[str] = Field(default=AC_Defs.song_name.default)
+
+	selected_folder: Optional[Path] = Field(default=None) # 必需参数 没有默认值
 
 
 
@@ -102,10 +104,13 @@ class AutoConvertModel(BaseModel):
 			return self
 		
 		# 验证 path 合法性
-		if self.standardize_input_video_path is None:
-			raise ValueError("standardize_input_video_path is required when standardize is enabled.")
-		if not self.standardize_input_video_path.is_file():
-			raise ValueError(f"standardize_input_video_path '{self.standardize_input_video_path}' does not exist or is not a file.")
+		input_path: Path = self.standardize_input_video_path
+		if input_path is None:
+			raise ValueError("chart confirmation video not selected")
+		if not input_path.exists() or not input_path.is_file():
+			raise ValueError(f"chart confirmation video does not exist: '{input_path}'")
+		if not os.access(input_path.parent, os.R_OK | os.W_OK):
+			raise ValueError(f"Directory of chart confirmation video is not readable or writable: '{input_path.parent}'")
 		
 		# 验证 song_name 合法性
 		if self.song_name is not None:
@@ -122,7 +127,7 @@ class AutoConvertModel(BaseModel):
 			self.song_name = default_name # update
 			return self
 		else:
-			raise ValueError(f"Derived default song_name '{default_name}' from standardize_input_video_path is not a valid Windows filename.")
+			raise ValueError(f"Derived default song name '{default_name}' from chart confirmation video is not a valid Windows filename.")
 	
 
 	# 检查 video_mode
@@ -187,46 +192,8 @@ class AutoConvertModel(BaseModel):
 
 
 
-	# detect
-
-	@model_validator(mode='after')
-	def validate_std_video_path_detect(self):
-		# 本模块未启用
-		if not self.is_detect_enabled:
-			return self
-		# 本模块启用并且前置模块 standardize 也启用
-		if self.is_standardize_enabled:
-			return self
-		# 本模块启用并且前置模块 standardize 未启用，需要 std_video_path_detect 参数
-		if self.std_video_path_detect is None:
-			raise ValueError("std_video_path_detect is required.")
-		
-		if not self.std_video_path_detect.is_file():
-			raise ValueError(f"std_video_path_detect '{self.std_video_path_detect}' does not exist or is not a file.")
-		return self
-
-
-
-
 
 	# analyze
-
-	@model_validator(mode='after')
-	def validate_std_video_path_analyze(self):
-		# 本模块未启用
-		if not self.is_analyze_enabled:
-			return self
-		# 本模块启用并且前置模块 standardize 也启用
-		if self.is_standardize_enabled:
-			return self
-		# 本模块启用并且前置模块 standardize 未启用，需要 std_video_path_analyze 参数
-		if self.std_video_path_analyze is None:
-			raise ValueError("std_video_path_analyze is required.")
-		
-		if not self.std_video_path_analyze.is_file():
-			raise ValueError(f"std_video_path_analyze '{self.std_video_path_analyze}' does not exist or is not a file.")
-		return self
-	
 
 	@model_validator(mode='after')
 	def validate_bpm(self):
@@ -274,4 +241,31 @@ class AutoConvertModel(BaseModel):
 		allowed = AC_Defs.duration_denominator.constraints["options"]
 		if self.duration_denominator not in allowed:
 			raise ValueError(f"duration_denominator must be one of {allowed}, got {self.duration_denominator}")
+		return self
+
+
+
+
+
+
+
+	# other
+
+	@model_validator(mode='after')
+	def validate_selected_folder(self):
+
+		# 两个模块均未启用
+		if not self.is_detect_enabled and not self.is_analyze_enabled:
+			return self
+		# 俩模块启用并且前置模块 standardize 也启用
+		if self.is_standardize_enabled:
+			return self
+		# 俩模块启用并且前置模块 standardize 未启用，需要 selected_folder 参数
+		folder = self.selected_folder
+		
+		# 检查
+		if folder is None:
+			raise ValueError("selected_folder is required.")
+		if not folder.exists() or not folder.is_dir():
+			raise ValueError(f"selected_folder does not exist: '{folder}'")
 		return self
