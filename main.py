@@ -35,7 +35,9 @@ def main() -> int:
 
         # print(f"Available styles: {QStyleFactory.keys()}")
         # print(f"Current style: {app.style().objectName()}")
-        app.setStyle("windows11")
+        available_styles = QStyleFactory.keys()
+        if "windows11" in available_styles:
+            app.setStyle("windows11")
 
         result = AllServices.initialize_all()
         if not result.is_ok:
