@@ -46,10 +46,10 @@ def estimate_tap_DefaultMsec(shared_context, tap_data):
     max = np.max(note_speeds)
     median = np.median(note_speeds)
     std_dev = np.std(note_speeds)
-    print(f"speed of {length} tap notes: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
+    print_info1 = f"speed of {length} tap notes: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}"
 
-    note_DefaultMsec, note_OptionNotespeed = get_note_DefaultMsec(shared_context, median)
-    return note_DefaultMsec, note_OptionNotespeed
+    note_DefaultMsec, note_OptionNotespeed, print_info2 = get_note_DefaultMsec(shared_context, median)
+    return note_DefaultMsec, note_OptionNotespeed, f"{print_info1}\n{print_info2}"
 
 
 
@@ -83,6 +83,6 @@ def get_note_DefaultMsec(shared_context, detected_note_speed):
             cloest_OptionNotespeed = OptionNotespeed
         i += 0.25
 
-    print(f"estimate note speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {detected_note_DefaultMsec:.3f}ms)")
+    print_info = f"estimate note speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {detected_note_DefaultMsec:.3f}ms)"
 
-    return cloest_DefaultMsec, cloest_OptionNotespeed
+    return cloest_DefaultMsec, cloest_OptionNotespeed, print_info

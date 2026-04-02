@@ -53,9 +53,9 @@ def main(std_video_path: Path,
 
         # 分析音符流速
         if tap_data:
-            shared_context.note_DefaultMsec, shared_context.note_OptionNotespeed = estimate_tap_DefaultMsec(shared_context, tap_data)
+            shared_context.note_DefaultMsec, shared_context.note_OptionNotespeed, tap_speed_print_info = estimate_tap_DefaultMsec(shared_context, tap_data)
         if touch_data:
-            shared_context.touch_DefaultMsec, shared_context.touch_OptionNotespeed = estimate_touch_DefaultMsec(shared_context, touch_data)
+            shared_context.touch_DefaultMsec, shared_context.touch_OptionNotespeed, touch_speed_print_info = estimate_touch_DefaultMsec(shared_context, touch_data)
             
         # 分析音符时间
         tap_info = analyze_tap_time(shared_context, tap_data)    
@@ -70,6 +70,9 @@ def main(std_video_path: Path,
         # generate maidata
         generate_maidata(shared_context, bpm, chart_lv, base_denominator, duration_denominator, final_note_info)
 
+        print(tap_speed_print_info)
+        print(touch_speed_print_info)
+        
         return ok()
     
     except Exception as e:

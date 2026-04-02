@@ -82,8 +82,8 @@ def estimate_touch_DefaultMsec(shared_context, touch_data):
 
 
     if not DefaultMsecs:
-        print("estimate_touch_DefaultMsec: no valid touch data")
-        return 0, 0
+        print_info = "estimate_touch_DefaultMsec: no valid touch data"
+        return 0, 0, print_info
     
     length = len(DefaultMsecs)
     mean = np.mean(DefaultMsecs)
@@ -91,10 +91,10 @@ def estimate_touch_DefaultMsec(shared_context, touch_data):
     max = np.max(DefaultMsecs)
     median = np.median(DefaultMsecs)
     std_dev = np.std(DefaultMsecs)
-    print(f"touch DefaultMsec {length}: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}")
+    print_info1 = f"touch DefaultMsec {length}: [Median {median:.3f}], Min {min:.3f}, Max {max:.3f}, Mean {mean:.3f}, Std Dev {std_dev:.3f}"
 
-    touch_DefaultMsec, touch_OptionNotespeed = get_touch_DefaultMsec(median)
-    return touch_DefaultMsec, touch_OptionNotespeed
+    touch_DefaultMsec, touch_OptionNotespeed, print_info2 = get_touch_DefaultMsec(median)
+    return touch_DefaultMsec, touch_OptionNotespeed, f"{print_info1}\n{print_info2}"
 
 
 
@@ -137,6 +137,6 @@ def get_touch_DefaultMsec(detected_touch_DefaultMsec):
             cloest_OptionNotespeed = OptionNotespeed
         i += 0.25
 
-    print(f"estimate touch speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {detected_touch_DefaultMsec:.3f}ms)")
+    print_info = f"estimate touch speed: {cloest_i:.2f} - {cloest_DefaultMsec:.3f}ms (detect {detected_touch_DefaultMsec:.3f}ms)"
 
-    return cloest_DefaultMsec, cloest_OptionNotespeed
+    return cloest_DefaultMsec, cloest_OptionNotespeed, print_info
