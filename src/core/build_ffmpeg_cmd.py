@@ -217,6 +217,11 @@ def _build_video_filter(size: Optional[int],
             pad_expr = f"{size}:{size}:(ow-iw)/2:(oh-ih)/2:black"
             filters.append(f"scale={scale_expr},pad={pad_expr}")
 
+    # 有些神秘视频像素宽高比居然不是1:1
+    # 此处强制设置为1:1
+    if size:
+        filters.append("setsar=1")
+
     # Pad start
     if pad:
         filters.append(f"tpad=start_duration={pad}:color=black")
