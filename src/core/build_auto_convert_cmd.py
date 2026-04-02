@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-import os
 import cv2
 
 from src.services.path_manage import PathManage
@@ -13,6 +12,19 @@ from .schemas.op_result import OpResult, ok, err
 from .schemas.settings_config import SettingsConfig_Definitions as SC_Defs
 from .tools.popup_dialog import show_confirm_dialog
 from .build_worker_cmd import build_cmd_head_python_exe
+
+
+
+
+
+def _try_unload_majdata_video_if_matches(target_path: Path) -> None:
+    """如果目标路径正被 MajdataPage 播放器加载，则先卸载。"""
+    try:
+        from src.app.pages.majdata_page import MajdataPage
+
+        MajdataPage.try_unload_video_if_matches(target_path)
+    except Exception:
+        return
 
 
 def build_auto_convert_cmd(data: AutoConvertModel) -> OpResult[list[str]]:
@@ -189,6 +201,7 @@ def _use_existing_standardized_video(file_path, data) -> bool:
         if is_delete:
             # 用户选择删除文件
             try:
+                _try_unload_majdata_video_if_matches(file_path)
                 file_path.unlink()
             except Exception as e:
                 print(f'Failed to delete "{file_path}": {e}')

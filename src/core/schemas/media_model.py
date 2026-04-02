@@ -5,6 +5,21 @@ from .media_config import MediaType
 from .media_config import MediaConfig_Definitions as M_Defs
 from ..tools.popup_dialog import show_confirm_dialog
 
+
+
+
+def _try_unload_majdata_video_if_matches(target_path: Path) -> None:
+    """如果目标路径正被 MajdataPage 播放器加载，则先卸载。"""
+    try:
+        from src.app.pages.majdata_page import MajdataPage
+
+        MajdataPage.try_unload_video_if_matches(target_path)
+    except Exception:
+        return
+
+
+
+
 class MediaModel(BaseModel):
     """
     Media configuration model for validation and processing.
@@ -268,6 +283,7 @@ class MediaModel(BaseModel):
             if show_confirm_dialog(title="run_ffmepg", prompt_text="Output file already exists. Do you want to delete it first?"):
                 # 用户同意删除
                 try:
+                    _try_unload_majdata_video_if_matches(self.output_path)
                     self.output_path.unlink()
                 except Exception as e:
                     raise ValueError(f"Failed to delete existing output file: {e}")

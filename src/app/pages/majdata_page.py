@@ -20,11 +20,17 @@ import i18n
 from src.core.tools import show_notify_dialog
 
 
+_MAJDATA_PAGE_INSTANCE: Optional["MajdataPage"] = None
+
+
 
 class MajdataPage(QWidget):
 
     def __init__(self, media_player=None, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
+
+        global _MAJDATA_PAGE_INSTANCE
+        _MAJDATA_PAGE_INSTANCE = self
 
         self._media_player = media_player # QMediaPlayer 实例，用于控制视频播放
         self._majdataedit_placeholder: Optional[QWidget] = None
@@ -220,9 +226,7 @@ class MajdataPage(QWidget):
         majdataview_has_video = bool(selected_video and is_play_video)
 
         # Reset video player
-        if self._media_player is not None:
-            self._media_player.stop()
-            self._media_player.setSource(QUrl())
+        self.unload_video()
 
         # Create a control txt for MajdataEdit
         control_text = f"folder: {self._selected_song_path}\nmaidata: {selected_maidata}\ntrack: {selected_track}"
@@ -249,9 +253,7 @@ class MajdataPage(QWidget):
     def reset_majdataview(self) -> None:
 
         # 1. Reset video player
-        if self._media_player is not None:
-            self._media_player.stop()
-            self._media_player.setSource(QUrl())
+        self.unload_video()
 
         # 2. Pause majdata
         pause_majdata()
@@ -265,3 +267,32 @@ class MajdataPage(QWidget):
         self._selected_song_path = None
 
         return
+
+
+    def unload_video(self) -> None:
+        if self._media_player is not None:
+            self._media_player.stop()
+            self._media_player.setSource(QUrl())
+
+
+
+    @classmethod
+    def try_unload_video_if_matches(cls, target_path: Path) -> None:
+        """当传入路径与当前已加载视频相同，让播放器卸载视频"""
+
+        try:
+            majdata_page = _MAJDATA_PAGE_INSTANCE
+            if majdata_page is None: return
+            if majdata_page._media_player is None: return
+            # 获取当前已加载的视频路径
+            source = majdata_page._media_player.source()
+            if source.isEmpty(): return
+            loaded_file = source.toLocalFile()
+            if not loaded_file: return
+            # 如果与传入的视频相同，则卸载视频
+            norm_loaded = os.path.normpath(os.path.abspath(loaded_file)).lower()
+            norm_target = os.path.normpath(os.path.abspath(str(target_path))).lower()
+            if norm_loaded == norm_target:
+                majdata_page.unload_video()
+        except Exception:
+            return
