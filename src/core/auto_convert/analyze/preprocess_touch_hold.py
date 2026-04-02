@@ -188,7 +188,7 @@ def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap, touch_hold_max_s
             # 平均距离
             if distances:
                 dist = np.mean(distances)
-                dist -= roi_radius * 0.08 # 减去尖头的圆球的尺寸
+                # dist -= roi_radius * 0.08 # 减去尖头的圆球的尺寸
 
             # # 显示窗口
             # print(f"frame {frame_num}: dist {dist:.2f}")
