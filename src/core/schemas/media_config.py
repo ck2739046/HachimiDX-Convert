@@ -295,8 +295,8 @@ class MediaConfig_Definitions:
         group="video",
         default=1.0,
         constraints={
-            "ge": 0.5,
-            "le": 2.0
+            "ge": 0.25,
+            "le": 4.0
         }
     )
 
@@ -306,8 +306,50 @@ class MediaConfig_Definitions:
         group="video",
         default=1.0,
         constraints={
-            "ge": 0.5,
-            "le": 2.0
+            "ge": 0.25,
+            "le": 4.0
+        }
+    )
+
+    video_x_rot_deg = MediaConfig_Definition(
+        key="video_x_rot_deg",
+        type="float",
+        group="video",
+        default=0.0,
+        constraints={
+            "ge": -85.0,
+            "le": 85.0
+        }
+    )
+
+    video_y_rot_deg = MediaConfig_Definition(
+        key="video_y_rot_deg",
+        type="float",
+        group="video",
+        default=0.0,
+        constraints={
+            "ge": -85.0,
+            "le": 85.0
+        }
+    )
+
+    video_width = MediaConfig_Definition(
+        key="video_width",
+        type="int",
+        group="video",
+        default=None,
+        constraints={
+            "gt": 0
+        }
+    )
+
+    video_height = MediaConfig_Definition(
+        key="video_height",
+        type="int",
+        group="video",
+        default=None,
+        constraints={
+            "gt": 0
         }
     )
 

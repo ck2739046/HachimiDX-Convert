@@ -17,6 +17,8 @@ def main(input_video: Path,
          circle_radius: int,
          scale_x: float,
          scale_y: float,
+         x_rot_deg: float,
+         y_rot_deg: float,
          media_type: MediaType,
          duration: float,
          start_sec: float = 0.0,
@@ -61,7 +63,25 @@ def main(input_video: Path,
 
         crop_w, crop_h, crop_x, crop_y = calculate_crop_params(video_width, video_height, circle_center, circle_radius, scale_x, scale_y)
 
-        is_input_std, need_crop, need_resize, need_trim_start, need_trim_end = is_input_already_standardized(crop_w, crop_h, crop_x, crop_y, video_width, video_height, target_res, start_sec, end_sec)
+        (is_input_std,
+         need_crop,
+         need_resize,
+         need_trim_start,
+         need_trim_end,
+         need_rotation
+        ) = is_input_already_standardized(
+            crop_w,
+            crop_h,
+            crop_x,
+            crop_y,
+            video_width,
+            video_height,
+            target_res,
+            start_sec,
+            end_sec,
+            x_rot_deg,
+            y_rot_deg,
+        )
         if is_input_std:
             # 如果输入已经标准了，直接复制到输出路径
             print("Input video already standardized, copy to output path.")
@@ -97,6 +117,14 @@ def main(input_video: Path,
                 M_Defs.video_scale_y.key: scale_y,
             })
 
+        if need_rotation:
+            params.update({
+                M_Defs.video_x_rot_deg.key: x_rot_deg,
+                M_Defs.video_y_rot_deg.key: y_rot_deg,
+                M_Defs.video_width.key: video_width,
+                M_Defs.video_height.key: video_height,
+            })
+
         if need_resize:
             params.update({
                 M_Defs.video_side_resolution.key: target_res,
@@ -122,6 +150,8 @@ def main(input_video: Path,
             change_hint += f'  trim start to {start_sec}s\n'
         if need_trim_end:
             change_hint += f'  trim end to {end_sec}s\n'
+        if need_rotation:
+            change_hint += f'  perspective rotate x={x_rot_deg}deg, y={y_rot_deg}deg\n'
 
         if change_hint:
             print(f"Process video with changes:\n{change_hint}")
@@ -181,8 +211,10 @@ def is_input_already_standardized(crop_w: int,
                                   video_height: int,
                                   target_res: int,
                                   start_sec: float,
-                                  end_sec: float
-                                 ) -> tuple[bool, bool, bool, bool, bool]:
+                                  end_sec: float,
+                                  x_rot_deg: float,
+                                  y_rot_deg: float,
+                                 ) -> tuple[bool, bool, bool, bool, bool, bool]:
 
     video_size = min(video_width, video_height)
     tolerance = video_size / 360
@@ -191,6 +223,7 @@ def is_input_already_standardized(crop_w: int,
     need_resize = True
     need_trim_start = True
     need_trim_end = True
+    need_rotation = abs(x_rot_deg) > 1e-6 or abs(y_rot_deg) > 1e-6
 
     # 如果裁剪画面尺寸≈实际视频尺寸，并且裁剪中心≈实际视频中心，则不裁剪
     # 使用 max(crop_w, crop_h) 来判断是否接近视频尺寸
@@ -209,8 +242,8 @@ def is_input_already_standardized(crop_w: int,
     if end_sec <= 0:
         need_trim_end = False
 
-    if not need_crop and not need_resize and not need_trim_start and not need_trim_end:
+    if not need_crop and not need_resize and not need_trim_start and not need_trim_end and not need_rotation:
         print("Video already standardized.")
-        return True, False, False, False, False
+        return True, False, False, False, False, False
 
-    return False, need_crop, need_resize, need_trim_start, need_trim_end
+    return False, need_crop, need_resize, need_trim_start, need_trim_end, need_rotation

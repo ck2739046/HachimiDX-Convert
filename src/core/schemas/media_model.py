@@ -82,6 +82,25 @@ class MediaModel(BaseModel):
         ge=M_Defs.video_scale_y.constraints["ge"],
         le=M_Defs.video_scale_y.constraints["le"]
     )
+
+    video_x_rot_deg: Optional[float] = Field(
+        default=M_Defs.video_x_rot_deg.default,
+        ge=M_Defs.video_x_rot_deg.constraints["ge"],
+        le=M_Defs.video_x_rot_deg.constraints["le"]
+    )
+    video_y_rot_deg: Optional[float] = Field(
+        default=M_Defs.video_y_rot_deg.default,
+        ge=M_Defs.video_y_rot_deg.constraints["ge"],
+        le=M_Defs.video_y_rot_deg.constraints["le"]
+    )
+    video_width: Optional[int] = Field(
+        default=M_Defs.video_width.default,
+        gt=M_Defs.video_width.constraints["gt"]
+    )
+    video_height: Optional[int] = Field(
+        default=M_Defs.video_height.default,
+        gt=M_Defs.video_height.constraints["gt"]
+    )
     
     
     
