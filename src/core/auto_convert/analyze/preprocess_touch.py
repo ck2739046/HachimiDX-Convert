@@ -74,9 +74,9 @@ def preprocess_touch_data(shared_context: SharedContext):
         # 按frame排序
         valid_track_path.sort(key=lambda x: x[0])
 
-        # 检查dist是否递减 (允许微小回退10%总距离)
+        # 检查dist是否递减 (允许微小回退20%总距离)
         dists = [x[1] for x in valid_track_path]
-        if not all(later - earlier < 0.1 * shared_context.touch_travel_dist for earlier, later in zip(dists, dists[1:])):
+        if not all(later - earlier < 0.2 * shared_context.touch_travel_dist for earlier, later in zip(dists, dists[1:])):
             print(f"preprocess_touch_data: dist not decreasing for track_id {track_id}")
             continue
 

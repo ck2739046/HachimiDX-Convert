@@ -81,9 +81,11 @@ def preprocess_tap_data(shared_context: SharedContext):
             print(f"preprocess_tap_data: dist not increasing for track_id {track_id}")
             continue
 
-        # 检查头尾dist是否覆盖全程 (20%-80%)
-        if dists[0] > valid_judgeline_start + 2*start_tolerance or dists[-1] < valid_judgeline_end - 2*end_tolerance:
-            print(f"preprocess_tap_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}. Allowd range: {valid_judgeline_start} - {valid_judgeline_end}")
+        # 检查头尾dist是否覆盖全程 (25%-60%)
+        big_head = valid_judgeline_start + 1.5*start_tolerance
+        big_tail = valid_judgeline_end - 3*end_tolerance
+        if dists[0] > big_head or dists[-1] < big_tail:
+            print(f"preprocess_tap_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}. Allowed range: {big_head} - {big_tail}")
             continue
 
         # 检查通过，添加到tap_data
