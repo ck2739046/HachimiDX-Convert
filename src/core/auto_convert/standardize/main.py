@@ -49,6 +49,7 @@ def main(input_video: Path,
             input_video=input_video,
             mode=video_mode,
             need_manual_adjust=need_manual_adjust,
+            start_sec=start_sec,
         )
         if not result.is_ok:
             return err("Failed to detect circle.", inner=result)

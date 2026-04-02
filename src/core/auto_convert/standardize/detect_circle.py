@@ -10,7 +10,8 @@ from ...schemas.op_result import OpResult, ok, err, print_op_result
 
 def main(input_video: Path,
          mode: str,
-         need_manual_adjust: bool
+         need_manual_adjust: bool,
+         start_sec: float | None = None
         ) -> OpResult[Tuple[Tuple[int, int], int]]:
     """
     检测视频中的圆形判定线
@@ -19,6 +20,7 @@ def main(input_video: Path,
         input_video(Path): 输入视频路径
         mode(str): 视频模式（'source video'或'camera footage'）
         need_manual_adjust(bool): 是否需要手动调整
+            start_sec(float | None): 开始时间(秒)
 
     Returns:
         OpResult -> (circle_center, circle_radius)
@@ -32,6 +34,7 @@ def main(input_video: Path,
         video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
 
         # 如果跳过检测，直接返回屏幕中心点
         if not need_manual_adjust:
@@ -53,15 +56,30 @@ def main(input_video: Path,
         r_small = round(video_size * 0.25)
         r_large = round(video_size * 0.55)
 
+        # 从 start_sec 往前 4 秒开始搜，总共搜 5 秒
+        search_start_sec = max((start_sec if start_sec is not None else 0.0) - 4.0, 0.0)
+        search_end_sec = search_start_sec + 5.0
+        search_start_frame = round(search_start_sec * fps)
+        search_end_frame = min(total_frames, round(search_end_sec * fps))
+
+        if search_start_frame >= total_frames or search_end_frame <= search_start_frame:
+            circle_center = (video_width // 2, video_height // 2)
+            circle_radius = min(video_width, video_height) // 2 - 2
+            print("Initial detection...fallback")
+            print(f"  Circle center: {circle_center}, radius: {circle_radius}")
+            return ok((circle_center, circle_radius))
+
+        cap.set(cv2.CAP_PROP_POS_FRAMES, search_start_frame)
+
         frame_counter = 0
         circles_detected = []
 
         # 处理帧
-        while frame_counter < total_frames:
+        while frame_counter < (search_end_frame - search_start_frame):
 
             # 打印进度
             frame_counter += 1
-            print(f"Initial detection...{frame_counter}/{total_frames}", end="\r")
+            print(f"Initial detection...{frame_counter}/{search_end_frame - search_start_frame}", end="\r")
 
             ret, frame = cap.read()
             if not ret: break  # 视频结束
@@ -81,7 +99,11 @@ def main(input_video: Path,
             
         
         if len(circles_detected) < target_circles_quantity:
-            return err("Not enough circles detected")
+            circle_center = (video_width // 2, video_height // 2)
+            circle_radius = min(video_width, video_height) // 2 - 2
+            print("Initial detection...fallback")
+            print(f"  Circle center: {circle_center}, radius: {circle_radius}")
+            return ok((circle_center, circle_radius))
         
         # 取出现次数最多的圆
         most_common = max(set(circles_detected), key=circles_detected.count)
