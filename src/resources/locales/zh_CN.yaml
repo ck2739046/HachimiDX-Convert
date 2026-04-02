@@ -333,7 +333,7 @@ zh_CN:
         在 Basic/Advanced 难度中，
         touch/touch-hold 音符的尺寸通常会更大。
       ui_chart_lv_label: "谱面难度: "
-      ui_chart_lv_help: "1-easy\n2-basic\n3-normal\n4-expert\n5-master\n6-re:master\n7-utage"
+      ui_chart_lv_help: "1-easy\n2-basic\n3-advanced\n4-expert\n5-master\n6-re:master\n7-utage"
       ui_base_denominator_label: "音符间隔分辨率: "
       ui_base_denominator_help: |
         程序解析音符间隔的时间分辨率。

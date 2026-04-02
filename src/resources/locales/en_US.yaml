@@ -333,7 +333,7 @@ en_US:
         In Basic/Advanced level,
         touch/touch-hold notes are usually larger in size.
       ui_chart_lv_label: "Chart Level: "
-      ui_chart_lv_help: "1-easy\n2-basic\n3-normal\n4-expert\n5-master\n6-re:master\n7-utage"
+      ui_chart_lv_help: "1-easy\n2-basic\n3-advanced\n4-expert\n5-master\n6-re:master\n7-utage"
       ui_base_denominator_label: "Base Denominator: "
       ui_base_denominator_help: |
         Time resolution used to parse note intervals.
