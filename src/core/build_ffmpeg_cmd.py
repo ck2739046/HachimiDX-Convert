@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 from src.services.path_manage import PathManage
 from .schemas.media_config import MediaType
@@ -128,7 +129,11 @@ def _build_video_args(data: MediaModel) -> OpResult[list[str]]:
         start = data.start,
         end = data.end,
         scale_x = data.video_scale_x,
-        scale_y = data.video_scale_y
+        scale_y = data.video_scale_y,
+        x_rot_deg = data.video_x_rot_deg,
+        y_rot_deg = data.video_y_rot_deg,
+        video_width = data.video_width,
+        video_height = data.video_height,
     )
     if vf:
         args.extend(["-vf", vf])
@@ -146,6 +151,8 @@ def _build_video_filter(size: Optional[int],
                         end: Optional[float],
                         scale_x: Optional[float] = None,
                         scale_y: Optional[float] = None,
+                        x_rot_deg: Optional[float] = None,
+                        y_rot_deg: Optional[float] = None,
                         video_width: Optional[int] = None,
                         video_height: Optional[int] = None
                        ) -> Optional[str]:
@@ -162,6 +169,15 @@ def _build_video_filter(size: Optional[int],
             trim_kv.append(f"end={end}")
         filters.append(f"trim={':'.join(trim_kv)}")
         filters.append("setpts=PTS-STARTPTS")
+
+    perspective_filter = _build_axis_rotation_perspective_filter(
+        x_rot_deg=x_rot_deg,
+        y_rot_deg=y_rot_deg,
+        video_width=video_width,
+        video_height=video_height,
+    )
+    if perspective_filter:
+        filters.append(perspective_filter)
 
     # Crop (支持越界，超出部分用黑色填充)
     if all(v is not None for v in crop):
@@ -227,6 +243,93 @@ def _build_video_filter(size: Optional[int],
         filters.append(f"tpad=start_duration={pad}:color=black")
 
     return ",".join(filters) if filters else None
+
+
+def _build_axis_rotation_perspective_filter(x_rot_deg: Optional[float],
+                                            y_rot_deg: Optional[float],
+                                            video_width: Optional[int],
+                                            video_height: Optional[int]
+                                           ) -> Optional[str]:
+    """将 x/y 轴旋转角转换为 FFmpeg perspective 滤镜参数。"""
+
+    x_rot_deg = float(x_rot_deg or 0.0)
+    y_rot_deg = float(y_rot_deg or 0.0)
+
+    if abs(x_rot_deg) < 1e-6 and abs(y_rot_deg) < 1e-6:
+        return None
+
+    if video_width is None or video_height is None:
+        return None
+    if video_width <= 1 or video_height <= 1:
+        return None
+
+    width = float(video_width)
+    height = float(video_height)
+
+    cx = (width - 1.0) / 2.0
+    cy = (height - 1.0) / 2.0
+    corners = [
+        (-cx, -cy, 0.0),
+        (cx, -cy, 0.0),
+        (cx, cy, 0.0),
+        (-cx, cy, 0.0),
+    ]
+
+    x_rad = math.radians(x_rot_deg)
+    y_rad = math.radians(y_rot_deg)
+
+    cos_x = math.cos(x_rad)
+    sin_x = math.sin(x_rad)
+    cos_y = math.cos(y_rad)
+    sin_y = math.sin(y_rad)
+
+    focal = max(width, height) * 1.2
+    distance = max(width, height) * 1.5
+
+    projected = []
+    for x, y, z in corners:
+        y1 = y * cos_x - z * sin_x
+        z1 = y * sin_x + z * cos_x
+
+        x2 = x * cos_y + z1 * sin_y
+        y2 = y1
+        z2 = -x * sin_y + z1 * cos_y
+
+        z_cam = z2 + distance
+        if abs(z_cam) < 1e-6:
+            z_cam = 1e-6
+
+        u = focal * x2 / z_cam + cx
+        v = focal * y2 / z_cam + cy
+        projected.append((u, v))
+
+    min_x = min(p[0] for p in projected)
+    max_x = max(p[0] for p in projected)
+    min_y = min(p[1] for p in projected)
+    max_y = max(p[1] for p in projected)
+
+    span_x = max(max_x - min_x, 1e-6)
+    span_y = max(max_y - min_y, 1e-6)
+
+    dst = []
+    for u, v in projected:
+        out_x = (u - min_x) * (width - 1.0) / span_x
+        out_y = (v - min_y) * (height - 1.0) / span_y
+        dst.append((out_x, out_y))
+
+    tl = dst[0]
+    tr = dst[1]
+    bl = dst[3]
+    br = dst[2]
+
+    # perspective 参数顺序为: tl, tr, bl, br
+    return (
+        "perspective="
+        f"{tl[0]:.6f}:{tl[1]:.6f}:"
+        f"{tr[0]:.6f}:{tr[1]:.6f}:"
+        f"{bl[0]:.6f}:{bl[1]:.6f}:"
+        f"{br[0]:.6f}:{br[1]:.6f}:sense=destination"
+    )
 
 
 
