@@ -55,6 +55,7 @@ def main(input_video: Path,
             return err("Failed to detect circle.", inner=result)
         circle_center, circle_radius = result.value
         scale_x, scale_y = 1.0, 1.0
+        x_rot_deg, y_rot_deg = 0.0, 0.0
 
         # 第二步：手动微调圆心和半径
         if need_manual_adjust:
@@ -67,7 +68,7 @@ def main(input_video: Path,
             ).main()
             if not result.is_ok:
                 return err("Failed to manual adjust circle.", inner=result)
-            circle_center, circle_radius, scale_x, scale_y = result.value
+            circle_center, circle_radius, scale_x, scale_y, x_rot_deg, y_rot_deg = result.value
 
         # 第三步：处理视频
         result = process_video.main(
