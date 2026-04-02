@@ -396,11 +396,11 @@ class ManualAdjust:
             return
         
         # 验证 scale 参数
-        if not (0.8 <= scale_x <= 1.2):
-            messagebox.showerror("错误", "X scale 必须在 0.8-1.2 之间")
+        if not (0.5 <= scale_x <= 2.0):
+            messagebox.showerror("错误", "X scale 必须在 0.5-2.0 之间")
             return
-        if not (0.8 <= scale_y <= 1.2):
-            messagebox.showerror("错误", "Y scale 必须在 0.8-1.2 之间")
+        if not (0.5 <= scale_y <= 2.0):
+            messagebox.showerror("错误", "Y scale 必须在 0.5-2.0 之间")
             return
         
         # 所有验证通过，保存调整结果并关闭窗口
@@ -487,7 +487,7 @@ class ManualAdjust:
         entry_scale_x = ttk.Entry(scale_x_frame, width=6)
         entry_scale_x.pack(side=tk.LEFT)
         entry_scale_x.insert(0, str(current_scale_x))
-        ttk.Label(scale_x_frame, text="0.8-1.2 (1.0 = no stretch)").pack(side=tk.LEFT, padx=(10, 0))
+        ttk.Label(scale_x_frame, text="0.5-2.0 (1.0 = no stretch)").pack(side=tk.LEFT, padx=(10, 0))
         
         # Y Scale 输入框
         scale_y_frame = ttk.Frame(input_frame)
@@ -496,7 +496,7 @@ class ManualAdjust:
         entry_scale_y = ttk.Entry(scale_y_frame, width=6)
         entry_scale_y.pack(side=tk.LEFT)
         entry_scale_y.insert(0, str(current_scale_y))
-        ttk.Label(scale_y_frame, text="0.8-1.2 (1.0 = no stretch)").pack(side=tk.LEFT, padx=(10, 0))
+        ttk.Label(scale_y_frame, text="0.5-2.0 (1.0 = no stretch)").pack(side=tk.LEFT, padx=(10, 0))
         
         # ========== 下半部分：按钮区域 ==========
         button_frame = ttk.Frame(dialog, padding="10")
