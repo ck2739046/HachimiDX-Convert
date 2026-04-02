@@ -145,7 +145,7 @@ class NoteAnalyzer:
                 continue
             # 检查dist是否在头尾 (20%-80%)
             if dists[0] > valid_judgeline_start + 2*start_tolerance or dists[-1] < valid_judgeline_end - 2*end_tolerance:
-                print(f"preprocess_tap_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}")
+                print(f"preprocess_tap_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}. Allowd range: {valid_judgeline_start} - {valid_judgeline_end}")
                 continue
             # 添加到tap_data
             path = []
@@ -998,7 +998,7 @@ class NoteAnalyzer:
                 continue
             # 检查dist是否在头尾 (20%-80%)
             if dists[0] > valid_judgeline_start + 4*start_tolerance or dists[-1] < valid_judgeline_end - 4*end_tolerance:
-                print(f"preprocess_hold_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}")
+                print(f"preprocess_hold_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}. Allowed range: {valid_judgeline_start} - {valid_judgeline_end}")
                 continue
             # 添加到hold_data
             path = []
@@ -1737,7 +1737,7 @@ class NoteAnalyzer:
                 continue
             # 检查dist是否在头尾 (20%-80%)
             if dists[0] > valid_judgeline_start + start_tolerance or dists[-1] < valid_judgeline_end - end_tolerance:
-                # print(f"preprocess_slide_head_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}")
+                # print(f"preprocess_slide_head_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}. Allowed range: {valid_judgeline_start} - {valid_judgeline_end}")
                 continue
             # 添加到slide_data
             path = []

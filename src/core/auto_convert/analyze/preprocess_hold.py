@@ -92,7 +92,7 @@ def preprocess_hold_data(shared_context: SharedContext):
 
         # 检查头尾dist是否覆盖全程
         if dists[0] > valid_judgeline_start + 2*start_tolerance or dists[-1] < valid_judgeline_end - 2*end_tolerance:
-            print(f"preprocess_hold_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}")
+            print(f"preprocess_hold_data: dist out of range for track_id {track_id}, start_dist: {dists[0]}, end_dist: {dists[-1]}. Allowd range: {valid_judgeline_start} - {valid_judgeline_end}")
             continue
         
         # 检查通过，添加到hold_data
