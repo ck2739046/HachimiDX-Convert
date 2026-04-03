@@ -52,6 +52,18 @@ class FFprobeInspectResult:
 
 class FFprobeInspect:
 
+    @staticmethod
+    def _precheck_input_path_and_ffprobe(input_path: str) -> OpResult[tuple[str, str]]:
+        input_path = os.path.normpath(os.path.abspath(str(input_path)))
+        ffprobe_exe = str(PathManage.FFPROBE_EXE_PATH)
+
+        if not os.path.exists(input_path):
+            return err(f"File not found: {input_path}")
+        if not os.path.isfile(ffprobe_exe):
+            return err(f"ffprobe.exe not found: {ffprobe_exe}")
+
+        return ok((input_path, ffprobe_exe))
+
     @classmethod
     def inspect_media(cls, input_path: str) -> OpResult[FFprobeInspectResult]:
         """Inspect one media file using ffprobe.
@@ -64,14 +76,10 @@ class FFprobeInspect:
         """
 
         # pre check
-        input_path = os.path.normpath(os.path.abspath(str(input_path)))
-        ffprobe_exe = str(PathManage.FFPROBE_EXE_PATH)
-        if not os.path.exists(input_path):
-            error_msg = f"File not found: {input_path}"
-            return err(error_msg)
-        if not os.path.isfile(ffprobe_exe):
-            error_msg=f"ffprobe.exe not found: {ffprobe_exe}"
-            return err(error_msg)
+        precheck_res = cls._precheck_input_path_and_ffprobe(input_path)
+        if not precheck_res.is_ok:
+            return err(precheck_res.error_msg, inner=precheck_res)
+        input_path, ffprobe_exe = precheck_res.value
 
         
         # run ffprobe
@@ -134,6 +142,88 @@ class FFprobeInspect:
                     audio_stream=first_audio_stream,
                     duration=duration)
                 )
+
+
+    @classmethod
+    def inspect_video_frame_timestamps_msec(cls, input_path: str) -> OpResult[list[float]]:
+        """Inspect frame-level timestamps for video stream only.
+
+        Notes:
+        - This function is intentionally separated from inspect_media so UI
+          widgets keep their lightweight default probe behavior.
+        - Returned timestamps are normalized to the first decoded frame (0 ms).
+
+        Returns:
+            OpResult: list[float] where index is frame number and value is ms.
+        """
+
+        precheck_res = cls._precheck_input_path_and_ffprobe(input_path)
+        if not precheck_res.is_ok:
+            return err(precheck_res.error_msg, inner=precheck_res)
+        input_path, ffprobe_exe = precheck_res.value
+
+        args = [
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "frame=best_effort_timestamp_time,pkt_pts_time",
+            "-of", "csv=p=0",
+            input_path,
+        ]
+
+        try:
+            result = subprocess.run(
+                [ffprobe_exe] + args,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except Exception as e:
+            return err(str(e), error_raw=e)
+
+        if result.returncode != 0:
+            error_msg = f"ffprobe frame timestamp inspect failed: exit_code={result.returncode}"
+            raw = ""
+            stderr = (result.stderr or "").strip()
+            stdout = (result.stdout or "").strip()
+            if stderr:
+                raw += f"stderr=\n{stderr}"
+            if stdout:
+                raw += f"\nstdout=\n{stdout}"
+            return err(error_msg, error_raw=raw)
+
+        sec_list: list[float] = []
+        for raw_line in (result.stdout or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            parsed_sec = None
+            for token in line.split(","):
+                token = token.strip()
+                if not token or token == "N/A":
+                    continue
+                try:
+                    parsed_sec = float(token)
+                    break
+                except Exception:
+                    continue
+
+            if parsed_sec is not None:
+                sec_list.append(parsed_sec)
+
+        if len(sec_list) == 0:
+            return err("ffprobe returned no valid frame timestamps")
+
+        base_sec = sec_list[0]
+        msec_list = [max((sec - base_sec) * 1000.0, 0.0) for sec in sec_list]
+
+        # Keep timestamp sequence monotonic to avoid tiny negative drift from float noise.
+        for i in range(1, len(msec_list)):
+            if msec_list[i] < msec_list[i - 1]:
+                msec_list[i] = msec_list[i - 1]
+
+        return ok(msec_list)
     
 
 
