@@ -53,17 +53,31 @@ def analyze_touch_hold_time(shared_context, touch_hold_data):
             # 将 dist 数据视为 touch note 处理
             if dist != -1:
                 reach_end_Msec = predict_touch_reach_end_time(shared_context, dist, frame_num, shared_context.touch_hold_travel_dist)
-                if reach_end_Msec != 0:
+                if reach_end_Msec != 0 and np.isfinite(reach_end_Msec):
                     dist_times.append(reach_end_Msec)
 
+        if not dist_times:
+            print(f"analyze_touch_hold_time: no valid dist data for track_id {key[0]}")
+            continue
+
         percent_times, percent_speeds = predict_touch_hold_percent_reach_end_time(percent_data)
+        if not percent_times:
+            print(f"analyze_touch_hold_time: no valid percent data for track_id {key[0]}")
+            continue
 
         # 计算平均值
-        mean_dist = np.mean(dist_times)
+        mean_dist = float(np.mean(dist_times))
         # 有极端值，使用中位数更稳定
-        median_percent = np.median(percent_times)
+        median_percent = float(np.median(percent_times))
+
+        if not np.isfinite(mean_dist) or not np.isfinite(median_percent):
+            print(f"analyze_touch_hold_time: invalid computed time for track_id {key[0]}")
+            continue
 
         duration = median_percent - mean_dist
+        if not np.isfinite(duration):
+            print(f"analyze_touch_hold_time: invalid duration for track_id {key[0]}")
+            continue
         
         track_id, note_type, note_variant, position = key
         new_position = f"{position}{get_suffix(note_variant)}"
@@ -103,6 +117,9 @@ def predict_touch_hold_percent_reach_end_time(percent_data):
 
     # 点配对并计算 speed
     speeds = []
+    if len(percent_data) < 2:
+        return [], []
+
     percent_data.sort(key=lambda x: x[1]) # 按 percent 排序
     for i in range(len(percent_data)):
         for j in range(i + 1, len(percent_data)):
@@ -111,15 +128,22 @@ def predict_touch_hold_percent_reach_end_time(percent_data):
             if abs(progress1 - progress2) < 0.05:
                 continue # 忽略相近的 progress 减少误差 (5%) 
             speed = abs(time1 - time2) / abs(progress1 - progress2)
-            speeds.append(speed)
+            if np.isfinite(speed):
+                speeds.append(speed)
 
-    final_speed = np.median(speeds)
+    if not speeds:
+        return [], []
+
+    final_speed = float(np.median(speeds))
+    if not np.isfinite(final_speed):
+        return [], []
 
     # 预测到达时间
     reach_end_times = []
     for time, progress in percent_data:
         remaining_progress = 1 - progress
         reach_end_time = time + remaining_progress * final_speed
-        reach_end_times.append(reach_end_time)
+        if np.isfinite(reach_end_time):
+            reach_end_times.append(reach_end_time)
 
     return reach_end_times, speeds
