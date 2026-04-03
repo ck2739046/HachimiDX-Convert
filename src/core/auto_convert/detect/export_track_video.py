@@ -11,7 +11,9 @@ from .note_definition import *
 from .track import _load_track_results
 
 
-def main(std_video_path: Path) -> OpResult[Path]:
+def main(std_video_path: Path,
+     total_frames: int,
+    ) -> OpResult[Path]:
 
     print("开始导出视频模块...")
     
@@ -24,7 +26,6 @@ def main(std_video_path: Path) -> OpResult[Path]:
         video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
         # 输出视频设置
         output_dir = std_video_path.parent

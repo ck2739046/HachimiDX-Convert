@@ -13,7 +13,9 @@ from .note_definition import *
 from .detect import _load_detect_results
 
 
-def main(std_video_path: Path) -> OpResult[None]:
+def main(std_video_path: Path,
+         total_frames: int,
+        ) -> OpResult[None]:
     try:
         # 读取检测结果
         detect_results = _load_detect_results(std_video_path.parent)
@@ -21,7 +23,6 @@ def main(std_video_path: Path) -> OpResult[None]:
         # 获取视频信息
         cap = cv2.VideoCapture(std_video_path)
         fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         video_size = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         cap.release()
 

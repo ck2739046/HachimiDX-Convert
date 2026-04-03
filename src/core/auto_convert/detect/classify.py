@@ -11,6 +11,7 @@ from .track import _save_track_results, _load_track_results
 
 
 def main(std_video_path: Path,
+         total_frames: int,
          batch_cls: int,
          inference_device: str,
          cls_ex_model_path: str,
@@ -54,7 +55,6 @@ def main(std_video_path: Path,
         cls_break_model = YOLO(cls_break_model_path, task="classify")
         imgsz = get_imgsz('cls')
 
-        total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.003)
 
         # 按帧读取视频，提取图像并分类

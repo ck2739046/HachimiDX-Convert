@@ -9,6 +9,7 @@ from .note_definition import *
 
 
 def main(std_video_path: Path,
+         total_frames: int,
          batch_detect: int,
          inference_device: str,
          detect_model_path: str,
@@ -28,11 +29,6 @@ def main(std_video_path: Path,
     """
 
     try:
-        # 获取视频信息
-        cap = cv2.VideoCapture(std_video_path)
-        total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        cap.release()
-
         final_results = []
         print("Start detection...")
 
@@ -68,7 +64,8 @@ def main(std_video_path: Path,
             
             # 结束
             finish_time = time.time()
-            print(f"{name} done, time: {finish_time - start_time:.1f}s, average: {total_frames / (finish_time - start_time):.1f}fps          ")
+            processed_frames = max(counter, 1)
+            print(f"{name} done, time: {finish_time - start_time:.1f}s, average: {processed_frames / (finish_time - start_time):.1f}fps          ")
 
         # 保存到文件
         _save_detect_results(final_results, std_video_path.parent)
