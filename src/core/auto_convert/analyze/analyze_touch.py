@@ -83,7 +83,7 @@ def predict_touch_reach_end_time(shared_context, dist, cur_frame, total_dist):
     # 反推 time_progress
     time_progress = reverse_function(location_progress)
     # 反推 move_start_time
-    cur_time = cur_frame / shared_context.std_video_fps * 1000  # 转换为毫秒
+    cur_time = shared_context.frame_to_msec(cur_frame)
     move_start_time = cur_time - time_progress * shared_context.touch_DefaultMsec
     reach_end_time = move_start_time + shared_context.touch_DefaultMsec
 

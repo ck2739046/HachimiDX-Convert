@@ -33,11 +33,12 @@ def estimate_tap_DefaultMsec(shared_context, tap_data):
             dist_start = path[start_idx]['dist']
             dist_end = path[end_idx]['dist']
 
-            frame_num_diff = frame_num_end - frame_num_start
             total_dist = dist_end - dist_start
-            
-            if frame_num_diff > 0: # 避免除零错误
-                note_speed = total_dist / frame_num_diff  # pixel/frame
+
+            time_diff_msec = shared_context.frame_delta_msec(frame_num_start, frame_num_end)
+
+            if time_diff_msec > 0: # 避免除零错误
+                note_speed = total_dist / time_diff_msec  # pixel/ms
                 note_speeds.append(note_speed)
 
     length = len(note_speeds)
@@ -65,7 +66,6 @@ def get_note_DefaultMsec(shared_context, detected_note_speed):
         return DefaultMsec, OptionNotespeed
 
     total_dist = shared_context.note_travel_dist
-    detected_note_speed = detected_note_speed * shared_context.std_video_fps / 1000 # pixel/frame to pixel/ms
     detected_note_DefaultMsec = total_dist / detected_note_speed # 走完全程需要多少时间 (lifetime)
 
     # 查找最接近的 DefaultMsec

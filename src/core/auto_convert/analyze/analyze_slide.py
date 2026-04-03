@@ -388,9 +388,9 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A
             dist = np.sqrt((cx - last_cx)**2 + (cy - last_cy)**2)
             if dist < min_dist:
                 continue # 两点间距过短，不能可靠计算速度，跳过
-            frame_diff = frame_num - last_frame
-            if frame_diff > 0:
-                speed = dist / frame_diff
+            time_diff_msec = shared_context.frame_delta_msec(last_frame, frame_num)
+            if time_diff_msec > 0:
+                speed = dist / time_diff_msec
                 frame_speeds.append(speed)
 
         last_cx = cx
@@ -437,8 +437,8 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A
     # 计算开始时间
     if start_move_frame is None:
         return None, None
-    time_to_start_Msec = (dist_to_start / note_speed) * (1000 / shared_context.std_video_fps)
-    note_start_time_Msec = start_move_frame / shared_context.std_video_fps * 1000 - time_to_start_Msec
+    time_to_start_Msec = dist_to_start / note_speed
+    note_start_time_Msec = shared_context.frame_to_msec(start_move_frame) - time_to_start_Msec
 
     # 找到最后一个进入终点A区的点
     end_move_frame = None
@@ -456,8 +456,8 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A
     # 计算结束时间
     if end_move_frame is None:
         return None, None
-    time_to_end_Msec = (dist_to_end / note_speed) * (1000 / shared_context.std_video_fps)
-    note_end_time_Msec = end_move_frame / shared_context.std_video_fps * 1000 + time_to_end_Msec
+    time_to_end_Msec = dist_to_end / note_speed
+    note_end_time_Msec = shared_context.frame_to_msec(end_move_frame) + time_to_end_Msec
 
     return note_start_time_Msec, note_end_time_Msec
 

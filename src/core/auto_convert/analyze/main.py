@@ -36,6 +36,8 @@ def main(std_video_path: Path,
     
     try:
         shared_context = create_shared_context(std_video_path, is_big_touch)
+        tap_speed_print_info = "tap speed not estimated (no tap data)"
+        touch_speed_print_info = "touch speed not estimated (no touch data)"
 
         tap_info = {}
         touch_info = {}

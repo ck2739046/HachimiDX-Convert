@@ -90,7 +90,7 @@ def predict_tap_reach_end_time(shared_context, cur_dist, cur_frame):
     -> reach_end_Msec = leave_start_Msec + DefaultMsec
     '''
 
-    cur_time = cur_frame / shared_context.std_video_fps * 1000 # 转换为毫秒
+    cur_time = shared_context.frame_to_msec(cur_frame)
     total_dist = shared_context.note_travel_dist
     dist_offset = -1/120 * total_dist * (shared_context.note_OptionNotespeed / 150 - 1)
     #time_offset = (shared_context.note_OptionNotespeed / 150 - 1) * (-0.5 / (shared_context.note_OptionNotespeed / 150 - 1)) * 1.6 * 1000 / 60
