@@ -142,6 +142,35 @@ def is_straight(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tu
         
 
 
+def is_arc(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id)
+
+    if pos_diff != 1:
+        # 圆弧必须是相邻的A区
+        return False, None
+    
+    positions = [x['position'] for x in note_path]
+    required = []
+    optional = []
+    banned = []
+
+    # 必须激活起点/终点
+    required.append(f'A{start_A_zone_id}')
+    required.append(f'A{end_A_zone_id}')
+
+    # 必须激活之间的 D 区
+    between_DE_zones_id = _get_between_DE_zones(start_A_zone_id, end_A_zone_id)
+    for id in between_DE_zones_id:
+        required.append(f'D{id}')
+
+    # 检查
+    if _ckeck_zones(positions, required, optional, banned):
+        syntax = _get_arc_syntax(start_A_zone_id, end_A_zone_id, end_A_zone_id)
+        return True, syntax
+    
+    return False, None
+
 
 
 
