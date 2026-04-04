@@ -133,7 +133,7 @@ def is_straight(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tu
 
     # 检查
     if _ckeck_zones(positions, required, optional, banned):
-        return True, f'{start_A_zone_id}-{end_A_zone_id}'
+        return True, '-'
     
     return False, None
 
@@ -167,7 +167,7 @@ def is_arc(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[b
     # 检查
     if _ckeck_zones(positions, required, optional, banned):
         syntax = _get_arc_syntax(start_A_zone_id, end_A_zone_id, end_A_zone_id)
-        return True, syntax
+        return True, syntax[0] # 只取箭头
     
     return False, None
 
@@ -206,8 +206,7 @@ def is_center_reflection(note_path: list, start_A_zone_id: int, end_A_zone_id: i
 
     # 检查
     if _ckeck_zones(positions, required, optional, banned):
-        syntax = _get_arc_syntax(start_A_zone_id, end_A_zone_id, end_A_zone_id)
-        return True, syntax
+        return True, 'v'
     
     return False, None
     
@@ -219,13 +218,13 @@ def is_center_reflection(note_path: list, start_A_zone_id: int, end_A_zone_id: i
 
 def is_inner_loop(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
 
-    is_q, syntax = is_inner_loop_q_clockwise(note_path, start_A_zone_id, end_A_zone_id)
-    is_p, syntax = is_inner_loop_p_counterclockwise(note_path, start_A_zone_id, end_A_zone_id)
+    is_q, syntax_q = is_inner_loop_q_clockwise(note_path, start_A_zone_id, end_A_zone_id)
+    is_p, syntax_p = is_inner_loop_p_counterclockwise(note_path, start_A_zone_id, end_A_zone_id)
 
     if is_q:
-        return True, syntax
+        return True, syntax_q
     elif is_p:
-        return True, syntax
+        return True, syntax_p
     else:
         return False, None
 
@@ -249,11 +248,11 @@ def is_inner_loop_q_clockwise(note_path: list, start_A_zone_id: int, end_A_zone_
 
     if pos_diff == 0:
         # 可选激活相邻 E 区
-        optional.append(f'E{start_A_zone_id}')
-        optional.append(f'E{start_A_zone_id + 1 if start_A_zone_id < 8 else 1}')
+        optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+        optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
         # 必须按顺序激活其他 B 区 (排除起点)
-        next_A_zone_id = start_A_zone_id + 1 if start_A_zone_id < 8 else 1
-        last_A_zone_id = start_A_zone_id - 1 if start_A_zone_id > 1 else 8
+        next_A_zone_id = _next_AB_zone_id(start_A_zone_id)
+        last_A_zone_id = _prev_AB_zone_id(start_A_zone_id)
         between_AB_zones_id = _get_between_AB_zones(next_A_zone_id, last_A_zone_id, clockwise=True)
         required.append(f'B{next_A_zone_id}')
         for id in between_AB_zones_id:
@@ -273,18 +272,18 @@ def is_inner_loop_q_clockwise(note_path: list, start_A_zone_id: int, end_A_zone_
 
     if pos_diff == 2 or pos_diff == 3:
         # 可选起点下一个 E 区
-        optional.append(f'E{start_A_zone_id + 1 if start_A_zone_id < 8 else 1}')
+        optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
         # 可选终点上一个 E 区
-        optional.append(f'E{end_A_zone_id}')
+        optional.append(f'E{_prev_DE_zone_id(end_A_zone_id)}')
         # 必须激活所有 B 区
         for id in [1, 2, 3, 4, 5, 6, 7, 8]:
             required.append(f'B{id}')
 
     if pos_diff in [4, 5, 6, 7]:
         # 可选起点下一个 E 区
-        optional.append(f'E{start_A_zone_id + 1 if start_A_zone_id < 8 else 1}')
+        optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
         # 可选终点上一个 E 区
-        optional.append(f'E{end_A_zone_id}')
+        optional.append(f'E{_prev_DE_zone_id(end_A_zone_id)}')
         # 必须激活之间的 B 区
         between_AB_zones_id = _get_between_AB_zones(start_A_zone_id, end_A_zone_id, clockwise=True)
         for id in between_AB_zones_id:
@@ -292,8 +291,7 @@ def is_inner_loop_q_clockwise(note_path: list, start_A_zone_id: int, end_A_zone_
 
     # 检查
     if _ckeck_zones(positions, required, optional, banned, required_sort):
-        syntax = _get_arc_syntax(start_A_zone_id, end_A_zone_id, end_A_zone_id)
-        return True, syntax
+        return True, 'q'
     
     return False, None
 
@@ -317,11 +315,11 @@ def is_inner_loop_p_counterclockwise(note_path: list, start_A_zone_id: int, end_
 
     if pos_diff == 0:
         # 可选激活相邻 E 区
-        optional.append(f'E{start_A_zone_id}')
-        optional.append(f'E{start_A_zone_id - 1 if start_A_zone_id > 1 else 8}')
+        optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+        optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
         # 必须按顺序激活其他 B 区 (排除起点)
-        next_A_zone_id = start_A_zone_id + 1 if start_A_zone_id < 8 else 1
-        last_A_zone_id = start_A_zone_id - 1 if start_A_zone_id > 1 else 8
+        next_A_zone_id = _next_AB_zone_id(start_A_zone_id)
+        last_A_zone_id = _prev_AB_zone_id(start_A_zone_id)
         between_AB_zones_id = _get_between_AB_zones(last_A_zone_id, next_A_zone_id, counterclockwise=True)
         required.append(f'B{last_A_zone_id}')
         for id in between_AB_zones_id:
@@ -340,18 +338,18 @@ def is_inner_loop_p_counterclockwise(note_path: list, start_A_zone_id: int, end_
 
     if pos_diff == 2 or pos_diff == 3:
         # 可选起点上一个 E 区
-        optional.append(f'E{start_A_zone_id}')
+        optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
         # 可选终点下一个 E 区
-        optional.append(f'E{end_A_zone_id + 1 if end_A_zone_id < 8 else 1}')
+        optional.append(f'E{_next_DE_zone_id(end_A_zone_id)}')
         # 必须激活所有 B 区
         for id in [1, 2, 3, 4, 5, 6, 7, 8]:
             required.append(f'B{id}')
 
     if pos_diff in [4, 5, 6, 7]:
         # 可选起点上一个 E 区
-        optional.append(f'E{start_A_zone_id}')
+        optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
         # 可选终点下一个 E 区
-        optional.append(f'E{end_A_zone_id + 1 if end_A_zone_id < 8 else 1}')
+        optional.append(f'E{_next_DE_zone_id(end_A_zone_id)}')
         # 必须激活之间的 B 区
         between_AB_zones_id = _get_between_AB_zones(start_A_zone_id, end_A_zone_id, counterclockwise=True)
         for id in between_AB_zones_id:
@@ -359,8 +357,7 @@ def is_inner_loop_p_counterclockwise(note_path: list, start_A_zone_id: int, end_
 
     # 检查
     if _ckeck_zones(positions, required, optional, banned, required_sort):
-        syntax = _get_arc_syntax(start_A_zone_id, end_A_zone_id, end_A_zone_id)
-        return True, syntax
+        return True, 'p'
     
     return False, None
 
@@ -370,6 +367,126 @@ def is_inner_loop_p_counterclockwise(note_path: list, start_A_zone_id: int, end_
 
 
 
+
+
+def is_zigzag(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id)
+
+    if pos_diff != 4:
+        # 必须是4
+        return False, None
+    
+    is_s, syntax_s = is_zigzag_s(note_path, start_A_zone_id, end_A_zone_id)
+    is_z, syntax_z = is_zigzag_z(note_path, start_A_zone_id, end_A_zone_id)
+
+    if is_s:
+        return True, syntax_s
+    elif is_z:
+        return True, syntax_z
+    else:
+        return False, None
+
+
+
+
+def is_zigzag_s(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    positions = [x['position'] for x in note_path]
+    required = []
+    optional = []
+    banned = []
+
+    # 必须激活起点/终点
+    required.append(f'A{start_A_zone_id}')
+    required.append(f'A{end_A_zone_id}')
+
+    # 必须激活 C 区
+    required.append(f'C1')
+
+    # 必须激活转折处的 B 区: 通用
+    B_zone_id = _next_AB_zone_id(_next_AB_zone_id(start_A_zone_id))
+    required.append(f'B{B_zone_id}')
+    B_zone_id = _prev_AB_zone_id(_prev_AB_zone_id(start_A_zone_id))
+    required.append(f'B{B_zone_id}')
+
+    # 必须激活转折处的 B 区: s
+    B_zone_id = _prev_AB_zone_id(start_A_zone_id)
+    required.append(f'B{B_zone_id}')
+    B_zone_id = _prev_AB_zone_id(end_A_zone_id)
+    required.append(f'B{B_zone_id}')
+    # 可选激活转折处的 E 区: s
+    E_zone_id = _prev_DE_zone_id(start_A_zone_id)
+    optional.append(f'E{E_zone_id}')
+    E_zone_id = _prev_DE_zone_id(end_A_zone_id)
+    optional.append(f'E{E_zone_id}')
+
+    # 检查
+    if _ckeck_zones(positions, required, optional, banned):
+        return True, 's'
+    
+    return False, None
+
+
+
+
+def is_zigzag_z(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    positions = [x['position'] for x in note_path]
+    required = []
+    optional = []
+    banned = []
+
+    # 必须激活起点/终点
+    required.append(f'A{start_A_zone_id}')
+    required.append(f'A{end_A_zone_id}')
+
+    # 必须激活 C 区
+    required.append(f'C1')
+
+    # 必须激活转折处的 B 区: 通用
+    B_zone_id = _next_AB_zone_id(_next_AB_zone_id(start_A_zone_id))
+    required.append(f'B{B_zone_id}')
+    B_zone_id = _prev_AB_zone_id(_prev_AB_zone_id(start_A_zone_id))
+    required.append(f'B{B_zone_id}')
+
+    # 必须激活转折处的 B 区: z
+    B_zone_id = _next_AB_zone_id(start_A_zone_id)
+    required.append(f'B{B_zone_id}')
+    B_zone_id = _next_AB_zone_id(end_A_zone_id)
+    required.append(f'B{B_zone_id}')
+    # 可选激活转折处的 E 区: z
+    E_zone_id = _next_DE_zone_id(start_A_zone_id)
+    optional.append(f'E{E_zone_id}')
+    E_zone_id = _next_DE_zone_id(end_A_zone_id)
+    optional.append(f'E{E_zone_id}')
+
+    # 检查
+    if _ckeck_zones(positions, required, optional, banned):
+        return True, 'z'
+    
+    return False, None
+
+
+
+
+
+
+
+
+
+
+# 此处上下指的是顺时针方向
+# A1: next AB2, prev AB8
+#     next DE2, prev DE1
+def _prev_AB_zone_id(A_zone_id: int) -> int:
+    return A_zone_id - 1 if A_zone_id > 1 else 8
+def _next_AB_zone_id(A_zone_id: int) -> int:
+    return A_zone_id + 1 if A_zone_id < 8 else 1
+def _prev_DE_zone_id(A_zone_id: int) -> int:
+    return A_zone_id
+def _next_DE_zone_id(A_zone_id: int) -> int:
+    return A_zone_id + 1 if A_zone_id < 8 else 1
 
 
 
