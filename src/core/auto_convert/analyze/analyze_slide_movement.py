@@ -175,6 +175,48 @@ def is_arc(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[b
 
 
 
+
+
+def is_center_reflection(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id)
+
+    if pos_diff == 0:
+        # 不可能起点和终点相同
+        return False, None
+    if pos_diff == 4:
+        # 不可能是相对的A区
+        return False, None
+    
+    positions = [x['position'] for x in note_path]
+    required = []
+    optional = []
+    banned = []
+
+    # 必须激活起点/终点
+    required.append(f'A{start_A_zone_id}')
+    required.append(f'A{end_A_zone_id}')
+
+    # 必须激活 C 区
+    required.append(f'C1')
+    
+    # 必须激活 B 区
+    required.append(f'B{start_A_zone_id}')
+    required.append(f'B{end_A_zone_id}')
+
+    # 检查
+    if _ckeck_zones(positions, required, optional, banned):
+        syntax = _get_arc_syntax(start_A_zone_id, end_A_zone_id, end_A_zone_id)
+        return True, syntax
+    
+    return False, None
+    
+
+
+
+
+
+
 def _ckeck_zones(note_positions: list[str],
                  reqiured: list[str] = [],
                  optional: list[str] = [],
