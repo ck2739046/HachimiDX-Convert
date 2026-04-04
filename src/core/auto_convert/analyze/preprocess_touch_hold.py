@@ -5,6 +5,14 @@ from .tool import *
 from .shared_context import *
 
 
+DEBUG_TOUCH_HOLD_PREPROCESS = True
+
+
+def debug_touch_hold(message):
+    if DEBUG_TOUCH_HOLD_PREPROCESS:
+        print(message)
+
+
 
 def preprocess_touch_hold_data(shared_context: SharedContext):
     '''
@@ -58,21 +66,48 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
             # 计算三角到中心的距离
             if precent_counter >= 5: break # 节省时间，hold阶段后半都不用计算了
             dist, percent_of_hold = get_touch_hold_data(shared_context.std_video_size, note.cx, note.cy, note.frame, cap, touch_hold_max_size)
+            debug_touch_hold(
+                f"preprocess_touch_hold_data: track_id={track_id}, frame={note.frame}, note_type={note_type.name}, "
+                f"note_variant={note.note_variant.name}, raw_dist={dist}, raw_percent={percent_of_hold}"
+            )
             # 过滤前后两端的数据
             if dist > valid_dist_start:
+                debug_touch_hold(
+                    f"preprocess_touch_hold_data: track_id={track_id}, frame={note.frame} dist filtered as head, "
+                    f"dist={dist:.3f}, valid_dist_start={valid_dist_start:.3f}"
+                )
                 dist = -1 # 掐头
             elif dist < valid_dist_end:
+                debug_touch_hold(
+                    f"preprocess_touch_hold_data: track_id={track_id}, frame={note.frame} dist filtered as tail, "
+                    f"dist={dist:.3f}, valid_dist_end={valid_dist_end:.3f}"
+                )
                 dist = -1 # 去尾
             if percent_of_hold < valid_percent_start:
+                debug_touch_hold(
+                    f"preprocess_touch_hold_data: track_id={track_id}, frame={note.frame} percent filtered as head, "
+                    f"percent={percent_of_hold:.3f}, valid_percent_start={valid_percent_start:.3f}"
+                )
                 percent_of_hold = -1 # 掐头
             elif percent_of_hold > valid_percent_end:
+                debug_touch_hold(
+                    f"preprocess_touch_hold_data: track_id={track_id}, frame={note.frame} percent filtered as tail, "
+                    f"percent={percent_of_hold:.3f}, valid_percent_end={valid_percent_end:.3f}"
+                )
                 percent_of_hold = -1 # 去尾
                 precent_counter += 1
             #  两个值都无效才跳过
             if dist == -1 and percent_of_hold == -1:
+                debug_touch_hold(
+                    f"preprocess_touch_hold_data: track_id={track_id}, frame={note.frame} skipped because both dist and percent are invalid"
+                )
                 continue
             # 计算方位
             position = calculate_all_position(shared_context.touch_areas, note.cx, note.cy)
+            debug_touch_hold(
+                f"preprocess_touch_hold_data: track_id={track_id}, frame={note.frame} accepted position={position}, "
+                f"dist={dist}, percent={percent_of_hold}"
+            )
             # 添加轨迹点
             valid_track_path.append((note.frame, position, dist, percent_of_hold))
 
@@ -101,6 +136,10 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
         note_variant = note_geometry_list[0].note_variant
         position = positions[0]
         key = (track_id, note_type, note_variant, position)
+        debug_touch_hold(
+            f"preprocess_touch_hold_data: track_id={track_id} finalized with {len(valid_track_path)} points, "
+            f"position={position}, note_variant={note_variant.name}"
+        )
 
         path = []
         for frame_num, position, dist, percent_of_hold in valid_track_path:
@@ -139,30 +178,47 @@ def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap, touch_hold_max_s
         x_end = round(min(cx + roi_radius, std_video_size - 1))
         y_end = round(min(cy + roi_radius, std_video_size - 1))
         roi = frame[y_start:y_end, x_start:x_end]
+        if roi.size == 0:
+            print(
+                f"get_touch_hold_data: empty roi for frame {frame_num}, cx={cx:.3f}, cy={cy:.3f}, "
+                f"x=[{x_start},{x_end}), y=[{y_start},{y_end})"
+            )
+            return -1, -1
         # 处理roi
         transformed_roi = diamond_polar_transform(roi)
         stretched_roi = stretch_transformed_image(transformed_roi)
         final_roi = apply_hsv_threshold(stretched_roi)
         h, w = final_roi.shape[:2]
+        debug_touch_hold(
+            f"get_touch_hold_data: frame={frame_num}, roi_shape={roi.shape[:2]}, final_roi_shape={final_roi.shape[:2]}, "
+            f"cx={cx:.3f}, cy={cy:.3f}"
+        )
         # 计算 final_roi 上方 15% - 50% 区域中黑色像素的比例
         roi_top = final_roi[int(h * 0.15):int(h * 0.5), :, :]
         black_mask = cv2.inRange(roi_top, (0, 0, 0), (10, 10, 10))
         black_pixel_count = cv2.countNonZero(black_mask)
         total_pixel_count = roi_top.shape[0] * roi_top.shape[1]
         black_pixel_ratio = black_pixel_count / total_pixel_count if total_pixel_count > 0 else 0
+        debug_touch_hold(
+            f"get_touch_hold_data: frame={frame_num}, black_pixel_count={black_pixel_count}, "
+            f"total_pixel_count={total_pixel_count}, black_pixel_ratio={black_pixel_ratio:.3f}"
+        )
         # 计算dist和percent
         dist = -1
         percent_of_hold = -1
 
         # 视为scale阶段,计算dist
         if black_pixel_ratio > 0.25:
+            debug_touch_hold(f"get_touch_hold_data: frame={frame_num} enter dist branch")
             # 动态阈值
             grey_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
             _, binary_roi = cv2.threshold(grey_roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             # 轮廓识别
             distances = []
             contours, _ = cv2.findContours(binary_roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if not contours: return -1, -1
+            if not contours:
+                print(f"get_touch_hold_data: frame {frame_num} dist branch has no contours")
+                return -1, -1
             for contour in contours:
                 # 尺寸合适
                 _, radius = cv2.minEnclosingCircle(contour)          
@@ -188,6 +244,11 @@ def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap, touch_hold_max_s
             # 平均距离
             if distances:
                 dist = np.mean(distances)
+                debug_touch_hold(
+                    f"get_touch_hold_data: frame={frame_num} dist candidates={len(distances)}, dist={dist:.3f}"
+                )
+            else:
+                print(f"get_touch_hold_data: frame {frame_num} dist branch found no valid triangle candidates")
                 # dist -= roi_radius * 0.08 # 减去尖头的圆球的尺寸
 
             # # 显示窗口
@@ -198,6 +259,7 @@ def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap, touch_hold_max_s
 
         # 视为hold阶段,计算percent_of_hold
         else:
+            debug_touch_hold(f"get_touch_hold_data: frame={frame_num} enter percent branch")
             # 逐列扫描final_roi的左边一半，关注每一列最下面的30%像素
             # 如果这一列最下面的30%像素中，黑色像素占比小于70%，计数器+1
             counter = 0
@@ -213,7 +275,14 @@ def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap, touch_hold_max_s
                 if black_pixels < h * 0.3 * 0.7:
                     counter += 1
             # 计算百分比
-            percent_of_hold = counter / (w // 2 - 1) / 2 # 除以2是因为只扫描了一半宽度
+            denom = w // 2 - 1
+            if denom <= 0:
+                print(f"get_touch_hold_data: frame {frame_num} invalid percent denominator, w={w}")
+                return -1, -1
+            percent_of_hold = counter / denom / 2 # 除以2是因为只扫描了一半宽度
+            debug_touch_hold(
+                f"get_touch_hold_data: frame={frame_num} percent counter={counter}, percent={percent_of_hold:.3f}"
+            )
 
         return dist, percent_of_hold
 
