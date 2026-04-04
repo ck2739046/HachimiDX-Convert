@@ -244,7 +244,7 @@ class ScreenRectification:
             center_y=float(self.circle_cy),
         )
 
-        font_size = 0.64
+        font_size = 0.62
         font_thickness = 2
 
         half_w = max(1, round(self.circle_r * self.scale_x))
@@ -527,7 +527,7 @@ class ScreenRectification:
         self.var_y_rot = tk.StringVar(value=f"{self.y_rot_deg:.1f}")
         self.var_z_rot = tk.StringVar(value=f"{self.z_rot_deg:.1f}")
 
-        top_label = ttk.Label(dialog, text="请按 ok 键退出", padding=(10, 10, 10, 2))
+        top_label = ttk.Label(dialog, text='Press "OK" to exit', padding=(10, 10, 10, 2))
         top_label.pack(anchor=tk.CENTER)
 
         input_frame = ttk.LabelFrame(dialog, text="Parameters", padding="10")
@@ -546,7 +546,7 @@ class ScreenRectification:
             minus_command=lambda: self.adjust_radius(-1),
             plus_command=lambda: self.adjust_radius(1),
             submit_command=lambda _event=None: self.submit_radius(),
-            note=f"整数，范围 {self.RADIUS_MIN}-{self.RADIUS_MAX}，步进 1",
+            note=f"{self.RADIUS_MIN} ~ {self.RADIUS_MAX}",
         )
 
         self.build_param_row(
@@ -557,7 +557,7 @@ class ScreenRectification:
             minus_command=lambda: self.adjust_center("x", -1),
             plus_command=lambda: self.adjust_center("x", 1),
             submit_command=lambda _event=None: self.submit_center("x"),
-            note=f"整数，范围 {-self.CENTER_MAX} 到 {self.CENTER_MAX}，步进 1",
+            note=f"{-self.CENTER_MAX} ~ {self.CENTER_MAX}",
         )
 
         self.build_param_row(
@@ -568,7 +568,7 @@ class ScreenRectification:
             minus_command=lambda: self.adjust_center("y", -1),
             plus_command=lambda: self.adjust_center("y", 1),
             submit_command=lambda _event=None: self.submit_center("y"),
-            note=f"整数，范围 {-self.CENTER_MAX} 到 {self.CENTER_MAX}，步进 1",
+            note=f"{-self.CENTER_MAX} ~ {self.CENTER_MAX}",
         )
 
         self.build_param_row(
@@ -579,7 +579,7 @@ class ScreenRectification:
             minus_command=lambda: self.adjust_scale("x", -self.SCALE_STEP),
             plus_command=lambda: self.adjust_scale("x", self.SCALE_STEP),
             submit_command=lambda _event=None: self.submit_scale("x"),
-            note=f"最多 2 位小数，范围 {self.SCALE_MIN}-{self.SCALE_MAX}，步进 {self.SCALE_STEP}",
+            note=f"{self.SCALE_MIN} ~ {self.SCALE_MAX}",
         )
 
         self.build_param_row(
@@ -590,7 +590,7 @@ class ScreenRectification:
             minus_command=lambda: self.adjust_scale("y", -self.SCALE_STEP),
             plus_command=lambda: self.adjust_scale("y", self.SCALE_STEP),
             submit_command=lambda _event=None: self.submit_scale("y"),
-            note=f"最多 2 位小数，范围 {self.SCALE_MIN}-{self.SCALE_MAX}，步进 {self.SCALE_STEP}",
+            note=f"{self.SCALE_MIN} ~ {self.SCALE_MAX}",
         )
 
         self.build_param_row(
@@ -601,7 +601,7 @@ class ScreenRectification:
             minus_command=lambda: self.adjust_rotation("z", -self.ROT_STEP),
             plus_command=lambda: self.adjust_rotation("z", self.ROT_STEP),
             submit_command=lambda _event=None: self.submit_rotation("z"),
-            note=f"最多 1 位小数，范围 {self.ROT_MIN} 到 {self.ROT_MAX}，步进 {self.ROT_STEP}",
+            note=f"{self.ROT_MIN} ~ {self.ROT_MAX}",
         )
 
         self.build_param_row(
@@ -612,7 +612,7 @@ class ScreenRectification:
             minus_command=lambda: self.adjust_rotation("x", -self.ROT_STEP),
             plus_command=lambda: self.adjust_rotation("x", self.ROT_STEP),
             submit_command=lambda _event=None: self.submit_rotation("x"),
-            note=f"最多 1 位小数，范围 {self.ROT_MIN} 到 {self.ROT_MAX}，步进 {self.ROT_STEP}",
+            note=f"{self.ROT_MIN} ~ {self.ROT_MAX}",
         )
 
         self.build_param_row(
@@ -623,7 +623,7 @@ class ScreenRectification:
             minus_command=lambda: self.adjust_rotation("y", -self.ROT_STEP),
             plus_command=lambda: self.adjust_rotation("y", self.ROT_STEP),
             submit_command=lambda _event=None: self.submit_rotation("y"),
-            note=f"最多 1 位小数，范围 {self.ROT_MIN} 到 {self.ROT_MAX}，步进 {self.ROT_STEP}",
+            note=f"{self.ROT_MIN} ~ {self.ROT_MAX}",
         )
 
         button_frame = ttk.Frame(dialog, padding="10")
