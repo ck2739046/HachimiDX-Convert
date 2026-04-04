@@ -205,8 +205,8 @@ def _build_video_filter(size: Optional[int],
         # 新画布中，原视频位于 (left_pad, top_pad)，右边界是 left_pad + iw
         # crop 区域右边界是 left_pad + x + w
         # 超出量 = max(0, left_pad + x + w - (left_pad + iw)) = max(0, x + w - iw)
-        right_pad_expr = f"max(0\,{x}+{w}-iw)"
-        bottom_pad_expr = f"max(0\,{y}+{h}-ih)"
+        right_pad_expr = f"max(0\\,{x}+{w}-iw)"
+        bottom_pad_expr = f"max(0\\,{y}+{h}-ih)"
         
         # 计算 pad 后的画布大小
         pad_w_expr = f"{left_pad}+iw+{right_pad_expr}"
@@ -236,7 +236,7 @@ def _build_video_filter(size: Optional[int],
         else:
             # Scale while keeping aspect ratio
             # Pad to square with black borders
-            scale_expr = f"if(gt(iw,ih),{size},-1):if(gt(iw,ih),-1,{size})".replace(",", r"\,") # 对逗号转义
+            scale_expr = f"if(gt(iw,ih),{size},-1):if(gt(iw,ih),-1,{size})".replace(",", r"\\,") # 对逗号转义
             pad_expr = f"{size}:{size}:(ow-iw)/2:(oh-ih)/2:black"
             filters.append(f"scale={scale_expr},pad={pad_expr}")
 
