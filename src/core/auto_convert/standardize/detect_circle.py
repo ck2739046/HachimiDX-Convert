@@ -10,7 +10,7 @@ from ...schemas.op_result import OpResult, ok, err, print_op_result
 
 def main(input_video: Path,
          mode: str,
-         need_manual_adjust: bool,
+         need_screen_rectification: bool,
          start_sec: float | None = None
         ) -> OpResult[Tuple[Tuple[int, int], int]]:
     """
@@ -19,7 +19,7 @@ def main(input_video: Path,
     Args:
         input_video(Path): 输入视频路径
         mode(str): 视频模式（'source video'或'camera footage'）
-        need_manual_adjust(bool): 是否需要手动调整
+        need_screen_rectification(bool): 是否需要画面矫正
             start_sec(float | None): 开始时间(秒)
 
     Returns:
@@ -37,7 +37,7 @@ def main(input_video: Path,
         fps = cap.get(cv2.CAP_PROP_FPS)
 
         # 如果跳过检测，直接返回屏幕中心点
-        if not need_manual_adjust:
+        if not need_screen_rectification:
             print("Detect circle...skip")
             # 默认已经全屏并且在屏幕中心
             circle_center = (video_width // 2, video_height // 2)

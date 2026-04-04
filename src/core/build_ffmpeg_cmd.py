@@ -172,7 +172,7 @@ def _build_video_filter(size: Optional[int],
         filters.append(f"trim={':'.join(trim_kv)}")
         filters.append("setpts=PTS-STARTPTS")
 
-    # 与 manual_adjust 预览顺序一致：先 z 轴平面旋转，再做 x/y 透视旋转
+    # 与 screen_rectification 预览顺序一致：先 z 轴平面旋转，再做 x/y 透视旋转
     plane_rotate_filter = _build_plane_rotation_filter(z_rot_deg)
     if plane_rotate_filter:
         filters.append(plane_rotate_filter)

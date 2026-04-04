@@ -313,11 +313,11 @@ zh_CN:
       ui_video_mode_help: |
         source video: 游戏原生画面
         camera footage: 相机直接拍摄街机屏幕
-      ui_need_manual_adjust_label: "手动调整: "
-      ui_need_manual_adjust_help: |
-        在谱面确认视频中，
-        如果圆形游戏画面不是全屏居中的，
-        请启用此选项，手动调整位置。
+      ui_need_screen_rectification_label: "画面矫正: "
+      ui_need_screen_rectification_help: |
+        标准输入画面应满足：镜头正对屏幕、内容居中且铺满全屏。
+        如果输入视频不满足要求，勾选此项可进行手动画面矫正。
+        如果输入视频已满足要求，无需勾选。
 
       ui_skip_detect_label: "跳过检测: "
       ui_skip_detect_help: "跳过逐帧检测视频中的音符，直接读取已经存在的检测结果 (detect_result.txt)。"

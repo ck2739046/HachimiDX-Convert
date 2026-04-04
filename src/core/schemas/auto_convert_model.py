@@ -37,7 +37,7 @@ class AutoConvertModel(BaseModel):
 
 	end_sec: Optional[float] = Field(default=AC_Defs.end_sec.default)
 
-	need_manual_adjust: Optional[bool] = Field(default=AC_Defs.need_manual_adjust.default)
+	need_screen_rectification: Optional[bool] = Field(default=AC_Defs.need_screen_rectification.default)
 
 	target_res: Optional[int] = Field(default=AC_Defs.target_res.default, gt=AC_Defs.target_res.constraints["gt"])
 

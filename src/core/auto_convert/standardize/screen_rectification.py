@@ -19,7 +19,7 @@ if _tcl_path.exists():
 
 
 
-class ManualAdjust:
+class ScreenRectification:
 
     RADIUS_MIN = 20
     RADIUS_MAX = 9999

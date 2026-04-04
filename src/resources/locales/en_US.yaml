@@ -313,11 +313,15 @@ en_US:
       ui_video_mode_help: |
         source video: native in-game footage
         camera footage: camera directly filming the arcade screen
-      ui_need_manual_adjust_label: "Manual Adjustment: "
-      ui_need_manual_adjust_help: |
-        In the chart confirmation video,
-        if the circular game screen is not full-screen centered,
-        enable this option for manual position adjustment.
+      ui_need_screen_rectification_label: "Screen Rectification: "
+      ui_need_screen_rectification_help: |
+        Expected input: camera facing the screen directly, with content centered 
+        and filling the entire frame.
+
+        If your input video does not meet these criteria, enable this option to 
+        access manual screen rectification controls.
+
+        If your input is already properly aligned, leave this option unchecked.
 
       ui_skip_detect_label: "Skip Detect: "
       ui_skip_detect_help: "Skip frame-by-frame note detection and directly read the existing detection result (detect_result.txt)."

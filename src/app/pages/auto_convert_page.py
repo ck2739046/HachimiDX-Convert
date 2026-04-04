@@ -37,7 +37,7 @@ class AutoConvertPage(BaseOutputPage):
         # standardize panel
         self.song_name_line_edit = None
         self.video_mode_combo_box = None
-        self.need_manual_adjust_check_box = None
+        self.need_screen_rectification_check_box = None
         self.start_sec_line_edit = None
         self.end_sec_line_edit = None
         self.video_range_visualizer = None
@@ -173,17 +173,17 @@ class AutoConvertPage(BaseOutputPage):
         self.video_mode_combo_box = self._create_combobox_with_options(AC_Defs.video_mode, length=125)
         video_mode_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_video_mode_help"))
 
-        need_manual_adjust_label = create_label(i18n.t(f"{I18N_Prefix}.ui_need_manual_adjust_label"))
-        self.need_manual_adjust_check_box = create_check_box(AC_Defs.need_manual_adjust.default)
-        need_manual_adjust_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_need_manual_adjust_help"))
+        need_screen_rectification_label = create_label(i18n.t(f"{I18N_Prefix}.ui_need_screen_rectification_label"))
+        self.need_screen_rectification_check_box = create_check_box(AC_Defs.need_screen_rectification.default)
+        need_screen_rectification_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_need_screen_rectification_help"))
 
         row = _create_row(video_mode_label,
                           self.video_mode_combo_box,
                           video_mode_help,
 
-                          need_manual_adjust_label,
-                          self.need_manual_adjust_check_box,
-                          need_manual_adjust_help,
+                          need_screen_rectification_label,
+                          self.need_screen_rectification_check_box,
+                          need_screen_rectification_help,
 
                           add_stretch=True)
         layout.addWidget(row)
@@ -496,7 +496,7 @@ class AutoConvertPage(BaseOutputPage):
                     AC_Defs.duration.key: try_float(self.chart_confirm_video_input.selected_file_duration),
                     AC_Defs.start_sec.key: try_float(self.start_sec_line_edit.text().strip()),
                     AC_Defs.end_sec.key: try_float(self.end_sec_line_edit.text().strip()),
-                    AC_Defs.need_manual_adjust.key: self.need_manual_adjust_check_box.isChecked(),
+                    AC_Defs.need_screen_rectification.key: self.need_screen_rectification_check_box.isChecked(),
                     AC_Defs.target_res.key: 1080, # 暂时不修改
                 })
             else:

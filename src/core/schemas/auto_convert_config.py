@@ -127,8 +127,8 @@ class AutoConvertConfig_Definitions:
 		default=None
 	)
 
-	need_manual_adjust = AutoConvertConfig_Definition(
-		key="need_manual_adjust",
+	need_screen_rectification = AutoConvertConfig_Definition(
+		key="need_screen_rectification",
 		type="bool",
 		group="standardize",
 		default=False

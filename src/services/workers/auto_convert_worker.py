@@ -82,7 +82,7 @@ def main(args: list[str]) -> bool:
                 duration=_get_cfg(cfg, "duration", float),
                 start_sec=_get_cfg(cfg, "start_sec", float),
                 end_sec=_get_cfg(cfg, "end_sec", float),
-                need_manual_adjust=_get_cfg(cfg, "need_manual_adjust", _as_bool),
+                need_screen_rectification=_get_cfg(cfg, "need_screen_rectification", _as_bool),
                 target_res=_get_cfg(cfg, "target_res", int),
             )
             if not result.is_ok:

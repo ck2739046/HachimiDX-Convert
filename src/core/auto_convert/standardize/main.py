@@ -4,7 +4,7 @@ from ...schemas.op_result import OpResult, ok, err, print_op_result
 from ...schemas.media_model import MediaType
 
 from . import detect_circle
-from .manual_adjust import ManualAdjust
+from .screen_rectification import ScreenRectification
 from . import process_video
 
 
@@ -18,7 +18,7 @@ def main(input_video: Path,
          duration: float,
          start_sec: float,
          end_sec: float,
-         need_manual_adjust: bool,
+         need_screen_rectification: bool,
          target_res: int
         ) -> OpResult[None]:
 
@@ -34,7 +34,7 @@ def main(input_video: Path,
         duration(float): 视频总时长(秒)
         start_sec(float): 开始时间(秒)
         end_sec(float): 结束时间(秒)
-        need_manual_adjust(bool): 是否需要手动调整
+        need_screen_rectification(bool): 是否需要画面矫正
         target_res(int): 目标分辨率(边长)
 
     Returns:
@@ -48,7 +48,7 @@ def main(input_video: Path,
         result = detect_circle.main(
             input_video=input_video,
             mode=video_mode,
-            need_manual_adjust=need_manual_adjust,
+            need_screen_rectification=need_screen_rectification,
             start_sec=start_sec,
         )
         if not result.is_ok:
@@ -58,8 +58,8 @@ def main(input_video: Path,
         x_rot_deg, y_rot_deg, z_rot_deg = 0.0, 0.0, 0.0
 
         # 第二步：手动微调圆心和半径
-        if need_manual_adjust:
-            result = ManualAdjust(
+        if need_screen_rectification:
+            result = ScreenRectification(
                 input_video=input_video,
                 circle_center=circle_center,
                 circle_radius=circle_radius,
