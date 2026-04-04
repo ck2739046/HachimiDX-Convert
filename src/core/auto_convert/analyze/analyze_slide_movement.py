@@ -82,18 +82,60 @@ def analyze_slide_tail_movement_syntax(input_shared_context, note_path):
 
 
 
+def is_straight(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
 
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id)
+    
+    if pos_diff == 0:
+        # 直线不可能起点和终点相同
+        return False, None
+    if pos_diff == 1:
+        # 直线不可能是相邻的A区
+        return False, None
+    
+    positions = [x['position'] for x in note_path]
+    required = []
+    optional = []
+    banned = []
 
+    # 必须激活起点/终点
+    required.append(f'A{start_A_zone_id}')
+    required.append(f'A{end_A_zone_id}')
+    
+    if pos_diff == 2:
+        # 可选激活之间的 AB 区
+        between_AB_zones_id = _get_between_AB_zones(start_A_zone_id, end_A_zone_id)
+        for id in between_AB_zones_id:
+            optional.append(f'A{id}')
+            optional.append(f'B{id}')
+        # 可选激活之间的 DE 区
+        between_DE_zones_id = _get_between_DE_zones(start_A_zone_id, end_A_zone_id)
+        for id in between_DE_zones_id:
+            optional.append(f'D{id}')
+            optional.append(f'E{id}')
+        
+    if pos_diff == 3:
+        # 必须激活之间的 B 区
+        between_AB_zones_id = _get_between_AB_zones(start_A_zone_id, end_A_zone_id)
+        for id in between_AB_zones_id:
+            required.append(f'B{id}')
+        # 可选激活之间的 E 区 (排除中间)
+        between_DE_zones_id = _get_between_DE_zones(start_A_zone_id, end_A_zone_id)
+        optional.append(f'E{between_DE_zones_id[0]}')
+        optional.append(f'E{between_DE_zones_id[-1]}')
+        
+    if pos_diff == 4:
+        # 必须激活 C 区
+        required.append(f'C1')
+        # 必须激活 B 区
+        required.append(f'B{start_A_zone_id}')
+        required.append(f'B{end_A_zone_id}')
 
-
-
-
-
-
-
-
-
-
+    # 检查
+    if _ckeck_zones(positions, required, optional, banned):
+        return True, f'{start_A_zone_id}-{end_A_zone_id}'
+    
+    return False, None
 
 
 
@@ -101,6 +143,131 @@ def analyze_slide_tail_movement_syntax(input_shared_context, note_path):
 
 
 
+
+
+
+def _ckeck_zones(note_positions: list[str],
+                 reqiured: list[str] = [],
+                 optional: list[str] = [],
+                 banned: list[str] = []) -> bool:
+    # banned
+    for pos in note_positions:
+        if pos in banned or (pos not in reqiured and pos not in optional):
+            return False
+    # required
+    for pos in reqiured:
+        if pos not in note_positions:
+            return False
+    return True
+
+
+
+def _get_pos_diff(start_A_zone_id: int, end_A_zone_id: int) -> int:
+    
+    if start_A_zone_id == 1 and end_A_zone_id == 8:
+        return 1
+    if start_A_zone_id == 8 and end_A_zone_id == 1:
+        return 1
+    
+    diff1 = abs(end_A_zone_id - start_A_zone_id)
+    diff2 = 8 - diff1
+    return min(diff1, diff2)
+
+
+
+def _is_clockwise(start_A_zone_id: int, end_A_zone_id: int) -> bool:
+    # 计算顺时针距离
+    if start_A_zone_id < end_A_zone_id:
+        clockwise_distance = end_A_zone_id - start_A_zone_id
+    else:
+        clockwise_distance = (8 - start_A_zone_id) + end_A_zone_id
+    # 计算逆时针距离
+    if start_A_zone_id > end_A_zone_id:
+        counterclockwise_distance = start_A_zone_id - end_A_zone_id
+    else:
+        counterclockwise_distance = start_A_zone_id + (8 - end_A_zone_id)
+    # 如果顺时针距离更短，返回True
+    # 特例, 如果两个A区相对 (差4), 无法判断, 默认逆时针
+    return clockwise_distance < counterclockwise_distance
+
+
+
+def _get_between_AB_zones(start_A_zone_id: int, end_A_zone_id: int) -> list[int]:
+
+    # 如果两个A区相同/相邻/相对，无法判断
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id)
+    if pos_diff in [0, 1, 4]:
+        return []
+
+    between_zones = []
+    if _is_clockwise(start_A_zone_id, end_A_zone_id):
+        # 顺时针方向
+        current = start_A_zone_id
+        while True:
+            current = current + 1 if current < 8 else 1
+            if current == end_A_zone_id:
+                break
+            between_zones.append(current)
+    else:
+        # 逆时针方向
+        current = start_A_zone_id
+        while True:
+            current = current - 1 if current > 1 else 8
+            if current == end_A_zone_id:
+                break
+            between_zones.append(current)
+    
+    return between_zones
+
+
+
+def _get_between_DE_zones(start_A_zone_id: int, end_A_zone_id: int) -> list[int]:
+
+    # 如果两个A区相同/相对，无法判断
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id)
+    if pos_diff in [0, 4]:
+        return []
+    
+    between_zones = []
+    if _is_clockwise(start_A_zone_id, end_A_zone_id):
+        # 顺时针方向
+        current = start_A_zone_id
+        while True:
+            # 移动到下一个A区
+            next_a = current + 1 if current < 8 else 1
+            # 顺时针方向时，D区编号等于next_a（因为next_a是较大的编号）
+            d_zone = next_a
+            between_zones.append(d_zone)
+            
+            if next_a == end_A_zone_id:
+                break
+            current = next_a
+    else:
+        # 逆时针方向
+        current = start_A_zone_id
+        while True:
+            # 移动到下一个A区
+            next_a = current - 1 if current > 1 else 8
+            # 逆时针方向时，D区编号等于current（因为current是较大的编号）
+            d_zone = current
+            between_zones.append(d_zone)
+            
+            if next_a == end_A_zone_id:
+                break
+            current = next_a
+    
+    return between_zones
+
+
+
+
+
+
+
+    
+
+
+# def aaa():
     # # 检测这个A区路径里边是否包含一些圆弧，要单独拆分出来
     # arc_segments = []
     # i = 0
