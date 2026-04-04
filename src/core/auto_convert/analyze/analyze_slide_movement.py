@@ -75,69 +75,11 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
     如果星星全程仅在A区或D区内移动，视为旋转
     '''    
 
-    def get_outer_rotation_syntax(start_position, next_position, end_position):
+    guessed_zone = None
 
-        start_position_id = int(start_position[1]) # 'A1' -> 1
-        next_position_id = int(next_position[1])   # 'A1' -> 1
-
-        # 判断起始点在顶部还是底部
-        if start_position_id in [1,2,7,8]:
-            start_side = 'up'
-        else:
-            start_side = 'down'
-
-        # 判断旋转方向
-        # > 代表从起点开始箭头向右, < 代表从起点开始箭头向左
-        if start_side == 'up':
-            # 处理1和8的特殊情况
-            if start_position_id == 1:
-                if next_position_id in [6, 7, 8]:
-                    next_position_id -= 8
-            elif start_position_id == 8:
-                if next_position_id in [1, 2, 3]:
-                    next_position_id += 8
-            # 判断方向
-            if next_position_id > start_position_id:
-                movement_type = '>'
-            else:
-                movement_type = '<'
-        else: # start_side == 'down'
-            if next_position_id > start_position_id:
-                movement_type = '<'
-            else:
-                movement_type = '>'
-
-        # 处理终点位置
-        if end_position.startswith('A'):
-            # 分支1：终点在A区
-            # 直接作为终点位置
-            end_position_id = int(end_position[1])
-        else:
-            # 分支2：终点在D区
-            # 这种情况大概是因为星星提太快了，来不及进入A区就结束了
-            # 终点位置应该是D区后面的那个A区
-            
-            # 判断旋转方向(顺时针/逆时针)
-            if start_position_id == 1:
-                if next_position_id in [6, 7, 8]:
-                    next_position_id -= 8
-            elif start_position_id == 8:
-                if next_position_id in [1, 2, 3]:
-                    next_position_id += 8
-            
-            if next_position_id > start_position_id:
-                # 顺时针, D3 -> A3，序号不变
-                end_position_id = int(end_position[1])
-            else:
-                # 逆时针, D3 -> A2，序号减一
-                end_position_id = int(end_position[1]) - 1
-                if end_position_id == 0:
-                    end_position_id = 8 # D1 -> A8
-
-        # 组合语法
-        movement_syntax = f"{movement_type}{end_position_id}"
-        return movement_syntax
     
+    
+
 
     def is_consecutive(id1, id2):
             # 检查两个A区ID是否连续（考虑环形结构）
@@ -177,7 +119,9 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
     # 考虑到有些星星速度太快，来不及进入A区就结束了
     # 需要根据惯性猜测最后可能进入哪个A区
     if not end_position.startswith('A'):
-        guessed_zone = guess_target_a_zone_by_inertia(shared_context, note_path, A_zone_endpoint_on_judgeline)
+        guessed_zone = guess_target_a_zone_by_inertia(shared_context,
+                                                      note_path,
+                                                      A_zone_endpoint_on_judgeline)
         if guessed_zone and last_A_zone != guessed_zone:
             A_zones.append(guessed_zone)
 
@@ -232,8 +176,7 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
 
         if seg_type == 'arc':
             start_id, next_id, end_id = seg_data
-            start_position, next_position, end_position = f"A{start_id}", f"A{next_id}", f"A{end_id}"
-            arc_syntax = get_outer_rotation_syntax(start_position, next_position, end_position)
+            arc_syntax = _get_arc_syntax(start_id, next_id, end_id)
             new_syntax = f"{start_id}{arc_syntax}"
         else:  # single
             new_syntax = str(seg_data)
@@ -262,3 +205,44 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
 
     return movement_syntax
 
+
+
+
+
+
+def _get_arc_syntax(start_position: int, next_position: int, end_position: int) -> str:
+    """
+    Args: A zone id (1-8)
+    Returns: movement syntax like '>5' or '<3'
+    """
+
+    # 判断起始点在顶部还是底部
+    if start_position in [1,2,7,8]:
+        start_side = 'up'
+    else:
+        start_side = 'down'
+
+    # 判断旋转方向
+    # > 代表从起点开始箭头向右, < 代表从起点开始箭头向左
+    if start_side == 'up':
+        # 处理1和8的特殊情况
+        if start_position == 1:
+            if next_position in [6, 7, 8]:
+                next_position -= 8
+        elif start_position == 8:
+            if next_position in [1, 2, 3]:
+                next_position += 8
+        # 判断方向
+        if next_position > start_position:
+            movement_type = '>'
+        else:
+            movement_type = '<'
+    else: # start_side == 'down'
+        if next_position > start_position:
+            movement_type = '<'
+        else:
+            movement_type = '>'
+
+    # 组合语法
+    movement_syntax = f"{movement_type}{end_position}"
+    return movement_syntax
