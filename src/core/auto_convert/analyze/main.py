@@ -10,7 +10,7 @@ from .preprocess_tap import preprocess_tap_data
 from .preprocess_touch import preprocess_touch_data
 from .preprocess_hold import preprocess_hold_data
 from .preprocess_touch_hold import preprocess_touch_hold_data
-from .preprocess_slide import preprocess_slide_head_data, preprocess_slide_tail_data
+from .preprocess_slide import preprocess_slide_data
 
 from .estimate_tap_speed import estimate_tap_DefaultMsec
 from .estimate_touch_speed import estimate_touch_DefaultMsec
@@ -50,8 +50,7 @@ def main(std_video_path: Path,
         touch_data = preprocess_touch_data(shared_context)
         hold_data = preprocess_hold_data(shared_context)
         touch_hold_data = preprocess_touch_hold_data(shared_context)
-        slide_head_data = preprocess_slide_head_data(shared_context)
-        slide_tail_data = preprocess_slide_tail_data(shared_context)
+        slide_head_data, slide_tail_data = preprocess_slide_data(shared_context)
 
         # 分析音符流速
         if tap_data:
