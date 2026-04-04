@@ -217,117 +217,320 @@ def is_center_reflection(note_path: list, start_A_zone_id: int, end_A_zone_id: i
 
 
 
+def is_inner_loop(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    is_q, syntax = is_inner_loop_q_clockwise(note_path, start_A_zone_id, end_A_zone_id)
+    is_p, syntax = is_inner_loop_p_counterclockwise(note_path, start_A_zone_id, end_A_zone_id)
+
+    if is_q:
+        return True, syntax
+    elif is_p:
+        return True, syntax
+    else:
+        return False, None
+
+
+
+
+def is_inner_loop_q_clockwise(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id, clockwise=True)
+
+    positions = [x['position'] for x in note_path]
+    required = []
+    optional = []
+    banned = []
+    required_sort = False
+
+    # 必须激活起点/终点
+    required.append(f'A{start_A_zone_id}')
+    if pos_diff != 0:
+        required.append(f'A{end_A_zone_id}')
+
+    if pos_diff == 0:
+        # 可选激活相邻 E 区
+        optional.append(f'E{start_A_zone_id}')
+        optional.append(f'E{start_A_zone_id + 1 if start_A_zone_id < 8 else 1}')
+        # 必须按顺序激活其他 B 区 (排除起点)
+        next_A_zone_id = start_A_zone_id + 1 if start_A_zone_id < 8 else 1
+        last_A_zone_id = start_A_zone_id - 1 if start_A_zone_id > 1 else 8
+        between_AB_zones_id = _get_between_AB_zones(next_A_zone_id, last_A_zone_id, clockwise=True)
+        required.append(f'B{next_A_zone_id}')
+        for id in between_AB_zones_id:
+            required.append(f'B{id}')
+        required.append(f'B{last_A_zone_id}')
+        required_sort = True
+
+
+    if pos_diff == 1:
+        # 可选之间的 E 区
+        between_DE_zones_id = _get_between_DE_zones(start_A_zone_id, end_A_zone_id)
+        for id in between_DE_zones_id:
+            optional.append(f'E{id}')
+        # 必须激活所有 B 区
+        for id in [1, 2, 3, 4, 5, 6, 7, 8]:
+            required.append(f'B{id}')
+
+    if pos_diff == 2 or pos_diff == 3:
+        # 可选起点下一个 E 区
+        optional.append(f'E{start_A_zone_id + 1 if start_A_zone_id < 8 else 1}')
+        # 可选终点上一个 E 区
+        optional.append(f'E{end_A_zone_id}')
+        # 必须激活所有 B 区
+        for id in [1, 2, 3, 4, 5, 6, 7, 8]:
+            required.append(f'B{id}')
+
+    if pos_diff in [4, 5, 6, 7]:
+        # 可选起点下一个 E 区
+        optional.append(f'E{start_A_zone_id + 1 if start_A_zone_id < 8 else 1}')
+        # 可选终点上一个 E 区
+        optional.append(f'E{end_A_zone_id}')
+        # 必须激活之间的 B 区
+        between_AB_zones_id = _get_between_AB_zones(start_A_zone_id, end_A_zone_id, clockwise=True)
+        for id in between_AB_zones_id:
+            required.append(f'B{id}')
+
+    # 检查
+    if _ckeck_zones(positions, required, optional, banned, required_sort):
+        syntax = _get_arc_syntax(start_A_zone_id, end_A_zone_id, end_A_zone_id)
+        return True, syntax
+    
+    return False, None
+
+
+
+
+def is_inner_loop_p_counterclockwise(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id, counterclockwise=True)
+
+    positions = [x['position'] for x in note_path]
+    required = []
+    optional = []
+    banned = []
+    required_sort = False
+
+    # 必须激活起点/终点
+    required.append(f'A{start_A_zone_id}')
+    if pos_diff != 0:
+        required.append(f'A{end_A_zone_id}')
+
+    if pos_diff == 0:
+        # 可选激活相邻 E 区
+        optional.append(f'E{start_A_zone_id}')
+        optional.append(f'E{start_A_zone_id - 1 if start_A_zone_id > 1 else 8}')
+        # 必须按顺序激活其他 B 区 (排除起点)
+        next_A_zone_id = start_A_zone_id + 1 if start_A_zone_id < 8 else 1
+        last_A_zone_id = start_A_zone_id - 1 if start_A_zone_id > 1 else 8
+        between_AB_zones_id = _get_between_AB_zones(last_A_zone_id, next_A_zone_id, counterclockwise=True)
+        required.append(f'B{last_A_zone_id}')
+        for id in between_AB_zones_id:
+            required.append(f'B{id}')
+        required.append(f'B{next_A_zone_id}')
+        required_sort = True
+
+    if pos_diff == 1:
+        # 可选之间的 E 区
+        between_DE_zones_id = _get_between_DE_zones(start_A_zone_id, end_A_zone_id)
+        for id in between_DE_zones_id:
+            optional.append(f'E{id}')
+        # 必须激活所有 B 区
+        for id in [1, 2, 3, 4, 5, 6, 7, 8]:
+            required.append(f'B{id}')
+
+    if pos_diff == 2 or pos_diff == 3:
+        # 可选起点上一个 E 区
+        optional.append(f'E{start_A_zone_id}')
+        # 可选终点下一个 E 区
+        optional.append(f'E{end_A_zone_id + 1 if end_A_zone_id < 8 else 1}')
+        # 必须激活所有 B 区
+        for id in [1, 2, 3, 4, 5, 6, 7, 8]:
+            required.append(f'B{id}')
+
+    if pos_diff in [4, 5, 6, 7]:
+        # 可选起点上一个 E 区
+        optional.append(f'E{start_A_zone_id}')
+        # 可选终点下一个 E 区
+        optional.append(f'E{end_A_zone_id + 1 if end_A_zone_id < 8 else 1}')
+        # 必须激活之间的 B 区
+        between_AB_zones_id = _get_between_AB_zones(start_A_zone_id, end_A_zone_id, counterclockwise=True)
+        for id in between_AB_zones_id:
+            required.append(f'B{id}')
+
+    # 检查
+    if _ckeck_zones(positions, required, optional, banned, required_sort):
+        syntax = _get_arc_syntax(start_A_zone_id, end_A_zone_id, end_A_zone_id)
+        return True, syntax
+    
+    return False, None
+
+
+
+
+
+
+
+
+
+
+
 def _ckeck_zones(note_positions: list[str],
-                 reqiured: list[str] = [],
+                 required: list[str] = [],
                  optional: list[str] = [],
-                 banned: list[str] = []) -> bool:
+                 banned: list[str] = [],
+                 required_sort: bool = False) -> bool:
     # banned
     for pos in note_positions:
-        if pos in banned or (pos not in reqiured and pos not in optional):
+        if pos in banned or (pos not in required and pos not in optional):
             return False
     # required
-    for pos in reqiured:
+    for pos in required:
         if pos not in note_positions:
             return False
+    # required_sort
+    if required_sort:
+        last_index = -1
+        for pos in required:
+            try:
+                index = note_positions.index(pos)
+            except ValueError:
+                return False
+            if index <= last_index:
+                return False
+            last_index = index
     return True
 
 
 
-def _get_pos_diff(start_A_zone_id: int, end_A_zone_id: int) -> int:
+
+def _get_pos_diff(start_A_zone_id: int, end_A_zone_id: int, clockwise=False, counterclockwise=False) -> int:
     
-    if start_A_zone_id == 1 and end_A_zone_id == 8:
-        return 1
-    if start_A_zone_id == 8 and end_A_zone_id == 1:
-        return 1
-    
-    diff1 = abs(end_A_zone_id - start_A_zone_id)
-    diff2 = 8 - diff1
-    return min(diff1, diff2)
-
-
-
-def _is_clockwise(start_A_zone_id: int, end_A_zone_id: int) -> bool:
     # 计算顺时针距离
-    if start_A_zone_id < end_A_zone_id:
+    if start_A_zone_id <= end_A_zone_id:
         clockwise_distance = end_A_zone_id - start_A_zone_id
     else:
         clockwise_distance = (8 - start_A_zone_id) + end_A_zone_id
     # 计算逆时针距离
-    if start_A_zone_id > end_A_zone_id:
+    if start_A_zone_id >= end_A_zone_id:
         counterclockwise_distance = start_A_zone_id - end_A_zone_id
     else:
         counterclockwise_distance = start_A_zone_id + (8 - end_A_zone_id)
+    
+    if clockwise:
+        return clockwise_distance
+    elif counterclockwise:
+        return counterclockwise_distance
+    else:
+        return min(clockwise_distance, counterclockwise_distance)
+
+
+
+
+def _is_clockwise(start_A_zone_id: int, end_A_zone_id: int) -> bool:
+
+    clockwise_dist = _get_pos_diff(start_A_zone_id, end_A_zone_id, clockwise=True)
+    counterclockwise_dist = _get_pos_diff(start_A_zone_id, end_A_zone_id, counterclockwise=True)
     # 如果顺时针距离更短，返回True
     # 特例, 如果两个A区相对 (差4), 无法判断, 默认逆时针
-    return clockwise_distance < counterclockwise_distance
+    return clockwise_dist < counterclockwise_dist
 
 
 
-def _get_between_AB_zones(start_A_zone_id: int, end_A_zone_id: int) -> list[int]:
 
-    # 如果两个A区相同/相邻/相对，无法判断
-    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id)
-    if pos_diff in [0, 1, 4]:
+def _get_between_AB_zones(start_A_zone_id: int, end_A_zone_id: int,
+                          clockwise=False, counterclockwise=False) -> list[int]:
+
+    
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id,
+                             clockwise=clockwise, counterclockwise=counterclockwise)
+    # 如果两个A区相同/相邻，无法判断
+    if pos_diff in [0, 1]:
+        return []
+    # 如果两个A区相对，且没有指定方向，无法判断
+    if pos_diff == 4 and not (clockwise or counterclockwise):
         return []
 
-    between_zones = []
-    if _is_clockwise(start_A_zone_id, end_A_zone_id):
-        # 顺时针方向
-        current = start_A_zone_id
-        while True:
-            current = current + 1 if current < 8 else 1
-            if current == end_A_zone_id:
-                break
-            between_zones.append(current)
-    else:
-        # 逆时针方向
-        current = start_A_zone_id
-        while True:
-            current = current - 1 if current > 1 else 8
-            if current == end_A_zone_id:
-                break
-            between_zones.append(current)
+    # 顺时针方向
+    between_zones_clockwise = []
+    current = start_A_zone_id
+    while True:
+        current = current + 1 if current < 8 else 1
+        if current == end_A_zone_id:
+            break
+        between_zones_clockwise.append(current)
     
-    return between_zones
+    # 逆时针方向
+    between_zones_counterclockwise = []
+    current = start_A_zone_id
+    while True:
+        current = current - 1 if current > 1 else 8
+        if current == end_A_zone_id:
+            break
+        between_zones_counterclockwise.append(current)
+
+    if clockwise:
+        return between_zones_clockwise
+    elif counterclockwise:
+        return between_zones_counterclockwise
+    else:
+        if _is_clockwise(start_A_zone_id, end_A_zone_id):
+            return between_zones_clockwise
+        else:
+            return between_zones_counterclockwise
 
 
 
-def _get_between_DE_zones(start_A_zone_id: int, end_A_zone_id: int) -> list[int]:
 
-    # 如果两个A区相同/相对，无法判断
-    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id)
-    if pos_diff in [0, 4]:
+def _get_between_DE_zones(start_A_zone_id: int, end_A_zone_id: int,
+                          clockwise=False, counterclockwise=False) -> list[int]:
+
+    
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id,
+                             clockwise=clockwise, counterclockwise=counterclockwise)
+    # 如果两个A区相同，无法判断
+    if pos_diff in [0]:
+        return []
+    # 如果两个A区相对，且没有指定方向，无法判断
+    if pos_diff == 4 and not (clockwise or counterclockwise):
         return []
     
-    between_zones = []
-    if _is_clockwise(start_A_zone_id, end_A_zone_id):
-        # 顺时针方向
-        current = start_A_zone_id
-        while True:
-            # 移动到下一个A区
-            next_a = current + 1 if current < 8 else 1
-            # 顺时针方向时，D区编号等于next_a（因为next_a是较大的编号）
-            d_zone = next_a
-            between_zones.append(d_zone)
-            
-            if next_a == end_A_zone_id:
-                break
-            current = next_a
-    else:
-        # 逆时针方向
-        current = start_A_zone_id
-        while True:
-            # 移动到下一个A区
-            next_a = current - 1 if current > 1 else 8
-            # 逆时针方向时，D区编号等于current（因为current是较大的编号）
-            d_zone = current
-            between_zones.append(d_zone)
-            
-            if next_a == end_A_zone_id:
-                break
-            current = next_a
+    # 顺时针方向
+    between_zones_clockwise = []
+    current = start_A_zone_id
+    while True:
+        # 移动到下一个A区
+        next_a = current + 1 if current < 8 else 1
+        # 顺时针方向时，DE区编号等于next_a（因为next_a是较大的编号）
+        de_zone = next_a
+        between_zones_clockwise.append(de_zone)
+        
+        if next_a == end_A_zone_id:
+            break
+        current = next_a
+
+    # 逆时针方向
+    between_zones_counterclockwise = []
+    current = start_A_zone_id
+    while True:
+        # 移动到下一个A区
+        next_a = current - 1 if current > 1 else 8
+        # 逆时针方向时，DE区编号等于current（因为current是较大的编号）
+        de_zone = current
+        between_zones_counterclockwise.append(de_zone)
+        
+        if next_a == end_A_zone_id:
+            break
+        current = next_a
     
-    return between_zones
+    if clockwise:
+        return between_zones_clockwise
+    elif counterclockwise:
+        return between_zones_counterclockwise
+    else:
+        if _is_clockwise(start_A_zone_id, end_A_zone_id):
+            return between_zones_clockwise
+        else:
+            return between_zones_counterclockwise
 
 
 
