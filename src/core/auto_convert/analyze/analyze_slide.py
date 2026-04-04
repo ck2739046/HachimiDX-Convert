@@ -36,49 +36,21 @@ def analyze_slide_tail(shared_context, slide_tail_data):
     }
     '''
 
-    # 原点为(0, 0)，半径为480 (标准1080p)，标准xy坐标系
-    # 判定线圆圈上的8个点
-    std_dict = {
-        'A1': (184, 443),
-        'A2': (443, 184),
-        'A3': (443, -183),
-        'A4': (184, -443),
-        'A5': (-183, -443),
-        'A6': (-443, -183),
-        'A7': (-443, 183),
-        'A8': (-183, 443),
-    }
-    # 需要转换为屏幕坐标
-    new_dict = {}
-    for area_label, (x, y) in std_dict.items():
-        # 转换成标准1080p屏幕坐标系
-        # 原点是(540, 540)，y轴向下为正
-        x_on_screen_cx = x + 540
-        y_on_screen_cy = -y + 540
-        # 按比例缩放到当前分辨率
-        scaled_x = round((x_on_screen_cx - 540) * shared_context.std_video_size / 1080 + shared_context.std_video_cx)
-        scaled_y = round((y_on_screen_cy - 540) * shared_context.std_video_size / 1080 + shared_context.std_video_cy)
-        new_dict[area_label] = (scaled_x, scaled_y)
-
-    A_zone_endpoint_on_judgeline = new_dict
-
 
     # 分析运动模式
-    # 暂时只检测边缘旋转 x>x / x<x
-    # 其他的一律视为直线 x-x
     slide_tail_info = {}
     for key, note_path in slide_tail_data.items():
 
         # 计算运动语法
         # 期望的返回: >5 / <3 / -7
-        movement_syntax = analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoint_on_judgeline)
+        movement_syntax = analyze_slide_tail_movement_syntax(shared_context, note_path)
         if not movement_syntax:
             print(f"analyze_slide_tail: failed to analyze movement syntax for track id {key[0]}")
             continue
-        end_position = 'A' + movement_syntax[-1]
-
+        
         # 计算持续时间
-        start_time, end_time = analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A_zone_endpoint_on_judgeline)
+        end_position = 'A' + movement_syntax[-1]
+        start_time, end_time = analyze_slide_tail_start_end_time(shared_context, note_path, end_position)
         if start_time is None or end_time is None:
             print(f"analyze_slide_tail: failed to analyze start/end time for track id {key[0]}")
             continue
@@ -195,9 +167,6 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
         # 找到了匹配的head，进行记录
         head_track_id, head_note_type, head_note_variant, head_position, head_end_time = best_head
         matched_head_track_ids.add(head_track_id)
-
-        # # 由于未知原因，星星时长总是长了1/16拍，进行修正
-        # tail_end_time -= one_beat_Msec / 16
 
         # 写入final_slide_info
         full_movement_syntax = f"{tail_start_position}{get_suffix(head_note_variant)}{tail_movement_syntax}{get_suffix(tail_note_variant)}"

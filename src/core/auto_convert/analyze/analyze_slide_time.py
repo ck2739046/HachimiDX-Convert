@@ -1,6 +1,6 @@
 import numpy as np
 
-def analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A_zone_endpoint_on_judgeline):
+def analyze_slide_tail_start_end_time(shared_context, note_path, end_position):
     '''
     粗略计算持续时间
 
@@ -55,12 +55,12 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, end_position, A
 
 
     # 起点
-    point = A_zone_endpoint_on_judgeline.get(positions[0], None)
+    point = shared_context.a_zone_endpoint.get(positions[0], None)
     if point is None:
         return None, None
     start_cx, start_cy = point
     # 终点
-    point = A_zone_endpoint_on_judgeline.get(end_position, None)
+    point = shared_context.a_zone_endpoint.get(end_position, None)
     if point is None:
         return None, None
     end_cx, end_cy = point

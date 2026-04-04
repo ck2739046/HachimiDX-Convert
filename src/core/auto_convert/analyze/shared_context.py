@@ -15,7 +15,6 @@ class SharedContext:
 
     std_video_path: Path
     std_video_size: int
-    std_video_fps: int
     frame_timestamps_msec: list[float]
     
     std_video_cx: int
@@ -38,7 +37,10 @@ class SharedContext:
     
     # 预计算数据
     touch_areas: Dict[str, Tuple[int, int]] = None
+    a_zone_endpoint: Dict[str, Tuple[int, int]] = None
     track_data: Dict[Any, Any] = None
+
+    
 
     def frame_to_msec(self, frame_idx: int) -> float:
         if frame_idx < 0:
@@ -62,7 +64,6 @@ def create_shared_context(std_video_path: Path, is_big_touch: bool) -> SharedCon
     # 获取视频信息
     cap = cv2.VideoCapture(str(std_video_path))
     std_video_size = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    std_video_fps = round(cap.get(cv2.CAP_PROP_FPS))
     cap.release()
 
     result = FFprobeInspect.inspect_video_frame_timestamps_msec(str(std_video_path))
@@ -92,6 +93,7 @@ def create_shared_context(std_video_path: Path, is_big_touch: bool) -> SharedCon
         touch_hold_max_size = touch_hold_max_size * 1.3
     
     touch_areas = get_touch_areas(std_video_size, std_video_cx, std_video_cy)
+    a_zone_endpoint = get_a_zone_endpoint(std_video_size, std_video_cx, std_video_cy)
     track_data = _load_track_results(std_video_path.parent)
 
     # 验证track_data中的frame索引不超过视频帧数
@@ -110,7 +112,6 @@ def create_shared_context(std_video_path: Path, is_big_touch: bool) -> SharedCon
     return SharedContext(
         std_video_path=std_video_path,
         std_video_size=std_video_size,
-        std_video_fps=std_video_fps,
         frame_timestamps_msec=frame_timestamps_msec,
 
         std_video_cx=std_video_cx,
@@ -126,6 +127,7 @@ def create_shared_context(std_video_path: Path, is_big_touch: bool) -> SharedCon
         touch_hold_max_size=touch_hold_max_size,
 
         touch_areas=touch_areas,
+        a_zone_endpoint=a_zone_endpoint,
         track_data=track_data,
     )
 
@@ -155,3 +157,33 @@ def get_touch_areas(std_video_size, std_video_cx, std_video_cy) -> dict:
         scaled_y = round((y - 540) * std_video_size / 1080 + std_video_cy)
         new_touch_areas[area_label] = (scaled_x, scaled_y)
     return new_touch_areas
+
+
+
+def get_a_zone_endpoint(std_video_size, std_video_cx, std_video_cy) -> dict:
+    # 原点为(0, 0)，半径为480 (标准1080p)，标准xy坐标系
+    # 判定线圆圈上的8个点
+    std_dict = {
+        'A1': (184, 443),
+        'A2': (443, 184),
+        'A3': (443, -183),
+        'A4': (184, -443),
+        'A5': (-183, -443),
+        'A6': (-443, -183),
+        'A7': (-443, 183),
+        'A8': (-183, 443),
+    }
+    # 需要转换为屏幕坐标
+    new_dict = {}
+    for area_label, (x, y) in std_dict.items():
+        # 转换成标准1080p屏幕坐标系
+        # 原点是(540, 540)，y轴向下为正
+        x_on_screen_cx = x + 540
+        y_on_screen_cy = -y + 540
+        # 按比例缩放到当前分辨率
+        scaled_x = round((x_on_screen_cx - 540) * std_video_size / 1080 + std_video_cx)
+        scaled_y = round((y_on_screen_cy - 540) * std_video_size / 1080 + std_video_cy)
+        new_dict[area_label] = (scaled_x, scaled_y)
+
+    A_zone_endpoint_on_judgeline = new_dict
+    return A_zone_endpoint_on_judgeline

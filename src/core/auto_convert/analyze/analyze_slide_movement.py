@@ -2,7 +2,7 @@ import numpy as np
 
 
 
-def guess_target_a_zone_by_inertia(shared_context, note_path, A_zone_endpoint_on_judgeline):
+def guess_target_a_zone_by_inertia(shared_context, note_path):
     '''
     根据倒数最后一段运动方向的惯性，猜测预测最终可能进入的A区。
     '''
@@ -41,7 +41,7 @@ def guess_target_a_zone_by_inertia(shared_context, note_path, A_zone_endpoint_on
     
     for zone_id in range(1, 9):
         zone_key = f'A{zone_id}'
-        P_cx, P_cy = A_zone_endpoint_on_judgeline[zone_key]
+        P_cx, P_cy = shared_context.a_zone_endpoint[zone_key]
         
         # 目标向量 AP (从A指向P)
         AP_x = P_cx - A_cx
@@ -66,7 +66,7 @@ def guess_target_a_zone_by_inertia(shared_context, note_path, A_zone_endpoint_on
 
 
 
-def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoint_on_judgeline):
+def analyze_slide_tail_movement_syntax(shared_context, note_path):
     '''
     分析运动模式
     暂时只检测边缘旋转 x>x / x<x
@@ -119,9 +119,7 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path, A_zone_endpoin
     # 考虑到有些星星速度太快，来不及进入A区就结束了
     # 需要根据惯性猜测最后可能进入哪个A区
     if not end_position.startswith('A'):
-        guessed_zone = guess_target_a_zone_by_inertia(shared_context,
-                                                      note_path,
-                                                      A_zone_endpoint_on_judgeline)
+        guessed_zone = guess_target_a_zone_by_inertia(shared_context, note_path)
         if guessed_zone and last_A_zone != guessed_zone:
             A_zones.append(guessed_zone)
 
