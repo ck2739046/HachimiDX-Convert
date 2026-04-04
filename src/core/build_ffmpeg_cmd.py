@@ -132,6 +132,7 @@ def _build_video_args(data: MediaModel) -> OpResult[list[str]]:
         scale_y = data.video_scale_y,
         x_rot_deg = data.video_x_rot_deg,
         y_rot_deg = data.video_y_rot_deg,
+        z_rot_deg = data.video_z_rot_deg,
         video_width = data.video_width,
         video_height = data.video_height,
     )
@@ -153,6 +154,7 @@ def _build_video_filter(size: Optional[int],
                         scale_y: Optional[float] = None,
                         x_rot_deg: Optional[float] = None,
                         y_rot_deg: Optional[float] = None,
+                        z_rot_deg: Optional[float] = None,
                         video_width: Optional[int] = None,
                         video_height: Optional[int] = None
                        ) -> Optional[str]:
@@ -169,6 +171,11 @@ def _build_video_filter(size: Optional[int],
             trim_kv.append(f"end={end}")
         filters.append(f"trim={':'.join(trim_kv)}")
         filters.append("setpts=PTS-STARTPTS")
+
+    # 与 manual_adjust 预览顺序一致：先 z 轴平面旋转，再做 x/y 透视旋转
+    plane_rotate_filter = _build_plane_rotation_filter(z_rot_deg)
+    if plane_rotate_filter:
+        filters.append(plane_rotate_filter)
 
     perspective_filter = _build_axis_rotation_perspective_filter(
         x_rot_deg=x_rot_deg,
@@ -243,6 +250,17 @@ def _build_video_filter(size: Optional[int],
         filters.append(f"tpad=start_duration={pad}:color=black")
 
     return ",".join(filters) if filters else None
+
+
+def _build_plane_rotation_filter(z_rot_deg: Optional[float]) -> Optional[str]:
+    """将 z 轴平面旋转角转换为 FFmpeg rotate 滤镜参数。"""
+    z_rot_deg = float(z_rot_deg or 0.0)
+    if abs(z_rot_deg) < 1e-6:
+        return None
+
+    # OpenCV 预览与 FFmpeg rotate 的正方向相反，这里取反以保证导出效果与预览一致。
+    z_rad = -math.radians(z_rot_deg)
+    return f"rotate={z_rad:.12f}:ow=iw:oh=ih:c=black"
 
 
 def _build_axis_rotation_perspective_filter(x_rot_deg: Optional[float],

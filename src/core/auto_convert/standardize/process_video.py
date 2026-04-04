@@ -19,6 +19,7 @@ def main(input_video: Path,
          scale_y: float,
          x_rot_deg: float,
          y_rot_deg: float,
+         z_rot_deg: float,
          media_type: MediaType,
          duration: float,
          start_sec: float = 0.0,
@@ -36,6 +37,9 @@ def main(input_video: Path,
         circle_radius(int): 圆半径
         scale_x(float): X轴缩放系数
         scale_y(float): Y轴缩放系数
+        x_rot_deg(float): X轴透视旋转角度(度)
+        y_rot_deg(float): Y轴透视旋转角度(度)
+        z_rot_deg(float): Z轴平面旋转角度(度)
         media_type(MediaType): 媒体类型 video_with_audio / video_without_audio
         duration(float): 视频总时长(秒)
         start_sec(float): 开始时间(秒)
@@ -81,6 +85,7 @@ def main(input_video: Path,
             end_sec,
             x_rot_deg,
             y_rot_deg,
+            z_rot_deg,
         )
         if is_input_std:
             # 如果输入已经标准了，直接复制到输出路径
@@ -121,6 +126,7 @@ def main(input_video: Path,
             params.update({
                 M_Defs.video_x_rot_deg.key: x_rot_deg,
                 M_Defs.video_y_rot_deg.key: y_rot_deg,
+                M_Defs.video_z_rot_deg.key: z_rot_deg,
                 M_Defs.video_width.key: video_width,
                 M_Defs.video_height.key: video_height,
             })
@@ -151,7 +157,7 @@ def main(input_video: Path,
         if need_trim_end:
             change_hint += f'  trim end to {end_sec}s\n'
         if need_rotation:
-            change_hint += f'  perspective rotate x={x_rot_deg}deg, y={y_rot_deg}deg\n'
+            change_hint += f'  plane rotation = {z_rot_deg}deg + perspective rotation x = {x_rot_deg}deg, y = {y_rot_deg}deg\n'
 
         if change_hint:
             print(f"Process video with changes:\n{change_hint}")
@@ -214,6 +220,7 @@ def is_input_already_standardized(crop_w: int,
                                   end_sec: float,
                                   x_rot_deg: float,
                                   y_rot_deg: float,
+                                  z_rot_deg: float,
                                  ) -> tuple[bool, bool, bool, bool, bool, bool]:
 
     video_size = min(video_width, video_height)
@@ -223,7 +230,7 @@ def is_input_already_standardized(crop_w: int,
     need_resize = True
     need_trim_start = True
     need_trim_end = True
-    need_rotation = abs(x_rot_deg) > 1e-6 or abs(y_rot_deg) > 1e-6
+    need_rotation = abs(x_rot_deg) > 1e-6 or abs(y_rot_deg) > 1e-6 or abs(z_rot_deg) > 1e-6
 
     # 如果裁剪画面尺寸≈实际视频尺寸，并且裁剪中心≈实际视频中心，则不裁剪
     # 使用 max(crop_w, crop_h) 来判断是否接近视频尺寸

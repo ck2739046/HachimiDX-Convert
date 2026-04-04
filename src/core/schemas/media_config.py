@@ -333,6 +333,17 @@ class MediaConfig_Definitions:
         }
     )
 
+    video_z_rot_deg = MediaConfig_Definition(
+        key="video_z_rot_deg",
+        type="float",
+        group="video",
+        default=0.0,
+        constraints={
+            "ge": -85.0,
+            "le": 85.0
+        }
+    )
+
     video_width = MediaConfig_Definition(
         key="video_width",
         type="int",
