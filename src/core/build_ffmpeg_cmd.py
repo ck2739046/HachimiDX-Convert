@@ -373,6 +373,10 @@ def _build_audio_args(data: MediaModel) -> OpResult[list[str]]:
 
     args = []
 
+    # 音频导出任务强制仅保留音频流，避免把封面图/字幕/数据流写进输出容器。
+    if data.media_type == MediaType.AUDIO:
+        args.extend(["-vn", "-sn", "-dn", "-map", "0:a:0"])
+
     # 有音频考虑 video mute
     if data.media_type == MediaType.VIDEO_WITH_AUDIO:
         if data.video_mute:
