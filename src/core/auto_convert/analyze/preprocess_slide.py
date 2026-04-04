@@ -6,7 +6,7 @@ from .shared_context import *
 
 
 def preprocess_slide_data(shared_context: SharedContext):
-
+    
     # 此处仅作基础的分类
     # 具体预处理交给底下的函数
     candidate_slide_head_data = {}
@@ -36,55 +36,85 @@ def preprocess_slide_data(shared_context: SharedContext):
         # 从头开始到到达第一个A区，算星星头
         # 剩下部分算星星尾
 
-
-
-
-        # 判断所有 pos 是否一致，因为星星尾是从一个A区移动到另一个A区的，所以 pos 一定不一致
-        # yes: 可能是星星头，进一步检查，return
-        # no:  进一步分类
-        oct_positions = [calculate_oct_position(
-                         shared_context.std_video_cx,
-                         shared_context.std_video_cy,
-                         note.cx, note.cy
-                        ) for note in note_geometry_list]
+        # 对当前轨迹进行分类
+        head_segment, tail_segment = _classify_segment(shared_context, note_geometry_list)
         
-        if len(set(oct_positions)) == 1:
-            candidate_slide_head_data[key] = note_geometry_list
-            continue
-        
-        # 看开头是否在A区或者离A区判定点够近
-        # yes: 可能是星星尾，进一步检查，return
-        # no: 可能是头+尾，进一步检查
-        start_pos = oct_positions[0]
-        start_in_a_zone = start_pos.startswith('A') or \
-                          _is_close_to_a_zone_endpoint(shared_context,
-                                                       note_geometry_list[0].cx,
-                                                       note_geometry_list[0].cy)
-        if start_in_a_zone:
-            candidate_slide_tail_data[key] = note_geometry_list
+        if head_segment is None and tail_segment is None:
+            print(f"preprocess_slide_data: track_id {track_id} could not be classified as head or tail")
             continue
 
-        # 是否到达A区
-        # yes: 按第一个A区分割，第一段视为星星头，第二段视为星星尾，进一步检查，return
-        # no:  可能是异常数据，丢弃, return
-        all_postions = [calculate_all_position(
-                        shared_context.touch_areas,
-                        note.cx, note.cy
-                       ) for note in note_geometry_list]
-        if any(pos.startswith('A') for pos in all_postions):
-            split_idx = next(i for i, pos in enumerate(all_postions) if pos.startswith('A'))
-            candidate_slide_head_data[key] = note_geometry_list[:split_idx]
-            candidate_slide_tail_data[key] = note_geometry_list[split_idx:]
-            continue
-        # 没有任何一个点在A区，丢弃
-        print(f"preprocess_slide_data: no A zone point for track_id {track_id}, discarding")
+        if head_segment is not None:
+            candidate_slide_head_data[key] = head_segment
+        if tail_segment is not None:
+            candidate_slide_tail_data[key] = tail_segment
+
 
     
     # 交给下层函数进行更细致的检查和处理
-    slide_head_data = preprocess_slide_head_data(shared_context)
-    slide_tail_data = preprocess_slide_tail_data(shared_context)
+    slide_head_data = preprocess_slide_head_data(shared_context, candidate_slide_head_data)
+    slide_tail_data = preprocess_slide_tail_data(shared_context, candidate_slide_tail_data)
 
     return slide_head_data, slide_tail_data
+
+
+
+
+
+
+# 递归分类音符
+def _classify_segment(shared_context, note_geometry_list, is_segmented=False):
+
+    # 段长度不足, 丢弃, return
+    if len(note_geometry_list) < 10:
+        return None, None
+    
+    # 判断所有 pos 是否一致, 因为星星尾是从一个A区移动到另一个A区的, 所以 pos 一定不一致
+    # yes: 可能是星星头, 进一步检查, return
+    # no:  进一步分类
+    oct_positions = [calculate_oct_position(
+                     shared_context.std_video_cx,
+                     shared_context.std_video_cy,
+                     note.cx, note.cy
+                    ) for note in note_geometry_list]
+    if len(set(oct_positions)) == 1:
+        return note_geometry_list, None
+    
+    # 看开头是否在A区或者离A区判定点够近
+    # yes: 可能是星星尾, 进一步检查, return
+    # no:  可能是头+尾, 进一步检查
+    start_pos = oct_positions[0]
+    start_in_a_zone = start_pos.startswith('A') or \
+                        _is_close_to_a_zone_endpoint(shared_context,
+                                                     note_geometry_list[0].cx,
+                                                     note_geometry_list[0].cy)
+    if start_in_a_zone:
+        return None, note_geometry_list
+    
+    # 是否已分段
+    # yes: 已分段, 还不满足条件, 说明数据异常, 丢弃, return
+    # no:  还未分段, 继续尝试分段
+    if is_segmented:
+        return None, None
+    
+    # 是否到达A区
+    # yes: 按第一个A区分割, 第一段视为星星头, 第二段视为星星尾, 递归
+    # no:  可能是异常数据, 丢弃, return
+    all_positions = [calculate_all_position(
+                     shared_context.touch_areas,
+                     note.cx, note.cy
+                    ) for note in note_geometry_list]
+    if any(pos.startswith('A') for pos in all_positions):
+        # 找到第一个A区点作为分割点
+        split_idx = next(i for i, pos in enumerate(all_positions) if pos.startswith('A'))
+        head_segment = note_geometry_list[:split_idx]
+        tail_segment = note_geometry_list[split_idx:]
+        # 递归处理头部和尾部
+        head_result, _ = _classify_segment(shared_context, head_segment, is_segmented=True)
+        _, tail_result = _classify_segment(shared_context, tail_segment, is_segmented=True)
+        return head_result, tail_result
+    
+    # 以上都不满足，说明数据异常，丢弃
+    return None, None
 
 
 
