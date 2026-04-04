@@ -177,11 +177,20 @@ def _build_video_filter(size: Optional[int],
     if plane_rotate_filter:
         filters.append(plane_rotate_filter)
 
+    rotate_center_x = None
+    rotate_center_y = None
+    if all(v is not None for v in crop):
+        w, h, x, y = crop
+        rotate_center_x = float(x) + (float(w) - 1.0) / 2.0
+        rotate_center_y = float(y) + (float(h) - 1.0) / 2.0
+
     perspective_filter = _build_axis_rotation_perspective_filter(
         x_rot_deg=x_rot_deg,
         y_rot_deg=y_rot_deg,
         video_width=video_width,
         video_height=video_height,
+        rotate_center_x=rotate_center_x,
+        rotate_center_y=rotate_center_y,
     )
     if perspective_filter:
         filters.append(perspective_filter)
@@ -266,7 +275,9 @@ def _build_plane_rotation_filter(z_rot_deg: Optional[float]) -> Optional[str]:
 def _build_axis_rotation_perspective_filter(x_rot_deg: Optional[float],
                                             y_rot_deg: Optional[float],
                                             video_width: Optional[int],
-                                            video_height: Optional[int]
+                                            video_height: Optional[int],
+                                            rotate_center_x: Optional[float] = None,
+                                            rotate_center_y: Optional[float] = None,
                                            ) -> Optional[str]:
     """将 x/y 轴旋转角转换为 FFmpeg perspective 滤镜参数。"""
 
@@ -284,13 +295,15 @@ def _build_axis_rotation_perspective_filter(x_rot_deg: Optional[float],
     width = float(video_width)
     height = float(video_height)
 
-    cx = (width - 1.0) / 2.0
-    cy = (height - 1.0) / 2.0
+    default_cx = (width - 1.0) / 2.0
+    default_cy = (height - 1.0) / 2.0
+    cx = default_cx if rotate_center_x is None else min(max(float(rotate_center_x), 0.0), width - 1.0)
+    cy = default_cy if rotate_center_y is None else min(max(float(rotate_center_y), 0.0), height - 1.0)
     corners = [
         (-cx, -cy, 0.0),
-        (cx, -cy, 0.0),
-        (cx, cy, 0.0),
-        (-cx, cy, 0.0),
+        (width - 1.0 - cx, -cy, 0.0),
+        (width - 1.0 - cx, height - 1.0 - cy, 0.0),
+        (-cx, height - 1.0 - cy, 0.0),
     ]
 
     x_rad = math.radians(x_rot_deg)
