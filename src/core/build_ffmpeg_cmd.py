@@ -245,7 +245,7 @@ def _build_video_filter(size: Optional[int],
         else:
             # Scale while keeping aspect ratio
             # Pad to square with black borders
-            scale_expr = f"if(gt(iw,ih),{size},-1):if(gt(iw,ih),-1,{size})".replace(",", r"\\,") # 对逗号转义
+            scale_expr = f"if(gt(iw,ih),{size},-1):if(gt(iw,ih),-1,{size})".replace(",", r"\,") # 对逗号转义
             pad_expr = f"{size}:{size}:(ow-iw)/2:(oh-ih)/2:black"
             filters.append(f"scale={scale_expr},pad={pad_expr}")
 
