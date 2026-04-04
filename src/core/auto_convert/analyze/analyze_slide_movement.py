@@ -476,6 +476,278 @@ def is_zigzag_z(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tu
 
 
 
+
+def is_outer_loop(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    is_qq, syntax_qq = is_outer_loop_qq_clockwise(note_path, start_A_zone_id, end_A_zone_id)
+    is_pp, syntax_pp = is_outer_loop_pp_counterclockwise(note_path, start_A_zone_id, end_A_zone_id)
+
+    if is_qq:
+        return True, syntax_qq
+    elif is_pp:
+        return True, syntax_pp
+    else:
+        return False, None
+
+
+
+
+def is_outer_loop_qq_clockwise(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id, clockwise=True)
+
+    positions = [x['position'] for x in note_path]
+    required = []
+    optional = []
+    banned = []
+
+    # 必须激活起点/终点
+    required.append(f'A{start_A_zone_id}')
+    if pos_diff != 0:
+        required.append(f'A{end_A_zone_id}')
+
+    # 通用
+    # 必须激活 C 区
+    required.append(f'C1')
+    # 必须激活绕大圈经过的 B 区
+    required.append(f'B{start_A_zone_id}')
+    required.append(f'B{start_A_zone_id - 3 if start_A_zone_id > 3 else start_A_zone_id + 5}')
+    # 必须激活绕大圈经过的 A 区
+    A_zone_id2 = _prev_AB_zone_id(_prev_AB_zone_id(start_A_zone_id))
+    required.append(f'A{A_zone_id2}')
+    # 可选激活绕大圈经过的 E 区
+    optional.append(f'E{_prev_DE_zone_id(A_zone_id2)}')
+
+    if pos_diff == 0:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _prev_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(start_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+
+    if pos_diff == 1:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _prev_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(end_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+        # 可选激活绕大圈回到终点经过的 E 区
+        between_DE_zone_ids = _get_between_DE_zones(end_A_zone_id, A_zone_id)
+        for id in between_DE_zone_ids:
+            optional.append(f'E{id}')
+
+    if pos_diff == 2:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _prev_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 必须激活绕大圈回到终点经过的 B 区
+        A_zone_id = _next_AB_zone_id(start_A_zone_id)
+        required.append(f'B{A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(start_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+        # 可选激活绕大圈回到终点经过的 E 区
+        optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+        optional.append(f'E{_prev_DE_zone_id(end_A_zone_id)}')
+
+    if pos_diff == 3:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _prev_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 必须激活绕大圈回到终点经过的 B 区
+        required.append(f'B{end_A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 B 区
+        between_AB_zone_ids = _get_between_AB_zones(start_A_zone_id, end_A_zone_id)
+        for id in between_AB_zone_ids:
+            optional.append(f'B{id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(start_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+        # 可选激活绕大圈回到终点经过的 E 区
+        optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+        optional.append(f'E{_prev_DE_zone_id(end_A_zone_id)}')
+
+    if pos_diff == 4:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _prev_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 必须激活绕大圈回到终点经过的 B 区
+        required.append(f'B{end_A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(start_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+        # 可选激活绕大圈回到终点经过的 E 区
+        optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+
+    if pos_diff == 5:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _prev_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(start_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+        # 可选激活绕大圈回到终点经过的 E 区
+        optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+
+    # if pos_diff == 6:
+        # pass
+
+    if pos_diff == 7:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _prev_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        optional.append(f'D{_prev_DE_zone_id(A_zone_id)}')
+
+    # 检查
+    if _ckeck_zones(positions, required, optional, banned):
+        return True, 'qq'
+    
+    return False, None
+
+
+
+
+def is_outer_loop_pp_counterclockwise(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
+
+    pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id, counterclockwise=True)
+
+    positions = [x['position'] for x in note_path]
+    required = []
+    optional = []
+    banned = []
+
+    # 必须激活起点/终点
+    required.append(f'A{start_A_zone_id}')
+    if pos_diff != 0:
+        required.append(f'A{end_A_zone_id}')
+
+    # 通用
+    # 必须激活 C 区
+    required.append(f'C1')
+    # 必须激活绕大圈经过的 B 区
+    required.append(f'B{start_A_zone_id}')
+    required.append(f'B{start_A_zone_id + 3 if start_A_zone_id < 6 else start_A_zone_id - 5}')
+    # 必须激活绕大圈经过的 A 区
+    A_zone_id2 = _next_AB_zone_id(_next_AB_zone_id(start_A_zone_id))
+    required.append(f'A{A_zone_id2}')
+    # 可选激活绕大圈经过的 E 区
+    optional.append(f'E{_next_DE_zone_id(A_zone_id2)}')
+
+    if pos_diff == 0:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _next_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(start_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+
+    if pos_diff == 1:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _next_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(end_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+        # 可选激活绕大圈回到终点经过的 E 区
+        between_DE_zone_ids = _get_between_DE_zones(end_A_zone_id, A_zone_id)
+        for id in between_DE_zone_ids:
+            optional.append(f'E{id}')
+
+    if pos_diff == 2:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _next_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 必须激活绕大圈回到终点经过的 B 区
+        A_zone_id = _prev_AB_zone_id(start_A_zone_id)
+        required.append(f'B{A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(start_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+        # 可选激活绕大圈回到终点经过的 E 区
+        optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+        optional.append(f'E{_next_DE_zone_id(end_A_zone_id)}')
+
+    if pos_diff == 3:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _next_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 必须激活绕大圈回到终点经过的 B 区
+        required.append(f'B{end_A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 B 区
+        between_AB_zone_ids = _get_between_AB_zones(start_A_zone_id, end_A_zone_id)
+        for id in between_AB_zone_ids:
+            optional.append(f'B{id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(start_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+        # 可选激活绕大圈回到终点经过的 E 区
+        optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
+        optional.append(f'E{_next_DE_zone_id(end_A_zone_id)}')
+
+    if pos_diff == 4:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _next_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 必须激活绕大圈回到终点经过的 B 区
+        required.append(f'B{end_A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(start_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+        # 可选激活绕大圈回到终点经过的 E 区
+        optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
+
+    if pos_diff == 5:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _next_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        between_DE_zone_ids = _get_between_DE_zones(start_A_zone_id, A_zone_id2)
+        for id in between_DE_zone_ids:
+            optional.append(f'D{id}')
+        # 可选激活绕大圈回到终点经过的 E 区
+        optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
+
+    # if pos_diff == 6:
+        # pass
+
+    if pos_diff == 7:
+        # 必须激活绕大圈回到终点经过的 A 区
+        A_zone_id = _next_AB_zone_id(start_A_zone_id)
+        required.append(f'A{A_zone_id}')
+        # 可选激活绕大圈回到终点经过的 D 区
+        optional.append(f'D{_next_DE_zone_id(A_zone_id)}')
+
+    # 检查
+    if _ckeck_zones(positions, required, optional, banned):
+        return True, 'pp'
+    
+    return False, None
+
+
+
+
+
+
+
+
+
+
+
+
 # 此处上下指的是顺时针方向
 # A1: next AB2, prev AB8
 #     next DE2, prev DE1
