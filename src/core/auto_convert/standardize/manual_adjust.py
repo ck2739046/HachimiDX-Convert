@@ -64,6 +64,7 @@ class ManualAdjust:
         self.scale_y = 1.0
         self.x_rot_deg = 0.0
         self.y_rot_deg = 0.0
+        self.z_rot_deg = 0.0
 
         self.video_width = 0
         self.video_height = 0
@@ -78,17 +79,18 @@ class ManualAdjust:
         self.var_scale_y: Optional[tk.StringVar] = None
         self.var_x_rot: Optional[tk.StringVar] = None
         self.var_y_rot: Optional[tk.StringVar] = None
+        self.var_z_rot: Optional[tk.StringVar] = None
 
 
 
-    def main(self) -> OpResult[Tuple[Tuple[int, int], int, float, float, float, float]]:
+    def main(self) -> OpResult[Tuple[Tuple[int, int], int, float, float, float, float, float]]:
         """
         如果没有跳过 initial detection
         那么需要人工确认是否识别正确
         显示预览窗口，绘制原始图像帧和圆形
 
         Returns:
-            OpResult -> (circle_center, circle_radius, scale_x, scale_y, x_rot_deg, y_rot_deg)
+            OpResult -> (circle_center, circle_radius, scale_x, scale_y, x_rot_deg, y_rot_deg, z_rot_deg)
         """
 
         cap = None
@@ -121,11 +123,12 @@ class ManualAdjust:
                 self.scale_y,
                 self.x_rot_deg,
                 self.y_rot_deg,
+                self.z_rot_deg,
             )
-            circle_center, circle_radius, scale_x, scale_y, x_rot_deg, y_rot_deg = last_op
+            circle_center, circle_radius, scale_x, scale_y, x_rot_deg, y_rot_deg, z_rot_deg = last_op
             print(
                 f"  Circle center: {circle_center}, radius: {circle_radius}, "
-                f"scale: ({scale_x}, {scale_y}), rot: ({x_rot_deg}, {y_rot_deg})"
+                f"scale: ({scale_x}, {scale_y}), rot: ({x_rot_deg}, {y_rot_deg}, {z_rot_deg})"
             )
 
             return ok(last_op)
@@ -231,10 +234,11 @@ class ManualAdjust:
             处理后的帧
         """
 
-        # 按要求先对整帧做透视旋转，再执行已有的裁剪/缩放流程
-        rotated_frame = self.apply_axis_rotation_preview(raw_frame, self.x_rot_deg, self.y_rot_deg)
+        # 先做平面旋转，再做 x/y 透视旋转
+        rotated_frame = self.apply_plane_rotation_preview(raw_frame, self.z_rot_deg)
+        rotated_frame = self.apply_axis_rotation_preview(rotated_frame, self.x_rot_deg, self.y_rot_deg)
 
-        font_size = 0.7
+        font_size = 0.64
         font_thickness = 2
 
         half_w = max(1, round(self.circle_r * self.scale_x))
@@ -313,7 +317,7 @@ class ManualAdjust:
         circle_info = (
             f"Center: ({self.circle_cx}, {self.circle_cy}), R: {self.circle_r}, "
             f"Scale: ({self.scale_x:.2f}, {self.scale_y:.2f}), "
-            f"Rot: ({self.x_rot_deg:.1f}, {self.y_rot_deg:.1f})"
+            f"Rot: ({self.x_rot_deg:.1f}, {self.y_rot_deg:.1f}, {self.z_rot_deg:.1f})"
         )
         cv2.putText(
             img=resized_frame,
@@ -370,6 +374,24 @@ class ManualAdjust:
 
         return resized_frame
 
+
+
+    def apply_plane_rotation_preview(self, frame, z_rot_deg: float):
+        """将 z 轴平面旋转应用到预览帧。"""
+        if abs(z_rot_deg) < 1e-6:
+            return frame
+
+        height, width = frame.shape[:2]
+        center = ((width - 1) / 2.0, (height - 1) / 2.0)
+        matrix = cv2.getRotationMatrix2D(center, z_rot_deg, 1.0)
+        return cv2.warpAffine(
+            frame,
+            matrix,
+            (width, height),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(0, 0, 0),
+            )
 
 
 
@@ -466,8 +488,8 @@ class ManualAdjust:
         if self.dialog is not None:
             return
         
-        window_w = 300
-        window_h = 550
+        window_w = 330
+        window_h = 600
 
         dialog = tk.Tk()
         dialog.title("Adjust circle")
@@ -490,6 +512,7 @@ class ManualAdjust:
         self.var_scale_y = tk.StringVar(value=f"{self.scale_y:.2f}")
         self.var_x_rot = tk.StringVar(value=f"{self.x_rot_deg:.1f}")
         self.var_y_rot = tk.StringVar(value=f"{self.y_rot_deg:.1f}")
+        self.var_z_rot = tk.StringVar(value=f"{self.z_rot_deg:.1f}")
 
         top_label = ttk.Label(dialog, text="请按 ok 键退出", padding=(10, 10, 10, 2))
         top_label.pack(anchor=tk.CENTER)
@@ -559,7 +582,18 @@ class ManualAdjust:
 
         self.build_param_row(
             parent=input_frame,
-            title="x rot",
+            title="plane rotation",
+            variable=self.var_z_rot,
+            validator=rot_validator,
+            minus_command=lambda: self.adjust_rotation("z", -self.ROT_STEP),
+            plus_command=lambda: self.adjust_rotation("z", self.ROT_STEP),
+            submit_command=lambda _event=None: self.submit_rotation("z"),
+            note=f"最多 1 位小数，范围 {self.ROT_MIN} 到 {self.ROT_MAX}，步进 {self.ROT_STEP}",
+        )
+
+        self.build_param_row(
+            parent=input_frame,
+            title="x rotation",
             variable=self.var_x_rot,
             validator=rot_validator,
             minus_command=lambda: self.adjust_rotation("x", -self.ROT_STEP),
@@ -570,7 +604,7 @@ class ManualAdjust:
 
         self.build_param_row(
             parent=input_frame,
-            title="y rot",
+            title="y rotation",
             variable=self.var_y_rot,
             validator=rot_validator,
             minus_command=lambda: self.adjust_rotation("y", -self.ROT_STEP),
@@ -601,7 +635,7 @@ class ManualAdjust:
         row = ttk.Frame(parent)
         row.pack(fill=tk.X, pady=(4, 0))
 
-        ttk.Label(row, text=f"{title}:", width=10).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Label(row, text=f"{title}:", width=14).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(row, text="-", width=3, command=minus_command).pack(side=tk.LEFT)
         entry = ttk.Entry(
             row,
@@ -665,8 +699,10 @@ class ManualAdjust:
     def adjust_rotation(self, axis: str, delta: float) -> None:
         if axis == "x":
             self.x_rot_deg = self.clamp_float(self.x_rot_deg + delta, self.ROT_MIN, self.ROT_MAX, 1)
-        else:
+        elif axis == "y":
             self.y_rot_deg = self.clamp_float(self.y_rot_deg + delta, self.ROT_MIN, self.ROT_MAX, 1)
+        else:
+            self.z_rot_deg = self.clamp_float(self.z_rot_deg + delta, self.ROT_MIN, self.ROT_MAX, 1)
         self.sync_dialog_values()
 
 
@@ -763,10 +799,15 @@ class ManualAdjust:
 
 
     def submit_rotation(self, axis: str) -> None:
-        if self.var_x_rot is None or self.var_y_rot is None:
+        if self.var_x_rot is None or self.var_y_rot is None or self.var_z_rot is None:
             return
 
-        var = self.var_x_rot if axis == "x" else self.var_y_rot
+        if axis == "x":
+            var = self.var_x_rot
+        elif axis == "y":
+            var = self.var_y_rot
+        else:
+            var = self.var_z_rot
         text = var.get().strip()
         if text in ("", "-", "-.", "."):
             self.sync_dialog_values()
@@ -787,8 +828,10 @@ class ManualAdjust:
         value = round(value, 1)
         if axis == "x":
             self.x_rot_deg = value
-        else:
+        elif axis == "y":
             self.y_rot_deg = value
+        else:
+            self.z_rot_deg = value
         self.sync_dialog_values()
 
 
@@ -827,6 +870,8 @@ class ManualAdjust:
             self.var_x_rot.set(f"{self.x_rot_deg:.1f}")
         if self.var_y_rot is not None:
             self.var_y_rot.set(f"{self.y_rot_deg:.1f}")
+        if self.var_z_rot is not None:
+            self.var_z_rot.set(f"{self.z_rot_deg:.1f}")
 
     def on_dialog_ok(self) -> None:
         self.is_confirmed = True
