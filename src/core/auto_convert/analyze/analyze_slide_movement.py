@@ -1,98 +1,19 @@
 import numpy as np
 
+shared_context = None
 
 
-def guess_target_a_zone_by_inertia(shared_context, note_path):
-    '''
-    根据倒数最后一段运动方向的惯性，猜测预测最终可能进入的A区。
-    '''
-    if len(note_path) < 2:
-        return None
-    
-    # 寻找倒序最后一点 (点A)
-    last_note = note_path[-1]
-    A_cx = last_note['cx']
-    A_cy = last_note['cy']
-    
-    # 倒序遍历寻找距离大于阈值的点 (点B)
-    B_cx, B_cy = None, None
-    min_dist = shared_context.std_video_size * 0.02 # 1080p下约为20像素
-    
-    for note in reversed(note_path[:-1]):
-        cx = note['cx']
-        cy = note['cy']
-        dist = np.sqrt((cx - A_cx)**2 + (cy - A_cy)**2)
-        if dist > min_dist:
-            B_cx, B_cy = cx, cy
-            break
-            
-    if B_cx is None or B_cy is None:
-        return None
-        
-    # 运动向量 BA (从B指向A)
-    BA_x = A_cx - B_cx
-    BA_y = A_cy - B_cy
-    BA_length = np.sqrt(BA_x**2 + BA_y**2)
-    if BA_length == 0: return None # 理论上不会发生AB重合
-        
-    # 过滤并找出距离射线最近的点
-    best_zone = None
-    min_distance_to_line = 999999
-    
-    for zone_id in range(1, 9):
-        zone_key = f'A{zone_id}'
-        P_cx, P_cy = shared_context.a_zone_endpoint[zone_key]
-        
-        # 目标向量 AP (从A指向P)
-        AP_x = P_cx - A_cx
-        AP_y = P_cy - A_cy
-        
-        # 1. 筛选排查：利用点乘 (Dot Product) 判断是否在相反方向
-        dot_product = BA_x * AP_x + BA_y * AP_y
-        if dot_product < 0:
-            continue  # 夹角 > 90度，说明目标点在跑过来的“背后”，排除
-            
-        # 2. 计算点到射线的距离：利用叉乘的绝对值 (Cross Product Area) / 底边长
-        cross_product = abs(BA_x * AP_y - BA_y * AP_x)
-        distance_to_line = cross_product / BA_length
-        
-        if distance_to_line < min_distance_to_line:
-            min_distance_to_line = distance_to_line
-            best_zone = zone_key
-            
-    return best_zone
-
-
-
-
-
-def analyze_slide_tail_movement_syntax(shared_context, note_path):
+def analyze_slide_tail_movement_syntax(input_shared_context, note_path):
     '''
     分析运动模式
     暂时只检测边缘旋转 x>x / x<x
     其他的一律视为直线 x-x
 
     如果星星全程仅在A区或D区内移动，视为旋转
-    '''    
+    '''
 
-    guessed_zone = None
-
-    
-    
-
-
-    def is_consecutive(id1, id2):
-            # 检查两个A区ID是否连续（考虑环形结构）
-            # 顺时针：1->2, 2->3, ..., 7->8, 8->1
-            if (id2 - id1) == 1 or (id1 == 8 and id2 == 1):
-                return True, 'clockwise'
-            # 逆时针：1->8, 8->7, ..., 2->1
-            if (id1 - id2) == 1 or (id1 == 1 and id2 == 8):
-                return True, 'counterclockwise'
-            return False, None
-
-
-
+    global shared_context
+    shared_context = input_shared_context
 
 
     if len(note_path) < 6:
@@ -100,108 +21,260 @@ def analyze_slide_tail_movement_syntax(shared_context, note_path):
     positions = [x['position'] for x in note_path]
     if not positions or len(positions) < 6:
         return None
+    
+    note_path_segments = _divide_path_by_A_zone(note_path)
+    classified_segments = []
+    for note_path_segment, start_A_zone, end_A_zone in note_path_segments:
 
-    start_position = positions[0]
-    end_position = positions[-1]
+        start_A_zone_id = int(start_A_zone[1])
+        end_A_zone_id = int(end_A_zone[1])
 
-    # 获得音符经过的所有A区判定点
-    A_zones = []
-    last_A_zone = ''
-    for note in note_path:
-        pos = note['position']
-        if not pos.startswith('A'): continue
-        if pos == last_A_zone: continue
-        last_A_zone = pos
-        A_zones.append(pos)
+        # 对一个 segemnt, 只有几种情况:
 
-    if not A_zones: return None
+        #   -  : straight
+        #  > < : arc
+        #   v  : center_reflection
+        #  p q : inner loop
+        #  z s : zigzag
+        # pp qq: outer loop
 
-    # 考虑到有些星星速度太快，来不及进入A区就结束了
-    # 需要根据惯性猜测最后可能进入哪个A区
-    if not end_position.startswith('A'):
-        guessed_zone = guess_target_a_zone_by_inertia(shared_context, note_path)
-        if guessed_zone and last_A_zone != guessed_zone:
-            A_zones.append(guessed_zone)
+        #   V  : a-zone-reflection 经过多个A区，会被拆分，忽略
 
-    # 检测这个A区路径里边是否包含一些圆弧，要单独拆分出来
-    arc_segments = []
-    i = 0
-    while i < len(A_zones):
-        current_id = int(A_zones[i][1])  # 'A7' -> 7
-        # 尝试检测从当前位置开始的圆弧
-        if i + 1 < len(A_zones):
-            next_id = int(A_zones[i + 1][1])
-            is_consec, direction = is_consecutive(current_id, next_id)
-
-            if is_consec:
-                # 找到圆弧的起点，继续向后查找相同方向的连续点
-                arc_start = current_id
-                arc_next = next_id
-                arc_end = next_id
-                j = i + 2
-                reverse_turn = False
-                while j < len(A_zones):
-                    check_id = int(A_zones[j][1])
-                    prev_id = int(A_zones[j - 1][1])
-                    is_consec_next, dir_next = is_consecutive(prev_id, check_id)
-                    # 如果方向一致且连续，继续扩展圆弧
-                    if is_consec_next and dir_next == direction:
-                        arc_end = check_id
-                        j += 1
-                    else:
-                        # 连续但方向变化，说明遇到折返，下一段应从拐点重新开始
-                        if is_consec_next and dir_next != direction:
-                            reverse_turn = True
-                        break
-                # 记录这个圆弧
-                arc_segments.append(('arc', (arc_start, arc_next, arc_end)))
-
-                if reverse_turn:
-                    i = j - 1 # 折返时保留拐点作为下一段起点；否则正常跳过
-                else:
-                    i = j # 跳过已处理的圆弧部分
-                continue
-
-        # 不是圆弧的一部分，作为单独的点
-        arc_segments.append(('single', current_id))
-        i += 1
-
-
-    # 将圆弧和单独的点组合成最终语法
-    movement_syntax = ''
-    last_end_id = None
-    for seg_type, seg_data in arc_segments:
-
-        if seg_type == 'arc':
-            start_id, next_id, end_id = seg_data
-            arc_syntax = _get_arc_syntax(start_id, next_id, end_id)
-            new_syntax = f"{start_id}{arc_syntax}"
-        else:  # single
-            new_syntax = str(seg_data)
-            end_id = seg_data
-
-        # 特例：首个语法直接添加，不需要连接符
-        if not movement_syntax:
-            movement_syntax = new_syntax
-            last_end_id = end_id
+        is_straight, syntax = is_straight(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_straight:
+            classified_segments.append(('straight', syntax))
             continue
 
-        # 特例：弧形折返，前一段终点与后一段起点相同，直接拼接
-        # 例如 6<3 + >6 -> 6<3>6
-        if seg_type == 'arc' and last_end_id == start_id:
-            movement_syntax += arc_syntax
-            last_end_id = end_id
+        is_arc, syntax = is_arc(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_arc:
+            classified_segments.append(('arc', syntax))
             continue
+
+        is_center_reflection, syntax = is_center_reflection(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_center_reflection:
+            classified_segments.append(('center_reflection', syntax))
+            continue
+
+        is_inner_loop, syntax = is_inner_loop(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_inner_loop:
+            classified_segments.append(('inner_loop', syntax))
+            continue
+
+        is_zigzag, syntax = is_zigzag(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_zigzag:
+            classified_segments.append(('zigzag', syntax))
+            continue
+
+        is_outer_loop, syntax = is_outer_loop(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_outer_loop:
+            classified_segments.append(('outer_loop', syntax))
+            continue
+
+        # 无法识别, syntax fallback to straight
+        classified_segments.append(('unknown', f'{start_A_zone_id}-{end_A_zone_id}'))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         
-        # 普通场景
-        movement_syntax += f"-{new_syntax}"
-        last_end_id = end_id
 
-    movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
 
-    # print(f'{" ".join(azone for azone in A_zones)} -> {movement_syntax}')
 
-    return movement_syntax
+    # # 检测这个A区路径里边是否包含一些圆弧，要单独拆分出来
+    # arc_segments = []
+    # i = 0
+    # while i < len(A_zones):
+    #     current_id = int(A_zones[i][1])  # 'A7' -> 7
+    #     # 尝试检测从当前位置开始的圆弧
+    #     if i + 1 < len(A_zones):
+    #         next_id = int(A_zones[i + 1][1])
+    #         is_consec, direction = is_consecutive(current_id, next_id)
+
+    #         if is_consec:
+    #             # 找到圆弧的起点，继续向后查找相同方向的连续点
+    #             arc_start = current_id
+    #             arc_next = next_id
+    #             arc_end = next_id
+    #             j = i + 2
+    #             reverse_turn = False
+    #             while j < len(A_zones):
+    #                 check_id = int(A_zones[j][1])
+    #                 prev_id = int(A_zones[j - 1][1])
+    #                 is_consec_next, dir_next = is_consecutive(prev_id, check_id)
+    #                 # 如果方向一致且连续，继续扩展圆弧
+    #                 if is_consec_next and dir_next == direction:
+    #                     arc_end = check_id
+    #                     j += 1
+    #                 else:
+    #                     # 连续但方向变化，说明遇到折返，下一段应从拐点重新开始
+    #                     if is_consec_next and dir_next != direction:
+    #                         reverse_turn = True
+    #                     break
+    #             # 记录这个圆弧
+    #             arc_segments.append(('arc', (arc_start, arc_next, arc_end)))
+
+    #             if reverse_turn:
+    #                 i = j - 1 # 折返时保留拐点作为下一段起点；否则正常跳过
+    #             else:
+    #                 i = j # 跳过已处理的圆弧部分
+    #             continue
+
+    #     # 不是圆弧的一部分，作为单独的点
+    #     arc_segments.append(('single', current_id))
+    #     i += 1
+
+
+    # # 将圆弧和单独的点组合成最终语法
+    # movement_syntax = ''
+    # last_end_id = None
+    # for seg_type, seg_data in arc_segments:
+
+    #     if seg_type == 'arc':
+    #         start_id, next_id, end_id = seg_data
+    #         arc_syntax = _get_arc_syntax(start_id, next_id, end_id)
+    #         new_syntax = f"{start_id}{arc_syntax}"
+    #     else:  # single
+    #         new_syntax = str(seg_data)
+    #         end_id = seg_data
+
+    #     # 特例：首个语法直接添加，不需要连接符
+    #     if not movement_syntax:
+    #         movement_syntax = new_syntax
+    #         last_end_id = end_id
+    #         continue
+
+    #     # 特例：弧形折返，前一段终点与后一段起点相同，直接拼接
+    #     # 例如 6<3 + >6 -> 6<3>6
+    #     if seg_type == 'arc' and last_end_id == start_id:
+    #         movement_syntax += arc_syntax
+    #         last_end_id = end_id
+    #         continue
+        
+    #     # 普通场景
+    #     movement_syntax += f"-{new_syntax}"
+    #     last_end_id = end_id
+
+    # movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
+
+    # # print(f'{" ".join(azone for azone in A_zones)} -> {movement_syntax}')
+
+    # return movement_syntax
+
+
+
+
+
+
+def _divide_path_by_A_zone(note_path) -> list:
+    """
+    将一整条分割成多个小段，分割点是经过了A区 (判定点)
+    返回：list[tuple[note_path, start_A_zone_label, end_A_zone_label]]
+    """
+
+    def _get_nearest_a_zone_endpoint(cx, cy) -> str:
+        # 获取给定位置最近的A区判定点
+        min_dist = float('inf')
+        nearest_endpoint = None
+        for label, (ex, ey) in shared_context.a_zone_endpoint.items():
+            dist = np.sqrt((cx - ex)**2 + (cy - ey)**2)
+            if dist < min_dist:
+                min_dist = dist
+                nearest_endpoint = label
+        return nearest_endpoint
+    
+
+    def _is_pass_a_zone_endpoint(cx, cy) -> tuple[bool, str]:
+        # 严格判断是否经过了A区判定点
+        max_dist = shared_context.note_travel_dist * 0.15
+        for label, (ex, ey) in shared_context.a_zone_endpoint.items():
+            dist = np.sqrt((cx - ex)**2 + (cy - ey)**2)
+            if dist < max_dist:
+                return True, label
+        return False, ""
+   
+
+    positions = [x['position'] for x in note_path]
+    # 在预处理时，不保证起点就在A区
+    # 所以要找到离起点最近的A区判定点
+    start_pos = positions[0]
+    if not start_pos.startswith('A'):
+        start_pos = (_get_nearest_a_zone_endpoint(note_path[0]['cx'],
+                                                  note_path[0]['cy']))
+    # 在预处理中，不保证终点也在A区
+    # 所以要找到离终点最近的A区判定点
+    end_pos = positions[-1]
+    if not end_pos.startswith('A'):
+        end_pos = (_get_nearest_a_zone_endpoint(note_path[-1]['cx'],
+                                                note_path[-1]['cy']))
+        
+    note_path_segments = []
+    current_segment = []
+    current_segment_start_A_zone = None
+    current_segment_end_A_zone = None
+    for i, point in enumerate(note_path):
+
+        # 特例：第一个点
+        if i == 0:
+            current_segment.append(point)
+            current_segment_start_A_zone = start_pos
+            continue
+
+        # 特例：最后一个点
+        if i == len(note_path) - 1:
+            current_segment.append(point)
+            current_segment_end_A_zone = end_pos
+            if current_segment_start_A_zone != current_segment_end_A_zone:
+                note_path_segments.append((current_segment,
+                                           current_segment_start_A_zone,
+                                           current_segment_end_A_zone))
+            break
+
+        # 普通：其他的轨迹点
+        cx, cy = point['cx'], point['cy']
+        is_pass, a_zone = _is_pass_a_zone_endpoint(cx, cy)
+        # 没经过A区，添加点到当前段
+        if not is_pass:
+            current_segment.append(point)
+            continue
+        # 经过A区，但是还在当前段的起点，添加到当前段
+        if current_segment_start_A_zone == a_zone:
+            current_segment.append(point)
+            continue
+        # 经过A区，且不是当前段的起点，说明进入了下一个A区
+        
+        # 保存当前段
+        current_segment_end_A_zone = a_zone
+        note_path_segments.append((current_segment,
+                                   current_segment_start_A_zone,
+                                   current_segment_end_A_zone))
+        # 开启新段
+        current_segment = [point]
+        current_segment_start_A_zone = a_zone
+        current_segment_end_A_zone = None
+
+
+    return note_path_segments
 
 
 
@@ -244,3 +317,84 @@ def _get_arc_syntax(start_position: int, next_position: int, end_position: int) 
     # 组合语法
     movement_syntax = f"{movement_type}{end_position}"
     return movement_syntax
+
+
+
+
+
+
+
+def _is_consecutive(id1, id2):
+    # 检查两个A区ID是否连续（考虑环形结构）
+    # 顺时针：1->2, 2->3, ..., 7->8, 8->1
+    if (id2 - id1) == 1 or (id1 == 8 and id2 == 1):
+        return True, 'clockwise'
+    # 逆时针：1->8, 8->7, ..., 2->1
+    if (id1 - id2) == 1 or (id1 == 1 and id2 == 8):
+        return True, 'counterclockwise'
+    return False, None
+
+
+
+
+
+
+# def guess_target_a_zone_by_inertia(note_path):
+#     '''
+#     根据运动惯性，预测最终可能进入的A区。
+#     '''
+#     if len(note_path) < 2:
+#         return None
+    
+#     # 寻找倒序最后一点 (点A)
+#     last_note = note_path[-1]
+#     A_cx = last_note['cx']
+#     A_cy = last_note['cy']
+    
+#     # 倒序遍历寻找距离大于阈值的点 (点B)
+#     B_cx, B_cy = None, None
+#     min_dist = shared_context.std_video_size * 0.02 # 1080p下约为20像素
+    
+#     for note in reversed(note_path[:-1]):
+#         cx = note['cx']
+#         cy = note['cy']
+#         dist = np.sqrt((cx - A_cx)**2 + (cy - A_cy)**2)
+#         if dist > min_dist:
+#             B_cx, B_cy = cx, cy
+#             break
+            
+#     if B_cx is None or B_cy is None:
+#         return None
+        
+#     # 运动向量 BA (从B指向A)
+#     BA_x = A_cx - B_cx
+#     BA_y = A_cy - B_cy
+#     BA_length = np.sqrt(BA_x**2 + BA_y**2)
+#     if BA_length == 0: return None # 理论上不会发生AB重合
+        
+#     # 过滤并找出距离射线最近的点
+#     best_zone = None
+#     min_distance_to_line = 999999
+    
+#     for zone_id in range(1, 9):
+#         zone_key = f'A{zone_id}'
+#         P_cx, P_cy = shared_context.a_zone_endpoint[zone_key]
+        
+#         # 目标向量 AP (从A指向P)
+#         AP_x = P_cx - A_cx
+#         AP_y = P_cy - A_cy
+        
+#         # 1. 筛选排查：利用点乘 (Dot Product) 判断是否在相反方向
+#         dot_product = BA_x * AP_x + BA_y * AP_y
+#         if dot_product < 0:
+#             continue  # 夹角 > 90度，说明目标点在跑过来的“背后”，排除
+            
+#         # 2. 计算点到射线的距离：利用叉乘的绝对值 (Cross Product Area) / 底边长
+#         cross_product = abs(BA_x * AP_y - BA_y * AP_x)
+#         distance_to_line = cross_product / BA_length
+        
+#         if distance_to_line < min_distance_to_line:
+#             min_distance_to_line = distance_to_line
+#             best_zone = zone_key
+            
+#     return best_zone
