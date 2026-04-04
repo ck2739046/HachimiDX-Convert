@@ -236,7 +236,13 @@ class ManualAdjust:
 
         # 先做平面旋转，再做 x/y 透视旋转
         rotated_frame = self.apply_plane_rotation_preview(raw_frame, self.z_rot_deg)
-        rotated_frame = self.apply_axis_rotation_preview(rotated_frame, self.x_rot_deg, self.y_rot_deg)
+        rotated_frame = self.apply_axis_rotation_preview(
+            rotated_frame,
+            self.x_rot_deg,
+            self.y_rot_deg,
+            center_x=float(self.circle_cx),
+            center_y=float(self.circle_cy),
+        )
 
         font_size = 0.64
         font_thickness = 2
@@ -395,21 +401,28 @@ class ManualAdjust:
 
 
 
-    def apply_axis_rotation_preview(self, frame, x_rot_deg: float, y_rot_deg: float):
+    def apply_axis_rotation_preview(self,
+                                    frame,
+                                    x_rot_deg: float,
+                                    y_rot_deg: float,
+                                    center_x: Optional[float] = None,
+                                    center_y: Optional[float] = None):
         """将沿 x/y 轴旋转角转换成透视预览效果。"""
         if abs(x_rot_deg) < 1e-6 and abs(y_rot_deg) < 1e-6:
             return frame
 
         height, width = frame.shape[:2]
-        cx = (width - 1) / 2.0
-        cy = (height - 1) / 2.0
+        default_cx = (width - 1) / 2.0
+        default_cy = (height - 1) / 2.0
+        cx = default_cx if center_x is None else float(np.clip(center_x, 0.0, width - 1.0))
+        cy = default_cy if center_y is None else float(np.clip(center_y, 0.0, height - 1.0))
 
         corners = np.array(
             [
                 [-cx, -cy, 0.0],
-                [cx, -cy, 0.0],
-                [cx, cy, 0.0],
-                [-cx, cy, 0.0],
+                [width - 1.0 - cx, -cy, 0.0],
+                [width - 1.0 - cx, height - 1.0 - cy, 0.0],
+                [-cx, height - 1.0 - cy, 0.0],
             ],
             dtype=np.float32,
         )
