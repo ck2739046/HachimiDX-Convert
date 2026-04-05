@@ -229,6 +229,8 @@ def get_syntax(note_path):
 
         # 无法识别, syntax fallback to straight
         classified_segments.append((start_A_zone, end_A_zone, '?'))
+        print(f"get_syntax: unrecognized movement pattern for segment, default to '?' syntax:")
+        print(", ".join(f"{note['position']}({note['frame']})" for note in note_path_segment))
 
 
     return classified_segments
@@ -254,6 +256,8 @@ def is_straight(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tu
         return False, None
     
     positions = [x['position'] for x in note_path]
+    positions.insert(0, f'A{start_A_zone_id}')
+    positions.append(f'A{end_A_zone_id}')
     required = []
     optional = []
     banned = []
@@ -311,6 +315,8 @@ def is_arc(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[b
         return False, None
     
     positions = [x['position'] for x in note_path]
+    positions.insert(0, f'A{start_A_zone_id}')
+    positions.append(f'A{end_A_zone_id}')
     required = []
     optional = []
     banned = []
@@ -319,10 +325,10 @@ def is_arc(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[b
     required.append(f'A{start_A_zone_id}')
     required.append(f'A{end_A_zone_id}')
 
-    # 必须激活之间的 D 区
+    # 可选激活之间的 D 区
     between_DE_zones_id = _get_between_DE_zones(start_A_zone_id, end_A_zone_id)
     for id in between_DE_zones_id:
-        required.append(f'D{id}')
+        optional.append(f'D{id}')
 
     # 检查
     if _ckeck_zones(positions, required, optional, banned):
@@ -349,6 +355,8 @@ def is_center_reflection(note_path: list, start_A_zone_id: int, end_A_zone_id: i
         return False, None
     
     positions = [x['position'] for x in note_path]
+    positions.insert(0, f'A{start_A_zone_id}')
+    positions.append(f'A{end_A_zone_id}')
     required = []
     optional = []
     banned = []
@@ -396,6 +404,8 @@ def is_inner_loop_q_clockwise(note_path: list, start_A_zone_id: int, end_A_zone_
     pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id, clockwise=True)
 
     positions = [x['position'] for x in note_path]
+    positions.insert(0, f'A{start_A_zone_id}')
+    positions.append(f'A{end_A_zone_id}')
     required = []
     optional = []
     banned = []
@@ -463,6 +473,8 @@ def is_inner_loop_p_counterclockwise(note_path: list, start_A_zone_id: int, end_
     pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id, counterclockwise=True)
 
     positions = [x['position'] for x in note_path]
+    positions.insert(0, f'A{start_A_zone_id}')
+    positions.append(f'A{end_A_zone_id}')
     required = []
     optional = []
     banned = []
@@ -553,6 +565,8 @@ def is_zigzag(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tupl
 def is_zigzag_s(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
 
     positions = [x['position'] for x in note_path]
+    positions.insert(0, f'A{start_A_zone_id}')
+    positions.append(f'A{end_A_zone_id}')
     required = []
     optional = []
     banned = []
@@ -593,6 +607,8 @@ def is_zigzag_s(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tu
 def is_zigzag_z(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[bool, str]:
 
     positions = [x['position'] for x in note_path]
+    positions.insert(0, f'A{start_A_zone_id}')
+    positions.append(f'A{end_A_zone_id}')
     required = []
     optional = []
     banned = []
@@ -657,6 +673,8 @@ def is_outer_loop_qq_clockwise(note_path: list, start_A_zone_id: int, end_A_zone
     pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id, clockwise=True)
 
     positions = [x['position'] for x in note_path]
+    positions.insert(0, f'A{start_A_zone_id}')
+    positions.append(f'A{end_A_zone_id}')
     required = []
     optional = []
     banned = []
@@ -781,6 +799,8 @@ def is_outer_loop_pp_counterclockwise(note_path: list, start_A_zone_id: int, end
     pos_diff = _get_pos_diff(start_A_zone_id, end_A_zone_id, counterclockwise=True)
 
     positions = [x['position'] for x in note_path]
+    positions.insert(0, f'A{start_A_zone_id}')
+    positions.append(f'A{end_A_zone_id}')
     required = []
     optional = []
     banned = []
@@ -1088,6 +1108,19 @@ def _get_between_DE_zones(start_A_zone_id: int, end_A_zone_id: int,
 
 
 
+
+    
+
+def _is_pass_a_zone_endpoint(cx, cy, input_shared_context) -> tuple[bool, str]:
+    # 严格判断是否经过了A区判定点
+    max_dist = input_shared_context.note_travel_dist * 0.15
+    for label, (ex, ey) in input_shared_context.a_zone_endpoint.items():
+        dist = np.sqrt((cx - ex)**2 + (cy - ey)**2)
+        if dist < max_dist:
+            return True, label
+    return False, ""
+
+
 def _divide_path_by_A_zone(note_path) -> list:
     """
     将一整条分割成多个小段，分割点是经过了A区 (判定点)
@@ -1104,17 +1137,6 @@ def _divide_path_by_A_zone(note_path) -> list:
                 min_dist = dist
                 nearest_endpoint = label
         return nearest_endpoint
-    
-
-    def _is_pass_a_zone_endpoint(cx, cy) -> tuple[bool, str]:
-        # 严格判断是否经过了A区判定点
-        max_dist = shared_context.note_travel_dist * 0.15
-        for label, (ex, ey) in shared_context.a_zone_endpoint.items():
-            dist = np.sqrt((cx - ex)**2 + (cy - ey)**2)
-            if dist < max_dist:
-                return True, label
-        return False, ""
-   
 
     positions = [x['position'] for x in note_path]
     # 在预处理时，不保证起点就在A区
@@ -1154,7 +1176,7 @@ def _divide_path_by_A_zone(note_path) -> list:
 
         # 普通：其他的轨迹点
         cx, cy = point['cx'], point['cy']
-        is_pass, a_zone = _is_pass_a_zone_endpoint(cx, cy)
+        is_pass, a_zone = _is_pass_a_zone_endpoint(cx, cy, shared_context)
         # 没经过A区，添加点到当前段
         if not is_pass:
             current_segment.append(point)
@@ -1166,6 +1188,7 @@ def _divide_path_by_A_zone(note_path) -> list:
         # 经过A区，且不是当前段的起点，说明进入了下一个A区
         
         # 保存当前段
+        current_segment.append(point)
         current_segment_end_A_zone = a_zone
         note_path_segments.append((current_segment,
                                    current_segment_start_A_zone,
@@ -1236,67 +1259,3 @@ def _is_consecutive(id1, id2):
         return True, 'counterclockwise'
     return False, None
 
-
-
-
-
-
-# def guess_target_a_zone_by_inertia(note_path):
-#     '''
-#     根据运动惯性，预测最终可能进入的A区。
-#     '''
-#     if len(note_path) < 2:
-#         return None
-    
-#     # 寻找倒序最后一点 (点A)
-#     last_note = note_path[-1]
-#     A_cx = last_note['cx']
-#     A_cy = last_note['cy']
-    
-#     # 倒序遍历寻找距离大于阈值的点 (点B)
-#     B_cx, B_cy = None, None
-#     min_dist = shared_context.std_video_size * 0.02 # 1080p下约为20像素
-    
-#     for note in reversed(note_path[:-1]):
-#         cx = note['cx']
-#         cy = note['cy']
-#         dist = np.sqrt((cx - A_cx)**2 + (cy - A_cy)**2)
-#         if dist > min_dist:
-#             B_cx, B_cy = cx, cy
-#             break
-            
-#     if B_cx is None or B_cy is None:
-#         return None
-        
-#     # 运动向量 BA (从B指向A)
-#     BA_x = A_cx - B_cx
-#     BA_y = A_cy - B_cy
-#     BA_length = np.sqrt(BA_x**2 + BA_y**2)
-#     if BA_length == 0: return None # 理论上不会发生AB重合
-        
-#     # 过滤并找出距离射线最近的点
-#     best_zone = None
-#     min_distance_to_line = 999999
-    
-#     for zone_id in range(1, 9):
-#         zone_key = f'A{zone_id}'
-#         P_cx, P_cy = shared_context.a_zone_endpoint[zone_key]
-        
-#         # 目标向量 AP (从A指向P)
-#         AP_x = P_cx - A_cx
-#         AP_y = P_cy - A_cy
-        
-#         # 1. 筛选排查：利用点乘 (Dot Product) 判断是否在相反方向
-#         dot_product = BA_x * AP_x + BA_y * AP_y
-#         if dot_product < 0:
-#             continue  # 夹角 > 90度，说明目标点在跑过来的“背后”，排除
-            
-#         # 2. 计算点到射线的距离：利用叉乘的绝对值 (Cross Product Area) / 底边长
-#         cross_product = abs(BA_x * AP_y - BA_y * AP_x)
-#         distance_to_line = cross_product / BA_length
-        
-#         if distance_to_line < min_distance_to_line:
-#             min_distance_to_line = distance_to_line
-#             best_zone = zone_key
-            
-#     return best_zone
