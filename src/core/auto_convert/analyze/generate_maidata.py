@@ -66,8 +66,15 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
             
             # 对于 slide, hold, touch_hold 可能存在 duration 信息
             if isinstance(time, tuple) and len(time) >= 2:
-                duration_syntax = parse_note_duration(one_beat_Msec, note_type, time, base_denominator, duration_denominator)
-                position += duration_syntax
+                if note_type == NoteType.SLIDE:
+                    # slide 可包含多个 duration
+                    position = _append_slide_duration_syntax(
+                        position, list(time[1:]), one_beat_Msec,
+                        base_denominator, duration_denominator)
+                else:
+                    duration_syntax = parse_note_duration(one_beat_Msec, note_type, time[-1],
+                                                          base_denominator, duration_denominator)
+                    position += duration_syntax
 
 
 
@@ -280,10 +287,8 @@ def check_note_time(time, track_id):
 
 
 
-def parse_note_duration(one_beat_Msec, note_type, time, base_denominator, duration_denominator) -> str:
+def parse_note_duration(one_beat_Msec, note_type, note_length, base_denominator, duration_denominator) -> str:
 
-    # 提取 length 信息
-    note_length = time[-1]
     length_beat = note_length / one_beat_Msec
 
     # 分类处理
@@ -308,3 +313,59 @@ def parse_note_duration(one_beat_Msec, note_type, time, base_denominator, durati
     duration_syntax = f'[{denominator}:{numerator}]'
 
     return duration_syntax
+
+
+
+
+
+def _append_slide_duration_syntax(position: str,
+                                  durations,
+                                  one_beat_Msec,
+                                  base_denominator,
+                                  duration_denominator) -> str:
+    """
+    插入 slide 的时值文本
+    - 单 slide: 1-2 -> 1-2[8:1]
+    - 多 slide: 1-2*-5 -> 1-2[8:1]*-5[8:1]
+    """
+    if not durations:
+        return position
+
+    # 单星星: 直接在末尾添加时值
+    if '*' not in position:
+        return position + parse_note_duration(
+            one_beat_Msec,
+            NoteType.SLIDE,
+            durations[-1],
+            base_denominator,
+            duration_denominator,
+        )
+
+    # 多段链式语法：按 '*' 分段填充时值
+    segments = position.split('*')
+    if len(segments) != len(durations):
+        print(
+            f"generate_maidata: slide segment/duration mismatch, "
+            f"segments={len(segments)}, durations={len(durations)}, position={position}"
+        )
+        # fallback: 如果分段数量与时值数量不匹配，直接在末尾添加时值
+        return position + parse_note_duration(
+            one_beat_Msec,
+            NoteType.SLIDE,
+            durations[-1],
+            base_denominator,
+            duration_denominator,
+        )
+
+    output_segments = []
+    for segment, duration in zip(segments, durations):
+        duration_syntax = parse_note_duration(
+            one_beat_Msec,
+            NoteType.SLIDE,
+            duration,
+            base_denominator,
+            duration_denominator,
+        )
+        output_segments.append(segment + duration_syntax)
+
+    return '*'.join(output_segments)

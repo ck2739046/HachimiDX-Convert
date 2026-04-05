@@ -79,9 +79,9 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
 
     返回格式:
     dict{
-        # 匹配的head_tail组合
-        key: (head_track_id, note_type, note_variant, full_movement_syntax),
-        value: (time, duration)
+        # 匹配的 head_tail 组合（同 head 多 tail 用 * 聚合）
+        key: (head_track_id, note_type, note_variant, merged_movement_syntax),
+        value: (time, duration_1, duration_2, ...)
 
         # 未匹配的head
         key: (head_track_id, note_type, note_variant, head_position),
@@ -130,8 +130,8 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
         new_position = str(head_position[0])
         head_by_position[new_position].append((track_id, note_type, note_variant, head_position, head_end_time))
 
-    # 记录哪些head_track_id被匹配了，使用set避免重复
-    matched_head_track_ids = set()
+    # 收集每个 head 匹配到的 tail 列表，后续方便聚合同头星星
+    matched_tails_by_head = defaultdict(list)
 
     # 遍历所有tail，寻找匹配的head
     processed_tails = 0
@@ -163,22 +163,55 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
             print(f"[{tail_track_id}] Tail not match: No heads match delay at position {tail_start_position}")
             continue
 
-        # 找到了匹配的head，进行记录
+        # 找到了匹配的head，暂存匹配结果
         head_track_id, head_note_type, head_note_variant, head_position, head_end_time = best_head
-        matched_head_track_ids.add(head_track_id)
-
-        # 写入final_slide_info
-        full_movement_syntax = f"{tail_start_position}{get_suffix(head_note_variant)}{tail_movement_syntax}{get_suffix(tail_note_variant)}"
-        key = (head_track_id, head_note_type, head_note_variant, full_movement_syntax)
         duration = tail_end_time - tail_start_time
-        value = (head_end_time, duration)
-        final_slide_info[key] = value
+        matched_tails_by_head[head_track_id].append({
+            'tail_track_id': tail_track_id,
+            'tail_note_variant': tail_note_variant,
+            'tail_movement_syntax': tail_movement_syntax,
+            'tail_start_time': tail_start_time,
+            'duration': duration,
+            'head_note_type': head_note_type,
+            'head_note_variant': head_note_variant,
+            'head_position': str(head_position[0]),
+            'head_end_time': head_end_time,
+        })
 
 
-
-    # 将未匹配的head也写入final_slide_info
+    # 将匹配成功的 head 聚合写入 final_slide_info
     for (head_track_id, head_note_type, head_note_variant, head_position), head_end_time in slide_head_info.items():
-        if head_track_id not in matched_head_track_ids:
+        if head_track_id in matched_tails_by_head:
+            matched_tails = matched_tails_by_head[head_track_id]
+
+            head_start_pos = str(head_position[0])
+            head_prefix = f"{head_start_pos}{get_suffix(head_note_variant)}"
+
+            segment_syntax_list = []
+            segment_durations = []
+            for item in matched_tails:
+                seg_full_syntax = f"{head_start_pos}{get_suffix(head_note_variant)}{item['tail_movement_syntax']}{get_suffix(item['tail_note_variant'])}"
+                segment_syntax_list.append(seg_full_syntax)
+                segment_durations.append(item['duration'])
+
+            # 组装链式语法（仅语法，不含时值）
+            merged_movement_syntax = segment_syntax_list[0] # 第一个segment完整保留
+            for seg_full_syntax in segment_syntax_list[1:]:
+                # 尝试删除后续的同头星星的的起始头
+                seg_tail_syntax = None
+                if seg_full_syntax.startswith(head_prefix):
+                    seg_tail_syntax = seg_full_syntax[len(head_prefix):]
+                if not seg_tail_syntax:
+                    # 前缀剥离失败，回退为 '/' 连接整段语法
+                    merged_movement_syntax += f"/{seg_full_syntax}"
+                    continue
+                merged_movement_syntax += f"*{seg_tail_syntax}"
+
+            key = (head_track_id, head_note_type, head_note_variant, merged_movement_syntax)
+            value = (head_end_time, *segment_durations)
+            final_slide_info[key] = value
+
+        else:
             full_movement_syntax = f"{head_position}$"
             key = (head_track_id, head_note_type, head_note_variant, full_movement_syntax)
             value = head_end_time
