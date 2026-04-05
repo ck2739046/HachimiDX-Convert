@@ -7,6 +7,19 @@ from .shared_context import *
 from ..detect.note_definition import *
 
 
+_WIFI_ENDPOINT_SEQ = {
+    '1': '456',
+    '2': '567',
+    '3': '678',
+    '4': '781',
+    '5': '812',
+    '6': '123',
+    '7': '234',
+    '8': '345',
+}
+
+
+
 def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denominator, duration_denominator, notes_info):
 
 
@@ -71,6 +84,8 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
                     position = _append_slide_duration_syntax(
                         position, list(time[1:]), one_beat_Msec,
                         base_denominator, duration_denominator)
+                    # 特例：三段同头直线 slide 压缩为 w 语法
+                    position = _try_compress_wifi_special(position)
                 else:
                     duration_syntax = parse_note_duration(one_beat_Msec, note_type, time[-1],
                                                           base_denominator, duration_denominator)
@@ -369,3 +384,98 @@ def _append_slide_duration_syntax(position: str,
         output_segments.append(segment + duration_syntax)
 
     return '*'.join(output_segments)
+
+
+
+
+
+
+
+
+
+def _try_compress_wifi_special(slide_position: str) -> str:
+    """
+    仅处理三段同头直线 slide 的特例：
+    1-4[2:1]*-5[2:1]*-6[2:1] -> 1w5[2:1]
+
+    约束：
+    - 恰好 3 段（由 '*' 连接）
+    - 三段都是 -x(varient) 直线段
+    - 三段时值文本完全一致
+    - 三段尾部变体完全一致
+    - 三段终点集合命中起点硬编码映射（顺序可乱）
+    - 同时保留头部与尾部变体
+    """
+
+    def check_varient(syntax) -> bool:
+        if not syntax[0].isdigit():
+            return False
+        varient = syntax[1:] if len(syntax) > 1 else ''
+        if varient not in ('', 'b', 'x', 'bx'):
+            return False
+        return True
+
+
+    if '*' not in slide_position:
+        return slide_position
+
+    # 按 * 分割
+    segments = slide_position.split('*')
+
+    # 必须严格是三段
+    if len(segments) != 3:
+        return slide_position
+    
+    # 每个段有且仅有一个 "-"
+    if not all(seg.count('-') == 1 for seg in segments):
+        return slide_position
+    
+    duration = None
+    start = None
+    end_syntax = None
+    end_pos_ids = None
+
+    # 第一段结构: 起点(变体) "-" 终点(变体) 时值
+    try:
+        # 提取时值
+        syntax, dur_part = segments[0].split('[')
+        # 提取起点终点
+        start, end = syntax.split('-')
+        if not check_varient(start):
+            return slide_position
+        if not check_varient(end):
+            return slide_position
+        # 通过
+        duration = '[' + dur_part # 补全括号
+        end_syntax = end[1:] if len(end) > 1 else ''
+        end_pos_ids = end[0]
+    except Exception:
+        return slide_position
+
+    # 第二/三段结构: "-" 终点(变体) 时值
+    for seg in segments[1:]:
+        try:
+            # 提取时值
+            syntax, dur_part = seg.split('[')
+            if '[' + dur_part != duration: # 时值一致性检查
+                return slide_position
+            # 提取终点
+            if not syntax.startswith('-'):
+                return slide_position
+            end = syntax[1:]
+            if not check_varient(end):
+                return slide_position
+            if end[1:] != end_syntax: # 变体一致性检查
+                return slide_position
+            end_pos_ids = end_pos_ids + end[0] # concat str
+        except Exception:
+            return slide_position
+
+    seq = _WIFI_ENDPOINT_SEQ.get(start[0])
+    if not seq:
+        return slide_position
+    
+    if sorted(end_pos_ids) != sorted(seq):
+        return slide_position
+    
+    return f"{start}w{seq[1]}{end_syntax}{duration}"
