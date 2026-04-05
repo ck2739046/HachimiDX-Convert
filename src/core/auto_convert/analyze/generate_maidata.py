@@ -300,9 +300,9 @@ def parse_note_duration(one_beat_Msec, note_type, time, base_denominator, durati
     # 将整数部分加入分子
     if one > 0:
         numerator = numerator + one * denominator
-    # 异常情况默认变为10/1 (时值不能为0)
+    # 异常情况默认变为1/1 (时值不能为0)
     if numerator == 0 and denominator == 1 and one == 0:
-        numerator = 10
+        numerator = 1
         denominator = 1
 
     duration_syntax = f'[{denominator}:{numerator}]'
