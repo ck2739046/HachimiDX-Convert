@@ -6,21 +6,178 @@ shared_context = None
 def analyze_slide_tail_movement_syntax(input_shared_context, note_path):
     '''
     分析运动模式
-    暂时只检测边缘旋转 x>x / x<x
-    其他的一律视为直线 x-x
-
-    如果星星全程仅在A区或D区内移动，视为旋转
     '''
 
     global shared_context
     shared_context = input_shared_context
-
 
     if len(note_path) < 6:
         return None
     positions = [x['position'] for x in note_path]
     if not positions or len(positions) < 6:
         return None
+    
+    classified_segments = get_syntax(note_path)
+
+    if not classified_segments:
+        return None
+
+    merged_tokens = []
+    pending_arc = None
+
+    def _flush_pending_arc():
+        nonlocal pending_arc
+        if pending_arc is None:
+            return
+        merged_tokens.append(
+            _get_arc_syntax(
+                pending_arc['start_id'],
+                pending_arc['next_id'],
+                pending_arc['end_id']
+            )
+        )
+        pending_arc = None
+
+    for start_A_zone, end_A_zone, syntax in classified_segments:
+
+        start_id = int(start_A_zone[1])
+        end_id = int(end_A_zone[1])
+
+        # arc 段：连续且同向时折叠成更长 arc
+        if syntax in ('<', '>'):
+            is_consec, direction = _is_consecutive(start_id, end_id)
+            if not is_consec:
+                _flush_pending_arc()
+                merged_tokens.append(f"{syntax}{end_id}")
+                continue
+
+            if pending_arc is None:
+                pending_arc = {
+                    'start_id': start_id,
+                    'next_id': end_id,
+                    'end_id': end_id,
+                    'direction': direction,
+                }
+                continue
+
+            if pending_arc['end_id'] == start_id and pending_arc['direction'] == direction:
+                pending_arc['end_id'] = end_id
+                continue
+
+            _flush_pending_arc()
+            pending_arc = {
+                'start_id': start_id,
+                'next_id': end_id,
+                'end_id': end_id,
+                'direction': direction,
+            }
+            continue
+
+        _flush_pending_arc()
+        merged_tokens.append(f"{syntax}{end_id}")
+
+    _flush_pending_arc()
+
+    if not merged_tokens:
+        return None
+
+    movement_syntax = ''.join(merged_tokens)
+
+    return movement_syntax
+
+
+
+
+# def aaa():
+    # # 检测这个A区路径里边是否包含一些圆弧，要单独拆分出来
+    # arc_segments = []
+    # i = 0
+    # while i < len(A_zones):
+    #     current_id = int(A_zones[i][1])  # 'A7' -> 7
+    #     # 尝试检测从当前位置开始的圆弧
+    #     if i + 1 < len(A_zones):
+    #         next_id = int(A_zones[i + 1][1])
+    #         is_consec, direction = is_consecutive(current_id, next_id)
+
+    #         if is_consec:
+    #             # 找到圆弧的起点，继续向后查找相同方向的连续点
+    #             arc_start = current_id
+    #             arc_next = next_id
+    #             arc_end = next_id
+    #             j = i + 2
+    #             reverse_turn = False
+    #             while j < len(A_zones):
+    #                 check_id = int(A_zones[j][1])
+    #                 prev_id = int(A_zones[j - 1][1])
+    #                 is_consec_next, dir_next = is_consecutive(prev_id, check_id)
+    #                 # 如果方向一致且连续，继续扩展圆弧
+    #                 if is_consec_next and dir_next == direction:
+    #                     arc_end = check_id
+    #                     j += 1
+    #                 else:
+    #                     # 连续但方向变化，说明遇到折返，下一段应从拐点重新开始
+    #                     if is_consec_next and dir_next != direction:
+    #                         reverse_turn = True
+    #                     break
+    #             # 记录这个圆弧
+    #             arc_segments.append(('arc', (arc_start, arc_next, arc_end)))
+
+    #             if reverse_turn:
+    #                 i = j - 1 # 折返时保留拐点作为下一段起点；否则正常跳过
+    #             else:
+    #                 i = j # 跳过已处理的圆弧部分
+    #             continue
+
+    #     # 不是圆弧的一部分，作为单独的点
+    #     arc_segments.append(('single', current_id))
+    #     i += 1
+
+
+    # # 将圆弧和单独的点组合成最终语法
+    # movement_syntax = ''
+    # last_end_id = None
+    # for seg_type, seg_data in arc_segments:
+
+    #     if seg_type == 'arc':
+    #         start_id, next_id, end_id = seg_data
+    #         arc_syntax = _get_arc_syntax(start_id, next_id, end_id)
+    #         new_syntax = f"{start_id}{arc_syntax}"
+    #     else:  # single
+    #         new_syntax = str(seg_data)
+    #         end_id = seg_data
+
+    #     # 特例：首个语法直接添加，不需要连接符
+    #     if not movement_syntax:
+    #         movement_syntax = new_syntax
+    #         last_end_id = end_id
+    #         continue
+
+    #     # 特例：弧形折返，前一段终点与后一段起点相同，直接拼接
+    #     # 例如 6<3 + >6 -> 6<3>6
+    #     if seg_type == 'arc' and last_end_id == start_id:
+    #         movement_syntax += arc_syntax
+    #         last_end_id = end_id
+    #         continue
+        
+    #     # 普通场景
+    #     movement_syntax += f"-{new_syntax}"
+    #     last_end_id = end_id
+
+    # movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
+
+    # # print(f'{" ".join(azone for azone in A_zones)} -> {movement_syntax}')
+
+    # return movement_syntax
+
+
+  
+    
+
+
+
+
+
+def get_syntax(note_path):
     
     note_path_segments = _divide_path_by_A_zone(note_path)
     classified_segments = []
@@ -40,38 +197,41 @@ def analyze_slide_tail_movement_syntax(input_shared_context, note_path):
 
         #   V  : a-zone-reflection 经过多个A区，会被拆分，忽略
 
-        is_straight, syntax = is_straight(note_path_segment, start_A_zone_id, end_A_zone_id)
-        if is_straight:
-            classified_segments.append(('straight', syntax))
+        is_straight1, syntax = is_straight(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_straight1:
+            classified_segments.append((start_A_zone, end_A_zone, syntax))
             continue
 
-        is_arc, syntax = is_arc(note_path_segment, start_A_zone_id, end_A_zone_id)
-        if is_arc:
-            classified_segments.append(('arc', syntax))
+        is_arc1, syntax = is_arc(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_arc1:
+            classified_segments.append((start_A_zone, end_A_zone, syntax))
             continue
 
-        is_center_reflection, syntax = is_center_reflection(note_path_segment, start_A_zone_id, end_A_zone_id)
-        if is_center_reflection:
-            classified_segments.append(('center_reflection', syntax))
+        is_center_reflection1, syntax = is_center_reflection(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_center_reflection1:
+            classified_segments.append((start_A_zone, end_A_zone, syntax))
             continue
 
-        is_inner_loop, syntax = is_inner_loop(note_path_segment, start_A_zone_id, end_A_zone_id)
-        if is_inner_loop:
-            classified_segments.append(('inner_loop', syntax))
+        is_inner_loop1, syntax = is_inner_loop(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_inner_loop1:
+            classified_segments.append((start_A_zone, end_A_zone, syntax))
             continue
 
-        is_zigzag, syntax = is_zigzag(note_path_segment, start_A_zone_id, end_A_zone_id)
-        if is_zigzag:
-            classified_segments.append(('zigzag', syntax))
+        is_zigzag1, syntax = is_zigzag(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_zigzag1:
+            classified_segments.append((start_A_zone, end_A_zone, syntax))
             continue
 
-        is_outer_loop, syntax = is_outer_loop(note_path_segment, start_A_zone_id, end_A_zone_id)
-        if is_outer_loop:
-            classified_segments.append(('outer_loop', syntax))
+        is_outer_loop1, syntax = is_outer_loop(note_path_segment, start_A_zone_id, end_A_zone_id)
+        if is_outer_loop1:
+            classified_segments.append((start_A_zone, end_A_zone, syntax))
             continue
 
         # 无法识别, syntax fallback to straight
-        classified_segments.append(('unknown', f'{start_A_zone_id}-{end_A_zone_id}'))
+        classified_segments.append((start_A_zone, end_A_zone, '?'))
+
+
+    return classified_segments
 
 
 
@@ -922,94 +1082,6 @@ def _get_between_DE_zones(start_A_zone_id: int, end_A_zone_id: int,
             return between_zones_counterclockwise
 
 
-
-
-
-
-
-    
-
-
-# def aaa():
-    # # 检测这个A区路径里边是否包含一些圆弧，要单独拆分出来
-    # arc_segments = []
-    # i = 0
-    # while i < len(A_zones):
-    #     current_id = int(A_zones[i][1])  # 'A7' -> 7
-    #     # 尝试检测从当前位置开始的圆弧
-    #     if i + 1 < len(A_zones):
-    #         next_id = int(A_zones[i + 1][1])
-    #         is_consec, direction = is_consecutive(current_id, next_id)
-
-    #         if is_consec:
-    #             # 找到圆弧的起点，继续向后查找相同方向的连续点
-    #             arc_start = current_id
-    #             arc_next = next_id
-    #             arc_end = next_id
-    #             j = i + 2
-    #             reverse_turn = False
-    #             while j < len(A_zones):
-    #                 check_id = int(A_zones[j][1])
-    #                 prev_id = int(A_zones[j - 1][1])
-    #                 is_consec_next, dir_next = is_consecutive(prev_id, check_id)
-    #                 # 如果方向一致且连续，继续扩展圆弧
-    #                 if is_consec_next and dir_next == direction:
-    #                     arc_end = check_id
-    #                     j += 1
-    #                 else:
-    #                     # 连续但方向变化，说明遇到折返，下一段应从拐点重新开始
-    #                     if is_consec_next and dir_next != direction:
-    #                         reverse_turn = True
-    #                     break
-    #             # 记录这个圆弧
-    #             arc_segments.append(('arc', (arc_start, arc_next, arc_end)))
-
-    #             if reverse_turn:
-    #                 i = j - 1 # 折返时保留拐点作为下一段起点；否则正常跳过
-    #             else:
-    #                 i = j # 跳过已处理的圆弧部分
-    #             continue
-
-    #     # 不是圆弧的一部分，作为单独的点
-    #     arc_segments.append(('single', current_id))
-    #     i += 1
-
-
-    # # 将圆弧和单独的点组合成最终语法
-    # movement_syntax = ''
-    # last_end_id = None
-    # for seg_type, seg_data in arc_segments:
-
-    #     if seg_type == 'arc':
-    #         start_id, next_id, end_id = seg_data
-    #         arc_syntax = _get_arc_syntax(start_id, next_id, end_id)
-    #         new_syntax = f"{start_id}{arc_syntax}"
-    #     else:  # single
-    #         new_syntax = str(seg_data)
-    #         end_id = seg_data
-
-    #     # 特例：首个语法直接添加，不需要连接符
-    #     if not movement_syntax:
-    #         movement_syntax = new_syntax
-    #         last_end_id = end_id
-    #         continue
-
-    #     # 特例：弧形折返，前一段终点与后一段起点相同，直接拼接
-    #     # 例如 6<3 + >6 -> 6<3>6
-    #     if seg_type == 'arc' and last_end_id == start_id:
-    #         movement_syntax += arc_syntax
-    #         last_end_id = end_id
-    #         continue
-        
-    #     # 普通场景
-    #     movement_syntax += f"-{new_syntax}"
-    #     last_end_id = end_id
-
-    # movement_syntax = movement_syntax[1:] # 去掉最开头的起始位置
-
-    # # print(f'{" ".join(azone for azone in A_zones)} -> {movement_syntax}')
-
-    # return movement_syntax
 
 
 
