@@ -4,6 +4,8 @@ from ..detect.note_definition import *
 from .tool import *
 from .shared_context import *
 
+from .analyze_slide_movement import _is_pass_a_zone_endpoint
+
 
 def preprocess_slide_data(shared_context: SharedContext):
     
@@ -37,16 +39,26 @@ def preprocess_slide_data(shared_context: SharedContext):
         # 剩下部分算星星尾
 
         # 对当前轨迹进行分类
-        head_segment, tail_segment = _classify_segment(shared_context, note_geometry_list)
+        head_segment, tail_segment, is_split = _classify_segment(shared_context, note_geometry_list, track_id)
         
         if head_segment is None and tail_segment is None:
             print(f"preprocess_slide_data: track_id {track_id} could not be classified as head or tail")
             continue
 
         if head_segment is not None:
+            # 不需要判断 is_spilit
+            # 星星头始终使用原始 track_id
             candidate_slide_head_data[key] = head_segment
         if tail_segment is not None:
-            candidate_slide_tail_data[key] = tail_segment
+            # 普通
+            if is_split is False:
+                candidate_slide_tail_data[key] = tail_segment
+            # 分段新产生的星星尾，需要分配一个新的 track_id
+            else:
+                new_track_id = f"{track_id+10000}"
+                new_key = (new_track_id, note_type)
+                candidate_slide_tail_data[new_key] = tail_segment
+                print(f"preprocess_slide_data: track_id {track_id} split into head {track_id} and tail {new_track_id}.")
 
 
     
@@ -62,11 +74,11 @@ def preprocess_slide_data(shared_context: SharedContext):
 
 
 # 递归分类音符
-def _classify_segment(shared_context, note_geometry_list, is_segmented=False):
+def _classify_segment(shared_context, note_geometry_list, track_id, is_segmented=False):
 
     # 段长度不足, 丢弃, return
     if len(note_geometry_list) < 10:
-        return None, None
+        return None, None, False
     
     # 判断所有 pos 是否一致, 因为星星尾是从一个A区移动到另一个A区的, 所以 pos 一定不一致
     # yes: 可能是星星头, 进一步检查, return
@@ -77,68 +89,63 @@ def _classify_segment(shared_context, note_geometry_list, is_segmented=False):
                      note.cx, note.cy
                     ) for note in note_geometry_list]
     if len(set(oct_positions)) == 1:
-        return note_geometry_list, None
+        return note_geometry_list, None, False
     
-    # 看开头是否在A区或者离A区判定点够近
-    # yes: 可能是星星尾, 进一步检查, return
-    # no:  可能是头+尾, 进一步检查
-    start_pos = oct_positions[0]
-    start_in_a_zone = start_pos.startswith('A') or \
-                        _is_close_to_a_zone_endpoint(shared_context,
-                                                     note_geometry_list[0].cx,
-                                                     note_geometry_list[0].cy)
-    if start_in_a_zone:
-        return None, note_geometry_list
-    
-    # 是否已分段
-    # yes: 已分段, 还不满足条件, 说明数据异常, 丢弃, return
-    # no:  还未分段, 继续尝试分段
-    if is_segmented:
-        return None, None
-    
-    # 是否到达A区
-    # yes: 按第一个A区分割, 第一段视为星星头, 第二段视为星星尾, 递归
-    # no:  可能是异常数据, 丢弃, return
+    # 如果开头在A区, 可能是星星尾
     all_positions = [calculate_all_position(
                      shared_context.touch_areas,
                      note.cx, note.cy
                     ) for note in note_geometry_list]
-    if any(pos.startswith('A') for pos in all_positions):
-        # 找到第一个A区点作为分割点
-        split_idx = next(i for i, pos in enumerate(all_positions) if pos.startswith('A'))
-        head_segment = note_geometry_list[:split_idx]
-        tail_segment = note_geometry_list[split_idx:]
+    if all_positions[0].startswith('A'):
+        return None, note_geometry_list, False
+    # 不在A区, 尝试惯性推断出发点
+    # 如果够近, 也可能是星星尾
+    start_A_zone = _guess_target_a_zone_by_inertia(shared_context, note_geometry_list[::-1])
+    start_cx, start_cy = note_geometry_list[0].cx, note_geometry_list[0].cy
+    if _is_close_to_A_zone_endpoint(shared_context, start_cx, start_cy, start_A_zone):
+        return None, note_geometry_list, False
+    
+    # 是否已分段
+    # yes: 已分段, 还不满足条件, 说明数据异常, 丢弃, return
+    # no:  还未分段, 继续尝试分段
+    if is_segmented is True:
+        return None, None, False
+    
+    # 是否到达A区
+    # yes: 按第一个A区分割, 第一段视为星星头, 第二段视为星星尾, 递归
+    # no:  可能是异常数据, 丢弃, return
+    for i, note in enumerate(note_geometry_list):
+        # 判断是否接近A区判定点
+        cx, cy = note.cx, note.cy
+        is_pass, A_zone = _is_pass_a_zone_endpoint(cx, cy, shared_context)
+        if not is_pass:
+            continue
+        # 找到了第一个A区判定点作为分割点
+        head_segment = note_geometry_list[:i]
+        tail_segment = note_geometry_list[i:]
+        # print(f"_classify_segment: track_id {track_id} split into head and tail at index {i}")
         # 递归处理头部和尾部
-        head_result, _ = _classify_segment(shared_context, head_segment, is_segmented=True)
-        _, tail_result = _classify_segment(shared_context, tail_segment, is_segmented=True)
-        return head_result, tail_result
+        head_result, _, _ = _classify_segment(shared_context, head_segment, track_id, is_segmented=True)
+        _, tail_result, _ = _classify_segment(shared_context, tail_segment, track_id, is_segmented=True)
+        return head_result, tail_result, True # 分段成功
     
     # 以上都不满足，说明数据异常，丢弃
-    return None, None
+    return None, None, False
 
 
 
 
 
 
-def _is_close_to_a_zone_endpoint(shared_context: SharedContext, cx: int, cy: int) -> bool:
+def _is_close_to_A_zone_endpoint(shared_context: SharedContext, cx: int, cy: int, target_a_zone: str) -> bool:
     '''
-    判断一个点是否接近A区判定点
-    接近的定义: 距离小于 note_travel_dist * 0.45
+    判断一个点是否接近指定的A区判定点
+    接近的定义: 距离小于 std_video_size * 0.24
     '''
+    ex, ey = shared_context.a_zone_endpoint[target_a_zone]
+    dist = np.sqrt((cx - ex)**2 + (cy - ey)**2)
+    return dist < shared_context.std_video_size * 0.24 # 1080p下约为240像素
 
-    if not shared_context.a_zone_endpoint:
-        return False
-
-    for endpoint in shared_context.a_zone_endpoint.values():
-        ex, ey = endpoint
-        dist = np.sqrt((cx - ex)**2 + (cy - ey)**2)
-        if dist < shared_context.note_travel_dist * 0.45:
-            # 因为 note_travel_dist * 0.45 * 2 小于两个 A 区判定点之间的距离
-            # 所以不可能同时接近两个点，直接返回就行
-            return True
-        
-    return False
 
 
 
@@ -294,25 +301,17 @@ def preprocess_slide_tail_data(shared_context: SharedContext, candidate_slide_ta
         if len(note_geometry_list) < 10: continue
 
 
-        # 先检查开头和结尾
+        # 开头在分类时已经检查过，此处仅检查结尾
         all_postions = [calculate_all_position(
                         shared_context.touch_areas,
                         note.cx, note.cy
                        ) for note in note_geometry_list]
-        start_in_a_zone = all_postions[0].startswith('A') or \
-                          _is_close_to_a_zone_endpoint(shared_context,
-                                                       note_geometry_list[0].cx,
-                                                       note_geometry_list[0].cy)
-        end_in_a_zone = all_postions[-1].startswith('A') or \
-                        _is_close_to_a_zone_endpoint(shared_context,
-                                                     note_geometry_list[-1].cx,
-                                                     note_geometry_list[-1].cy)
-        if not start_in_a_zone:
-            print(f"preprocess_slide_tail_data: start point not in A zone for track_id {track_id}")
-            continue
-        if not end_in_a_zone:
-            print(f"preprocess_slide_tail_data: end point not in A zone for track_id {track_id}")
-            continue
+        if not all_postions[-1].startswith('A'):
+            end_A_zone = _guess_target_a_zone_by_inertia(shared_context, note_geometry_list)
+            end_cx, end_cy = note_geometry_list[-1].cx, note_geometry_list[-1].cy
+            if not _is_close_to_A_zone_endpoint(shared_context, end_cx, end_cy, end_A_zone):
+                print(f"preprocess_slide_tail_data: end point not close to A zone for track_id {track_id}")
+                continue
 
 
 
@@ -370,3 +369,68 @@ def preprocess_slide_tail_data(shared_context: SharedContext, candidate_slide_ta
         return {}
 
     return slide_data
+
+
+
+
+
+
+def _guess_target_a_zone_by_inertia(shared_context, note_path):
+    '''
+    根据运动惯性，预测最终可能进入的A区。
+    '''
+    if len(note_path) < 2:
+        return None
+
+    # 寻找倒序最后一点 (点A)
+    last_note = note_path[-1]
+    A_cx = last_note.cx
+    A_cy = last_note.cy
+
+    # 倒序遍历寻找距离大于阈值的点 (点B)
+    B_cx, B_cy = None, None
+    min_dist = shared_context.std_video_size * 0.02 # 1080p下约为20像素
+
+    for note in reversed(note_path[:-1]):
+        cx = note.cx
+        cy = note.cy
+        dist = np.sqrt((cx - A_cx)**2 + (cy - A_cy)**2)
+        if dist > min_dist:
+            B_cx, B_cy = cx, cy
+            break
+        
+    if B_cx is None or B_cy is None:
+        return None
+    
+    # 运动向量 BA (从B指向A)
+    BA_x = A_cx - B_cx
+    BA_y = A_cy - B_cy
+    BA_length = np.sqrt(BA_x**2 + BA_y**2)
+    if BA_length == 0: return None # 理论上不会发生AB重合
+    
+    # 过滤并找出距离射线最近的点
+    best_zone = None
+    min_distance_to_line = 999999
+
+    for zone_id in range(1, 9):
+        zone_key = f'A{zone_id}'
+        P_cx, P_cy = shared_context.a_zone_endpoint[zone_key]
+    
+        # 目标向量 AP (从A指向P)
+        AP_x = P_cx - A_cx
+        AP_y = P_cy - A_cy
+    
+        # 1. 筛选排查：利用点乘 (Dot Product) 判断是否在相反方向
+        dot_product = BA_x * AP_x + BA_y * AP_y
+        if dot_product < 0:
+            continue  # 夹角 > 90度，说明目标点在跑过来的“背后”，排除
+        
+        # 2. 计算点到射线的距离：利用叉乘的绝对值 (Cross Product Area) / 底边长
+        cross_product = abs(BA_x * AP_y - BA_y * AP_x)
+        distance_to_line = cross_product / BA_length
+    
+        if distance_to_line < min_distance_to_line:
+            min_distance_to_line = distance_to_line
+            best_zone = zone_key
+        
+    return best_zone
