@@ -17,6 +17,17 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, start_position,
     positions = [x['position'] for x in note_path]
     if not positions or len(positions) < 6:
         return None, None
+    
+    # 起点
+    point = shared_context.a_zone_endpoint.get(start_position, None)
+    if point is None:
+        return None, None
+    start_cx, start_cy = point
+    # 终点
+    point = shared_context.a_zone_endpoint.get(end_position, None)
+    if point is None:
+        return None, None
+    end_cx, end_cy = point
 
     # 计算帧间速度
     last_cx = None
@@ -29,6 +40,12 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, start_position,
         frame_num = point['frame']
         cx = point['cx']
         cy = point['cy']
+
+        # 过滤离起点/终点过近的
+        dist_to_start = np.sqrt((cx - start_cx)**2 + (cy - start_cy)**2)
+        dist_to_end = np.sqrt((cx - end_cx)**2 + (cy - end_cy)**2)
+        if dist_to_start < min_dist or dist_to_end < min_dist:
+            continue
 
         if last_cx is not None and last_cy is not None and last_frame is not None:
             dist = np.sqrt((cx - last_cx)**2 + (cy - last_cy)**2)
@@ -54,16 +71,6 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, start_position,
 
 
 
-    # 起点
-    point = shared_context.a_zone_endpoint.get(start_position, None)
-    if point is None:
-        return None, None
-    start_cx, start_cy = point
-    # 终点
-    point = shared_context.a_zone_endpoint.get(end_position, None)
-    if point is None:
-        return None, None
-    end_cx, end_cy = point
 
     # 定义A区中心半径
     a_zone_radius = (shared_context.note_travel_dist) / 7
