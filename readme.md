@@ -15,7 +15,7 @@ A tool designed for the rhythm game `maimai`. Accepts chart confirmation videos 
 - **Fully automatic chart conversion**
     - Supports recognition and duration inference for all note types: tap, slide, touch, hold, and touch-hold.
     - Supports variant classification for ex-note, break-note, and ex-break-note.
-    - Supports basic slide path inference (`<` `>` `-`).
+    - Supports automatic syntax inference for all slide notations.
 
 - **Custom vision models**
     - Optimized specifically for maimai, with stronger robustness in complex scenes.
@@ -79,11 +79,6 @@ Code lives in `src/`, organized in three layers:
 
 
 ## 🚧 Known Issues
-
-- **Slides**
-    - Complex slide path recognition is not ideal.
-    - Multiple slides from the same start point (`x*x`)  are not recognized well.
-    - Wifi slides (`w`) are not supported.
 
 - **Touch / Touch-Hold**
     - Overlapping notes at the same spot are not supported.
