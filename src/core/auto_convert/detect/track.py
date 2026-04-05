@@ -13,6 +13,50 @@ from .note_definition import *
 from .detect import _load_detect_results
 
 
+TRACKER_NOTE_TYPES = [
+    NoteType.TAP,
+    NoteType.SLIDE,
+    NoteType.TOUCH,
+    NoteType.HOLD,
+    NoteType.TOUCH_HOLD,
+]
+
+
+# 每个类型设置独立的匹配阈值
+# ≥ match_thresh, 匹配成功, 旧 id 继续
+# < match_thresh, 匹配失败, 新 id
+TRACKER_MATCH_THRESHOLDS = {
+    NoteType.TAP: 0.85,
+    NoteType.SLIDE: 0.80, # 低一点，更不容易跳 id
+    NoteType.TOUCH: 0.80, # 多个 touch 可能存在重叠，降低阈值可以避免从一个 touch 跳到另一个 touch
+    NoteType.HOLD: 0.85,
+    NoteType.TOUCH_HOLD: 0.85,
+}
+
+
+def _build_tracker(match_thresh: float, fps: float) -> BOTSORT:
+    tracker_args = SimpleNamespace(
+        tracker_type='botsort',
+        track_high_thresh=0.25, # 默认，宽容
+        track_low_thresh=0.1,   # 默认，宽容
+        new_track_thresh=0.25,  # 默认，高敏感度，容易视为新的轨迹ID
+        track_buffer=10,        # real buffer frames = fps / 30 * track_buffer
+                                # 此处 10 = 0.33s
+        match_thresh=match_thresh,
+        fuse_score=True,        # 默认，综合考虑conf和iou
+        gmc_method='none',      # 画面稳定，不需要gmc补偿
+
+        proximity_thresh=273,
+        appearance_thresh=478,
+        with_reid=False,        # 不使用ReID特征
+        model='HachimiDX'
+    )
+    return BOTSORT(tracker_args, frame_rate=fps)
+
+
+
+
+
 def main(std_video_path: Path,
          total_frames: int,
         ) -> OpResult[None]:
@@ -26,24 +70,11 @@ def main(std_video_path: Path,
         video_size = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         cap.release()
 
-        # 初始化tracker
-        tracker_args = SimpleNamespace(
-            tracker_type='botsort',
-            track_high_thresh=0.25, # 默认，宽容
-            track_low_thresh=0.1,   # 默认，宽容
-            new_track_thresh=0.25,  # 默认，高敏感度，容易视为新的轨迹ID
-            track_buffer=15,        # real buffer frames = fps / 30 * track_buffer
-                                    # 此处 15 = 0.5s
-            match_thresh=0.85,      # 高iou，允许音符移动较大距离后还能匹配上
-            fuse_score=True,        # 默认，综合考虑conf和iou
-            gmc_method='none',      # 画面稳定，不需要gmc补偿
-
-            proximity_thresh=273,
-            appearance_thresh=478,
-            with_reid=False,        # 不使用ReID特征
-            model='HachimiDX'
-        )
-        tracker = BOTSORT(tracker_args, frame_rate=fps)
+        # 初始化5个独立tracker: 每个note_type一个实例
+        trackers_by_type = {
+            note_type: _build_tracker(TRACKER_MATCH_THRESHOLDS[note_type], fps)
+            for note_type in TRACKER_NOTE_TYPES
+        }
 
         # 按帧号重新组织detect_results
         detections_by_frame = defaultdict(list)
@@ -55,6 +86,9 @@ def main(std_video_path: Path,
         last_counter = 0
         start_time = time.time()
         last_time = start_time
+        # 维护 local tracker id 到全局连续 id 的映射
+        local_to_global_id = {}
+        next_global_id = [0]
         frame_shape = np.empty((video_size, video_size, 3), dtype=np.uint8)
         # final_tracked_results should be a dict
         # (track_id, note_type) -> list of note_geometry
@@ -67,20 +101,34 @@ def main(std_video_path: Path,
 
             # 获取当前帧的检测结果
             single_frame_detections = detections_by_frame.get(frame_number, [])
-            # 转换为tracker需要的数据格式
-            # 就算没有检测框，也要传个空对象给tracker以更新时间
-            tracker_input = _convert_detections_to_tracker_format(single_frame_detections, frame_shape)
-            # 交给tracker追踪
-            track_result = tracker.update(tracker_input)
-            if track_result is None or len(track_result) == 0:
-                continue
-            # 解析追踪结果
-            parsed_track_results = _parse_track_results(track_result, single_frame_detections)
-            # 写入最终结果
-            for track_id, original_note_geometry in parsed_track_results:
-                key = (track_id, original_note_geometry.note_type)
-                value = original_note_geometry
-                final_tracked_results[key].append(value)
+
+            # 按note_type分流到各自tracker
+            detections_by_note_type = defaultdict(list)
+            for note_geometry in single_frame_detections:
+                detections_by_note_type[note_geometry.note_type].append(note_geometry)
+
+            for note_type in TRACKER_NOTE_TYPES:
+                type_detections = detections_by_note_type.get(note_type, [])
+                # 转换为tracker需要的数据格式
+                # 就算没有检测框，也要传个空对象给tracker以更新时间
+                tracker_input = _convert_detections_to_tracker_format(type_detections, frame_shape)
+                # 交给tracker追踪
+                track_result = trackers_by_type[note_type].update(tracker_input)
+                if track_result is None or len(track_result) == 0:
+                    continue
+                # 解析追踪结果
+                parsed_track_results = _parse_track_results(track_result, type_detections)
+                # 写入最终结果
+                for local_track_id, original_note_geometry in parsed_track_results:
+                    global_track_id = _get_or_assign_global_track_id(
+                        note_type,
+                        local_track_id,
+                        local_to_global_id,
+                        next_global_id,
+                    )
+                    key = (global_track_id, original_note_geometry.note_type)
+                    value = original_note_geometry
+                    final_tracked_results[key].append(value)
             
             # 打印进度
             counter += 1
@@ -232,3 +280,12 @@ def _load_track_results(output_dir):
     
     return tracks
 
+
+
+def _get_or_assign_global_track_id(note_type, local_track_id, id_mapping, next_id_holder):
+    """将 (note_type, local_track_id) 映射为全局连续 ID"""
+    key = (note_type, int(local_track_id))
+    if key not in id_mapping:
+        id_mapping[key] = next_id_holder[0]
+        next_id_holder[0] += 1
+    return id_mapping[key]
