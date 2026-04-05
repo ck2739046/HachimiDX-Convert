@@ -82,8 +82,10 @@ def analyze_slide_tail_movement_syntax(input_shared_context, note_path):
         return None
 
     movement_syntax = ''.join(merged_tokens)
+    start_pos = classified_segments[0][0]  # 起始位置
+    end_pos = classified_segments[-1][1]   # 终止位置
 
-    return movement_syntax
+    return movement_syntax, start_pos, end_pos
 
 
 
