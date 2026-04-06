@@ -30,10 +30,6 @@ class ScreenRectification:
     SCALE_MAX = 4.0
     SCALE_STEP = 0.05
 
-    ROT_MIN = -85.0
-    ROT_MAX = 85.0
-    ROT_STEP = 0.5
-
     PREVIEW_SIZE = 800
 
     def __init__(self,
@@ -77,9 +73,6 @@ class ScreenRectification:
         self.var_center_y: Optional[tk.StringVar] = None
         self.var_scale_x: Optional[tk.StringVar] = None
         self.var_scale_y: Optional[tk.StringVar] = None
-        self.var_x_rot: Optional[tk.StringVar] = None
-        self.var_y_rot: Optional[tk.StringVar] = None
-        self.var_z_rot: Optional[tk.StringVar] = None
 
 
 
@@ -234,15 +227,7 @@ class ScreenRectification:
             处理后的帧
         """
 
-        # 先做平面旋转，再做 x/y 透视旋转
-        rotated_frame = self.apply_plane_rotation_preview(raw_frame, self.z_rot_deg)
-        rotated_frame = self.apply_axis_rotation_preview(
-            rotated_frame,
-            self.x_rot_deg,
-            self.y_rot_deg,
-            center_x=float(self.circle_cx),
-            center_y=float(self.circle_cy),
-        )
+        frame = raw_frame
 
         font_size = 0.62
         font_thickness = 2
@@ -258,7 +243,7 @@ class ScreenRectification:
         target_width = max(1, x2 - x1)
         target_height = max(1, y2 - y1)
 
-        frame_h, frame_w = rotated_frame.shape[:2]
+        frame_h, frame_w = frame.shape[:2]
         src_x1 = max(0, x1)
         src_y1 = max(0, y1)
         src_x2 = min(frame_w, x2)
@@ -270,7 +255,7 @@ class ScreenRectification:
         cropped_frame = np.zeros((target_height, target_width, 3), dtype=np.uint8)
 
         if src_x1 < src_x2 and src_y1 < src_y2:
-            video_slice = rotated_frame[src_y1:src_y2, src_x1:src_x2]
+            video_slice = frame[src_y1:src_y2, src_x1:src_x2]
             slice_height, slice_width = video_slice.shape[:2]
             cropped_frame[dst_y1:dst_y1+slice_height, dst_x1:dst_x1+slice_width] = video_slice
 
@@ -322,8 +307,7 @@ class ScreenRectification:
 
         circle_info = (
             f"Center: ({self.circle_cx}, {self.circle_cy}), R: {self.circle_r}, "
-            f"Scale: ({self.scale_x:.2f}, {self.scale_y:.2f}), "
-            f"Rot: ({self.x_rot_deg:.1f}, {self.y_rot_deg:.1f}, {self.z_rot_deg:.1f})"
+            f"Scale: ({self.scale_x:.2f}, {self.scale_y:.2f})"
         )
         cv2.putText(
             img=resized_frame,
@@ -382,107 +366,6 @@ class ScreenRectification:
 
 
 
-    def apply_plane_rotation_preview(self, frame, z_rot_deg: float):
-        """将 z 轴平面旋转应用到预览帧。"""
-        if abs(z_rot_deg) < 1e-6:
-            return frame
-
-        height, width = frame.shape[:2]
-        center = ((width - 1) / 2.0, (height - 1) / 2.0)
-        matrix = cv2.getRotationMatrix2D(center, z_rot_deg, 1.0)
-        return cv2.warpAffine(
-            frame,
-            matrix,
-            (width, height),
-            flags=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_CONSTANT,
-            borderValue=(0, 0, 0),
-            )
-
-
-
-    def apply_axis_rotation_preview(self,
-                                    frame,
-                                    x_rot_deg: float,
-                                    y_rot_deg: float,
-                                    center_x: Optional[float] = None,
-                                    center_y: Optional[float] = None):
-        """将沿 x/y 轴旋转角转换成透视预览效果。"""
-        if abs(x_rot_deg) < 1e-6 and abs(y_rot_deg) < 1e-6:
-            return frame
-
-        height, width = frame.shape[:2]
-        default_cx = (width - 1) / 2.0
-        default_cy = (height - 1) / 2.0
-        cx = default_cx if center_x is None else float(np.clip(center_x, 0.0, width - 1.0))
-        cy = default_cy if center_y is None else float(np.clip(center_y, 0.0, height - 1.0))
-
-        corners = np.array(
-            [
-                [-cx, -cy, 0.0],
-                [width - 1.0 - cx, -cy, 0.0],
-                [width - 1.0 - cx, height - 1.0 - cy, 0.0],
-                [-cx, height - 1.0 - cy, 0.0],
-            ],
-            dtype=np.float32,
-        )
-
-        x_rad = np.deg2rad(x_rot_deg)
-        y_rad = np.deg2rad(y_rot_deg)
-
-        rot_x = np.array(
-            [
-                [1.0, 0.0, 0.0],
-                [0.0, np.cos(x_rad), -np.sin(x_rad)],
-                [0.0, np.sin(x_rad), np.cos(x_rad)],
-            ],
-            dtype=np.float32,
-        )
-        rot_y = np.array(
-            [
-                [np.cos(y_rad), 0.0, np.sin(y_rad)],
-                [0.0, 1.0, 0.0],
-                [-np.sin(y_rad), 0.0, np.cos(y_rad)],
-            ],
-            dtype=np.float32,
-        )
-
-        rotation = rot_y @ rot_x
-        rotated = corners @ rotation.T
-
-        focal = max(width, height) * 1.2
-        distance = max(width, height) * 1.5
-        z = rotated[:, 2] + distance
-        z = np.where(np.abs(z) < 1e-6, 1e-6, z)
-
-        projected = np.zeros((4, 2), dtype=np.float32)
-        projected[:, 0] = focal * rotated[:, 0] / z + cx
-        projected[:, 1] = focal * rotated[:, 1] / z + cy
-
-        min_xy = projected.min(axis=0)
-        max_xy = projected.max(axis=0)
-        span = np.maximum(max_xy - min_xy, 1e-6)
-
-        dst = np.zeros((4, 2), dtype=np.float32)
-        dst[:, 0] = (projected[:, 0] - min_xy[0]) * (width - 1) / span[0]
-        dst[:, 1] = (projected[:, 1] - min_xy[1]) * (height - 1) / span[1]
-
-        src = np.array(
-            [[0.0, 0.0], [width - 1.0, 0.0], [width - 1.0, height - 1.0], [0.0, height - 1.0]],
-            dtype=np.float32,
-        )
-        matrix = cv2.getPerspectiveTransform(src, dst)
-        return cv2.warpPerspective(
-            frame,
-            matrix,
-            (width, height),
-            flags=cv2.INTER_LINEAR,
-            borderMode=cv2.BORDER_CONSTANT,
-            borderValue=(0, 0, 0),
-        )
-
-
-
 
     def pump_dialog_events(self) -> None:
         if self.dialog is None:
@@ -523,9 +406,6 @@ class ScreenRectification:
         self.var_center_y = tk.StringVar(value=str(self.circle_cy))
         self.var_scale_x = tk.StringVar(value=f"{self.scale_x:.2f}")
         self.var_scale_y = tk.StringVar(value=f"{self.scale_y:.2f}")
-        self.var_x_rot = tk.StringVar(value=f"{self.x_rot_deg:.1f}")
-        self.var_y_rot = tk.StringVar(value=f"{self.y_rot_deg:.1f}")
-        self.var_z_rot = tk.StringVar(value=f"{self.z_rot_deg:.1f}")
 
         top_label = ttk.Label(dialog, text='Press "OK" to exit', padding=(10, 10, 10, 2))
         top_label.pack(anchor=tk.CENTER)
@@ -536,7 +416,6 @@ class ScreenRectification:
         int_signed_validator = dialog.register(self.validate_signed_int_input)
         radius_validator = dialog.register(self.validate_radius_input)
         scale_validator = dialog.register(self.validate_scale_input)
-        rot_validator = dialog.register(self.validate_rot_input)
 
         self.build_param_row(
             parent=input_frame,
@@ -591,39 +470,6 @@ class ScreenRectification:
             plus_command=lambda: self.adjust_scale("y", self.SCALE_STEP),
             submit_command=lambda _event=None: self.submit_scale("y"),
             note=f"{self.SCALE_MIN} ~ {self.SCALE_MAX}",
-        )
-
-        self.build_param_row(
-            parent=input_frame,
-            title="plane rotation",
-            variable=self.var_z_rot,
-            validator=rot_validator,
-            minus_command=lambda: self.adjust_rotation("z", -self.ROT_STEP),
-            plus_command=lambda: self.adjust_rotation("z", self.ROT_STEP),
-            submit_command=lambda _event=None: self.submit_rotation("z"),
-            note=f"{self.ROT_MIN} ~ {self.ROT_MAX}",
-        )
-
-        self.build_param_row(
-            parent=input_frame,
-            title="x rotation",
-            variable=self.var_x_rot,
-            validator=rot_validator,
-            minus_command=lambda: self.adjust_rotation("x", -self.ROT_STEP),
-            plus_command=lambda: self.adjust_rotation("x", self.ROT_STEP),
-            submit_command=lambda _event=None: self.submit_rotation("x"),
-            note=f"{self.ROT_MIN} ~ {self.ROT_MAX}",
-        )
-
-        self.build_param_row(
-            parent=input_frame,
-            title="y rotation",
-            variable=self.var_y_rot,
-            validator=rot_validator,
-            minus_command=lambda: self.adjust_rotation("y", -self.ROT_STEP),
-            plus_command=lambda: self.adjust_rotation("y", self.ROT_STEP),
-            submit_command=lambda _event=None: self.submit_rotation("y"),
-            note=f"{self.ROT_MIN} ~ {self.ROT_MAX}",
         )
 
         button_frame = ttk.Frame(dialog, padding="10")
@@ -683,11 +529,6 @@ class ScreenRectification:
             return True
         return bool(re.fullmatch(r"\d(\.\d{0,2})?", proposed))
 
-    def validate_rot_input(self, proposed: str) -> bool:
-        if proposed in ("", "-", "-.", "."):
-            return True
-        return bool(re.fullmatch(r"-?\d{1,2}(\.\d{0,1})?", proposed))
-
 
 
 
@@ -707,15 +548,6 @@ class ScreenRectification:
             self.scale_x = self.clamp_float(self.scale_x + delta, self.SCALE_MIN, self.SCALE_MAX, 2)
         else:
             self.scale_y = self.clamp_float(self.scale_y + delta, self.SCALE_MIN, self.SCALE_MAX, 2)
-        self.sync_dialog_values()
-
-    def adjust_rotation(self, axis: str, delta: float) -> None:
-        if axis == "x":
-            self.x_rot_deg = self.clamp_float(self.x_rot_deg + delta, self.ROT_MIN, self.ROT_MAX, 1)
-        elif axis == "y":
-            self.y_rot_deg = self.clamp_float(self.y_rot_deg + delta, self.ROT_MIN, self.ROT_MAX, 1)
-        else:
-            self.z_rot_deg = self.clamp_float(self.z_rot_deg + delta, self.ROT_MIN, self.ROT_MAX, 1)
         self.sync_dialog_values()
 
 
@@ -811,45 +643,6 @@ class ScreenRectification:
 
 
 
-    def submit_rotation(self, axis: str) -> None:
-        if self.var_x_rot is None or self.var_y_rot is None or self.var_z_rot is None:
-            return
-
-        if axis == "x":
-            var = self.var_x_rot
-        elif axis == "y":
-            var = self.var_y_rot
-        else:
-            var = self.var_z_rot
-        text = var.get().strip()
-        if text in ("", "-", "-.", "."):
-            self.sync_dialog_values()
-            return
-
-        try:
-            value = float(text)
-        except ValueError:
-            self.show_input_error(f"{axis} rot 输入无效")
-            self.sync_dialog_values()
-            return
-
-        if value < self.ROT_MIN or value > self.ROT_MAX:
-            self.show_input_error(f"{axis} rot 范围必须是 {self.ROT_MIN} 到 {self.ROT_MAX}")
-            self.sync_dialog_values()
-            return
-
-        value = round(value, 1)
-        if axis == "x":
-            self.x_rot_deg = value
-        elif axis == "y":
-            self.y_rot_deg = value
-        else:
-            self.z_rot_deg = value
-        self.sync_dialog_values()
-
-
-
-
     def show_input_error(self, message: str) -> None:
         if self.dialog is not None:
             messagebox.showerror("错误", message, parent=self.dialog)
@@ -879,12 +672,6 @@ class ScreenRectification:
             self.var_scale_x.set(f"{self.scale_x:.2f}")
         if self.var_scale_y is not None:
             self.var_scale_y.set(f"{self.scale_y:.2f}")
-        if self.var_x_rot is not None:
-            self.var_x_rot.set(f"{self.x_rot_deg:.1f}")
-        if self.var_y_rot is not None:
-            self.var_y_rot.set(f"{self.y_rot_deg:.1f}")
-        if self.var_z_rot is not None:
-            self.var_z_rot.set(f"{self.z_rot_deg:.1f}")
 
     def on_dialog_ok(self) -> None:
         self.is_confirmed = True
