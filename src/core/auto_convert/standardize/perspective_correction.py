@@ -11,11 +11,15 @@ class PerspectiveCorrection:
     WINDOW_WIDTH = PANEL_SIZE * 2
     WINDOW_HEIGHT = PANEL_SIZE
 
-    TRACKBAR_INPUT_NAME = "Input Scale %"
-    TRACKBAR_OUTPUT_NAME = "Corrected Scale %"
-    TRACKBAR_MIN = 10
-    TRACKBAR_MAX = 300
-    TRACKBAR_DEFAULT = 100
+    CONTROL_HEIGHT = 64
+    SLIDER_Y_OFFSET = 40
+    SLIDER_TRACK_PADDING = 72
+    SLIDER_TRACK_WIDTH = 656
+    SLIDER_KNOB_RADIUS = 8
+
+    SCALE_MIN_PERCENT = 10
+    SCALE_MAX_PERCENT = 300
+    SCALE_DEFAULT_PERCENT = 100
 
     DRAG_RADIUS_PX = 18
 
@@ -42,6 +46,9 @@ class PerspectiveCorrection:
         self.quad_points: Optional[np.ndarray] = None
         self.left_panel_meta: Optional[Dict[str, float]] = None
         self.dragging_point_index = -1
+        self.dragging_slider_name: Optional[str] = None
+        self.input_zoom_percent = self.SCALE_DEFAULT_PERCENT
+        self.output_zoom_percent = self.SCALE_DEFAULT_PERCENT
 
     def main(self) -> OpResult[Tuple[Tuple[int, int], int, float, float, float, float, float]]:
         cap = None
@@ -68,20 +75,6 @@ class PerspectiveCorrection:
 
             cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
             cv2.resizeWindow(window_name, self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
-            cv2.createTrackbar(
-                self.TRACKBAR_INPUT_NAME,
-                window_name,
-                self.TRACKBAR_DEFAULT - self.TRACKBAR_MIN,
-                self.TRACKBAR_MAX - self.TRACKBAR_MIN,
-                lambda _v: None,
-            )
-            cv2.createTrackbar(
-                self.TRACKBAR_OUTPUT_NAME,
-                window_name,
-                self.TRACKBAR_DEFAULT - self.TRACKBAR_MIN,
-                self.TRACKBAR_MAX - self.TRACKBAR_MIN,
-                lambda _v: None,
-            )
             cv2.setMouseCallback(window_name, self._on_mouse_event)
 
             cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
@@ -107,10 +100,8 @@ class PerspectiveCorrection:
                     if self.quad_points is None:
                         self.quad_points = self._build_default_quad(self.frame_width, self.frame_height)
 
-                input_zoom_percent = cv2.getTrackbarPos(self.TRACKBAR_INPUT_NAME, window_name)
-                output_zoom_percent = cv2.getTrackbarPos(self.TRACKBAR_OUTPUT_NAME, window_name)
-                input_zoom = (input_zoom_percent + self.TRACKBAR_MIN) / 100.0
-                output_zoom = (output_zoom_percent + self.TRACKBAR_MIN) / 100.0
+                input_zoom = self.input_zoom_percent / 100.0
+                output_zoom = self.output_zoom_percent / 100.0
 
                 left_panel, left_meta = self._compose_panel(raw_frame, input_zoom)
                 self.left_panel_meta = left_meta
@@ -239,6 +230,9 @@ class PerspectiveCorrection:
                                output_zoom: float) -> None:
         cv2.line(preview, (self.PANEL_SIZE, 0), (self.PANEL_SIZE, self.PANEL_SIZE), (255, 255, 255), 1)
 
+        self._draw_slider_panel(preview, 0, "Input scale", self.input_zoom_percent, input_zoom, "input")
+        self._draw_slider_panel(preview, self.PANEL_SIZE, "Corrected scale", self.output_zoom_percent, output_zoom, "output")
+
         cv2.putText(
             preview,
             "Input (drag 4 points)",
@@ -263,7 +257,7 @@ class PerspectiveCorrection:
         cv2.putText(
             preview,
             f"Input zoom: {input_zoom:.2f}x",
-            (12, self.PANEL_SIZE - 44),
+            (12, self.PANEL_SIZE - self.CONTROL_HEIGHT - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
             (255, 255, 255),
@@ -273,7 +267,7 @@ class PerspectiveCorrection:
         cv2.putText(
             preview,
             f"Output zoom: {output_zoom:.2f}x",
-            (self.PANEL_SIZE + 12, self.PANEL_SIZE - 44),
+            (self.PANEL_SIZE + 12, self.PANEL_SIZE - self.CONTROL_HEIGHT - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
             (255, 255, 255),
@@ -314,6 +308,78 @@ class PerspectiveCorrection:
                 2,
                 cv2.LINE_AA,
             )
+
+    def _draw_slider_panel(self,
+                             preview: np.ndarray,
+                             panel_offset_x: int,
+                             label: str,
+                             percent_value: int,
+                             zoom_value: float,
+                             slider_name: str) -> None:
+        panel_bottom = self.PANEL_SIZE
+        control_top = panel_bottom - self.CONTROL_HEIGHT
+        control_bottom = panel_bottom
+
+        cv2.rectangle(
+            preview,
+            (panel_offset_x, control_top),
+            (panel_offset_x + self.PANEL_SIZE, control_bottom),
+            (0, 0, 0),
+            -1,
+        )
+        cv2.rectangle(
+            preview,
+            (panel_offset_x, control_top),
+            (panel_offset_x + self.PANEL_SIZE - 1, control_bottom - 1),
+            (70, 70, 70),
+            1,
+        )
+
+        track_x1 = panel_offset_x + self.SLIDER_TRACK_PADDING
+        track_x2 = panel_offset_x + self.PANEL_SIZE - self.SLIDER_TRACK_PADDING
+        track_y = control_top + self.SLIDER_Y_OFFSET
+
+        cv2.putText(
+            preview,
+            f"{label}: {percent_value}%",
+            (track_x1, control_top + 20),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.52,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+
+        cv2.line(preview, (track_x1, track_y), (track_x2, track_y), (170, 170, 170), 2)
+
+        knob_x = int(round(self._slider_percent_to_x(percent_value, track_x1, track_x2)))
+        knob_color = (0, 200, 255) if self.dragging_slider_name == slider_name else (0, 140, 255)
+        cv2.circle(preview, (knob_x, track_y), self.SLIDER_KNOB_RADIUS + 2, (255, 255, 255), 1)
+        cv2.circle(preview, (knob_x, track_y), self.SLIDER_KNOB_RADIUS, knob_color, -1)
+
+        cv2.putText(
+            preview,
+            f"{zoom_value:.2f}x",
+            (track_x2 - 64, control_top + 20),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.50,
+            (200, 200, 200),
+            1,
+            cv2.LINE_AA,
+        )
+
+    def _slider_percent_to_x(self, percent_value: int, track_x1: int, track_x2: int) -> float:
+        clamped = self._clamp_percent(percent_value)
+        ratio = (clamped - self.SCALE_MIN_PERCENT) / float(self.SCALE_MAX_PERCENT - self.SCALE_MIN_PERCENT)
+        return track_x1 + ratio * (track_x2 - track_x1)
+
+    def _slider_x_to_percent(self, x: float, track_x1: int, track_x2: int) -> int:
+        ratio = (x - track_x1) / float(max(1, track_x2 - track_x1))
+        percent = self.SCALE_MIN_PERCENT + ratio * (self.SCALE_MAX_PERCENT - self.SCALE_MIN_PERCENT)
+        return self._clamp_percent(int(round(percent)))
+
+    def _clamp_percent(self, value: int) -> int:
+        return max(self.SCALE_MIN_PERCENT, min(self.SCALE_MAX_PERCENT, int(value)))
 
     def _frame_to_panel(self, frame_point: np.ndarray, meta: Dict[str, float]) -> np.ndarray:
         zoom = meta["zoom"]
@@ -375,6 +441,9 @@ class PerspectiveCorrection:
         if self.quad_points is None or self.left_panel_meta is None:
             return
 
+        if self._handle_slider_event(event, x, y):
+            return
+
         if x >= self.PANEL_SIZE:
             if event == cv2.EVENT_LBUTTONUP:
                 self.dragging_point_index = -1
@@ -400,3 +469,66 @@ class PerspectiveCorrection:
 
         elif event == cv2.EVENT_LBUTTONUP:
             self.dragging_point_index = -1
+
+    def _handle_slider_event(self, event: int, x: int, y: int) -> bool:
+        control_top = self.PANEL_SIZE - self.CONTROL_HEIGHT
+
+        if self.dragging_slider_name is not None:
+            slider_name = self.dragging_slider_name
+            panel_offset_x = 0 if slider_name == "input" else self.PANEL_SIZE
+            track_x1 = panel_offset_x + self.SLIDER_TRACK_PADDING
+            track_x2 = panel_offset_x + self.PANEL_SIZE - self.SLIDER_TRACK_PADDING
+
+            if event == cv2.EVENT_MOUSEMOVE:
+                self._update_slider_from_mouse(slider_name, x, track_x1, track_x2)
+                return True
+
+            if event == cv2.EVENT_LBUTTONUP:
+                self._update_slider_from_mouse(slider_name, x, track_x1, track_x2)
+                self.dragging_slider_name = None
+                return True
+
+            return True
+
+        if y < control_top:
+            if event == cv2.EVENT_LBUTTONUP:
+                self.dragging_slider_name = None
+            return False
+
+        if x < 0 or x >= self.WINDOW_WIDTH:
+            return False
+
+        slider_name = "input" if x < self.PANEL_SIZE else "output"
+        panel_offset_x = 0 if slider_name == "input" else self.PANEL_SIZE
+        track_x1 = panel_offset_x + self.SLIDER_TRACK_PADDING
+        track_x2 = panel_offset_x + self.PANEL_SIZE - self.SLIDER_TRACK_PADDING
+        track_y = control_top + self.SLIDER_Y_OFFSET
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            hit_x_min = track_x1 - 14
+            hit_x_max = track_x2 + 14
+            hit_y_min = track_y - 18
+            hit_y_max = track_y + 18
+            if hit_x_min <= x <= hit_x_max and hit_y_min <= y <= hit_y_max:
+                self.dragging_slider_name = slider_name
+                self._update_slider_from_mouse(slider_name, x, track_x1, track_x2)
+                return True
+
+        if event == cv2.EVENT_MOUSEMOVE and self.dragging_slider_name == slider_name:
+            self._update_slider_from_mouse(slider_name, x, track_x1, track_x2)
+            return True
+
+        if event == cv2.EVENT_LBUTTONUP:
+            if self.dragging_slider_name == slider_name:
+                self._update_slider_from_mouse(slider_name, x, track_x1, track_x2)
+                self.dragging_slider_name = None
+                return True
+
+        return self.dragging_slider_name == slider_name
+
+    def _update_slider_from_mouse(self, slider_name: str, x: int, track_x1: int, track_x2: int) -> None:
+        percent = self._slider_x_to_percent(float(x), track_x1, track_x2)
+        if slider_name == "input":
+            self.input_zoom_percent = percent
+        else:
+            self.output_zoom_percent = percent
