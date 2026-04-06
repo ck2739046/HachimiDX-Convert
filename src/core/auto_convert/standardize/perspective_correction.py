@@ -11,15 +11,19 @@ class PerspectiveCorrection:
     WINDOW_WIDTH = PANEL_SIZE * 2
     WINDOW_HEIGHT = PANEL_SIZE
 
-    CONTROL_HEIGHT = 64
-    SLIDER_Y_OFFSET = 40
+    CONTROL_HEIGHT = 100
+    SLIDER_TOP_Y_OFFSET = 36
+    SLIDER_BOTTOM_Y_OFFSET = 72
     SLIDER_TRACK_PADDING = 72
-    SLIDER_TRACK_WIDTH = 656
     SLIDER_KNOB_RADIUS = 8
 
     SCALE_MIN_PERCENT = 10
     SCALE_MAX_PERCENT = 300
     SCALE_DEFAULT_PERCENT = 100
+
+    STRETCH_MIN_PERCENT = 30
+    STRETCH_MAX_PERCENT = 300
+    STRETCH_DEFAULT_PERCENT = 100
 
     DRAG_RADIUS_PX = 18
 
@@ -49,6 +53,8 @@ class PerspectiveCorrection:
         self.dragging_slider_name: Optional[str] = None
         self.input_zoom_percent = self.SCALE_DEFAULT_PERCENT
         self.output_zoom_percent = self.SCALE_DEFAULT_PERCENT
+        self.output_stretch_x_percent = self.STRETCH_DEFAULT_PERCENT
+        self.output_stretch_y_percent = self.STRETCH_DEFAULT_PERCENT
 
     def main(self) -> OpResult[Tuple[Tuple[int, int], int, float, float, float, float, float]]:
         cap = None
@@ -108,6 +114,7 @@ class PerspectiveCorrection:
                 self._draw_quad_overlay(left_panel, left_meta)
 
                 corrected_frame = self._warp_full_frame(raw_frame)
+                corrected_frame = self._apply_output_stretch(corrected_frame)
                 right_panel, _ = self._compose_panel(corrected_frame, output_zoom)
 
                 preview = np.zeros((self.WINDOW_HEIGHT, self.WINDOW_WIDTH, 3), dtype=np.uint8)
@@ -232,6 +239,7 @@ class PerspectiveCorrection:
 
         self._draw_slider_panel(preview, 0, "Input scale", self.input_zoom_percent, input_zoom, "input")
         self._draw_slider_panel(preview, self.PANEL_SIZE, "Corrected scale", self.output_zoom_percent, output_zoom, "output")
+        self._draw_right_stretch_sliders(preview)
 
         cv2.putText(
             preview,
@@ -278,7 +286,7 @@ class PerspectiveCorrection:
         cv2.putText(
             preview,
             "SPACE: pause/play  ESC: exit",
-            (12, self.PANEL_SIZE - 16),
+            (12, self.PANEL_SIZE - self.CONTROL_HEIGHT - 30),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.58,
             (255, 255, 255),
@@ -289,7 +297,7 @@ class PerspectiveCorrection:
         cv2.putText(
             preview,
             "Reference quad can be inside target; transform applies to whole frame",
-            (self.PANEL_SIZE + 12, self.PANEL_SIZE - 16),
+            (self.PANEL_SIZE + 12, self.PANEL_SIZE - self.CONTROL_HEIGHT - 30),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.50,
             (255, 255, 255),
@@ -335,16 +343,68 @@ class PerspectiveCorrection:
             1,
         )
 
-        track_x1 = panel_offset_x + self.SLIDER_TRACK_PADDING
-        track_x2 = panel_offset_x + self.PANEL_SIZE - self.SLIDER_TRACK_PADDING
-        track_y = control_top + self.SLIDER_Y_OFFSET
+        slider_geo = self._get_slider_geometries()[slider_name]
+        self._draw_slider(
+            preview=preview,
+            label=f"{label}: {percent_value}%",
+            value_text=f"{zoom_value:.2f}x",
+            slider_name=slider_name,
+            track_x1=slider_geo["x1"],
+            track_x2=slider_geo["x2"],
+            track_y=slider_geo["y"],
+            percent_value=percent_value,
+            min_percent=slider_geo["min"],
+            max_percent=slider_geo["max"],
+        )
 
+    def _draw_right_stretch_sliders(self, preview: np.ndarray) -> None:
+        geo = self._get_slider_geometries()
+        x_geo = geo["stretch_x"]
+        y_geo = geo["stretch_y"]
+
+        self._draw_slider(
+            preview=preview,
+            label=f"H stretch: {self.output_stretch_x_percent}%",
+            value_text=f"{self.output_stretch_x_percent}%",
+            slider_name="stretch_x",
+            track_x1=x_geo["x1"],
+            track_x2=x_geo["x2"],
+            track_y=x_geo["y"],
+            percent_value=self.output_stretch_x_percent,
+            min_percent=x_geo["min"],
+            max_percent=x_geo["max"],
+        )
+        self._draw_slider(
+            preview=preview,
+            label=f"V stretch: {self.output_stretch_y_percent}%",
+            value_text=f"{self.output_stretch_y_percent}%",
+            slider_name="stretch_y",
+            track_x1=y_geo["x1"],
+            track_x2=y_geo["x2"],
+            track_y=y_geo["y"],
+            percent_value=self.output_stretch_y_percent,
+            min_percent=y_geo["min"],
+            max_percent=y_geo["max"],
+        )
+
+    def _draw_slider(self,
+                     preview: np.ndarray,
+                     label: str,
+                     value_text: str,
+                     slider_name: str,
+                     track_x1: int,
+                     track_x2: int,
+                     track_y: int,
+                     percent_value: int,
+                     min_percent: int,
+                     max_percent: int) -> None:
+        label_y = track_y - 14
         cv2.putText(
             preview,
-            f"{label}: {percent_value}%",
-            (track_x1, control_top + 20),
+            label,
+            (track_x1, label_y),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.52,
+            0.48,
             (255, 255, 255),
             1,
             cv2.LINE_AA,
@@ -352,34 +412,92 @@ class PerspectiveCorrection:
 
         cv2.line(preview, (track_x1, track_y), (track_x2, track_y), (170, 170, 170), 2)
 
-        knob_x = int(round(self._slider_percent_to_x(percent_value, track_x1, track_x2)))
+        knob_x = int(round(self._slider_percent_to_x(percent_value, track_x1, track_x2, min_percent, max_percent)))
         knob_color = (0, 200, 255) if self.dragging_slider_name == slider_name else (0, 140, 255)
         cv2.circle(preview, (knob_x, track_y), self.SLIDER_KNOB_RADIUS + 2, (255, 255, 255), 1)
         cv2.circle(preview, (knob_x, track_y), self.SLIDER_KNOB_RADIUS, knob_color, -1)
 
         cv2.putText(
             preview,
-            f"{zoom_value:.2f}x",
-            (track_x2 - 64, control_top + 20),
+            value_text,
+            (track_x2 - 64, label_y),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.50,
+            0.46,
             (200, 200, 200),
             1,
             cv2.LINE_AA,
         )
 
-    def _slider_percent_to_x(self, percent_value: int, track_x1: int, track_x2: int) -> float:
-        clamped = self._clamp_percent(percent_value)
-        ratio = (clamped - self.SCALE_MIN_PERCENT) / float(self.SCALE_MAX_PERCENT - self.SCALE_MIN_PERCENT)
+    def _slider_percent_to_x(self,
+                             percent_value: int,
+                             track_x1: int,
+                             track_x2: int,
+                             min_percent: int,
+                             max_percent: int) -> float:
+        clamped = self._clamp_value(percent_value, min_percent, max_percent)
+        ratio = (clamped - min_percent) / float(max(1, max_percent - min_percent))
         return track_x1 + ratio * (track_x2 - track_x1)
 
-    def _slider_x_to_percent(self, x: float, track_x1: int, track_x2: int) -> int:
+    def _slider_x_to_percent(self,
+                             x: float,
+                             track_x1: int,
+                             track_x2: int,
+                             min_percent: int,
+                             max_percent: int) -> int:
         ratio = (x - track_x1) / float(max(1, track_x2 - track_x1))
-        percent = self.SCALE_MIN_PERCENT + ratio * (self.SCALE_MAX_PERCENT - self.SCALE_MIN_PERCENT)
-        return self._clamp_percent(int(round(percent)))
+        percent = min_percent + ratio * (max_percent - min_percent)
+        return self._clamp_value(int(round(percent)), min_percent, max_percent)
 
-    def _clamp_percent(self, value: int) -> int:
-        return max(self.SCALE_MIN_PERCENT, min(self.SCALE_MAX_PERCENT, int(value)))
+    def _clamp_value(self, value: int, min_value: int, max_value: int) -> int:
+        return max(min_value, min(max_value, int(value)))
+
+    def _get_slider_geometries(self) -> Dict[str, Dict[str, int]]:
+        control_top = self.PANEL_SIZE - self.CONTROL_HEIGHT
+
+        left_panel_offset = 0
+        right_panel_offset = self.PANEL_SIZE
+
+        left_full_x1 = left_panel_offset + self.SLIDER_TRACK_PADDING
+        left_full_x2 = left_panel_offset + self.PANEL_SIZE - self.SLIDER_TRACK_PADDING
+        right_full_x1 = right_panel_offset + self.SLIDER_TRACK_PADDING
+        right_full_x2 = right_panel_offset + self.PANEL_SIZE - self.SLIDER_TRACK_PADDING
+
+        half_len = (right_full_x2 - right_full_x1) // 2
+        right_half_left_x1 = right_full_x1
+        right_half_left_x2 = right_half_left_x1 + half_len
+        right_half_right_x2 = right_full_x2
+        right_half_right_x1 = right_half_right_x2 - half_len
+
+        return {
+            "input": {
+                "x1": left_full_x1,
+                "x2": left_full_x2,
+                "y": control_top + self.SLIDER_TOP_Y_OFFSET,
+                "min": self.SCALE_MIN_PERCENT,
+                "max": self.SCALE_MAX_PERCENT,
+            },
+            "output": {
+                "x1": right_full_x1,
+                "x2": right_full_x2,
+                "y": control_top + self.SLIDER_TOP_Y_OFFSET,
+                "min": self.SCALE_MIN_PERCENT,
+                "max": self.SCALE_MAX_PERCENT,
+            },
+            "stretch_x": {
+                "x1": right_half_left_x1,
+                "x2": right_half_left_x2,
+                "y": control_top + self.SLIDER_BOTTOM_Y_OFFSET,
+                "min": self.STRETCH_MIN_PERCENT,
+                "max": self.STRETCH_MAX_PERCENT,
+            },
+            "stretch_y": {
+                "x1": right_half_right_x1,
+                "x2": right_half_right_x2,
+                "y": control_top + self.SLIDER_BOTTOM_Y_OFFSET,
+                "min": self.STRETCH_MIN_PERCENT,
+                "max": self.STRETCH_MAX_PERCENT,
+            },
+        }
 
     def _frame_to_panel(self, frame_point: np.ndarray, meta: Dict[str, float]) -> np.ndarray:
         zoom = meta["zoom"]
@@ -435,6 +553,18 @@ class PerspectiveCorrection:
             borderValue=(0, 0, 0),
         )
 
+    def _apply_output_stretch(self, frame: np.ndarray) -> np.ndarray:
+        stretch_x = self.output_stretch_x_percent / 100.0
+        stretch_y = self.output_stretch_y_percent / 100.0
+
+        if abs(stretch_x - 1.0) < 1e-6 and abs(stretch_y - 1.0) < 1e-6:
+            return frame
+
+        frame_h, frame_w = frame.shape[:2]
+        stretched_w = max(1, int(round(frame_w * stretch_x)))
+        stretched_h = max(1, int(round(frame_h * stretch_y)))
+        return cv2.resize(frame, (stretched_w, stretched_h), interpolation=cv2.INTER_LINEAR)
+
     def _on_mouse_event(self, event, x, y, flags, param) -> None:
         _ = flags
         _ = param
@@ -472,19 +602,21 @@ class PerspectiveCorrection:
 
     def _handle_slider_event(self, event: int, x: int, y: int) -> bool:
         control_top = self.PANEL_SIZE - self.CONTROL_HEIGHT
+        slider_geo = self._get_slider_geometries()
 
         if self.dragging_slider_name is not None:
             slider_name = self.dragging_slider_name
-            panel_offset_x = 0 if slider_name == "input" else self.PANEL_SIZE
-            track_x1 = panel_offset_x + self.SLIDER_TRACK_PADDING
-            track_x2 = panel_offset_x + self.PANEL_SIZE - self.SLIDER_TRACK_PADDING
+            geo = slider_geo.get(slider_name)
+            if geo is None:
+                self.dragging_slider_name = None
+                return False
 
             if event == cv2.EVENT_MOUSEMOVE:
-                self._update_slider_from_mouse(slider_name, x, track_x1, track_x2)
+                self._update_slider_from_mouse(slider_name, x, geo)
                 return True
 
             if event == cv2.EVENT_LBUTTONUP:
-                self._update_slider_from_mouse(slider_name, x, track_x1, track_x2)
+                self._update_slider_from_mouse(slider_name, x, geo)
                 self.dragging_slider_name = None
                 return True
 
@@ -498,37 +630,32 @@ class PerspectiveCorrection:
         if x < 0 or x >= self.WINDOW_WIDTH:
             return False
 
-        slider_name = "input" if x < self.PANEL_SIZE else "output"
-        panel_offset_x = 0 if slider_name == "input" else self.PANEL_SIZE
-        track_x1 = panel_offset_x + self.SLIDER_TRACK_PADDING
-        track_x2 = panel_offset_x + self.PANEL_SIZE - self.SLIDER_TRACK_PADDING
-        track_y = control_top + self.SLIDER_Y_OFFSET
-
         if event == cv2.EVENT_LBUTTONDOWN:
-            hit_x_min = track_x1 - 14
-            hit_x_max = track_x2 + 14
-            hit_y_min = track_y - 18
-            hit_y_max = track_y + 18
-            if hit_x_min <= x <= hit_x_max and hit_y_min <= y <= hit_y_max:
-                self.dragging_slider_name = slider_name
-                self._update_slider_from_mouse(slider_name, x, track_x1, track_x2)
-                return True
+            for slider_name, geo in slider_geo.items():
+                hit_x_min = geo["x1"] - 14
+                hit_x_max = geo["x2"] + 14
+                hit_y_min = geo["y"] - 18
+                hit_y_max = geo["y"] + 18
+                if hit_x_min <= x <= hit_x_max and hit_y_min <= y <= hit_y_max:
+                    self.dragging_slider_name = slider_name
+                    self._update_slider_from_mouse(slider_name, x, geo)
+                    return True
 
-        if event == cv2.EVENT_MOUSEMOVE and self.dragging_slider_name == slider_name:
-            self._update_slider_from_mouse(slider_name, x, track_x1, track_x2)
-            return True
+        return True
 
-        if event == cv2.EVENT_LBUTTONUP:
-            if self.dragging_slider_name == slider_name:
-                self._update_slider_from_mouse(slider_name, x, track_x1, track_x2)
-                self.dragging_slider_name = None
-                return True
-
-        return self.dragging_slider_name == slider_name
-
-    def _update_slider_from_mouse(self, slider_name: str, x: int, track_x1: int, track_x2: int) -> None:
-        percent = self._slider_x_to_percent(float(x), track_x1, track_x2)
+    def _update_slider_from_mouse(self, slider_name: str, x: int, geo: Dict[str, int]) -> None:
+        percent = self._slider_x_to_percent(
+            float(x),
+            geo["x1"],
+            geo["x2"],
+            geo["min"],
+            geo["max"],
+        )
         if slider_name == "input":
             self.input_zoom_percent = percent
-        else:
+        elif slider_name == "output":
             self.output_zoom_percent = percent
+        elif slider_name == "stretch_x":
+            self.output_stretch_x_percent = percent
+        elif slider_name == "stretch_y":
+            self.output_stretch_y_percent = percent
