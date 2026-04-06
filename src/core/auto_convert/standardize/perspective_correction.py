@@ -9,13 +9,14 @@ from ...schemas.op_result import OpResult, ok, err
 class PerspectiveCorrection:
     PANEL_SIZE = 800
     WINDOW_WIDTH = PANEL_SIZE * 2
-    WINDOW_HEIGHT = PANEL_SIZE
+    WINDOW_HEIGHT = PANEL_SIZE + 136
 
     CONTROL_HEIGHT = 136
-    SLIDER_TOP_Y_OFFSET = 34
-    SLIDER_MID_Y_OFFSET = 66
-    SLIDER_BOTTOM_Y_OFFSET = 98
-    SLIDER_TRACK_PADDING = 72
+    SLIDER_TOP_Y_OFFSET = 28
+    SLIDER_MID_Y_OFFSET = 62
+    SLIDER_BOTTOM_Y_OFFSET = 96
+    SLIDER_TRACK_PADDING = 44
+    SLIDER_HALF_GAP = 36
     SLIDER_KNOB_RADIUS = 8
 
     SCALE_MIN_PERCENT = 10
@@ -130,8 +131,8 @@ class PerspectiveCorrection:
                 )
 
                 preview = np.zeros((self.WINDOW_HEIGHT, self.WINDOW_WIDTH, 3), dtype=np.uint8)
-                preview[:, :self.PANEL_SIZE] = left_panel
-                preview[:, self.PANEL_SIZE:] = right_panel
+                preview[:self.PANEL_SIZE, :self.PANEL_SIZE] = left_panel
+                preview[:self.PANEL_SIZE, self.PANEL_SIZE:] = right_panel
                 self._draw_combined_overlay(preview, is_playing, input_zoom, output_zoom)
 
                 cv2.imshow(window_name, preview)
@@ -276,7 +277,7 @@ class PerspectiveCorrection:
         cv2.putText(
             preview,
             f"Input zoom: {input_zoom:.2f}x",
-            (12, self.PANEL_SIZE - self.CONTROL_HEIGHT - 10),
+            (12, self.PANEL_SIZE + 20),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
             (255, 255, 255),
@@ -286,7 +287,7 @@ class PerspectiveCorrection:
         cv2.putText(
             preview,
             f"Output zoom: {output_zoom:.2f}x",
-            (self.PANEL_SIZE + 12, self.PANEL_SIZE - self.CONTROL_HEIGHT - 10),
+            (self.PANEL_SIZE + 12, self.PANEL_SIZE + 20),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
             (255, 255, 255),
@@ -297,7 +298,7 @@ class PerspectiveCorrection:
         cv2.putText(
             preview,
             "SPACE: pause/play  ESC: exit",
-            (12, self.PANEL_SIZE - self.CONTROL_HEIGHT - 30),
+            (12, self.PANEL_SIZE + self.CONTROL_HEIGHT - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.58,
             (255, 255, 255),
@@ -308,7 +309,7 @@ class PerspectiveCorrection:
         cv2.putText(
             preview,
             "Reference quad can be inside target; transform applies to whole frame",
-            (self.PANEL_SIZE + 12, self.PANEL_SIZE - self.CONTROL_HEIGHT - 30),
+            (self.PANEL_SIZE + 12, self.PANEL_SIZE + self.CONTROL_HEIGHT - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.50,
             (255, 255, 255),
@@ -335,8 +336,8 @@ class PerspectiveCorrection:
                              percent_value: int,
                              zoom_value: float,
                              slider_name: str) -> None:
-        panel_bottom = self.PANEL_SIZE
-        control_top = panel_bottom - self.CONTROL_HEIGHT
+        panel_bottom = self.PANEL_SIZE + self.CONTROL_HEIGHT
+        control_top = self.PANEL_SIZE
         control_bottom = panel_bottom
 
         cv2.rectangle(
@@ -493,7 +494,7 @@ class PerspectiveCorrection:
         return max(min_value, min(max_value, int(value)))
 
     def _get_slider_geometries(self) -> Dict[str, Dict[str, int]]:
-        control_top = self.PANEL_SIZE - self.CONTROL_HEIGHT
+        control_top = self.PANEL_SIZE
 
         left_panel_offset = 0
         right_panel_offset = self.PANEL_SIZE
@@ -503,7 +504,8 @@ class PerspectiveCorrection:
         right_full_x1 = right_panel_offset + self.SLIDER_TRACK_PADDING
         right_full_x2 = right_panel_offset + self.PANEL_SIZE - self.SLIDER_TRACK_PADDING
 
-        half_len = (right_full_x2 - right_full_x1) // 2
+        available_len = right_full_x2 - right_full_x1
+        half_len = max(1, (available_len - self.SLIDER_HALF_GAP) // 2)
         right_half_left_x1 = right_full_x1
         right_half_left_x2 = right_half_left_x1 + half_len
         right_half_right_x2 = right_full_x2
@@ -656,7 +658,7 @@ class PerspectiveCorrection:
             self.dragging_point_index = -1
 
     def _handle_slider_event(self, event: int, x: int, y: int) -> bool:
-        control_top = self.PANEL_SIZE - self.CONTROL_HEIGHT
+        control_top = self.PANEL_SIZE
         slider_geo = self._get_slider_geometries()
 
         if self.dragging_slider_name is not None:
