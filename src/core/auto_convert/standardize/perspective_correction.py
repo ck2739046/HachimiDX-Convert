@@ -11,9 +11,10 @@ class PerspectiveCorrection:
     WINDOW_WIDTH = PANEL_SIZE * 2
     WINDOW_HEIGHT = PANEL_SIZE
 
-    CONTROL_HEIGHT = 100
-    SLIDER_TOP_Y_OFFSET = 36
-    SLIDER_BOTTOM_Y_OFFSET = 72
+    CONTROL_HEIGHT = 136
+    SLIDER_TOP_Y_OFFSET = 34
+    SLIDER_MID_Y_OFFSET = 66
+    SLIDER_BOTTOM_Y_OFFSET = 98
     SLIDER_TRACK_PADDING = 72
     SLIDER_KNOB_RADIUS = 8
 
@@ -24,6 +25,10 @@ class PerspectiveCorrection:
     STRETCH_MIN_PERCENT = 30
     STRETCH_MAX_PERCENT = 300
     STRETCH_DEFAULT_PERCENT = 100
+
+    OFFSET_MIN_PX = -5000
+    OFFSET_MAX_PX = 5000
+    OFFSET_DEFAULT_PX = 0
 
     DRAG_RADIUS_PX = 18
 
@@ -55,6 +60,8 @@ class PerspectiveCorrection:
         self.output_zoom_percent = self.SCALE_DEFAULT_PERCENT
         self.output_stretch_x_percent = self.STRETCH_DEFAULT_PERCENT
         self.output_stretch_y_percent = self.STRETCH_DEFAULT_PERCENT
+        self.output_offset_x_px = self.OFFSET_DEFAULT_PX
+        self.output_offset_y_px = self.OFFSET_DEFAULT_PX
 
     def main(self) -> OpResult[Tuple[Tuple[int, int], int, float, float, float, float, float]]:
         cap = None
@@ -115,7 +122,12 @@ class PerspectiveCorrection:
 
                 corrected_frame = self._warp_full_frame(raw_frame)
                 corrected_frame = self._apply_output_stretch(corrected_frame)
-                right_panel, _ = self._compose_panel(corrected_frame, output_zoom)
+                right_panel, _ = self._compose_panel(
+                    corrected_frame,
+                    output_zoom,
+                    offset_x=self.output_offset_x_px,
+                    offset_y=self.output_offset_y_px,
+                )
 
                 preview = np.zeros((self.WINDOW_HEIGHT, self.WINDOW_WIDTH, 3), dtype=np.uint8)
                 preview[:, :self.PANEL_SIZE] = left_panel
@@ -157,7 +169,7 @@ class PerspectiveCorrection:
             if cap is not None:
                 cap.release()
 
-    def _compose_panel(self, frame, zoom: float):
+    def _compose_panel(self, frame, zoom: float, offset_x: int = 0, offset_y: int = 0):
         canvas = np.zeros((self.PANEL_SIZE, self.PANEL_SIZE, 3), dtype=np.uint8)
 
         frame_h, frame_w = frame.shape[:2]
@@ -165,28 +177,26 @@ class PerspectiveCorrection:
         scaled_h = max(1, int(round(frame_h * zoom)))
         scaled = cv2.resize(frame, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
 
-        src_x1 = max(0, (scaled_w - self.PANEL_SIZE) // 2)
-        src_y1 = max(0, (scaled_h - self.PANEL_SIZE) // 2)
-        src_x2 = min(scaled_w, src_x1 + self.PANEL_SIZE)
-        src_y2 = min(scaled_h, src_y1 + self.PANEL_SIZE)
+        top_left_x = int(round((self.PANEL_SIZE - scaled_w) * 0.5 + offset_x))
+        top_left_y = int(round((self.PANEL_SIZE - scaled_h) * 0.5 + offset_y))
 
-        crop = scaled[src_y1:src_y2, src_x1:src_x2]
-        crop_h, crop_w = crop.shape[:2]
+        dst_x1 = max(0, top_left_x)
+        dst_y1 = max(0, top_left_y)
+        dst_x2 = min(self.PANEL_SIZE, top_left_x + scaled_w)
+        dst_y2 = min(self.PANEL_SIZE, top_left_y + scaled_h)
 
-        dst_x1 = (self.PANEL_SIZE - crop_w) // 2
-        dst_y1 = (self.PANEL_SIZE - crop_h) // 2
-        dst_x2 = dst_x1 + crop_w
-        dst_y2 = dst_y1 + crop_h
-        canvas[dst_y1:dst_y2, dst_x1:dst_x2] = crop
+        src_x1 = max(0, -top_left_x)
+        src_y1 = max(0, -top_left_y)
+        src_x2 = src_x1 + max(0, dst_x2 - dst_x1)
+        src_y2 = src_y1 + max(0, dst_y2 - dst_y1)
+
+        if src_x1 < src_x2 and src_y1 < src_y2 and dst_x1 < dst_x2 and dst_y1 < dst_y2:
+            canvas[dst_y1:dst_y2, dst_x1:dst_x2] = scaled[src_y1:src_y2, src_x1:src_x2]
 
         meta = {
             "zoom": float(zoom),
-            "src_x": float(src_x1),
-            "src_y": float(src_y1),
-            "dst_x": float(dst_x1),
-            "dst_y": float(dst_y1),
-            "crop_w": float(crop_w),
-            "crop_h": float(crop_h),
+            "top_left_x": float(top_left_x),
+            "top_left_y": float(top_left_y),
         }
         return canvas, meta
 
@@ -240,6 +250,7 @@ class PerspectiveCorrection:
         self._draw_slider_panel(preview, 0, "Input scale", self.input_zoom_percent, input_zoom, "input")
         self._draw_slider_panel(preview, self.PANEL_SIZE, "Corrected scale", self.output_zoom_percent, output_zoom, "output")
         self._draw_right_stretch_sliders(preview)
+        self._draw_right_offset_sliders(preview)
 
         cv2.putText(
             preview,
@@ -387,6 +398,36 @@ class PerspectiveCorrection:
             max_percent=y_geo["max"],
         )
 
+    def _draw_right_offset_sliders(self, preview: np.ndarray) -> None:
+        geo = self._get_slider_geometries()
+        x_geo = geo["offset_x"]
+        y_geo = geo["offset_y"]
+
+        self._draw_slider(
+            preview=preview,
+            label=f"H offset: {self.output_offset_x_px}px",
+            value_text=f"{self.output_offset_x_px}px",
+            slider_name="offset_x",
+            track_x1=x_geo["x1"],
+            track_x2=x_geo["x2"],
+            track_y=x_geo["y"],
+            percent_value=self.output_offset_x_px,
+            min_percent=x_geo["min"],
+            max_percent=x_geo["max"],
+        )
+        self._draw_slider(
+            preview=preview,
+            label=f"V offset: {self.output_offset_y_px}px",
+            value_text=f"{self.output_offset_y_px}px",
+            slider_name="offset_y",
+            track_x1=y_geo["x1"],
+            track_x2=y_geo["x2"],
+            track_y=y_geo["y"],
+            percent_value=self.output_offset_y_px,
+            min_percent=y_geo["min"],
+            max_percent=y_geo["max"],
+        )
+
     def _draw_slider(self,
                      preview: np.ndarray,
                      label: str,
@@ -420,7 +461,7 @@ class PerspectiveCorrection:
         cv2.putText(
             preview,
             value_text,
-            (track_x2 - 64, label_y),
+            (track_x2 - 94, label_y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.46,
             (200, 200, 200),
@@ -486,29 +527,43 @@ class PerspectiveCorrection:
             "stretch_x": {
                 "x1": right_half_left_x1,
                 "x2": right_half_left_x2,
-                "y": control_top + self.SLIDER_BOTTOM_Y_OFFSET,
+                "y": control_top + self.SLIDER_MID_Y_OFFSET,
                 "min": self.STRETCH_MIN_PERCENT,
                 "max": self.STRETCH_MAX_PERCENT,
             },
             "stretch_y": {
                 "x1": right_half_right_x1,
                 "x2": right_half_right_x2,
-                "y": control_top + self.SLIDER_BOTTOM_Y_OFFSET,
+                "y": control_top + self.SLIDER_MID_Y_OFFSET,
                 "min": self.STRETCH_MIN_PERCENT,
                 "max": self.STRETCH_MAX_PERCENT,
+            },
+            "offset_x": {
+                "x1": right_half_left_x1,
+                "x2": right_half_left_x2,
+                "y": control_top + self.SLIDER_BOTTOM_Y_OFFSET,
+                "min": self.OFFSET_MIN_PX,
+                "max": self.OFFSET_MAX_PX,
+            },
+            "offset_y": {
+                "x1": right_half_right_x1,
+                "x2": right_half_right_x2,
+                "y": control_top + self.SLIDER_BOTTOM_Y_OFFSET,
+                "min": self.OFFSET_MIN_PX,
+                "max": self.OFFSET_MAX_PX,
             },
         }
 
     def _frame_to_panel(self, frame_point: np.ndarray, meta: Dict[str, float]) -> np.ndarray:
         zoom = meta["zoom"]
-        panel_x = frame_point[0] * zoom - meta["src_x"] + meta["dst_x"]
-        panel_y = frame_point[1] * zoom - meta["src_y"] + meta["dst_y"]
+        panel_x = frame_point[0] * zoom + meta["top_left_x"]
+        panel_y = frame_point[1] * zoom + meta["top_left_y"]
         return np.array([panel_x, panel_y], dtype=np.float32)
 
     def _panel_to_frame(self, panel_x: float, panel_y: float, meta: Dict[str, float]) -> np.ndarray:
         zoom = max(1e-6, meta["zoom"])
-        frame_x = (panel_x - meta["dst_x"] + meta["src_x"]) / zoom
-        frame_y = (panel_y - meta["dst_y"] + meta["src_y"]) / zoom
+        frame_x = (panel_x - meta["top_left_x"]) / zoom
+        frame_y = (panel_y - meta["top_left_y"]) / zoom
 
         frame_x = float(np.clip(frame_x, 0.0, max(0.0, self.frame_width - 1.0)))
         frame_y = float(np.clip(frame_y, 0.0, max(0.0, self.frame_height - 1.0)))
@@ -659,3 +714,7 @@ class PerspectiveCorrection:
             self.output_stretch_x_percent = percent
         elif slider_name == "stretch_y":
             self.output_stretch_y_percent = percent
+        elif slider_name == "offset_x":
+            self.output_offset_x_px = percent
+        elif slider_name == "offset_y":
+            self.output_offset_y_px = percent
