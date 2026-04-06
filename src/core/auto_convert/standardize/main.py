@@ -4,7 +4,7 @@ from ...schemas.op_result import OpResult, ok, err, print_op_result
 from ...schemas.media_model import MediaType
 
 from . import detect_circle
-from .screen_rectification import ScreenRectification
+from .perspective_correction import PerspectiveCorrection
 from . import process_video
 
 
@@ -59,12 +59,19 @@ def main(input_video: Path,
 
         # 第二步：手动微调圆心和半径
         if need_screen_rectification:
-            result = ScreenRectification(
+            # result = ScreenRectification(
+            #     input_video=input_video,
+            #     circle_center=circle_center,
+            #     circle_radius=circle_radius,
+            #     start_sec=start_sec,
+            #     end_sec=end_sec
+            # ).main()
+            result = PerspectiveCorrection(
                 input_video=input_video,
                 circle_center=circle_center,
                 circle_radius=circle_radius,
                 start_sec=start_sec,
-                end_sec=end_sec
+                end_sec=end_sec,
             ).main()
             if not result.is_ok:
                 return err("Failed to manual adjust circle.", inner=result)
