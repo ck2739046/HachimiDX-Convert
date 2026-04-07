@@ -21,7 +21,7 @@ class PerspectiveCorrection:
     SLIDER_MARGIN_X = 20
     SLIDER_MARGIN_Y = 10
     SLIDER_HEIGHT = 30
-    CONTROL_PANEL_HEIGHT = SLIDER_MARGIN_Y * 5 + SLIDER_HEIGHT * 3
+    CONTROL_PANEL_HEIGHT = SLIDER_MARGIN_Y * 6 + SLIDER_HEIGHT * 4
 
     FRAME_PREVIEW_SIZE = 800
     WINDOW_WIDTH = FRAME_PREVIEW_SIZE * 2
@@ -40,9 +40,13 @@ class PerspectiveCorrection:
     STRETCH_MAX_PERCENT = 200
     STRETCH_DEFAULT_PERCENT = 100
 
-    OFFSET_MIN_PX = -500
-    OFFSET_MAX_PX = 500
+    OFFSET_MIN_PX = -800
+    OFFSET_MAX_PX = 800
     OFFSET_DEFAULT_PX = 0
+
+    FINE_OFFSET_MIN_PX = -100
+    FINE_OFFSET_MAX_PX = 100
+    FINE_OFFSET_DEFAULT_PX = 0
 
     
 
@@ -90,6 +94,8 @@ class PerspectiveCorrection:
         self.output_stretch_y_percent = self.STRETCH_DEFAULT_PERCENT
         self.output_offset_x_px = self.OFFSET_DEFAULT_PX
         self.output_offset_y_px = self.OFFSET_DEFAULT_PX
+        self.output_fine_offset_x_px = self.FINE_OFFSET_DEFAULT_PX
+        self.output_fine_offset_y_px = self.FINE_OFFSET_DEFAULT_PX
 
 
 
@@ -184,8 +190,8 @@ class PerspectiveCorrection:
                 right_panel, _ = self._compose_panel(
                     corrected_frame,
                     current_output_zoom_percent,
-                    offset_x=self.output_offset_x_px,
-                    offset_y=self.output_offset_y_px,
+                    offset_x=self.output_offset_x_px + self.output_fine_offset_x_px,
+                    offset_y=self.output_offset_y_px + self.output_fine_offset_y_px,
                 )
                 # 在右侧面板上绘制固定参考标记
                 self._draw_reference_marks(right_panel)
@@ -380,6 +386,7 @@ class PerspectiveCorrection:
                                 "Scale", output_zoom_percent, "output")
         self._draw_right_stretch_sliders(canvas)
         self._draw_right_offset_sliders(canvas)
+        self._draw_right_fine_offset_sliders(canvas)
 
         cv2.putText(
             canvas,
@@ -524,6 +531,37 @@ class PerspectiveCorrection:
 
 
 
+    def _draw_right_fine_offset_sliders(self, canvas: np.ndarray) -> None:
+        geo = self._get_slider_geometries()
+        x_geo = geo["fine_offset_x"]
+        y_geo = geo["fine_offset_y"]
+
+        self._draw_slider(
+            canvas=canvas,
+            label=f"H fine offset: {self.output_fine_offset_x_px}px",
+            value_text=f"{self.output_fine_offset_x_px}px",
+            is_selected=(self.dragging_slider_name == "fine_offset_x"),
+            track_x1=x_geo["x1"],
+            track_x2=x_geo["x2"],
+            track_y=x_geo["y"],
+            percent_value=self.output_fine_offset_x_px,
+            min_percent=x_geo["min"],
+            max_percent=x_geo["max"],
+        )
+        self._draw_slider(
+            canvas=canvas,
+            label=f"V fine offset: {self.output_fine_offset_y_px}px",
+            value_text=f"{self.output_fine_offset_y_px}px",
+            is_selected=(self.dragging_slider_name == "fine_offset_y"),
+            track_x1=y_geo["x1"],
+            track_x2=y_geo["x2"],
+            track_y=y_geo["y"],
+            percent_value=self.output_fine_offset_y_px,
+            min_percent=y_geo["min"],
+            max_percent=y_geo["max"],
+        )
+
+
     def _draw_slider(self,
                      canvas: np.ndarray,
                      label: str,          # slider 左上方的标签文本
@@ -630,6 +668,8 @@ class PerspectiveCorrection:
         y2 = y1 + self.SLIDER_MARGIN_Y + self.SLIDER_HEIGHT
         # 第三层
         y3 = y2 + self.SLIDER_MARGIN_Y + self.SLIDER_HEIGHT
+        # 第四层（精细调整）
+        y4 = y3 + self.SLIDER_MARGIN_Y + self.SLIDER_HEIGHT
 
         return {
             "input": {
@@ -664,15 +704,29 @@ class PerspectiveCorrection:
                 "x1": right_half_left_x1,
                 "x2": right_half_left_x2,
                 "y": y3,
-                "min": self.OFFSET_MIN_PX,
-                "max": self.OFFSET_MAX_PX,
+                "min": -self.frame_width if self.frame_width > 0 else self.OFFSET_MIN_PX,
+                "max": self.frame_width if self.frame_width > 0 else self.OFFSET_MAX_PX,
             },
             "offset_y": {
                 "x1": right_half_right_x1,
                 "x2": right_half_right_x2,
                 "y": y3,
-                "min": self.OFFSET_MIN_PX,
-                "max": self.OFFSET_MAX_PX,
+                "min": -self.frame_height if self.frame_height > 0 else self.OFFSET_MIN_PX,
+                "max": self.frame_height if self.frame_height > 0 else self.OFFSET_MAX_PX,
+            },
+            "fine_offset_x": {
+                "x1": right_half_left_x1,
+                "x2": right_half_left_x2,
+                "y": y4,
+                "min": self.FINE_OFFSET_MIN_PX,
+                "max": self.FINE_OFFSET_MAX_PX,
+            },
+            "fine_offset_y": {
+                "x1": right_half_right_x1,
+                "x2": right_half_right_x2,
+                "y": y4,
+                "min": self.FINE_OFFSET_MIN_PX,
+                "max": self.FINE_OFFSET_MAX_PX,
             },
         }
 
@@ -869,3 +923,7 @@ class PerspectiveCorrection:
             self.output_offset_x_px = percent
         elif slider_name == "offset_y":
             self.output_offset_y_px = percent
+        elif slider_name == "fine_offset_x":
+            self.output_fine_offset_x_px = percent
+        elif slider_name == "fine_offset_y":
+            self.output_fine_offset_y_px = percent
