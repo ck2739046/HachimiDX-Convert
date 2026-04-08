@@ -59,13 +59,6 @@ def main(input_video: Path,
 
         # 第二步：手动微调圆心和半径
         if need_screen_rectification:
-            # result = ScreenRectification(
-            #     input_video=input_video,
-            #     circle_center=circle_center,
-            #     circle_radius=circle_radius,
-            #     start_sec=start_sec,
-            #     end_sec=end_sec
-            # ).main()
             result = PerspectiveCorrection(
                 input_video=input_video,
                 circle_center=circle_center,
