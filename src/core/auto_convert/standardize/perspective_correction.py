@@ -65,15 +65,10 @@ class PerspectiveCorrection:
             end_sec(float): 结束时间(秒)
         """
 
+        self.circle_center = circle_center
+        self.circle_radius = circle_radius
+
         self.input_video = input_video
-        self.circle_cx = int(circle_center[0])
-        self.circle_cy = int(circle_center[1])
-        self.circle_r = int(circle_radius)
-        self.scale_x = 1.0
-        self.scale_y = 1.0
-        self.x_rot_deg = 0.0
-        self.y_rot_deg = 0.0
-        self.z_rot_deg = 0.0
         self.start_sec = 0.0 if start_sec is None else float(start_sec)
         self.end_sec = 0.0 if end_sec is None else float(end_sec)
 
@@ -109,7 +104,10 @@ class PerspectiveCorrection:
         Returns:
             OpResult -> (circle_center, circle_radius,
                          scale_x, scale_y,
-                         x_rot_deg, y_rot_deg, z_rot_deg)
+                         perspective_points)
+            
+        perspective_points 是 tuple 或 None。
+        透视四点 float 坐标 (tl_x, tl_y, tr_x, tr_y, bl_x, bl_y, br_x, br_y)
         """
         
         cap = None        
@@ -145,6 +143,23 @@ class PerspectiveCorrection:
             pos_y = (screen_height - self.WINDOW_HEIGHT) // 2
             cv2.moveWindow(window_name, pos_x, pos_y)
 
+
+            # 将传入的圆心和半径转化为 offset 和 zoom
+            zoom_percent = self.FRAME_PREVIEW_SIZE / 2 / self.circle_radius * 100
+            if self.SCALE_MIN_PERCENT <= zoom_percent <= self.SCALE_MAX_PERCENT:
+                self.output_zoom_percent = zoom_percent
+            input_cx = self.circle_center[0]
+            input_cy = self.circle_center[1]
+            frame_cx = self.frame_width / 2
+            frame_cy = self.frame_height / 2
+            cx_offset = input_cx - frame_cx
+            cy_offset = input_cy - frame_cy
+            offset_x = -1 * cx_offset * self.output_zoom_percent / 100
+            offset_y = -1 * cy_offset * self.output_zoom_percent / 100
+            if self.OFFSET_MIN_PX <= offset_x <= self.OFFSET_MAX_PX:
+                self.output_offset_x_px = offset_x
+            if self.OFFSET_MIN_PX <= offset_y <= self.OFFSET_MAX_PX:
+                self.output_offset_y_px = offset_y
 
             
             is_playing = True
@@ -220,16 +235,48 @@ class PerspectiveCorrection:
                 elif key == 27:  # ESC
                     break
 
-            last_op = (
-                (self.circle_cx, self.circle_cy),
-                self.circle_r,
-                self.scale_x,
-                self.scale_y,
-                self.x_rot_deg,
-                self.y_rot_deg,
-                self.z_rot_deg,
-            )
-            return ok(last_op)
+            
+            # 计算 return 值
+            circle_radius = self.FRAME_PREVIEW_SIZE / 2 / (self.output_zoom_percent / 100)
+            offset_x = self.output_offset_x_px + self.output_fine_offset_x_px
+            offset_y = self.output_offset_y_px + self.output_fine_offset_y_px
+            cx_offset = -1 * offset_x / (self.output_zoom_percent / 100) / (self.output_stretch_x_percent / 100)
+            cy_offset = -1 * offset_y / (self.output_zoom_percent / 100) / (self.output_stretch_y_percent / 100)
+            output_cx = frame_cx + cx_offset
+            output_cy = frame_cy + cy_offset
+            scale_x = self.output_stretch_x_percent / 100
+            scale_y = self.output_stretch_y_percent / 100
+            # 提取透视四边形四个点的坐标 (tl, tr, bl, br)
+            if self.quad_points is not None:
+                if np.array_equal(self.quad_points, self._build_default_quad(self.frame_width, self.frame_height)):
+                    perspective_points = None
+                else:
+                    src_quad = self.quad_points.astype(np.float32)
+                    dst_quad = self._build_target_quad(src_quad)
+                    matrix = cv2.getPerspectiveTransform(src_quad, dst_quad)
+                    frame_corners = np.array([
+                        [[0.0, 0.0]],
+                        [[float(self.frame_width - 1), 0.0]],
+                        [[0.0, float(self.frame_height - 1)]],
+                        [[float(self.frame_width - 1), float(self.frame_height - 1)]],
+                    ], dtype=np.float32)
+                    projected_corners = cv2.perspectiveTransform(frame_corners, matrix).reshape(-1, 2)
+                    tl = projected_corners[0]
+                    tr = projected_corners[1]
+                    bl = projected_corners[2]
+                    br = projected_corners[3]
+                    perspective_points = (float(tl[0]), float(tl[1]),
+                                          float(tr[0]), float(tr[1]),
+                                          float(bl[0]), float(bl[1]),
+                                          float(br[0]), float(br[1]))
+            else:
+                perspective_points = None
+            
+            return ok(((output_cx, output_cy),
+                      circle_radius,
+                      scale_x, scale_y,
+                      perspective_points))
+                      
 
         except Exception as e:
             return err("Error in perspective correction preview", error_raw=e)
