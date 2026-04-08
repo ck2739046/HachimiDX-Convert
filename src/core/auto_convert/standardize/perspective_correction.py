@@ -144,7 +144,7 @@ class PerspectiveCorrection:
 
 
             # 设置窗口
-            window_name = "Screen Correction"
+            window_name = "Screen Rectification"
             cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
             cv2.resizeWindow(window_name, self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
             cv2.setMouseCallback(window_name, self._on_mouse_event)
