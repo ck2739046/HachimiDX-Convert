@@ -17,9 +17,7 @@ def main(input_video: Path,
          circle_radius: int,
          scale_x: float,
          scale_y: float,
-         x_rot_deg: float,
-         y_rot_deg: float,
-         z_rot_deg: float,
+         perspective_points: Tuple[float, float, float, float, float, float, float, float] | None,
          media_type: MediaType,
          duration: float,
          start_sec: float = 0.0,
@@ -37,9 +35,7 @@ def main(input_video: Path,
         circle_radius(int): 圆半径
         scale_x(float): X轴缩放系数
         scale_y(float): Y轴缩放系数
-        x_rot_deg(float): X轴透视旋转角度(度)
-        y_rot_deg(float): Y轴透视旋转角度(度)
-        z_rot_deg(float): Z轴平面旋转角度(度)
+        perspective_points(Tuple[8 float] | None): 透视四点坐标
         media_type(MediaType): 媒体类型 video_with_audio / video_without_audio
         duration(float): 视频总时长(秒)
         start_sec(float): 开始时间(秒)
@@ -65,27 +61,26 @@ def main(input_video: Path,
         video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
 
-        crop_w, crop_h, crop_x, crop_y = calculate_crop_params(video_width, video_height, circle_center, circle_radius, scale_x, scale_y)
+        # 此处把 x/y scale 揉进 crop 里
+        crop_w, crop_h, crop_x, crop_y = calculate_crop_params(circle_center, circle_radius, scale_x, scale_y)
 
         (is_input_std,
          need_crop,
          need_resize,
          need_trim_start,
          need_trim_end,
-         need_rotation
+         need_perspective_correction
         ) = is_input_already_standardized(
             crop_w,
             crop_h,
             crop_x,
             crop_y,
+            perspective_points,
             video_width,
             video_height,
             target_res,
             start_sec,
-            end_sec,
-            x_rot_deg,
-            y_rot_deg,
-            z_rot_deg,
+            end_sec
         )
         if is_input_std:
             # 如果输入已经标准了，直接复制到输出路径
@@ -118,18 +113,20 @@ def main(input_video: Path,
                 M_Defs.video_crop_h.key: crop_h,
                 M_Defs.video_crop_x.key: crop_x,
                 M_Defs.video_crop_y.key: crop_y,
-                M_Defs.video_scale_x.key: scale_x,
-                M_Defs.video_scale_y.key: scale_y,
             })
 
-        if need_rotation:
+        if need_perspective_correction:
             params.update({
-                M_Defs.video_x_rot_deg.key: x_rot_deg,
-                M_Defs.video_y_rot_deg.key: y_rot_deg,
-                M_Defs.video_z_rot_deg.key: z_rot_deg,
-                M_Defs.video_width.key: video_width,
-                M_Defs.video_height.key: video_height,
+                M_Defs.video_perspective_tl_x.key: perspective_points[0],
+                M_Defs.video_perspective_tl_y.key: perspective_points[1],
+                M_Defs.video_perspective_tr_x.key: perspective_points[2],
+                M_Defs.video_perspective_tr_y.key: perspective_points[3],
+                M_Defs.video_perspective_bl_x.key: perspective_points[4],
+                M_Defs.video_perspective_bl_y.key: perspective_points[5],
+                M_Defs.video_perspective_br_x.key: perspective_points[6],
+                M_Defs.video_perspective_br_y.key: perspective_points[7],
             })
+
 
         if need_resize:
             params.update({
@@ -156,8 +153,8 @@ def main(input_video: Path,
             change_hint += f'  trim start to {start_sec}s\n'
         if need_trim_end:
             change_hint += f'  trim end to {end_sec}s\n'
-        if need_rotation:
-            change_hint += f'  plane rotation = {z_rot_deg}deg + perspective rotation x = {x_rot_deg}deg, y = {y_rot_deg}deg\n'
+        if need_perspective_correction:
+            change_hint += f'  apply perspective correction\n'
 
         if change_hint:
             print(f"Process video with changes:\n{change_hint}")
@@ -182,21 +179,19 @@ def main(input_video: Path,
 
 
 
-def calculate_crop_params(video_width: int,
-                          video_height: int,
-                          circle_center: Tuple[int, int],
+def calculate_crop_params(circle_center: Tuple[int, int],
                           circle_radius: int,
                           scale_x: float = 1.0,
                           scale_y: float = 1.0
                         ) -> Tuple[int, int, int, int]:
 
     # 根据 scale 计算水平和垂直方向的半长
-    half_w = round(circle_radius * scale_x)
-    half_h = round(circle_radius * scale_y)
+    half_w = circle_radius / scale_x
+    half_h = circle_radius / scale_y
 
     # 计算裁剪区域的宽度和高度
-    crop_w = half_w * 2
-    crop_h = half_h * 2
+    crop_w = round(half_w * 2)
+    crop_h = round(half_h * 2)
 
     # 计算裁剪区域左上角坐标（允许越界，由 ffmpeg 处理黑色填充）
     crop_x = round(circle_center[0] - half_w)
@@ -213,24 +208,27 @@ def is_input_already_standardized(crop_w: int,
                                   crop_h: int,
                                   crop_x: int,
                                   crop_y: int,
+                                  perspective_points: Tuple[float, float, float, float, float, float, float, float] | None,
                                   video_width: int,
                                   video_height: int,
                                   target_res: int,
                                   start_sec: float,
-                                  end_sec: float,
-                                  x_rot_deg: float,
-                                  y_rot_deg: float,
-                                  z_rot_deg: float,
+                                  end_sec: float
                                  ) -> tuple[bool, bool, bool, bool, bool, bool]:
 
     video_size = min(video_width, video_height)
     tolerance = video_size / 360
 
+    need_perspective_correction = True
     need_crop = True
     need_resize = True
     need_trim_start = True
     need_trim_end = True
-    need_rotation = abs(x_rot_deg) > 1e-6 or abs(y_rot_deg) > 1e-6 or abs(z_rot_deg) > 1e-6
+
+
+    # 透视矫正
+    if perspective_points is None:
+        need_perspective_correction = False
 
     # 如果裁剪画面尺寸≈实际视频尺寸，并且裁剪中心≈实际视频中心，则不裁剪
     # 使用 max(crop_w, crop_h) 来判断是否接近视频尺寸
@@ -249,8 +247,8 @@ def is_input_already_standardized(crop_w: int,
     if end_sec <= 0:
         need_trim_end = False
 
-    if not need_crop and not need_resize and not need_trim_start and not need_trim_end and not need_rotation:
+    if not need_crop and not need_resize and not need_trim_start and not need_trim_end and not need_perspective_correction:
         print("Video already standardized.")
         return True, False, False, False, False, False
 
-    return False, need_crop, need_resize, need_trim_start, need_trim_end, need_rotation
+    return False, need_crop, need_resize, need_trim_start, need_trim_end, need_perspective_correction

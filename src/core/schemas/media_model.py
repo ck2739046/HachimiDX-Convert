@@ -87,6 +87,14 @@ class MediaModel(BaseModel):
     video_crop_w: Optional[int] = Field(default=M_Defs.video_crop_w.default, gt=M_Defs.video_crop_w.constraints["gt"])
     video_crop_h: Optional[int] = Field(default=M_Defs.video_crop_h.default, gt=M_Defs.video_crop_h.constraints["gt"])
     
+    video_perspective_tl_x: Optional[float] = Field(default=M_Defs.video_perspective_tl_x.default)
+    video_perspective_tl_y: Optional[float] = Field(default=M_Defs.video_perspective_tl_y.default)
+    video_perspective_tr_x: Optional[float] = Field(default=M_Defs.video_perspective_tr_x.default)
+    video_perspective_tr_y: Optional[float] = Field(default=M_Defs.video_perspective_tr_y.default)
+    video_perspective_bl_x: Optional[float] = Field(default=M_Defs.video_perspective_bl_x.default)
+    video_perspective_bl_y: Optional[float] = Field(default=M_Defs.video_perspective_bl_y.default)
+    video_perspective_br_x: Optional[float] = Field(default=M_Defs.video_perspective_br_x.default)
+    video_perspective_br_y: Optional[float] = Field(default=M_Defs.video_perspective_br_y.default)
     
     
 
@@ -261,4 +269,25 @@ class MediaModel(BaseModel):
                 # 用户不同意删除，直接返回
                 raise ValueError("Output file already exists and user chose not to delete it.")
         
+        return self
+
+
+    @model_validator(mode='after')
+    def validate_video_perspective_params(self):
+        """all set or all unset"""
+        set_tl_x = self.video_perspective_tl_x is not None
+        set_tl_y = self.video_perspective_tl_y is not None
+        set_tr_x = self.video_perspective_tr_x is not None
+        set_tr_y = self.video_perspective_tr_y is not None
+        set_bl_x = self.video_perspective_bl_x is not None
+        set_bl_y = self.video_perspective_bl_y is not None
+        set_br_x = self.video_perspective_br_x is not None
+        set_br_y = self.video_perspective_br_y is not None
+
+        all_set = all([set_tl_x, set_tl_y, set_tr_x, set_tr_y, set_bl_x, set_bl_y, set_br_x, set_br_y])
+        all_unset = not any([set_tl_x, set_tl_y, set_tr_x, set_tr_y, set_bl_x, set_bl_y, set_br_x, set_br_y])
+
+        if not (all_set or all_unset):
+            raise ValueError("video_perspective params must be all set or all unset.")
+
         return self

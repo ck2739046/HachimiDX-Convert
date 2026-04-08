@@ -128,13 +128,16 @@ def _build_video_args(data: MediaModel) -> OpResult[list[str]]:
         pad = data.pad_start,
         start = data.start,
         end = data.end,
-        scale_x = data.video_scale_x,
-        scale_y = data.video_scale_y,
-        x_rot_deg = data.video_x_rot_deg,
-        y_rot_deg = data.video_y_rot_deg,
-        z_rot_deg = data.video_z_rot_deg,
-        video_width = data.video_width,
-        video_height = data.video_height,
+        perspective = (
+            data.video_perspective_tl_x,
+            data.video_perspective_tl_y,
+            data.video_perspective_tr_x,
+            data.video_perspective_tr_y,
+            data.video_perspective_bl_x,
+            data.video_perspective_bl_y,
+            data.video_perspective_br_x,
+            data.video_perspective_br_y,
+        ),
     )
     if vf:
         args.extend(["-vf", vf])
@@ -150,13 +153,7 @@ def _build_video_filter(size: Optional[int],
                         pad: Optional[float],
                         start: Optional[float],
                         end: Optional[float],
-                        scale_x: Optional[float] = None,
-                        scale_y: Optional[float] = None,
-                        x_rot_deg: Optional[float] = None,
-                        y_rot_deg: Optional[float] = None,
-                        z_rot_deg: Optional[float] = None,
-                        video_width: Optional[int] = None,
-                        video_height: Optional[int] = None
+                        perspective: tuple[Optional[float], Optional[float], Optional[float], Optional[float], Optional[float], Optional[float], Optional[float], Optional[float]] = None
                        ) -> Optional[str]:
     """构建视频滤镜"""
 
@@ -172,82 +169,28 @@ def _build_video_filter(size: Optional[int],
         filters.append(f"trim={':'.join(trim_kv)}")
         filters.append("setpts=PTS-STARTPTS")
 
-    # 与 screen_rectification 预览顺序一致：先 z 轴平面旋转，再做 x/y 透视旋转
-    plane_rotate_filter = _build_plane_rotation_filter(z_rot_deg)
-    if plane_rotate_filter:
-        filters.append(plane_rotate_filter)
-
-    rotate_center_x = None
-    rotate_center_y = None
-    if all(v is not None for v in crop):
-        w, h, x, y = crop
-        rotate_center_x = float(x) + (float(w) - 1.0) / 2.0
-        rotate_center_y = float(y) + (float(h) - 1.0) / 2.0
-
-    perspective_filter = _build_axis_rotation_perspective_filter(
-        x_rot_deg=x_rot_deg,
-        y_rot_deg=y_rot_deg,
-        video_width=video_width,
-        video_height=video_height,
-        rotate_center_x=rotate_center_x,
-        rotate_center_y=rotate_center_y,
-    )
-    if perspective_filter:
+    # Perspective correction using four points
+    if perspective is not None and all(p is not None for p in perspective):
+        tl_x, tl_y, tr_x, tr_y, bl_x, bl_y, br_x, br_y = perspective
+        perspective_filter = (
+            f"perspective="
+            f"{tl_x:.6f}:{tl_y:.6f}:"
+            f"{tr_x:.6f}:{tr_y:.6f}:"
+            f"{bl_x:.6f}:{bl_y:.6f}:"
+            f"{br_x:.6f}:{br_y:.6f}:sense=destination"
+        )
         filters.append(perspective_filter)
 
     # Crop (支持越界，超出部分用黑色填充)
     if all(v is not None for v in crop):
         w, h, x, y = crop
+        pad_cmd, crop_cmd = (_build_crop_filter(w, h, x, y))
+        filters.append(pad_cmd)
+        filters.append(crop_cmd)
         
-        # 计算是否需要扩展画布以容纳整个 crop 区域
-        # crop 区域范围: [x, x+w] 水平方向, [y, y+h] 垂直方向
-        # 原视频范围: [0, iw] 水平方向, [0, ih] 垂直方向
-        
-        # 向左/上偏移量（当 x<0 或 y<0 时）
-        left_pad = abs(min(x, 0))  # 如果 x<0, left_pad=-x; 否则为 0
-        top_pad = abs(min(y, 0))   # 如果 y<0, top_pad=-y; 否则为 0
-        
-        # 构建 FFmpeg 表达式来处理动态边界计算
-        # 向右扩展量 = max(0, x + w - iw)  当 x>=0
-        # 向右扩展量 = max(0, x + w - iw + left_pad) 当 x<0 (因为 iw 在新画布中是 iw+left_pad，相对位置变了)
-        # 实际上更简单：计算 crop 区域右边界超出原视频右边界的量
-        # 新画布中，原视频位于 (left_pad, top_pad)，右边界是 left_pad + iw
-        # crop 区域右边界是 left_pad + x + w
-        # 超出量 = max(0, left_pad + x + w - (left_pad + iw)) = max(0, x + w - iw)
-        right_pad_expr = f"max(0\\,{x}+{w}-iw)"
-        bottom_pad_expr = f"max(0\\,{y}+{h}-ih)"
-        
-        # 计算 pad 后的画布大小
-        pad_w_expr = f"{left_pad}+iw+{right_pad_expr}"
-        pad_h_expr = f"{top_pad}+ih+{bottom_pad_expr}"
-        
-        # 原视频在新画布中的位置
-        pad_x = left_pad
-        pad_y = top_pad
-        
-        # 添加 pad 滤镜（使用表达式动态计算）
-        filters.append(f"pad={pad_w_expr}:{pad_h_expr}:{pad_x}:{pad_y}:black")
-        
-        # 调整 crop 坐标到新画布坐标系
-        x = x + left_pad
-        y = y + top_pad
-        
-        filters.append(f"crop={w}:{h}:{x}:{y}")
-
-
     # Resize
     if size:
-        # 检查是否应用了 X/Y 缩放
-        scale_applied = (scale_x is not None and abs(scale_x - 1.0) > 1e-9) or (scale_y is not None and abs(scale_y - 1.0) > 1e-9)
-        if scale_applied:
-            # 如果应用了缩放，直接拉伸到正方形（不保持宽高比）
-            filters.append(f"scale={size}:{size}")
-        else:
-            # Scale while keeping aspect ratio
-            # Pad to square with black borders
-            scale_expr = f"if(gt(iw,ih),{size},-1):if(gt(iw,ih),-1,{size})".replace(",", r"\,") # 对逗号转义
-            pad_expr = f"{size}:{size}:(ow-iw)/2:(oh-ih)/2:black"
-            filters.append(f"scale={scale_expr},pad={pad_expr}")
+        filters.append(_build_resize_filter(size, crop))
 
     # 有些神秘视频像素宽高比居然不是1:1
     # 此处强制设置为1:1
@@ -261,107 +204,59 @@ def _build_video_filter(size: Optional[int],
     return ",".join(filters) if filters else None
 
 
-def _build_plane_rotation_filter(z_rot_deg: Optional[float]) -> Optional[str]:
-    """将 z 轴平面旋转角转换为 FFmpeg rotate 滤镜参数。"""
-    z_rot_deg = float(z_rot_deg or 0.0)
-    if abs(z_rot_deg) < 1e-6:
-        return None
 
-    # OpenCV 预览与 FFmpeg rotate 的正方向相反，这里取反以保证导出效果与预览一致。
-    z_rad = -math.radians(z_rot_deg)
-    return f"rotate={z_rad:.12f}:ow=iw:oh=ih:c=black"
+def _build_crop_filter(w, h, x, y) -> tuple[str, str]:
+    # 计算是否需要扩展画布以容纳整个 crop 区域
+    # crop 区域范围: [x, x+w] 水平方向, [y, y+h] 垂直方向
+    # 原视频范围: [0, iw] 水平方向, [0, ih] 垂直方向
+    
+    # 向左/上偏移量（当 x<0 或 y<0 时）
+    left_pad = abs(min(x, 0))  # 如果 x<0, left_pad=-x; 否则为 0
+    top_pad = abs(min(y, 0))   # 如果 y<0, top_pad=-y; 否则为 0
+    
+    # 构建 FFmpeg 表达式来处理动态边界计算
+    # 向右扩展量 = max(0, x + w - iw)  当 x>=0
+    # 向右扩展量 = max(0, x + w - iw + left_pad) 当 x<0 (因为 iw 在新画布中是 iw+left_pad，相对位置变了)
+    # 实际上更简单：计算 crop 区域右边界超出原视频右边界的量
+    # 新画布中，原视频位于 (left_pad, top_pad)，右边界是 left_pad + iw
+    # crop 区域右边界是 left_pad + x + w
+    # 超出量 = max(0, left_pad + x + w - (left_pad + iw)) = max(0, x + w - iw)
+    right_pad_expr = f"max(0\\,{x}+{w}-iw)"
+    bottom_pad_expr = f"max(0\\,{y}+{h}-ih)"
+    
+    # 计算 pad 后的画布大小
+    pad_w_expr = f"{left_pad}+iw+{right_pad_expr}"
+    pad_h_expr = f"{top_pad}+ih+{bottom_pad_expr}"
+    
+    # 原视频在新画布中的位置
+    pad_x = left_pad
+    pad_y = top_pad
+    
+    # 添加 pad 滤镜（使用表达式动态计算）
+    pad_cmd = f"pad={pad_w_expr}:{pad_h_expr}:{pad_x}:{pad_y}:black"
+    
+    # 调整 crop 坐标到新画布坐标系
+    x = x + left_pad
+    y = y + top_pad
+    
+    crop_cmd = f"crop={w}:{h}:{x}:{y}"
+
+    return pad_cmd, crop_cmd
 
 
-def _build_axis_rotation_perspective_filter(x_rot_deg: Optional[float],
-                                            y_rot_deg: Optional[float],
-                                            video_width: Optional[int],
-                                            video_height: Optional[int],
-                                            rotate_center_x: Optional[float] = None,
-                                            rotate_center_y: Optional[float] = None,
-                                           ) -> Optional[str]:
-    """将 x/y 轴旋转角转换为 FFmpeg perspective 滤镜参数。"""
 
-    x_rot_deg = float(x_rot_deg or 0.0)
-    y_rot_deg = float(y_rot_deg or 0.0)
+def _build_resize_filter(size, crop) -> str:
 
-    if abs(x_rot_deg) < 1e-6 and abs(y_rot_deg) < 1e-6:
-        return None
-
-    if video_width is None or video_height is None:
-        return None
-    if video_width <= 1 or video_height <= 1:
-        return None
-
-    width = float(video_width)
-    height = float(video_height)
-
-    default_cx = (width - 1.0) / 2.0
-    default_cy = (height - 1.0) / 2.0
-    cx = default_cx if rotate_center_x is None else min(max(float(rotate_center_x), 0.0), width - 1.0)
-    cy = default_cy if rotate_center_y is None else min(max(float(rotate_center_y), 0.0), height - 1.0)
-    corners = [
-        (-cx, -cy, 0.0),
-        (width - 1.0 - cx, -cy, 0.0),
-        (width - 1.0 - cx, height - 1.0 - cy, 0.0),
-        (-cx, height - 1.0 - cy, 0.0),
-    ]
-
-    x_rad = math.radians(x_rot_deg)
-    y_rad = math.radians(y_rot_deg)
-
-    cos_x = math.cos(x_rad)
-    sin_x = math.sin(x_rad)
-    cos_y = math.cos(y_rad)
-    sin_y = math.sin(y_rad)
-
-    focal = max(width, height) * 1.2
-    distance = max(width, height) * 1.5
-
-    projected = []
-    for x, y, z in corners:
-        y1 = y * cos_x - z * sin_x
-        z1 = y * sin_x + z * cos_x
-
-        x2 = x * cos_y + z1 * sin_y
-        y2 = y1
-        z2 = -x * sin_y + z1 * cos_y
-
-        z_cam = z2 + distance
-        if abs(z_cam) < 1e-6:
-            z_cam = 1e-6
-
-        u = focal * x2 / z_cam + cx
-        v = focal * y2 / z_cam + cy
-        projected.append((u, v))
-
-    min_x = min(p[0] for p in projected)
-    max_x = max(p[0] for p in projected)
-    min_y = min(p[1] for p in projected)
-    max_y = max(p[1] for p in projected)
-
-    span_x = max(max_x - min_x, 1e-6)
-    span_y = max(max_y - min_y, 1e-6)
-
-    dst = []
-    for u, v in projected:
-        out_x = (u - min_x) * (width - 1.0) / span_x
-        out_y = (v - min_y) * (height - 1.0) / span_y
-        dst.append((out_x, out_y))
-
-    tl = dst[0]
-    tr = dst[1]
-    bl = dst[3]
-    br = dst[2]
-
-    # perspective 参数顺序为: tl, tr, bl, br
-    return (
-        "perspective="
-        f"{tl[0]:.6f}:{tl[1]:.6f}:"
-        f"{tr[0]:.6f}:{tr[1]:.6f}:"
-        f"{bl[0]:.6f}:{bl[1]:.6f}:"
-        f"{br[0]:.6f}:{br[1]:.6f}:sense=destination"
-    )
-
+    if all(v is not None for v in crop):
+        w, h, x, y = crop
+        if w != h:
+            # 不是正方形，不保持宽高比，直接缩放
+            return f"scale={size}:{size}"
+    
+    # 没有裁剪信息，保持宽高比缩放，然后填充到正方形
+    scale_expr = f"if(gt(iw,ih),{size},-1):if(gt(iw,ih),-1,{size})".replace(",", r"\,") # 对逗号转义
+    pad_expr = f"{size}:{size}:(ow-iw)/2:(oh-ih)/2:black"
+    return f"scale={scale_expr},pad={pad_expr}"
 
 
 

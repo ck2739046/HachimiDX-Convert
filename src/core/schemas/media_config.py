@@ -289,7 +289,61 @@ class MediaConfig_Definitions:
         }
     )
 
-    
+    video_perspective_tl_x = MediaConfig_Definition(
+        key="video_perspective_tl_x",
+        type="float",
+        group="video",
+        default=None
+    )
+
+    video_perspective_tl_y = MediaConfig_Definition(
+        key="video_perspective_tl_y",
+        type="float",
+        group="video",
+        default=None
+    )
+
+    video_perspective_tr_x = MediaConfig_Definition(
+        key="video_perspective_tr_x",
+        type="float",
+        group="video",
+        default=None
+    )
+
+    video_perspective_tr_y = MediaConfig_Definition(
+        key="video_perspective_tr_y",
+        type="float",
+        group="video",
+        default=None
+    )
+
+    video_perspective_bl_x = MediaConfig_Definition(
+        key="video_perspective_bl_x",
+        type="float",
+        group="video",
+        default=None
+    )
+
+    video_perspective_bl_y = MediaConfig_Definition(
+        key="video_perspective_bl_y",
+        type="float",
+        group="video",
+        default=None
+    )
+
+    video_perspective_br_x = MediaConfig_Definition(
+        key="video_perspective_br_x",
+        type="float",
+        group="video",
+        default=None
+    )
+
+    video_perspective_br_y = MediaConfig_Definition(
+        key="video_perspective_br_y",
+        type="float",
+        group="video",
+        default=None
+    )
 
 
 
