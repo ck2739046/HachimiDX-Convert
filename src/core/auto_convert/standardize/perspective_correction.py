@@ -32,8 +32,8 @@ class PerspectiveCorrection:
     OUTER_RADIUS_PLUS = 3
     POINT_COLOR = (0, 128, 255) # 橘色
 
-    SCALE_MIN_PERCENT = 50
-    SCALE_MAX_PERCENT = 200
+    SCALE_MIN_PERCENT = 20
+    SCALE_MAX_PERCENT = 300
     SCALE_DEFAULT_PERCENT = 100
 
     STRETCH_MIN_PERCENT = 50
@@ -145,8 +145,9 @@ class PerspectiveCorrection:
 
 
             # 将传入的圆心和半径转化为 offset 和 zoom
-            zoom_percent = self.FRAME_PREVIEW_SIZE / 2 / self.circle_radius * 100
+            zoom_percent = round(self.FRAME_PREVIEW_SIZE / 2 / self.circle_radius * 100)
             if self.SCALE_MIN_PERCENT <= zoom_percent <= self.SCALE_MAX_PERCENT:
+                self.input_zoom_percent = zoom_percent
                 self.output_zoom_percent = zoom_percent
             input_cx = self.circle_center[0]
             input_cy = self.circle_center[1]
@@ -154,8 +155,8 @@ class PerspectiveCorrection:
             frame_cy = self.frame_height / 2
             cx_offset = input_cx - frame_cx
             cy_offset = input_cy - frame_cy
-            offset_x = -1 * cx_offset * self.output_zoom_percent / 100
-            offset_y = -1 * cy_offset * self.output_zoom_percent / 100
+            offset_x = round(-1 * cx_offset * self.output_zoom_percent / 100)
+            offset_y = round(-1 * cy_offset * self.output_zoom_percent / 100)
             if self.OFFSET_MIN_PX <= offset_x <= self.OFFSET_MAX_PX:
                 self.output_offset_x_px = offset_x
             if self.OFFSET_MIN_PX <= offset_y <= self.OFFSET_MAX_PX:
@@ -242,8 +243,8 @@ class PerspectiveCorrection:
             offset_y = self.output_offset_y_px + self.output_fine_offset_y_px
             cx_offset = -1 * offset_x / (self.output_zoom_percent / 100) / (self.output_stretch_x_percent / 100)
             cy_offset = -1 * offset_y / (self.output_zoom_percent / 100) / (self.output_stretch_y_percent / 100)
-            output_cx = frame_cx + cx_offset
-            output_cy = frame_cy + cy_offset
+            output_cx = round(frame_cx + cx_offset)
+            output_cy = round(frame_cy + cy_offset)
             scale_x = self.output_stretch_x_percent / 100
             scale_y = self.output_stretch_y_percent / 100
             # 提取透视四边形四个点的坐标 (tl, tr, bl, br)
@@ -369,11 +370,11 @@ class PerspectiveCorrection:
 
 
     def _build_default_quad(self, frame_w: int, frame_h: int) -> np.ndarray:
-        """默认四点的位置在画面中心，大小占画面约36%（宽高各18%）"""
+        """默认四点的位置在画面中心，大小占画面约20%（宽高各10%）"""
         cx = frame_w / 2.0
         cy = frame_h / 2.0
-        half_w = frame_w * 0.18
-        half_h = frame_h * 0.18
+        half_w = frame_w * 0.1
+        half_h = frame_h * 0.1
         return np.array(
             [
                 [cx - half_w, cy - half_h],
