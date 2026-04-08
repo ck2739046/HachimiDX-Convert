@@ -86,41 +86,6 @@ class MediaModel(BaseModel):
     video_crop_y: Optional[int] = Field(default=M_Defs.video_crop_y.default)
     video_crop_w: Optional[int] = Field(default=M_Defs.video_crop_w.default, gt=M_Defs.video_crop_w.constraints["gt"])
     video_crop_h: Optional[int] = Field(default=M_Defs.video_crop_h.default, gt=M_Defs.video_crop_h.constraints["gt"])
-
-    video_scale_x: Optional[float] = Field(
-        default=M_Defs.video_scale_x.default,
-        ge=M_Defs.video_scale_x.constraints["ge"],
-        le=M_Defs.video_scale_x.constraints["le"]
-    )
-    video_scale_y: Optional[float] = Field(
-        default=M_Defs.video_scale_y.default,
-        ge=M_Defs.video_scale_y.constraints["ge"],
-        le=M_Defs.video_scale_y.constraints["le"]
-    )
-
-    video_x_rot_deg: Optional[float] = Field(
-        default=M_Defs.video_x_rot_deg.default,
-        ge=M_Defs.video_x_rot_deg.constraints["ge"],
-        le=M_Defs.video_x_rot_deg.constraints["le"]
-    )
-    video_y_rot_deg: Optional[float] = Field(
-        default=M_Defs.video_y_rot_deg.default,
-        ge=M_Defs.video_y_rot_deg.constraints["ge"],
-        le=M_Defs.video_y_rot_deg.constraints["le"]
-    )
-    video_z_rot_deg: Optional[float] = Field(
-        default=M_Defs.video_z_rot_deg.default,
-        ge=M_Defs.video_z_rot_deg.constraints["ge"],
-        le=M_Defs.video_z_rot_deg.constraints["le"]
-    )
-    video_width: Optional[int] = Field(
-        default=M_Defs.video_width.default,
-        gt=M_Defs.video_width.constraints["gt"]
-    )
-    video_height: Optional[int] = Field(
-        default=M_Defs.video_height.default,
-        gt=M_Defs.video_height.constraints["gt"]
-    )
     
     
     
