@@ -57,6 +57,7 @@ def main(input_video: Path,
 
         scale_x, scale_y = 1.0, 1.0
         perspective_points = None
+        brightness = 0.0
 
         # 第二步：手动微调圆心和半径
         if need_screen_rectification:
@@ -69,7 +70,7 @@ def main(input_video: Path,
             ).main()
             if not result.is_ok:
                 return err("Failed to manual adjust circle.", inner=result)
-            circle_center, circle_radius, scale_x, scale_y, perspective_points = result.value
+            circle_center, circle_radius, scale_x, scale_y, perspective_points, brightness = result.value
 
         # 第三步：处理视频
         result = process_video.main(
@@ -80,6 +81,7 @@ def main(input_video: Path,
             scale_x=scale_x,
             scale_y=scale_y,
             perspective_points = perspective_points,
+            brightness=brightness,
             media_type=media_type,
             duration=duration,
             start_sec=start_sec,

@@ -95,6 +95,11 @@ class MediaModel(BaseModel):
     video_perspective_bl_y: Optional[float] = Field(default=M_Defs.video_perspective_bl_y.default)
     video_perspective_br_x: Optional[float] = Field(default=M_Defs.video_perspective_br_x.default)
     video_perspective_br_y: Optional[float] = Field(default=M_Defs.video_perspective_br_y.default)
+    video_brightness: Optional[float] = Field(
+        default=M_Defs.video_brightness.default,
+        ge=M_Defs.video_brightness.constraints["ge"],
+        le=M_Defs.video_brightness.constraints["le"],
+    )
     
     
 

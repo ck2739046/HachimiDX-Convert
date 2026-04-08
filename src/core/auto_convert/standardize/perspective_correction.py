@@ -48,6 +48,10 @@ class PerspectiveCorrection:
     FINE_OFFSET_MAX_PX = 100
     FINE_OFFSET_DEFAULT_PX = 0
 
+    BRIGHTNESS_MIN_PERCENT = -100
+    BRIGHTNESS_MAX_PERCENT = 100
+    BRIGHTNESS_DEFAULT_PERCENT = 0
+
     
 
     def __init__(self,
@@ -91,12 +95,22 @@ class PerspectiveCorrection:
         self.output_offset_y_px = self.OFFSET_DEFAULT_PX
         self.output_fine_offset_x_px = self.FINE_OFFSET_DEFAULT_PX
         self.output_fine_offset_y_px = self.FINE_OFFSET_DEFAULT_PX
+        self.output_brightness_percent = self.BRIGHTNESS_DEFAULT_PERCENT
 
 
 
 
 
-    def main(self) -> OpResult[Tuple[Tuple[int, int], int, float, float, float, float, float]]:
+    def main(self) -> OpResult[
+        Tuple[
+            Tuple[int, int],
+            float,
+            float,
+            float,
+            Optional[Tuple[float, float, float, float, float, float, float, float]],
+            float,
+        ]
+    ]:
 
         """
         画面矫正
@@ -104,7 +118,8 @@ class PerspectiveCorrection:
         Returns:
             OpResult -> (circle_center, circle_radius,
                          scale_x, scale_y,
-                         perspective_points)
+                         perspective_points,
+                         brightness)
             
         perspective_points 是 tuple 或 None。
         透视四点 float 坐标 (tl_x, tl_y, tr_x, tr_y, bl_x, bl_y, br_x, br_y)
@@ -203,6 +218,7 @@ class PerspectiveCorrection:
 
                 corrected_frame = self._apply_perspective_correction(raw_frame)
                 corrected_frame = self._apply_output_stretch(corrected_frame)
+                corrected_frame = self._apply_output_brightness(corrected_frame)
                 right_panel, _ = self._compose_panel(
                     corrected_frame,
                     current_output_zoom_percent,
@@ -247,6 +263,7 @@ class PerspectiveCorrection:
             output_cy = round(frame_cy + cy_offset)
             scale_x = self.output_stretch_x_percent / 100
             scale_y = self.output_stretch_y_percent / 100
+            brightness = self.output_brightness_percent / 100.0
             # 提取透视四边形四个点的坐标 (tl, tr, bl, br)
             if self.quad_points is not None:
                 if np.array_equal(self.quad_points, self._build_default_quad(self.frame_width, self.frame_height)):
@@ -276,7 +293,8 @@ class PerspectiveCorrection:
             return ok(((output_cx, output_cy),
                       circle_radius,
                       scale_x, scale_y,
-                      perspective_points))
+                      perspective_points,
+                      brightness))
                       
 
         except Exception as e:
@@ -432,6 +450,7 @@ class PerspectiveCorrection:
                                 "Scale", input_zoom_percent, "input")
         self._draw_slider_panel(canvas, self.FRAME_PREVIEW_SIZE, # 右侧 panel
                                 "Scale", output_zoom_percent, "output")
+        self._draw_left_brightness_slider(canvas)
         self._draw_right_stretch_sliders(canvas)
         self._draw_right_offset_sliders(canvas)
         self._draw_right_fine_offset_sliders(canvas)
@@ -537,6 +556,24 @@ class PerspectiveCorrection:
             percent_value=self.output_stretch_y_percent,
             min_percent=y_geo["min"],
             max_percent=y_geo["max"],
+        )
+
+
+    def _draw_left_brightness_slider(self, canvas: np.ndarray) -> None:
+        geo = self._get_slider_geometries()["brightness"]
+        brightness_value = self.output_brightness_percent / 100.0
+
+        self._draw_slider(
+            canvas=canvas,
+            label=f"Brightness: {brightness_value:+.2f}",
+            value_text=f"{brightness_value:+.2f}",
+            is_selected=(self.dragging_slider_name == "brightness"),
+            track_x1=geo["x1"],
+            track_x2=geo["x2"],
+            track_y=geo["y"],
+            percent_value=self.output_brightness_percent,
+            min_percent=geo["min"],
+            max_percent=geo["max"],
         )
 
 
@@ -727,6 +764,13 @@ class PerspectiveCorrection:
                 "min": self.SCALE_MIN_PERCENT,
                 "max": self.SCALE_MAX_PERCENT,
             },
+            "brightness": {
+                "x1": left_full_x1,
+                "x2": left_full_x2,
+                "y": y2,
+                "min": self.BRIGHTNESS_MIN_PERCENT,
+                "max": self.BRIGHTNESS_MAX_PERCENT,
+            },
             "output": {
                 "x1": right_full_x1,
                 "x2": right_full_x2,
@@ -859,6 +903,16 @@ class PerspectiveCorrection:
         return cv2.resize(frame, (stretched_w, stretched_h), interpolation=cv2.INTER_LINEAR)
 
 
+    def _apply_output_brightness(self, frame: np.ndarray) -> np.ndarray:
+        brightness = self.output_brightness_percent / 100.0
+        if abs(brightness) < 1e-6:
+            return frame
+
+        adjusted = frame.astype(np.float32) + brightness * 255.0
+        adjusted = np.clip(adjusted, 0, 255)
+        return adjusted.astype(np.uint8)
+
+
 
 
 
@@ -961,6 +1015,8 @@ class PerspectiveCorrection:
         )
         if slider_name == "input":
             self.input_zoom_percent = percent
+        elif slider_name == "brightness":
+            self.output_brightness_percent = percent
         elif slider_name == "output":
             self.output_zoom_percent = percent
         elif slider_name == "stretch_x":

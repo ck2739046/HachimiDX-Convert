@@ -18,6 +18,7 @@ def main(input_video: Path,
          scale_x: float,
          scale_y: float,
          perspective_points: Tuple[float, float, float, float, float, float, float, float] | None,
+         brightness: float,
          media_type: MediaType,
          duration: float,
          start_sec: float = 0.0,
@@ -36,6 +37,7 @@ def main(input_video: Path,
         scale_x(float): X轴缩放系数
         scale_y(float): Y轴缩放系数
         perspective_points(Tuple[8 float] | None): 透视四点坐标
+        brightness(float): 亮度（FFmpeg eq 语义，范围 -1.0~1.0）
         media_type(MediaType): 媒体类型 video_with_audio / video_without_audio
         duration(float): 视频总时长(秒)
         start_sec(float): 开始时间(秒)
@@ -69,13 +71,15 @@ def main(input_video: Path,
          need_resize,
          need_trim_start,
          need_trim_end,
-         need_perspective_correction
+         need_perspective_correction,
+         need_brightness
         ) = is_input_already_standardized(
             crop_w,
             crop_h,
             crop_x,
             crop_y,
             perspective_points,
+            brightness,
             video_width,
             video_height,
             target_res,
@@ -127,6 +131,11 @@ def main(input_video: Path,
                 M_Defs.video_perspective_br_y.key: perspective_points[7],
             })
 
+        if need_brightness:
+            params.update({
+                M_Defs.video_brightness.key: brightness,
+            })
+
 
         if need_resize:
             params.update({
@@ -155,6 +164,8 @@ def main(input_video: Path,
             change_hint += f'  trim end to {end_sec}s\n'
         if need_perspective_correction:
             change_hint += f'  apply perspective correction\n'
+        if need_brightness:
+            change_hint += f'  apply brightness: {brightness:+.2f}\n'
 
         if change_hint:
             print(f"Process video with changes:\n{change_hint}")
@@ -209,12 +220,13 @@ def is_input_already_standardized(crop_w: int,
                                   crop_x: int,
                                   crop_y: int,
                                   perspective_points: Tuple[float, float, float, float, float, float, float, float] | None,
+                                  brightness: float,
                                   video_width: int,
                                   video_height: int,
                                   target_res: int,
                                   start_sec: float,
                                   end_sec: float
-                                 ) -> tuple[bool, bool, bool, bool, bool, bool]:
+                                 ) -> tuple[bool, bool, bool, bool, bool, bool, bool]:
 
     video_size = min(video_width, video_height)
     tolerance = video_size / 360
@@ -224,6 +236,7 @@ def is_input_already_standardized(crop_w: int,
     need_resize = True
     need_trim_start = True
     need_trim_end = True
+    need_brightness = True
 
 
     # 透视矫正
@@ -246,9 +259,11 @@ def is_input_already_standardized(crop_w: int,
         need_trim_start = False
     if end_sec <= 0:
         need_trim_end = False
+    if abs(brightness) <= 1e-6:
+        need_brightness = False
 
-    if not need_crop and not need_resize and not need_trim_start and not need_trim_end and not need_perspective_correction:
+    if not need_crop and not need_resize and not need_trim_start and not need_trim_end and not need_perspective_correction and not need_brightness:
         print("Video already standardized.")
-        return True, False, False, False, False, False
+        return True, False, False, False, False, False, False
 
-    return False, need_crop, need_resize, need_trim_start, need_trim_end, need_perspective_correction
+    return False, need_crop, need_resize, need_trim_start, need_trim_end, need_perspective_correction, need_brightness

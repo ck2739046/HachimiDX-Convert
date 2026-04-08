@@ -128,6 +128,7 @@ def _build_video_args(data: MediaModel) -> OpResult[list[str]]:
         pad = data.pad_start,
         start = data.start,
         end = data.end,
+        brightness = data.video_brightness,
         perspective = (
             data.video_perspective_tl_x,
             data.video_perspective_tl_y,
@@ -153,6 +154,7 @@ def _build_video_filter(size: Optional[int],
                         pad: Optional[float],
                         start: Optional[float],
                         end: Optional[float],
+                        brightness: Optional[float],
                         perspective: tuple[Optional[float], Optional[float], Optional[float], Optional[float], Optional[float], Optional[float], Optional[float], Optional[float]] = None
                        ) -> Optional[str]:
     """构建视频滤镜"""
@@ -180,6 +182,10 @@ def _build_video_filter(size: Optional[int],
             f"{br_x:.6f}:{br_y:.6f}:sense=destination"
         )
         filters.append(perspective_filter)
+
+    if brightness is not None and abs(brightness) > 1e-6:
+        clamped_brightness = max(-1.0, min(1.0, float(brightness)))
+        filters.append(f"eq=brightness={clamped_brightness:.6f}")
 
     # Crop (支持越界，超出部分用黑色填充)
     if all(v is not None for v in crop):

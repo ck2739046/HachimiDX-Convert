@@ -345,6 +345,17 @@ class MediaConfig_Definitions:
         default=None
     )
 
+    video_brightness = MediaConfig_Definition(
+        key="video_brightness",
+        type="float",
+        group="video",
+        default=None,
+        constraints={
+            "ge": -1.0,
+            "le": 1.0,
+        }
+    )
+
 
 
 
