@@ -56,17 +56,17 @@ class ONNXBackend(BaseBackend):
             import onnxruntime
 
             # Select execution provider
-            available = onnxruntime.get_available_providers()
-            if cuda and "CUDAExecutionProvider" in available:
-                providers = [("CUDAExecutionProvider", {"device_id": self.device.index}), "CPUExecutionProvider"]
-            elif self.device.type == "mps" and "CoreMLExecutionProvider" in available:
-                providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
-            else:
-                providers = ["CPUExecutionProvider"]
-                if cuda:
-                    LOGGER.warning("CUDA requested but CUDAExecutionProvider not available. Using CPU...")
-                    self.device = torch.device("cpu")
-                    cuda = False
+            # available = onnxruntime.get_available_providers()
+            # if cuda and "CUDAExecutionProvider" in available:
+            #     providers = [("CUDAExecutionProvider", {"device_id": self.device.index}), "CPUExecutionProvider"]
+            # elif self.device.type == "mps" and "CoreMLExecutionProvider" in available:
+            #     providers = ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+            # else:
+            #     providers = ["CPUExecutionProvider"]
+            #     if cuda:
+            #         LOGGER.warning("CUDA requested but CUDAExecutionProvider not available. Using CPU...")
+            #         self.device = torch.device("cpu")
+            #         cuda = False
             
             providers = ["DmlExecutionProvider", "CPUExecutionProvider"] # 强制使用 dml
 

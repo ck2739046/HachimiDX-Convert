@@ -16,11 +16,8 @@ requirements += ["onnxslim>=0.1.71", "onnxruntime" + ("-gpu" if torch.cuda.is_av
 requirements += ["onnxslim>=0.1.71"] #, "onnxruntime" + ("-gpu" if torch.cuda.is_available() else "")]
 
 
+onnx.py line 59-69 注释掉
 
-onnx.py line 71:
-
-""
-
-->
+onnx.py line 71 新增:
 
 providers = ["DmlExecutionProvider", "CPUExecutionProvider"] # 强制使用 dml
