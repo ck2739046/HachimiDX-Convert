@@ -93,7 +93,7 @@ class SettingsConfig_Definitions:
         type="str",
         group="model",
         default="cuda",
-        constraints={"options": ["cpu", "cuda", "0"]},
+        constraints={"options": ["cpu", "cuda"]},
     )
 
     @staticmethod
@@ -103,7 +103,7 @@ class SettingsConfig_Definitions:
         elif backend == "TensorRT":
             return "cuda"
         elif backend == "DirectML":
-            return "0"
+            return "cpu" # 虽然写的cpu但实际上会自动选择显卡
         else:
             return "cpu" # default to cpu if unknown backend
 
