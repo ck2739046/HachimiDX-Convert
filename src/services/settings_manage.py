@@ -159,7 +159,7 @@ class SettingsManage:
                 temp_path = tf.name
 
             os.makedirs(os.path.dirname(SETTINGS_PATH), exist_ok=True)
-            os.replace(temp_path, SETTINGS_PATH)
+            shutil.move(temp_path, SETTINGS_PATH)
             return ok()
 
         except Exception as e:

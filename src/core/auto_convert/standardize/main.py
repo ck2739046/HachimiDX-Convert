@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 
 from ...schemas.op_result import OpResult, ok, err, print_op_result
 from ...schemas.media_model import MediaType
@@ -95,7 +96,7 @@ def main(input_video: Path,
         if temp_output_path != final_output_path:
             try:
                 final_output_path.parent.mkdir(parents=True, exist_ok=True)
-                temp_output_path.replace(final_output_path)
+                shutil.move(str(temp_output_path), str(final_output_path))
             except Exception as e:
                 return err(f"Failed to move output video from temp dir to main output dir.", error_raw=e)
 
