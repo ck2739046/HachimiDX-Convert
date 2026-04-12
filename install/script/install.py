@@ -11,6 +11,7 @@ USE_PyPI_Mirror = ""
 
 QingHua_PyPI_Mirror = "-i https://pypi.tuna.tsinghua.edu.cn/simple"
 
+ROOT = Path(__file__).resolve().parents[2] # 往上三级目录
 
 
 
@@ -132,7 +133,7 @@ def install():
     if not is_success: sys.exit(1)
 
     # 解决 pywin32 导入错误
-    cmd = [sys.executable, "../python/Scripts/pywin32_postinstall.py", "-install"]
+    cmd = [sys.executable, f"{ROOT}/python/Scripts/pywin32_postinstall.py", "-install"]
     subprocess.run(cmd, capture_output=True) # 隐藏输出
     
 
@@ -432,15 +433,15 @@ def install_directml_onnx() -> bool:
 def modify_ultralytics_for_dml(recover = False) -> bool:
 
     print("")
-    root = Path(__file__).parent.parent
-    ultralytics = root / "python" / "Lib" / "site-packages" / "ultralytics"
+    ultralytics = ROOT / "python" / "Lib" / "site-packages" / "ultralytics"
     target_path_onnx = ultralytics / "nn" / "backends" / "onnx.py"
     target_path_exporter = ultralytics / "engine" / "exporter.py"
 
-    modified_onnx = Path(__file__).parent / "dml_support" / "modified" / "onnx.py"
-    modified_exporter = Path(__file__).parent / "dml_support" / "modified" / "exporter.py"
-    original_onnx = Path(__file__).parent / "dml_support" / "original" / "onnx.py"
-    original_exporter = Path(__file__).parent / "dml_support" / "original" / "exporter.py"
+    dml_support_dir = ROOT / "install" / "dml_support"
+    modified_onnx = dml_support_dir / "modified" / "onnx.py"
+    modified_exporter = dml_support_dir / "modified" / "exporter.py"
+    original_onnx = dml_support_dir / "original" / "onnx.py"
+    original_exporter = dml_support_dir / "original" / "exporter.py"
 
     # ckech file exists
     for file in [target_path_onnx, target_path_exporter, modified_onnx, modified_exporter, original_onnx, original_exporter]:

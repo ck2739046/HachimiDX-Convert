@@ -10,7 +10,7 @@ cd /d "%~dp0"
 "..\python\python.exe" -m pip install wheel --no-warn-script-location
 
 :: 运行脚本
-"..\python\python.exe" -u install.py
+"..\python\python.exe" -u ".\script\install.py"
 
 @echo off
 pause
