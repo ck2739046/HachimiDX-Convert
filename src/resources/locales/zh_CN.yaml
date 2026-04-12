@@ -418,6 +418,7 @@ zh_CN:
       warning_cancel_failed: "取消任务失败\n%{error}"
 
       notice_save_success: "设置保存成功，部分设置项可能需要重启程序后才能生效"
+      warning_refresh_failed: "重新读取配置到内存失败: %{error}"
       notice_reset_success: "已重置为默认设置，部分设置项可能需要重启程序后才能生效"
       notice_check_start: "开始检测模型运行环境: backend=%{backend}"
       notice_check_pass: "1. 运行环境检测通过: %{backend}"

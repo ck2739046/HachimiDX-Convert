@@ -191,6 +191,22 @@ class SettingsManage:
 
 
     @classmethod
+    def refresh(cls) -> OpResult[None]:
+        """从文件重新加载配置，刷新内存中的配置"""
+        with cls._lock:
+            result = cls._load_or_create()
+            if result.is_ok:
+                cls._config = result.value
+                return ok()
+            else:
+                return err(
+                    "Failed to refresh configuration from file.",
+                    inner = result
+                )
+
+
+
+    @classmethod
     def get(cls, key: str) -> OpResult[Any]:
         """获取配置项"""
         with cls._lock:

@@ -260,6 +260,12 @@ class SettingsPage(BaseOutputPage):
                     )
                     return
 
+            # 保存成功后刷新内存中的配置
+            refresh_result = SettingsManage.refresh()
+            if not refresh_result.is_ok:
+                # 刷新失败，记录警告但继续
+                self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.warning_refresh_failed", error=refresh_result.error_msg))
+
             self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_save_success"))
             self._load_settings_to_ui()
         finally:
