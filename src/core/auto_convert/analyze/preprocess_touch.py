@@ -61,7 +61,7 @@ def preprocess_touch_data(shared_context: SharedContext):
             continue
 
         # 检验长度
-        if len(valid_track_path) < 6:
+        if len(valid_track_path) < 3:
             print(f"preprocess_touch_data: path too short for track_id {track_id}, length: {len(valid_track_path)}")
             continue
 

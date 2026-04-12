@@ -65,7 +65,7 @@ def estimate_touch_DefaultMsec(shared_context, touch_data):
             cur_time = shared_context.frame_to_msec(point['frame'])
             big_slope_points.append((cur_time, time_progress))
 
-        if len(big_slope_points) < 6:
+        if len(big_slope_points) < 3:
             print(f"estimate_touch_DefaultMsec: [track_id {track_id}] not enough big slope points, length: {len(big_slope_points)}")
             continue
 
