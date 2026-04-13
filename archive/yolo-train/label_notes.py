@@ -31,6 +31,7 @@ class Note:
     
 
 star_skin = 0 # 0 圆头星星，1 尖头星星
+note_speed = 0
 
 
 
@@ -359,7 +360,7 @@ def manual_align(video_path, txt_path, time_notes, align_diff=0):
         cv2.imshow(window_name, result_frame)
 
         # 等待按键
-        key = cv2.waitKey(1) & 0xFF
+        key = cv2.waitKey(20) & 0xFF
         
         if key == ord('q') or key == ord('Q'):  # 退出
             print(f"对齐完成！")
@@ -460,7 +461,8 @@ def draw_tap_note(note, target_time):
     # 说明音符走完全程要 282ms
     # 在标准 1080p 下，起点 120 终点 480 全程 360 像素
     # 所以此时移动速度为 360 / 282 像素/毫秒
-    speed = 360 / (1000 / 850 * 60 * 4)
+    defaultMsec = 100 * note_speed + 100
+    speed = 360 / (1000 / defaultMsec * 60 * 4)
     time_diff = target_time - note.frameTime
     new_distance_to_o = note.local_posY + speed * time_diff
     # local_posY就是到屏幕中心的距离
@@ -526,7 +528,8 @@ def draw_hold_note(note, target_time):
     if note.status.lower() == "move" and note.local_posY != 300:
         # 假设速度 7.50
         # 由于是中点，移动速度减半
-        speed = 360 / (1000 / 850 * 60 * 4) * 0.5
+        defaultMsec = 100 * note_speed + 100
+        speed = 360 / (1000 / defaultMsec * 60 * 4) * 0.5
         time_diff = target_time - note.frameTime
         new_distance_to_o = note.local_posY + speed * time_diff
         # 以 O (屏幕中心) 为中心，沿直线获得距离为 new_distance_to_o 的两个点
@@ -660,7 +663,8 @@ def draw_slide_note(note, target_time):
     # 说明音符走完全程要 282ms
     # 在标准 1080p 下，起点 120 终点 480 全程 360 像素
     # 所以此时移动速度为 360 / 282 像素/毫秒
-    speed = 360 / (1000 / 850 * 60 * 4)
+    defaultMsec = 100 * note_speed + 100
+    speed = 360 / (1000 / defaultMsec * 60 * 4)
     time_diff = target_time - note.frameTime
     new_distance_to_o = note.local_posY + speed * time_diff
     # local_posY就是到屏幕中心的距离
@@ -1685,13 +1689,15 @@ def reorder_obb_points(points):
     return [top_point, right_point, bottom_point, left_point]
 
 
-def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0):
+def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_speedd=7.50):
     """
     主函数
     """
 
     global star_skin
+    global note_speed
     star_skin = star_skinn
+    note_speed = note_speedd
 
     # check file exist
     if not os.path.exists(video_path):
@@ -2005,15 +2011,22 @@ if __name__ == "__main__":
     # align_diff = 66.666667
     # star_skin = 1 # 蓝色尖头星星
 
-    video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11820_120_standardized.mp4"
-    txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11820_2025-10-16_19-03-33.txt"
-    output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11820"
-    align_diff = -233.333333
+    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11820_120_standardized.mp4"
+    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11820_2025-10-16_19-03-33.txt"
+    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11820"
+    # align_diff = -233.333333
+    # star_skin = 1 # 粉色尖头星星
+
+    video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\hold稳定性补强_std.mp4"
+    txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\2026-04-13_18-56-39.txt"
+    output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data"
+    align_diff = 66.677777
     star_skin = 1 # 粉色尖头星星
+    note_speed = 4.0
    
 
     # 执行对齐
-    main(video_path, txt_path, output_dir, align_diff, star_skin)
+    main(video_path, txt_path, output_dir, align_diff, star_skin, note_speed)
 
     # Break分类数据集:
     # train:

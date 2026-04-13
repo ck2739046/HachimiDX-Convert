@@ -2,3 +2,5 @@ dataset/
 pt/*.pt
 pt/*.engine
 pt/*.onnx
+mod_dump_notes/build_1.bat
+dataset2/
