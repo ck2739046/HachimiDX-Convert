@@ -341,7 +341,7 @@ en_US:
       ui_base_denominator_label: "Base Denominator: "
       ui_base_denominator_help: |
         Time resolution used to parse note intervals.
-        Default is 16, meaning one unit is 1/16 beat, written as "{16}," in sinmai syntax.
+        Default is 16, meaning one unit is 1/16 beat, written as "{16}," in simai syntax.
         The program aligns note intervals to this time unit.
         Unit time calculation: 240000 / bpm / denominator (ms)
         Recommended unit time is >=30ms. If BPM is high, lower the denominator for better accuracy.
@@ -350,7 +350,7 @@ en_US:
       ui_duration_denominator_label: "Duration Denominator: "
       ui_duration_denominator_help: |
         Time resolution used to parse note durations.
-        Default is 8, meaning one unit is 1/8 beat, written as "[8:x]," in sinmai syntax.
+        Default is 8, meaning one unit is 1/8 beat, written as "[8:x]," in simai syntax.
         The program aligns note durations to this time unit.
         Unit time calculation: 240000 / bpm / denominator (ms)
         Recommended unit time is >=30ms. If BPM is high, lower the denominator for better accuracy.

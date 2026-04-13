@@ -335,7 +335,7 @@ class AutoConvertPage(QWidget):
         row_layout.addWidget(self.base_denominator_combo)
         base_denominator_help = ui_helpers.create_help_icon(
             "程序解析音符间隔的时间分辨率\n" \
-            "默认为 16，代表单位时间为 1/16 小节，在 sinmai 语法中写作 {16},\n" \
+            "默认为 16，代表单位时间为 1/16 小节，在 simai 语法中写作 {16},\n" \
             "程序会将音符间隔对齐到单位时间\n" \
             "单位时间计算: 240000 / bpm / 分辨率 (ms)\n" \
             "建议单位时间 ≥30ms，如果 BPM 较高，需要适当降低分辨率以保证准确性\n" \
@@ -351,7 +351,7 @@ class AutoConvertPage(QWidget):
         row_layout.addWidget(self.duration_denominator_combo)
         duration_denominator_help = ui_helpers.create_help_icon(
             "程序解析音符时值的时间分辨率\n" \
-            "默认为 8，代表单位时间为 1/8 小节，在 sinmai 语法中写作 [8],\n" \
+            "默认为 8，代表单位时间为 1/8 小节，在 simai 语法中写作 [8],\n" \
             "程序会将音符时值对齐到单位时间\n" \
             "单位时间计算: 240000 / bpm / 分辨率 (ms)\n" \
             "建议单位时间 ≥30ms，如果 BPM 较高，需要适当降低分辨率以保证准确性\n" \

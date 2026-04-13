@@ -72,7 +72,7 @@ Code lives in `src/`, organized in three layers:
     - Elements path tracking.
     - Filters, converts, and processes data.
     - Infers note position, timing, and duration.
-    - Converts to sinmai syntax.
+    - Converts to simai syntax.
     - Performs audio matching, synchronization, and arcade timing inference.
 
 
