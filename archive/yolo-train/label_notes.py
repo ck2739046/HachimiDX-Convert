@@ -49,6 +49,7 @@ class Note:
 
 star_skin = 0 # 0 圆头星星，1 尖头星星
 note_speed = 0
+is_big_touch = False
 
 
 
@@ -722,6 +723,8 @@ def draw_touch_note(note, target_time):
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
     size = note.touchDecor + 54
+    if is_big_touch:
+        size = round(size * 1.3)
 
     if note.touchAlpha < 0.4: return None, None # 忽略过于透明的音符
 
@@ -749,6 +752,9 @@ def draw_touch_hold_note(note, target_time):
         size = note.touchDecor + 68 # 缩放阶段
     else:
         size = note.touchDecor + 100 # 转圈阶段
+
+    if is_big_touch:
+        size = round(size * 1.3)
 
     # 反正最后识别尺寸也是靠识别彩虹框，跟touch一样不做运动补偿了
     return [
@@ -1702,15 +1708,18 @@ def reorder_obb_points(points):
     return [top_point, right_point, bottom_point, left_point]
 
 
-def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_speedd=7.50):
+def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_speedd=7.50, is_big_touchh=False):
     """
     主函数
     """
 
     global star_skin
     global note_speed
+    global is_big_touch
     star_skin = star_skinn
     note_speed = note_speedd
+    is_big_touch = is_big_touchh
+
 
     # check file exist
     if not os.path.exists(video_path):
@@ -2030,16 +2039,73 @@ if __name__ == "__main__":
     # align_diff = -233.333333
     # star_skin = 1 # 粉色尖头星星
 
-    video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\hold稳定性补强_std.mp4"
-    txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\2026-04-13_18-56-39.txt"
-    output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data"
-    align_diff = 66.677777
-    star_skin = 1 # 粉色尖头星星
-    note_speed = 4.0
+
+
+
+
+
+
+
+
+
+
+    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\hold稳定性补强_std.mp4"
+    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\2026-04-13_18-56-39.txt"
+    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data"
+    # align_diff = 66.677777
+    # star_skin = 1 # 粉色尖头星星
+    # note_speed = 4.0
+
+
+
+
+
+
+
+
+
+
+    # # 过曝
+    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11929\11929_std.mp4"
+    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11929\11929_2026-04-13_20-57-27.txt"
+    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11929"
+    # align_diff = 2528.09
+    # star_skin = 0 # 蓝色圆头星星
+
+    # # 欠曝
+    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11969\11969_std.mp4"
+    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11969\11969_2026-04-13_20-46-46.txt"
+    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11969"
+    # align_diff = 1415.73
+    # star_skin = 1 # 粉色尖头星星
+
+    # # 过曝
+    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_std.mp4"
+    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_2026-04-13_20-53-19.txt"
+    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11979"
+    # align_diff = 910.11
+    # star_skin = 0 # 蓝色圆头星星
+
+    # # 欠曝
+    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11981\11981_std.mp4"
+    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11981\11981_2026-04-13_20-43-20.txt"
+    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11981"
+    # align_diff = 168.54
+    # star_skin = 1 # 粉色尖头星星
+
+    # # 欠曝
+    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11988\11988_std.mp4"
+    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11988\11988_2026-04-13_20-37-20.txt"
+    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11988"
+    # align_diff = -33.71
+    # star_skin = 0 # 蓝色圆头星星
+
+    # note_speed = 3.0
+    # is_big_touch = True
    
 
     # 执行对齐
-    main(video_path, txt_path, output_dir, align_diff, star_skin, note_speed)
+    main(video_path, txt_path, output_dir, align_diff, star_skin, note_speed, is_big_touch)
 
     # Break分类数据集:
     # train:
