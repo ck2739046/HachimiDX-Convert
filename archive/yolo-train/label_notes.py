@@ -2,6 +2,23 @@ import os
 import cv2
 import numpy as np
 import shutil
+from pathlib import Path
+
+
+
+# 解决 imread/imwrite 无法正确处理中文路径
+def cv_imread(filepath):
+    cv_imr = cv2.imdecode(np.fromfile(filepath,dtype=np.uint8),cv2.IMREAD_COLOR)
+    return cv_imr
+
+def cv_imwrite(filepath,img):
+    parent = Path(filepath).parent
+    if not parent.exists():
+        parent.mkdir(parents=True, exist_ok=True)
+    cv_imw = cv2.imencode('.jpg',img)[1].tofile(filepath)
+    return
+
+
 
 
 class Note:
@@ -1062,12 +1079,8 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
         
         # 保存图像（只保存一次，detect和obb共用）
         image_path = os.path.join(images_dir, image_filename)
-        success = cv2.imwrite(image_path, frame)
-        
-        if not success:
-            print(f"\n警告: 无法保存图像 {image_path}")
-            print(f"帧信息: shape={frame.shape if frame is not None else 'None'}")
-        
+        cv_imwrite(image_path, frame)
+
         # 保存detect标签文件（空标签也保存）
         with open(os.path.join(detect_labels_dir, label_filename), 'w') as f:
             if detect_labels:
@@ -1211,7 +1224,7 @@ def verify_dataset(output_dir):
             continue
         
         # 读取图像
-        frame = cv2.imread(img_path)
+        frame = cv_imread(img_path)
         if frame is None:
             print(f"警告：无法读取图像 {img_path}")
             current_frame_idx = (current_frame_idx + 1) % len(sorted_frame_keys)
@@ -1289,7 +1302,7 @@ def verify_dataset(output_dir):
                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
         cv2.putText(frame, f"Detect: {detect_count} notes | OBB: {obb_count} notes",
                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        cv2.putText(frame, "Space: Play/Pause | Left/Right: Previous/Next | Q: Quit",
+        cv2.putText(frame, "Space: Play/Pause | Arrow: Last frame | Q: Quit",
                    (10, frame_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
         
         cv2.imshow(window_name, frame)
@@ -1555,14 +1568,14 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
             break_save_dir = break_yes if is_break else break_no
             break_filename = f"{video_name}_f{frame_number}_n{note_counter}_break_{break_label}.jpg"
             break_save_path = os.path.join(break_save_dir, break_filename)
-            cv2.imwrite(break_save_path, cropped_img)
+            cv_imwrite(break_save_path, cropped_img)
             break_count[break_label] += 1
             
             # 保存到EX分类数据集
             ex_save_dir = ex_yes if is_ex else ex_no
             ex_filename = f"{video_name}_f{frame_number}_n{note_counter}_ex_{ex_label}.jpg"
             ex_save_path = os.path.join(ex_save_dir, ex_filename)
-            cv2.imwrite(ex_save_path, cropped_img)
+            cv_imwrite(ex_save_path, cropped_img)
             ex_count[ex_label] += 1
             
             note_counter += 1
