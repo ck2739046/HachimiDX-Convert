@@ -1070,14 +1070,22 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
                     width = max_x - min_x
                     height = max_y - min_y
                     
-                    # 归一化
-                    x_center_norm = center[0] / frame_width
-                    y_center_norm = center[1] / frame_height
-                    width_norm = width / frame_width
-                    height_norm = height / frame_height
-                    
-                    # 添加到标签列表
-                    detect_labels.append(f"{class_id} {x_center_norm} {y_center_norm} {width_norm} {height_norm}")
+                    # 按半径过滤
+                    dist_to_center = np.sqrt((center[0] - frame_width/2) ** 2 + (center[1] - frame_height/2) ** 2)
+                    threshold = frame_width * 520/1080 # 1080p下不超过520像素
+                    if dist_to_center <= threshold:
+                        # 归一化
+                        x_center_norm = center[0] / frame_width
+                        y_center_norm = center[1] / frame_height
+                        width_norm = width / frame_width
+                        height_norm = height / frame_height
+                        # 确保归一化后的数据不超过 0-1
+                        x_center_norm = max(0, min(1, x_center_norm))
+                        y_center_norm = max(0, min(1, y_center_norm))
+                        width_norm = max(0, min(1, width_norm))
+                        height_norm = max(0, min(1, height_norm))
+                        # 添加到标签列表
+                        detect_labels.append(f"{class_id} {x_center_norm} {y_center_norm} {width_norm} {height_norm}")
         
         # 保存图像和标签（即使标签为空也保存）
         image_filename = f"{video_name}_{frame_number}.jpg"
@@ -1110,12 +1118,16 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
                 if points is not None and class_id >= 0:
                     # 重新排序四个点：点1（最上方），点2（最右边），点3（最下方），点4（最左边）
                     reordered_points = reorder_obb_points(points)
-                    
+
                     # 归一化4个角点
                     normalized_points = []
                     for p in reordered_points:
                         x_norm = p[0] / frame_width
                         y_norm = p[1] / frame_height
+                        # 确保归一化后的数据不超过 0-1
+                        x_norm = max(0, min(1, x_norm))
+                        y_norm = max(0, min(1, y_norm))
+                        # 保存坐标
                         normalized_points.extend([x_norm, y_norm])
                     
                     # 添加到标签列表
