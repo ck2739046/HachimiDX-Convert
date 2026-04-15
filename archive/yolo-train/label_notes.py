@@ -2610,9 +2610,8 @@ if __name__ == "__main__":
             # 11394 背景暗 autoplay:critical combo数 达成率累加
             "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_std.mp4",
             "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_2026-04-15_13-20-22.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11394",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset5\seperate_data\11394",
             "align_diff": 316.68+3,
-            "star_skin": 1, # 粉色尖头星星
             "note_speed": 7.5,
         },
 
@@ -2620,9 +2619,8 @@ if __name__ == "__main__":
             # 11741 背景亮 autoplay:critical combo数 达成率累加 带开头/结尾动画
             "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_std.mp4",
             "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_2026-04-15_13-33-11.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11741",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset5\seperate_data\11741",
             "align_diff": -8016.66,
-            "star_skin": 0, # 粉色圆头星星
             "note_speed": 7.5,
         },
 
@@ -2630,9 +2628,8 @@ if __name__ == "__main__":
             # 11753 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
             "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_std.mp4",
             "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_2026-04-15_13-15-16.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11753",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset5\seperate_data\11753",
             "align_diff": 966.68,
-            "star_skin": 0, # 蓝色圆头星星
             "note_speed": 7.5,
         },
 
@@ -2640,9 +2637,8 @@ if __name__ == "__main__":
             # 11818 背景暗 autoplay:random 达成率递减 达成率递减
             "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_std.mp4",
             "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_2026-04-15_12-57-49.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11818",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset5\seperate_data\11818",
             "align_diff": -49.99999,
-            "star_skin": 1, # 蓝色尖头星星
             "note_speed": 7.5,
         },
 
@@ -2650,9 +2646,8 @@ if __name__ == "__main__":
             # 11814 背景暗 autoplay:critical combo数 达成率累加
             "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_std.mp4",
             "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_2026-04-15_13-24-09.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11814",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset5\seperate_data\11814",
             "align_diff": 1283.34,
-            "star_skin": 0, # 蓝色圆头星星
             "note_speed": 7.5,
         },
 
@@ -2660,74 +2655,9 @@ if __name__ == "__main__":
             # 11898 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计 带开头动画
             "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_std.mp4",
             "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_2026-04-15_13-28-52.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11898",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset5\seperate_data\11898",
             "align_diff": -7749.99,
-            "star_skin": 1, # 粉色尖头星星
             "note_speed": 7.5,
-        },
-
-
-
-
-
-        # dataset 3
-        {
-            # 过曝
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11929\11929_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11929\11929_2026-04-14_22-47-45.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11929",
-            "align_diff": [(0, 2561.8),(492, 2544.9),(1663, 2528.1),(3337, 2511.2),(4345, 2528.1)],
-            "star_skin": 0, # 蓝色圆头星星
-            "note_speed": 3.0,
-            "is_big_touch": True,
-            "export_half_frame": False,
-        },
-
-        {
-            # 欠曝
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11969\11969_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11969\11969_2026-04-14_22-51-16.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11969",
-            "align_diff": [(0, 1415.73),(1026, 1398.9),(3005, 1382.0)],
-            "star_skin": 1, # 粉色尖头星星
-            "note_speed": 3.0,
-            "is_big_touch": True,
-            "export_half_frame": False,
-        },
-
-        {
-            # 过曝
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_2026-04-14_22-37-06.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11979",
-            "align_diff": [(0, 910.11),(251, 893.3),(1546, 876.4),(3654, 859.6),(4353, 876.4)],
-            "star_skin": 0, # 蓝色圆头星星
-            "note_speed": 3.0,
-            "is_big_touch": True,
-            "export_half_frame": False,
-        },
-
-        {
-            # 欠曝
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11981\11981_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11981\11981_2026-04-14_22-40-34.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11981",
-            "align_diff": [(0, 185.4),(1181, 168.5),(2748,151.7),(3865,134.9),(4345, 168.5)],
-            "star_skin": 1, # 粉色尖头星星
-            "note_speed": 3.0,
-            "is_big_touch": True,
-            "export_half_frame": False,
-        },
-
-        {
-            # 欠曝
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11988\11988_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11988\11988_2026-04-14_22-44-40.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11988",
-            "align_diff": [(0, 0), (267, -33.71), (510, -50.6), (1970, -67.4), (2267, -33.7), (3544, -50.6)],
-            "star_skin": 0, # 蓝色圆头星星
-            "note_speed": 3.0,
-            "export_half_frame": False,
         },
 
 
@@ -2738,9 +2668,8 @@ if __name__ == "__main__":
         {
             "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset4\touch_hold_std.mp4",
             "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset4\2026-04-15_20-35-51.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset4\seperate_data\touch_hold_plus",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset5\seperate_data\touch_hold_plus",
             "align_diff": 300.0,
-            "star_skin": 1, # 粉色尖头星星
             "note_speed": 4.0
         }
     ]
@@ -2751,7 +2680,6 @@ if __name__ == "__main__":
         txt_path = song["txt_path"]
         output_dir = song["output_dir"]
         align_diff = song["align_diff"]
-        star_skin = song["star_skin"]
         note_speed = song["note_speed"]
         is_big_touch = song.get("is_big_touch", False)
         export_half_frame = song.get("export_half_frame", True)
