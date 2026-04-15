@@ -23,7 +23,9 @@ namespace default_namespace {
     {
         private static FieldInfo _activeNoteListField;
         private static FieldInfo _activeSlideListField;
+        private static MethodInfo? _touchHoldGetHoldAmountMethod;
         private static bool _fieldsInitialized = false;
+        private static bool _touchHoldProgressWarningLogged = false;
         private static string _outputFilePath = "";
         private static bool _isFileCreated = false;
         private static bool _isDumpEnabled = false;
@@ -46,6 +48,7 @@ namespace default_namespace {
             // 尺寸相关属性
             public Vector3 TouchDecorPosition { get; set; }  // Touch装饰位置
             public float TouchAlpha { get; set; }            // Touch音符透明度 (Init->Scale阶段 0->1)
+            public float TouchHoldProgress { get; set; }     // TouchHold视觉进度 (0~1)
             public Vector2 HoldBodySize { get; set; }           // Hold尺寸
             public Vector3 HoldLocalScale { get; set; }         // Hold音符的localScale
             public Vector3 TapLocalScale { get; set; }          // Tap音符的localScale (Scale阶段)
@@ -74,6 +77,13 @@ namespace default_namespace {
             var gameCtrlType = typeof(GameCtrl);
             _activeNoteListField = gameCtrlType.GetField("_activeNoteList", BindingFlags.NonPublic | BindingFlags.Instance);
             _activeSlideListField = gameCtrlType.GetField("_activeSlideList", BindingFlags.NonPublic | BindingFlags.Instance);
+            _touchHoldGetHoldAmountMethod = typeof(TouchHoldC).GetMethod("GetHoldAmount", BindingFlags.NonPublic | BindingFlags.Instance);
+
+            if (_touchHoldGetHoldAmountMethod == null && !_touchHoldProgressWarningLogged)
+            {
+                MelonLogger.Warning("TouchHold progress method not found, fallback formula will be used.");
+                _touchHoldProgressWarningLogged = true;
+            }
 
             _fieldsInitialized = true;
         }
@@ -180,7 +190,7 @@ namespace default_namespace {
                         {
                             // 获取音符
                             string typeName = note.GetType().Name;
-                            var noteInfo = GetNoteInfo(note, typeName);
+                            var noteInfo = GetNoteInfo(note, typeName, currentTime);
                             if (noteInfo != null)
                                 allNotes.Add(noteInfo);
                         }
@@ -220,7 +230,7 @@ namespace default_namespace {
             }
         }
 
-        private static NoteInfo GetNoteInfo(NoteBase noteBase, string noteType)
+        private static NoteInfo GetNoteInfo(NoteBase noteBase, string noteType, float currentTime)
         {
             try
             {
@@ -236,9 +246,12 @@ namespace default_namespace {
                 actualPosition = noteObj.transform.position;
                 actualLocalPosition = noteObj.transform.localPosition;
 
+                float appearMsec = GetNoteFieldFloat(noteBase, "AppearMsec", -1f);
+
                 // 初始化尺寸数据
                 Vector3 touchDecorPosition = Vector3.zero;
                 float touchAlpha = 0f;
+                float touchHoldProgress = 0f;
                 Vector2 holdBodySize = Vector2.zero;
                 Vector3 holdLocalScale = Vector3.zero;
                 Vector3 starLocalScale = Vector3.zero;
@@ -254,6 +267,11 @@ namespace default_namespace {
                     touchDecorPosition = colors[0].transform.localPosition;
                     // 获取透明度（从第一个ColorsObject获取）
                     touchAlpha = colors[0].color.a;
+
+                    if (noteBase is TouchHoldC)
+                    {
+                        touchHoldProgress = GetTouchHoldProgress(noteBase, currentTime, appearMsec);
+                    }
                 }
                 // 处理Hold音符尺寸
                 else if (noteType.Contains("Hold"))
@@ -299,22 +317,19 @@ namespace default_namespace {
                     Status = noteBase.GetNoteStatus().ToString(),
                     IsActive = gameObject.activeSelf,
                     IsEnd = noteBase.IsEnd(),
-                    AppearMsec = -1f,  // 默认值
+                    AppearMsec = appearMsec,
                     IsExNote = noteBase.ExNote,  // 获取EX音符标志
 
                     // touch/hold/tap/star尺寸数据
                     TouchDecorPosition = touchDecorPosition,
                     TouchAlpha = touchAlpha,
+                    TouchHoldProgress = touchHoldProgress,
                     HoldBodySize = holdBodySize,
                     HoldLocalScale = holdLocalScale,
                     TapLocalScale = tapLocalScale,
                     StarLocalScale = starLocalScale,
                     UserNoteSize = userNoteSize
                 };
-
-                // 通过反射获取AppearMsec
-                var appearMsecField = noteBase.GetType().GetField("AppearMsec", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                noteInfo.AppearMsec = (float)appearMsecField.GetValue(noteBase);
                 
                 return noteInfo;
             }
@@ -323,6 +338,61 @@ namespace default_namespace {
                 MelonLogger.Warning($"Failed to get note info for {noteType}: {e.Message}");
                 return null;
             }
+        }
+
+        private static float GetTouchHoldProgress(NoteBase noteBase, float currentTime, float appearMsec)
+        {
+            if (_touchHoldGetHoldAmountMethod != null)
+            {
+                try
+                {
+                    var result = _touchHoldGetHoldAmountMethod.Invoke(noteBase, null);
+                    if (result is float value)
+                        return ClampProgress(value);
+                    if (result is double valueDouble)
+                        return ClampProgress((float)valueDouble);
+                }
+                catch (Exception e)
+                {
+                    if (!_touchHoldProgressWarningLogged)
+                    {
+                        MelonLogger.Warning($"TouchHold progress reflection failed, use fallback formula: {e.Message}");
+                        _touchHoldProgressWarningLogged = true;
+                    }
+                    _touchHoldGetHoldAmountMethod = null;
+                }
+            }
+
+            float tailMsec = GetNoteFieldFloat(noteBase, "TailMsec", appearMsec);
+            if (tailMsec <= appearMsec)
+                return 0f;
+
+            float progress = (currentTime - appearMsec) / (tailMsec - appearMsec);
+            return ClampProgress(progress);
+        }
+
+        private static float GetNoteFieldFloat(NoteBase noteBase, string fieldName, float defaultValue)
+        {
+            var field = noteBase.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            if (field == null)
+                return defaultValue;
+
+            var value = field.GetValue(noteBase);
+            if (value is float floatValue)
+                return floatValue;
+            if (value is double doubleValue)
+                return (float)doubleValue;
+            if (value is int intValue)
+                return intValue;
+
+            return defaultValue;
+        }
+
+        private static float ClampProgress(float value)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value))
+                return 0f;
+            return Mathf.Clamp01(value);
         }
 
         private static NoteInfo GetSlideRootStarInfo(object slideRoot, float currentTime)
@@ -429,7 +499,7 @@ namespace default_namespace {
                     File.WriteAllText(_outputFilePath, $"Note Dump Started at {timestamp}\n");
                     File.AppendAllText(_outputFilePath, $"Music Info: {string.Join(" - ", _currentMusicInfo)}\n");
                     File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | IsEX | (Details...)\n");
-                    File.AppendAllText(_outputFilePath, "  Touch: TouchDecor+Alpha | Hold: HoldScale+HoldSize | Tap/Break: TapScale\n");
+                    File.AppendAllText(_outputFilePath, "  Touch: TouchDecor+Alpha(+TouchHoldProgress) | Hold: HoldScale+HoldSize | Tap/Break: TapScale\n");
                     File.AppendAllText(_outputFilePath, "  Star(1st): StarScale+UserNoteSize | Star-Move(2nd): StarScale+Alpha+LaunchMsec+ArriveMsec\n");
                     File.AppendAllText(_outputFilePath, "=".PadRight(30, '=') + "\n");
 
@@ -457,6 +527,10 @@ namespace default_namespace {
                     {
                         var decorPosition = note.TouchDecorPosition;
                         line += $" | TouchDecorPosition: {decorPosition.y:F4} | Alpha: {note.TouchAlpha:F4}";
+                        if (note.NoteType == nameof(TouchHoldC))
+                        {
+                            line += $" | TouchHoldProgress: {note.TouchHoldProgress:F4}";
+                        }
                     }
                     // Hold音符
                     else if (noteTypeLower.Contains("hold"))
