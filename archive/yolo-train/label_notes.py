@@ -1340,6 +1340,28 @@ def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_
 
 
 
+
+    # 绘制进度点：0/1 在 12 点，顺时针增加
+    hold_progress = touch_hold_note.touchHoldProgress
+    if hold_progress is not None and hold_progress >= 0.02:  # 忽略前2%
+        # 根据进度计算角度
+        progress = max(0.0, min(1.0, float(hold_progress)))
+        base_radius = view.shape[1] * 0.4
+        angle = -np.pi / 2 + progress * 2 * np.pi
+        # 圆角菱形轨迹：p=1 是菱形，p=2 是圆
+        shape_p = 1.3
+        dir_x = np.cos(angle)
+        dir_y = np.sin(angle)
+        denom = (abs(dir_x) ** shape_p + abs(dir_y) ** shape_p) ** (1.0 / shape_p)
+        adjusted_radius = base_radius if denom <= 1e-6 else (base_radius / denom)
+        # 计算进度点在裁剪图中的坐标
+        progress_x = int(round(center_on_crop[0] + adjusted_radius * dir_x))
+        progress_y = int(round(center_on_crop[1] + adjusted_radius * dir_y))
+        cv2.circle(view, (progress_x, progress_y), 3, (0, 255, 0), -1)
+
+
+
+
     cv2.imshow('Touch-Hold Parser', view)
     key = cv2.waitKey(0) & 0xFF
     if key in (ord('q'), ord('Q'), 27):
@@ -2606,7 +2628,8 @@ if __name__ == "__main__":
             "align_diff": [(0, 2561.8),(492, 2544.9),(1663, 2528.1),(3337, 2511.2),(4345, 2528.1)],
             "star_skin": 0, # 蓝色圆头星星
             "note_speed": 3.0,
-            "is_big_touch": True
+            "is_big_touch": True,
+            "export_half_frame": False,
         },
 
         {
@@ -2617,7 +2640,8 @@ if __name__ == "__main__":
             "align_diff": [(0, 1415.73),(1026, 1398.9),(3005, 1382.0)],
             "star_skin": 1, # 粉色尖头星星
             "note_speed": 3.0,
-            "is_big_touch": True
+            "is_big_touch": True,
+            "export_half_frame": False,
         },
 
         {
@@ -2628,7 +2652,8 @@ if __name__ == "__main__":
             "align_diff": [(0, 910.11),(251, 893.3),(1546, 876.4),(3654, 859.6),(4353, 876.4)],
             "star_skin": 0, # 蓝色圆头星星
             "note_speed": 3.0,
-            "is_big_touch": True
+            "is_big_touch": True,
+            "export_half_frame": False,
         },
 
         {
@@ -2639,7 +2664,8 @@ if __name__ == "__main__":
             "align_diff": [(0, 185.4),(1181, 168.5),(2748,151.7),(3865,134.9),(4345, 168.5)],
             "star_skin": 1, # 粉色尖头星星
             "note_speed": 3.0,
-            "is_big_touch": True
+            "is_big_touch": True,
+            "export_half_frame": False,
         },
 
         {
@@ -2650,6 +2676,7 @@ if __name__ == "__main__":
             "align_diff": [(0, 0), (267, -33.71), (510, -50.6), (1970, -67.4), (2267, -33.7), (3544, -50.6)],
             "star_skin": 0, # 蓝色圆头星星
             "note_speed": 3.0,
+            "export_half_frame": False,
         },
 
 
@@ -2676,5 +2703,6 @@ if __name__ == "__main__":
         star_skin = song["star_skin"]
         note_speed = song["note_speed"]
         is_big_touch = song.get("is_big_touch", False)
+        export_half_frame = song.get("export_half_frame", True)
 
-        main(video_path, txt_path, output_dir, align_diff, star_skin, note_speed, is_big_touch, export_half_frame=True, mode="6")
+        main(video_path, txt_path, output_dir, align_diff, star_skin, note_speed, is_big_touch, export_half_frame=export_half_frame, mode="6")
