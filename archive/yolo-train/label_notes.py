@@ -25,7 +25,7 @@ def cv_imwrite(filepath,img):
 class Note:
     def __init__(self, frameTime=None, type=None, index=None, posX=None, posY=None, 
                  local_posX=None, local_posY=None, status=None, 
-                 appearMsec=None, isEX=None, touchDecor=None, touchAlpha=None,
+                 appearMsec=None, isEX=None, touchDecor=None, touchAlpha=None, touchHoldProgress=None,
                  tapScale=None, holdScale=None, holdSize=None, starScale=None, starAlpha=None):
         
         self.frameTime = frameTime
@@ -40,6 +40,7 @@ class Note:
         self.isEX = isEX
         self.touchDecor = touchDecor
         self.touchAlpha = touchAlpha
+        self.touchHoldProgress = touchHoldProgress
         self.tapScale = tapScale
         self.holdScale = holdScale
         self.holdSize = holdSize
@@ -281,6 +282,7 @@ def parse_note_line(line, frame_time):
         # 处理额外数据
         extra_data = parts[6].strip().lower() if len(parts) >= 7 else ""
         extra_data2 = parts[7].strip().lower() if len(parts) >= 8 else ""
+        extra_data3 = parts[8].strip().lower() if len(parts) >= 9 else ""
 
         #print(f"Parsing note: {type_name}-{index} at {frame_time}ms with extra data: '{extra_data}' and '{extra_data2}'")
         
@@ -291,6 +293,12 @@ def parse_note_line(line, frame_time):
                 note.touchDecor = touch_decor
                 touch_alpha = float(extra_data2.split('alpha:')[1].strip())
                 note.touchAlpha = touch_alpha
+
+        # 处理Touch-Hold类型的TouchHoldProgress数据
+        if 'touchhold' in type_name.lower():
+            if 'touchholdprogress' in extra_data3:
+                touch_hold_progress = float(extra_data3.split('touchholdprogress:')[1].strip())
+                note.touchHoldProgress = touch_hold_progress
 
         # 处理Hold类型的HoldScale和HoldSize数据
         elif 'hold' in type_name.lower():
