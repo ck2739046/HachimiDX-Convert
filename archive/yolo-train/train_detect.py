@@ -12,7 +12,7 @@ class CustomDetectionTrainer(DetectionTrainer):
         # 使用VarifocalLoss替换默认损失函数
         # gamma: 调节难易样本的权重，越大越关注难样本（默认2.0）
         # alpha: 平衡因子，用于处理类别不平衡（默认0.75）
-        model.model[-1].loss_fn = VarifocalLoss(gamma=2.2, alpha=0.75)
+        model.model[-1].loss_fn = VarifocalLoss(gamma=2.0, alpha=0.75)
         return model
 
 
@@ -25,7 +25,7 @@ def train(model_name=None):
         return
     
     # 加载预训练模型
-    model = YOLO('yolo26m.pt')
+    model = YOLO('yolo11m.pt')
 
     project_path = os.path.join(os.path.dirname(__file__), 'result')
 
@@ -44,7 +44,7 @@ def train(model_name=None):
         epochs=18,     
         imgsz=960,        
         batch=batch_num,
-        patience=6, 
+        patience=8, 
         save_period=1,
         workers=workers_num,    
         device=0,        
