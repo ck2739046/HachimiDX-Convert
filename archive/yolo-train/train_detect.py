@@ -33,7 +33,8 @@ def train(model_name=None):
         model_name = 'note_unknown'
 
     # 参数
-    workers_num = 20
+    workers_num = 10
+    batch_num = 28
     
     # 开始训练（使用自定义的VariFocalLoss训练器）
     print("开始训练（使用VariFocalLoss处理数据集不平衡）...")
@@ -42,8 +43,8 @@ def train(model_name=None):
         data=data_config,
         epochs=18,     
         imgsz=960,        
-        batch=0.8,
-        patience=5, 
+        batch=batch_num,
+        patience=6, 
         save_period=1,
         workers=workers_num,    
         device=0,        
@@ -54,14 +55,13 @@ def train(model_name=None):
         verbose=True,
         plots=False,
         
-        augment=True,
         compile=True,
 
         optimizer="auto",
 
         rect=True,
         mosaic=0.4,         # 启用马赛克增强
-        close_mosaic=5,     # 第5轮后关闭马赛克增强
+        close_mosaic=8,     # 第8轮后关闭马赛克增强
 
         hsv_h=0.03,         # HSV色调增强，适应不同光照
         hsv_s=0.2,          # HSV饱和度增强

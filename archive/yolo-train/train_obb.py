@@ -36,7 +36,8 @@ def train(model_name=None):
         model_name = 'note_unknown'
 
     # 参数
-    workers_num = 25
+    workers_num = 10
+    batch_num = 40
     
     # 开始训练（使用自定义的 VarifocalLoss 训练器）
     print("开始训练（使用 VarifocalLoss 处理数据集不平衡）...")
@@ -45,8 +46,8 @@ def train(model_name=None):
         data=data_config,
         epochs=18,     
         imgsz=960,        
-        batch=0.8,       
-        patience=5,
+        batch=batch_num,       
+        patience=6,
         save_period=1,
         workers=workers_num,    
         device=0,        
@@ -57,7 +58,6 @@ def train(model_name=None):
         verbose=True,
         plots=False,
         
-        augment=True,
         compile=True,
 
         optimizer='auto',
