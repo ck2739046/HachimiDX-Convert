@@ -1274,9 +1274,15 @@ def crop_with_black_padding(frame, center_x, center_y, crop_width, crop_height):
     return cropped
 
 
-def parse_touch_hold(cropped_frame, touch_hold_note):
+def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_y):
     """
     接收裁剪后的帧与 touch-hold 音符信息，逐条展示。
+
+    参数:
+        cropped_frame: 裁剪后的图像
+        touch_hold_note: touch-hold 音符对象
+        crop_origin_x: 裁剪框左上角在原图中的 x
+        crop_origin_y: 裁剪框左上角在原图中的 y
 
     返回:
         True: 继续展示下一条
@@ -1287,12 +1293,52 @@ def parse_touch_hold(cropped_frame, touch_hold_note):
 
     view = cropped_frame.copy()
     note_alpha = touch_hold_note.touchAlpha if touch_hold_note.touchAlpha is not None else -1
-    if note_alpha < 0.4:
+    if note_alpha < 0.4:  # 忽略过于透明的音符
         return True
     info_text = f"idx:{touch_hold_note.index} alpha:{note_alpha:.3f}"
-    cv2.putText(view, info_text, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+    cv2.putText(view, info_text, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
     cv2.putText(view, "Any key: next | Q/ESC: quit", (8, view.shape[0] - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+
+
+
+
+    # 绘制 touch 框
+    # 魔改 draw_touch_hold_note() 的计算逻辑，并把四点映射到裁剪图坐标系
+    center_x = 1080 + touch_hold_note.posX
+    center_y = 120 - touch_hold_note.posY
+
+    size = touch_hold_note.touchDecor + 68
+    if is_big_touch:
+        size = round(size * 1.3)
+
+    points_on_full = [
+        (center_x - size, center_y - size),  # 左上
+        (center_x + size, center_y - size),  # 右上
+        (center_x + size, center_y + size),  # 右下
+        (center_x - size, center_y + size),  # 左下
+    ]
+
+    points_on_crop = []
+    for px, py in points_on_full:
+        mx = int(round(px - crop_origin_x))
+        my = int(round(py - crop_origin_y))
+        points_on_crop.append((mx, my))
+
+    cv2.polylines(view, [np.array(points_on_crop, dtype=np.int32)], isClosed=True,
+                  color=(0, 255, 255), thickness=1)
+
+
+
+
+    # 绘制中心点
+    center_on_crop = (
+        int(round(center_x - crop_origin_x)),
+        int(round(center_y - crop_origin_y)),
+    )
+    cv2.circle(view, center_on_crop, 2, (0, 0, 255), 2)
+
+
 
     cv2.imshow('Touch-Hold Parser', view)
     key = cv2.waitKey(0) & 0xFF
@@ -1396,7 +1442,7 @@ def export_dataset_touch_hold(video_path, txt_path, time_offset):
         return
 
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    crop_size = frame_width * 200 / 1080
+    crop_size = frame_width * 210 / 1080
     if is_big_touch:
         crop_size *= 1.3
     crop_size = max(1, int(round(crop_size)))
@@ -1423,10 +1469,12 @@ def export_dataset_touch_hold(video_path, txt_path, time_offset):
         for note in touch_hold_notes:
             center_x = 1080 + note.posX
             center_y = 120 - note.posY
+            crop_origin_x = int(round(center_x - crop_size / 2))
+            crop_origin_y = int(round(center_y - crop_size / 2))
             cropped = crop_with_black_padding(frame, center_x, center_y, crop_size, crop_size)
             shown_count += 1
 
-            should_continue = parse_touch_hold(cropped, note)
+            should_continue = parse_touch_hold(cropped, note, crop_origin_x, crop_origin_y)
             if not should_continue:
                 cap.release()
                 cv2.destroyWindow('Touch-Hold Parser')
