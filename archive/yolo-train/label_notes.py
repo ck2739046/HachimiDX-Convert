@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import shutil
+from bisect import bisect_right
 from pathlib import Path
 
 
@@ -50,6 +51,63 @@ class Note:
 star_skin = 0 # 0 圆头星星，1 尖头星星
 note_speed = 0
 is_big_touch = False
+
+
+def prepare_align_diff(align_diff):
+    """
+    统一处理 align_diff 输入。
+
+    返回:
+        base_align_diff: float，常量时间偏移（仅当 align_diff 为数字时有效）
+        align_schedule: list[(frame, diff)] 或 None
+        schedule_frames: 排序后的 frame 列表或 None
+    """
+    if isinstance(align_diff, (int, float)):
+        return float(align_diff), None, None
+
+    if isinstance(align_diff, list):
+        schedule = []
+        for item in align_diff:
+            if not isinstance(item, (tuple, list)) or len(item) != 2:
+                raise ValueError("align_diff list item must be tuple(int, float)")
+
+            frame_no, diff = item
+            frame_no = int(frame_no)
+            if frame_no < 0:
+                raise ValueError("align_diff frame must be >= 0")
+
+            schedule.append((frame_no, float(diff)))
+
+        if len(schedule) == 0:
+            raise ValueError("align_diff list cannot be empty")
+
+        schedule.sort(key=lambda x: x[0])
+
+        # 相同帧号只保留最后一个配置
+        dedup_schedule = []
+        for frame_no, diff in schedule:
+            if dedup_schedule and dedup_schedule[-1][0] == frame_no:
+                dedup_schedule[-1] = (frame_no, diff)
+            else:
+                dedup_schedule.append((frame_no, diff))
+
+        schedule_frames = [frame_no for frame_no, _ in dedup_schedule]
+        return None, dedup_schedule, schedule_frames
+
+    raise TypeError("align_diff must be float/int or list of tuple(int, float)")
+
+
+def resolve_align_diff(frame_number, base_align_diff, align_schedule=None, schedule_frames=None):
+    """
+    根据当前帧号获取生效的时间偏移。
+    """
+    if align_schedule is None:
+        return float(base_align_diff)
+
+    idx = bisect_right(schedule_frames, frame_number) - 1
+    if idx < 0:
+        idx = 0
+    return align_schedule[idx][1]
 
 
 
@@ -272,7 +330,7 @@ def parse_note_line(line, frame_time):
 
 
 
-def manual_align(video_path, txt_path, time_notes, align_diff=0):
+def manual_align(video_path, txt_path, time_notes, align_diff=0, jumps_to=0):
     """
     手动对齐视频帧和时间戳音符数据
     
@@ -287,15 +345,20 @@ def manual_align(video_path, txt_path, time_notes, align_diff=0):
     返回：时间偏移量(毫秒)
     """
     
-    video_frame_counter = 0  # 视频当前帧计数
     last_video_frame_counter = -1  # 上一次的视频帧计数器
     is_playing = False  # 播放状态
 
-    if align_diff == 0:
+    base_align_diff, align_schedule, schedule_frames = prepare_align_diff(align_diff)
+    is_scheduled_align = align_schedule is not None
+
+    if is_scheduled_align:
+        time_offset = resolve_align_diff(0, base_align_diff, align_schedule, schedule_frames)
+        mode = 2
+    elif base_align_diff == 0:
         time_offset = 0.0  # notes与video的时间差(ms)
         mode = 1  # 1=对齐模式, 2=验证模式
     else:
-        time_offset = align_diff
+        time_offset = base_align_diff
         mode = 2
 
     cap = cv2.VideoCapture(video_path)
@@ -322,8 +385,13 @@ def manual_align(video_path, txt_path, time_notes, align_diff=0):
 
     max_time_diff = (1000 / (cap.get(cv2.CAP_PROP_FPS))) - 0.1 # 最大时间差，1帧时间
 
-    # 重置视频到第一帧
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    if jumps_to == 0:
+        # 重置视频到第一帧
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        video_frame_counter = 0  # 视频当前帧计数
+    else:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, jumps_to)
+        video_frame_counter = jumps_to
 
     # 获取所有时间戳并排序
     sorted_times = sorted(time_notes.keys())    
@@ -345,6 +413,9 @@ def manual_align(video_path, txt_path, time_notes, align_diff=0):
         
         # 从预先缓存的时间戳列表中获取当前帧的真实时间戳
         current_video_timestamp = frame_timestamps[video_frame_counter]
+
+        if is_scheduled_align and mode == 2:
+            time_offset = resolve_align_diff(video_frame_counter, base_align_diff, align_schedule, schedule_frames)
         
         # 计算notes虚拟时间 = 视频真实时间戳 + 时间差
         notes_virtual_time = current_video_timestamp + time_offset
@@ -378,7 +449,7 @@ def manual_align(video_path, txt_path, time_notes, align_diff=0):
         cv2.imshow(window_name, result_frame)
 
         # 等待按键
-        key = cv2.waitKey(20) & 0xFF
+        key = cv2.waitKey(15) & 0xFF
         
         if key == ord('q') or key == ord('Q'):  # 退出
             print(f"对齐完成！")
@@ -928,9 +999,11 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
         video_path: 视频路径
         txt_path: 音符数据txt路径
         output_dir: 输出目录
-        time_offset: 时间偏移量(毫秒)
+        time_offset: 时间偏移量(毫秒)，支持 float 或 list[(frame, diff)]
         video_name: 视频名称（用于文件命名），如果为None则从video_path提取
     """
+
+    base_align_diff, align_schedule, schedule_frames = prepare_align_diff(time_offset)
     
     # 解析txt文件
     time_notes = parse_txt(txt_path)
@@ -1022,7 +1095,8 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
         current_video_timestamp = frame_timestamps[frame_number]
         
         # 计算notes虚拟时间
-        notes_virtual_time = current_video_timestamp + time_offset
+        current_align_diff = resolve_align_diff(frame_number, base_align_diff, align_schedule, schedule_frames)
+        notes_virtual_time = current_video_timestamp + current_align_diff
         
         # 查找最接近的音符
         current_notes = find_closest_notes(time_notes, sorted_times, notes_virtual_time, max_time_diff)
@@ -1452,12 +1526,14 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
     参数:
         video_path: 视频路径
         txt_path: 音符数据txt路径
-        time_offset: 时间偏移量(毫秒)
+        time_offset: 时间偏移量(毫秒)，支持 float 或 list[(frame, diff)]
         break_cls_dir: Break分类数据集输出目录
         ex_cls_dir: EX分类数据集输出目录
         dataset_split: 数据集划分 ('train' 或 'valid')
         video_name: 视频名称（用于文件命名），如果为None则从video_path提取
     """
+
+    base_align_diff, align_schedule, schedule_frames = prepare_align_diff(time_offset)
     
     # 解析txt文件
     time_notes = parse_txt(txt_path)
@@ -1534,7 +1610,8 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
         current_video_timestamp = frame_timestamps[frame_number]
         
         # 计算notes虚拟时间
-        notes_virtual_time = current_video_timestamp + time_offset
+        current_align_diff = resolve_align_diff(frame_number, base_align_diff, align_schedule, schedule_frames)
+        notes_virtual_time = current_video_timestamp + current_align_diff
         
         # 查找最接近的音符
         current_notes = find_closest_notes(time_notes, sorted_times, notes_virtual_time, max_time_diff)
@@ -1720,7 +1797,7 @@ def reorder_obb_points(points):
     return [top_point, right_point, bottom_point, left_point]
 
 
-def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_speedd=7.50, is_big_touchh=False):
+def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_speedd=7.50, is_big_touchh=False, mode=None, jumps_to=0):
     """
     主函数
     """
@@ -1749,18 +1826,21 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_spee
         print("错误：没有找到任何音符数据！")
         return
     
-    # 询问用户选择操作模式
-    print("\n请选择操作模式:")
-    print("1. 手动对齐")
-    print("2. 导出数据集")
-    print("3. 验证数据集")
-    print("4. 统计数据集")
-    print("5. 导出分类数据集")
-    choice = input("请输入选择 (1, 2, 3, 4 或 5): ").strip()
+    if mode is None:
+        # 询问用户选择操作模式
+        print("\n请选择操作模式:")
+        print("1. 手动对齐")
+        print("2. 导出数据集")
+        print("3. 验证数据集")
+        print("4. 统计数据集")
+        print("5. 导出分类数据集")
+        choice = input("请输入选择 (1, 2, 3, 4 或 5): ").strip()
+    else:
+        choice = mode
     
     if choice == '1':
         # 手动对齐模式
-        time_offset = manual_align(video_path, txt_path, time_notes, align_diff)
+        time_offset = manual_align(video_path, txt_path, time_notes, align_diff, jumps_to)
         return
     
     elif choice == '2':
@@ -2009,131 +2089,85 @@ if __name__ == "__main__":
     # detect: 0 Tap, 1 Slide, 2 Touch, 3 TouchHold
     # obb: 0 Hold
 
-    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11753_120_standardized.mp4"
-    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11753_2025-10-16_14-59-08.txt"
-    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11753"
-    # align_diff = -291.666667
-    # star_skin = 0 # 蓝色圆头星星
-
-    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11394_120_standardized.mp4"
-    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11394_2025-10-16_14-03-19.txt"
-    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11394"
-    # align_diff = -175.0
-    # star_skin = 1 # 粉色尖头星星
-
-    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11311_120_standardized.mp4"
-    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11311_2025-10-16_19-00-53.txt"
-    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11311"
-    # align_diff = -141.666667
-    # star_skin = 0 # 粉色圆头星星
-
-    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11741_120_standardized.mp4"
-    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11741_2025-10-16_18-56-29.txt"
-    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11741"
-    # align_diff = -133.333333
-    # star_skin = 1 # 粉色尖头星星
-
-    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11814_120_standardized.mp4"
-    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11814_2025-10-16_19-17-01.txt"
-    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11814"
-    # align_diff = -336.666667
-    # star_skin = 0 # 蓝色圆头星星
-
-    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11818_120_standardized.mp4"
-    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11818_2025-10-16_19-08-17.txt"
-    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11818"
-    # align_diff = 66.666667
-    # star_skin = 1 # 蓝色尖头星星
-
-    # video_path = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\standardized\11820_120_standardized.mp4"
-    # txt_path= r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\source_data\11820_2025-10-16_19-03-33.txt"
-    # output_dir = r"D:\git\aaa-HachimiDX-Convert\yolo-train\dataset\seperate_data\11820"
-    # align_diff = -233.333333
-    # star_skin = 1 # 粉色尖头星星
 
 
 
 
-
-
-
-
-
-
-
-    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\hold稳定性补强_std.mp4"
-    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\2026-04-13_18-56-39.txt"
-    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data"
-    # align_diff = 66.677777
-    # star_skin = 1 # 粉色尖头星星
-    # note_speed = 4.0
-
-
-
-
-
-
-
-
-
-
-    # # 过曝
-    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11929\11929_std.mp4"
-    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11929\11929_2026-04-13_20-57-27.txt"
-    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11929"
-    # align_diff = 2528.09
-    # star_skin = 0 # 蓝色圆头星星
-
-    # # 欠曝
-    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11969\11969_std.mp4"
-    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11969\11969_2026-04-13_20-46-46.txt"
-    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11969"
-    # align_diff = 1415.73
-    # star_skin = 1 # 粉色尖头星星
-
-    # # 过曝
-    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_std.mp4"
-    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_2026-04-13_20-53-19.txt"
-    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11979"
-    # align_diff = 910.11
-    # star_skin = 0 # 蓝色圆头星星
-
-    # # 欠曝
-    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11981\11981_std.mp4"
-    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11981\11981_2026-04-13_20-43-20.txt"
-    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11981"
-    # align_diff = 168.54
-    # star_skin = 1 # 粉色尖头星星
-
-    # # 欠曝
-    # video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11988\11988_std.mp4"
-    # txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11988\11988_2026-04-13_20-37-20.txt"
-    # output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11988"
-    # align_diff = -33.71
-    # star_skin = 0 # 蓝色圆头星星
-
-    # note_speed = 3.0
-    # is_big_touch = True
-   
+    video_path = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\hold稳定性补强_std.mp4"
+    txt_path= r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\2026-04-13_18-56-39.txt"
+    output_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data"
+    align_diff = -1916.666667
+    star_skin = 1 # 粉色尖头星星
 
     # 执行对齐
-    main(video_path, txt_path, output_dir, align_diff, star_skin, note_speed, is_big_touch)
+    main(video_path, txt_path, output_dir, align_diff, star_skin, note_speedd=4.0, is_big_touchh=False)
 
-    # Break分类数据集:
-    # train:
-    #     yes: 19431 (8.73%)
-    #     no: 203081 (91.27%)
-    #     总计: 222512
-    # valid:
-    #     yes: 21295 (13.48%)
-    #     no: 136672 (86.52%)
-    #     总计: 157967
-    # EX分类数据集:
-    # train:
-    #     yes: 3098 (1.39%)
-    #     no: 219414 (98.61%)
-    #     总计: 222512
-    # valid:
-    #     yes: 7510 (4.75%)
-    #     no: 150457 (95.25%)
-    #     总计: 157967
+
+
+
+
+    # dataset3 = [
+    #     {
+    #         # 过曝
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11929\11929_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11929\11929_2026-04-14_22-47-45.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11929",
+    #         "align_diff": [(0, 2561.8),(492, 2544.9),(1663, 2528.1),(3337, 2511.2),(4345, 2528.1)],
+    #         "star_skin": 0, # 蓝色圆头星星
+    #         "jumps_to": 4300
+    #     },
+
+    #     {
+    #         # 欠曝
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11969\11969_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11969\11969_2026-04-14_22-51-16.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11969",
+    #         "align_diff": [(0, 1415.73),(1026, 1398.9),(3005, 1382.0)],
+    #         "star_skin": 1, # 粉色尖头星星
+    #         "jumps_to": 2900
+    #     },
+
+    #     {
+    #         # 过曝
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_2026-04-14_22-37-06.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11979",
+    #         "align_diff": [(0, 910.11),(251, 893.3),(1546, 876.4),(3654, 859.6),(4353, 876.4)],
+    #         "star_skin": 0, # 蓝色圆头星星
+    #         "jumps_to": 4300
+    #     },
+
+    #     {
+    #         # 欠曝
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11981\11981_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11981\11981_2026-04-14_22-40-34.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11981",
+    #         "align_diff": [(0, 185.4),(1181, 168.5),(2748,151.7),(3865,134.9),(4345, 168.5)],
+    #         "star_skin": 1, # 粉色尖头星星
+    #         "jumps_to": 4300
+    #     },
+
+    #     {
+    #         # 欠曝
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11988\11988_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11988\11988_2026-04-14_22-44-40.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\11988",
+    #         "align_diff": [(0, 0), (267, -33.71), (510, -50.6), (1970, -67.4), (2267, -33.7), (3544, -50.6)],
+    #         "star_skin": 0, # 蓝色圆头星星
+    #         "jumps_to": 3500,
+    #         "is_big_touch": False
+    #     }
+    # ]
+
+    # speed_3 = 3.0
+
+    # for song in dataset3:
+    #     video_path = song["video_path"]
+    #     txt_path = song["txt_path"]
+    #     output_dir = song["output_dir"]
+    #     align_diff = song["align_diff"]
+    #     star_skin = song["star_skin"]
+    #     is_big_touch = song.get("is_big_touch", True)
+    #     # jumps_to = song.get("jumps_to", 0)
+    #     # main(video_path, txt_path, output_dir, align_diff, star_skin, speed_3, is_big_touch, mode="1", jumps_to=jumps_to)
+    #     main(video_path, txt_path, output_dir, align_diff, star_skin, speed_3, is_big_touch, mode="3")
