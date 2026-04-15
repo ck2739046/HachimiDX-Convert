@@ -1242,6 +1242,206 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
     cap.release()
 
 
+def crop_with_black_padding(frame, center_x, center_y, crop_width, crop_height):
+    """
+    按中心点裁剪固定大小区域，超出边界的部分使用黑色填充。
+    """
+    frame_height, frame_width = frame.shape[:2]
+    crop_width = max(1, int(crop_width))
+    crop_height = max(1, int(crop_height))
+
+    x1 = int(round(center_x - crop_width / 2))
+    y1 = int(round(center_y - crop_height / 2))
+    x2 = x1 + crop_width
+    y2 = y1 + crop_height
+
+    src_x1 = max(0, x1)
+    src_y1 = max(0, y1)
+    src_x2 = min(frame_width, x2)
+    src_y2 = min(frame_height, y2)
+
+    cropped = np.zeros((crop_height, crop_width, 3), dtype=frame.dtype)
+
+    if src_x1 >= src_x2 or src_y1 >= src_y2:
+        return cropped
+
+    dst_x1 = src_x1 - x1
+    dst_y1 = src_y1 - y1
+    dst_x2 = dst_x1 + (src_x2 - src_x1)
+    dst_y2 = dst_y1 + (src_y2 - src_y1)
+
+    cropped[dst_y1:dst_y2, dst_x1:dst_x2] = frame[src_y1:src_y2, src_x1:src_x2]
+    return cropped
+
+
+def parse_touch_hold(cropped_frame, touch_hold_note):
+    """
+    接收裁剪后的帧与 touch-hold 音符信息，逐条展示。
+
+    返回:
+        True: 继续展示下一条
+        False: 退出展示流程
+    """
+    if cropped_frame is None:
+        return True
+
+    view = cropped_frame.copy()
+    note_alpha = touch_hold_note.touchAlpha if touch_hold_note.touchAlpha is not None else -1
+    if note_alpha < 0.4:
+        return True
+    info_text = f"idx:{touch_hold_note.index} alpha:{note_alpha:.3f}"
+    cv2.putText(view, info_text, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+    cv2.putText(view, "Any key: next | Q/ESC: quit", (8, view.shape[0] - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+    cv2.imshow('Touch-Hold Parser', view)
+    key = cv2.waitKey(0) & 0xFF
+    if key in (ord('q'), ord('Q'), 27):
+        return False
+    return True
+
+
+def export_dataset_touch_hold(video_path, txt_path, time_offset):
+    """
+    先遍历 txt 挑出含 touch-hold 的时间帧，再按视频帧顺序展示裁剪结果。
+
+    规则:
+    - 先从 txt 中筛出包含 touch-hold 的时间帧
+    - 再映射到视频帧，并按视频帧号顺序处理
+    - 同一帧可包含多个 touch-hold，逐个展示
+    - 裁剪尺寸为 frame_width * 200 / 1080（正方形）
+    - 若 is_big_touch 为 True，则裁剪尺寸再乘 1.3
+    - 贴边不足部分使用黑色填充
+    """
+    base_align_diff, align_schedule, schedule_frames = prepare_align_diff(time_offset)
+
+    time_notes = parse_txt(txt_path)
+    if not time_notes:
+        print("错误：没有找到任何音符数据！")
+        return
+
+    # 先遍历txt，筛出所有包含touch-hold的时间帧
+    touch_hold_time_entries = []
+    for txt_time in sorted(time_notes.keys()):
+        notes = time_notes.get(txt_time, [])
+        touch_hold_notes = [n for n in notes if 'touchhold' in n.type.lower()]
+        if len(touch_hold_notes) > 0:
+            touch_hold_time_entries.append((txt_time, touch_hold_notes))
+
+    if len(touch_hold_time_entries) == 0:
+        print("未在txt中找到任何 touch-hold 音符。")
+        return
+
+    cap = cv2.VideoCapture(video_path)
+    total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if total_video_frames <= 0:
+        print("错误：视频无可用帧！")
+        cap.release()
+        return
+
+    print("正在读取视频帧时间戳...")
+    frame_timestamps = []
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    i = 0
+    while i < total_video_frames and cap.grab():
+        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
+        frame_timestamps.append(timestamp)
+        i += 1
+        if i % 100 == 0 or i == total_video_frames:
+            print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
+    print("\r时间戳读取完成！            ")
+
+    available_video_frames = len(frame_timestamps)
+    if available_video_frames == 0:
+        print("错误：无法读取视频时间戳！")
+        cap.release()
+        return
+
+    # 预计算每个视频帧对应的虚拟notes时间，后续用于将txt时间帧映射到视频帧
+    aligned_frame_times = []
+    for frame_number in range(available_video_frames):
+        current_align_diff = resolve_align_diff(frame_number, base_align_diff, align_schedule, schedule_frames)
+        aligned_frame_times.append(frame_timestamps[frame_number] + current_align_diff)
+
+    is_monotonic = True
+    for i in range(available_video_frames - 1):
+        if aligned_frame_times[i] > aligned_frame_times[i + 1]:
+            is_monotonic = False
+            break
+
+    # 将txt中的touch-hold时间帧映射到视频帧，同一视频帧会聚合多个touch-hold
+    frame_touch_hold_map = {}
+    for txt_time, touch_hold_notes in touch_hold_time_entries:
+        if is_monotonic:
+            idx = bisect_right(aligned_frame_times, txt_time)
+            candidates = []
+            if idx > 0:
+                candidates.append(idx - 1)
+            if idx < available_video_frames:
+                candidates.append(idx)
+            if len(candidates) == 0:
+                continue
+            frame_number = min(candidates, key=lambda x: abs(aligned_frame_times[x] - txt_time))
+        else:
+            frame_number = min(range(available_video_frames), key=lambda x: abs(aligned_frame_times[x] - txt_time))
+
+        if frame_number not in frame_touch_hold_map:
+            frame_touch_hold_map[frame_number] = []
+        frame_touch_hold_map[frame_number].extend(touch_hold_notes)
+
+    sorted_hit_frames = sorted(frame_touch_hold_map.keys())
+    if len(sorted_hit_frames) == 0:
+        print("未能将 touch-hold 时间帧映射到视频帧。")
+        cap.release()
+        return
+
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    crop_size = frame_width * 200 / 1080
+    if is_big_touch:
+        crop_size *= 1.3
+    crop_size = max(1, int(round(crop_size)))
+
+    print("\n开始解析 touch-hold ...")
+    print(f"视频宽度: {frame_width}")
+    print(f"裁剪尺寸: {crop_size}x{crop_size}")
+    print(f"txt命中时间帧: {len(touch_hold_time_entries)}")
+    print(f"映射后视频命中帧: {len(sorted_hit_frames)}")
+    print("按任意键切换到下一个音符，按 Q 或 ESC 退出。")
+
+    shown_count = 0
+    hit_frame_count = len(sorted_hit_frames)
+    cv2.namedWindow('Touch-Hold Parser', cv2.WINDOW_AUTOSIZE)
+
+    for idx, frame_number in enumerate(sorted_hit_frames, 1):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        ret, frame = cap.read()
+        if not ret:
+            continue
+
+        touch_hold_notes = frame_touch_hold_map.get(frame_number, [])
+
+        for note in touch_hold_notes:
+            center_x = 1080 + note.posX
+            center_y = 120 - note.posY
+            cropped = crop_with_black_padding(frame, center_x, center_y, crop_size, crop_size)
+            shown_count += 1
+
+            should_continue = parse_touch_hold(cropped, note)
+            if not should_continue:
+                cap.release()
+                cv2.destroyWindow('Touch-Hold Parser')
+                print(f"\n已退出。已展示 {shown_count} 个 touch-hold，命中帧数 {hit_frame_count}。")
+                return
+
+        if idx % 10 == 0 or idx == len(sorted_hit_frames):
+            print(f"\r处理进度: {idx}/{len(sorted_hit_frames)} 命中帧 | 已展示: {shown_count}",
+                  end="", flush=True)
+
+    cap.release()
+    cv2.destroyWindow('Touch-Hold Parser')
+    print(f"\n\n解析完成！命中帧: {hit_frame_count}，展示音符: {shown_count}")
+
+
 def verify_dataset(output_dir):
     """
     验证并可视化导出的数据集
@@ -1845,7 +2045,8 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_spee
         print("3. 验证数据集")
         print("4. 统计数据集")
         print("5. 导出分类数据集")
-        choice = input("请输入选择 (1, 2, 3, 4 或 5): ").strip()
+        print("6. 解析Touch-Hold裁剪")
+        choice = input("请输入选择 (1, 2, 3, 4, 5 或 6): ").strip()
     else:
         choice = mode
     
@@ -1902,6 +2103,12 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_spee
         
         # 直接调用批量导出函数
         export_all_classification_datasets()
+
+    elif choice == '6':
+        # 解析 touch-hold 裁剪模式
+        print("\n开始解析 Touch-Hold 裁剪...")
+        print(f"使用时间偏移: {align_diff}ms")
+        export_dataset_touch_hold(video_path, txt_path, align_diff)
     
     else:
         print("无效的选择！")
