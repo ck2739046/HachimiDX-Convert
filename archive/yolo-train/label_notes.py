@@ -985,7 +985,7 @@ def calculate_oct_position(circle_center_x, circle_center_y, note_x, note_y):
         return 0
 
 
-def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=None):
+def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=None, export_half_frame=False):
     """
     导出YOLO训练数据集
     
@@ -1001,6 +1001,7 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
         output_dir: 输出目录
         time_offset: 时间偏移量(毫秒)，支持 float 或 list[(frame, diff)]
         video_name: 视频名称（用于文件命名），如果为None则从video_path提取
+        export_half_frame: 是否隔一帧导出（True时仅导出偶数帧）
     """
 
     base_align_diff, align_schedule, schedule_frames = prepare_align_diff(time_offset)
@@ -1067,6 +1068,7 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
     
     print(f"\n开始导出数据集...")
     print(f"视频尺寸: {frame_width}x{frame_height}")
+    print(f"导出模式: {'隔帧导出(1/2帧)' if export_half_frame else '全帧导出'}")
     print(f"输出目录:")
     print(f"  Images: {images_dir}")
     print(f"  Detect labels: {detect_labels_dir}")
@@ -1082,8 +1084,9 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
         print(f"错误: 目录写入测试失败: {e}")
         return
     
-    # 遍历所有帧
-    for frame_number in range(total_video_frames):
+    # 遍历所有帧（可选隔帧导出）
+    frame_step = 2 if export_half_frame else 1
+    for frame_number in range(0, total_video_frames, frame_step):
         # 读取帧
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
         ret, frame = cap.read()
@@ -1797,7 +1800,7 @@ def reorder_obb_points(points):
     return [top_point, right_point, bottom_point, left_point]
 
 
-def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_speedd=7.50, is_big_touchh=False, mode=None, jumps_to=0):
+def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_speedd=7.50, is_big_touchh=False, mode=None, jumps_to=0, export_half_frame=False):
     """
     主函数
     """
@@ -1851,15 +1854,20 @@ def main(video_path, txt_path, output_dir, align_diff=0, star_skinn=0, note_spee
             if confirm != 'y':
                 print("已取消导出")
                 return
+
+        if mode is None and export_half_frame is False:
+            frame_switch = input("是否开启隔帧导出? (y/n, 默认n): ").strip().lower()
+            export_half_frame = (frame_switch == 'y')
         
         print(f"\n使用时间偏移: {align_diff}ms")
+        print(f"隔帧导出: {'开启' if export_half_frame else '关闭'}")
         print(f"输出目录: {output_dir}")
         
         # 从视频路径提取视频名称
         video_name = os.path.splitext(os.path.basename(video_path))[0]
         
         # 导出数据集
-        export_dataset(video_path, txt_path, output_dir, align_diff, video_name)
+        export_dataset(video_path, txt_path, output_dir, align_diff, video_name, export_half_frame)
     
     elif choice == '3':
         # 验证数据集模式
@@ -2100,7 +2108,7 @@ if __name__ == "__main__":
     star_skin = 1 # 粉色尖头星星
 
     # 执行对齐
-    main(video_path, txt_path, output_dir, align_diff, star_skin, note_speedd=4.0, is_big_touchh=False)
+    main(video_path, txt_path, output_dir, align_diff, star_skin, note_speedd=4.0, export_half_frame=True, mode="2")
 
 
 
