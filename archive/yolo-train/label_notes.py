@@ -1276,7 +1276,7 @@ def crop_with_black_padding(frame, center_x, center_y, crop_width, crop_height):
 
 def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_y):
     """
-    接收裁剪后的帧与 touch-hold 音符信息，逐条展示。
+    接收裁剪后的帧与 touch-hold 音符信息，生成 YOLO detect 标签。
 
     参数:
         cropped_frame: 裁剪后的图像
@@ -1285,20 +1285,40 @@ def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_
         crop_origin_y: 裁剪框左上角在原图中的 y
 
     返回:
-        True: 继续展示下一条
-        False: 退出展示流程
+        YOLO detect 标签行列表
+        - class 0: touch 框
+        - class 1: 进度点框（若进度有效）
     """
     if cropped_frame is None:
-        return True
+        return []
 
-    view = cropped_frame.copy()
+    frame_h, frame_w = cropped_frame.shape[:2]
     note_alpha = touch_hold_note.touchAlpha if touch_hold_note.touchAlpha is not None else -1
     if note_alpha < 0.4:  # 忽略过于透明的音符
-        return True
-    info_text = f"idx:{touch_hold_note.index} alpha:{note_alpha:.3f}"
-    cv2.putText(view, info_text, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
-    cv2.putText(view, "Any key: next | Q/ESC: quit", (8, view.shape[0] - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        return []
+
+    labels = []
+
+    def append_bbox(class_id, x1, y1, x2, y2):
+        x1 = max(0.0, min(float(frame_w), float(x1)))
+        y1 = max(0.0, min(float(frame_h), float(y1)))
+        x2 = max(0.0, min(float(frame_w), float(x2)))
+        y2 = max(0.0, min(float(frame_h), float(y2)))
+        box_w = x2 - x1
+        box_h = y2 - y1
+        if box_w <= 0 or box_h <= 0:
+            return
+        x_center = (x1 + x2) * 0.5 / frame_w
+        y_center = (y1 + y2) * 0.5 / frame_h
+        width = box_w / frame_w
+        height = box_h / frame_h
+
+        # 强制归一化结果在 [0, 1]
+        x_center = max(0.0, min(1.0, x_center))
+        y_center = max(0.0, min(1.0, y_center))
+        width = max(0.0, min(1.0, width))
+        height = max(0.0, min(1.0, height))
+        labels.append(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}")
 
 
 
@@ -1325,18 +1345,17 @@ def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_
         my = int(round(py - crop_origin_y))
         points_on_crop.append((mx, my))
 
-    cv2.polylines(view, [np.array(points_on_crop, dtype=np.int32)], isClosed=True,
-                  color=(0, 255, 255), thickness=1)
+    x_coords = [p[0] for p in points_on_crop]
+    y_coords = [p[1] for p in points_on_crop]
+    append_bbox(0, min(x_coords), min(y_coords), max(x_coords), max(y_coords))
 
 
 
 
-    # 绘制中心点
     center_on_crop = (
         int(round(center_x - crop_origin_x)),
         int(round(center_y - crop_origin_y)),
     )
-    cv2.circle(view, center_on_crop, 2, (0, 0, 255), 2)
 
 
 
@@ -1346,7 +1365,7 @@ def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_
     if hold_progress is not None and hold_progress >= 0.02:  # 忽略前2%
         # 根据进度计算角度
         progress = max(0.0, min(1.0, float(hold_progress)))
-        base_radius = view.shape[1] * 0.4
+        base_radius = frame_w * 0.4
         angle = -np.pi / 2 + progress * 2 * np.pi
         # 圆角菱形轨迹：p=1 是菱形，p=2 是圆
         shape_p = 1.3
@@ -1355,31 +1374,33 @@ def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_
         denom = (abs(dir_x) ** shape_p + abs(dir_y) ** shape_p) ** (1.0 / shape_p)
         adjusted_radius = base_radius if denom <= 1e-6 else (base_radius / denom)
         # 计算进度点在裁剪图中的坐标
-        progress_x = int(round(center_on_crop[0] + adjusted_radius * dir_x))
-        progress_y = int(round(center_on_crop[1] + adjusted_radius * dir_y))
-        cv2.circle(view, (progress_x, progress_y), 3, (0, 255, 0), -1)
+        progress_x = float(center_on_crop[0] + adjusted_radius * dir_x)
+        progress_y = float(center_on_crop[1] + adjusted_radius * dir_y)
 
+        # class 1: 进度点框，边长为 round(width * 0.048)
+        dot_side = max(1, int(round(frame_w * 0.048)))
+        half_side = dot_side * 0.5
+        append_bbox(1,
+                    progress_x - half_side,
+                    progress_y - half_side,
+                    progress_x + half_side,
+                    progress_y + half_side)
 
-
-
-    cv2.imshow('Touch-Hold Parser', view)
-    key = cv2.waitKey(0) & 0xFF
-    if key in (ord('q'), ord('Q'), 27):
-        return False
-    return True
+    return labels
 
 
 def export_dataset_touch_hold(video_path, txt_path, time_offset):
     """
-    先遍历 txt 挑出含 touch-hold 的时间帧，再按视频帧顺序展示裁剪结果。
+    先遍历 txt 挑出含 touch-hold 的时间帧，再按视频帧顺序导出 YOLO detect 数据集。
 
     规则:
     - 先从 txt 中筛出包含 touch-hold 的时间帧
     - 再映射到视频帧，并按视频帧号顺序处理
-    - 同一帧可包含多个 touch-hold，逐个展示
+    - 同一帧可包含多个 touch-hold，逐个导出
     - 裁剪尺寸为 frame_width * 200 / 1080（正方形）
     - 若 is_big_touch 为 True，则裁剪尺寸再乘 1.3
     - 贴边不足部分使用黑色填充
+    - 标签类别: class 0 = touch 框, class 1 = 进度点框
     """
     base_align_diff, align_schedule, schedule_frames = prepare_align_diff(time_offset)
 
@@ -1469,16 +1490,32 @@ def export_dataset_touch_hold(video_path, txt_path, time_offset):
         crop_size *= 1.3
     crop_size = max(1, int(round(crop_size)))
 
-    print("\n开始解析 touch-hold ...")
+    images_dir = os.path.join(output_dir, 'images')
+    labels_dir = os.path.join(output_dir, 'labels')
+    for d in (images_dir, labels_dir):
+        if os.path.exists(d):
+            try:
+                if os.path.isfile(d):
+                    os.remove(d)
+                else:
+                    shutil.rmtree(d)
+            except Exception as e:
+                print(f"Warning: failed to remove {d}: {e}")
+        os.makedirs(d, exist_ok=True)
+
+    print("\n开始导出 touch-hold detect 数据集 ...")
     print(f"视频宽度: {frame_width}")
     print(f"裁剪尺寸: {crop_size}x{crop_size}")
     print(f"txt命中时间帧: {len(touch_hold_time_entries)}")
     print(f"映射后视频命中帧: {len(sorted_hit_frames)}")
-    print("按任意键切换到下一个音符，按 Q 或 ESC 退出。")
+    print(f"输出目录:")
+    print(f"  Images: {images_dir}")
+    print(f"  Labels: {labels_dir}")
 
-    shown_count = 0
+    exported_count = 0
+    class0_count = 0
+    class1_count = 0
     hit_frame_count = len(sorted_hit_frames)
-    cv2.namedWindow('Touch-Hold Parser', cv2.WINDOW_AUTOSIZE)
 
     for idx, frame_number in enumerate(sorted_hit_frames, 1):
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
@@ -1494,22 +1531,36 @@ def export_dataset_touch_hold(video_path, txt_path, time_offset):
             crop_origin_x = int(round(center_x - crop_size / 2))
             crop_origin_y = int(round(center_y - crop_size / 2))
             cropped = crop_with_black_padding(frame, center_x, center_y, crop_size, crop_size)
-            shown_count += 1
 
-            should_continue = parse_touch_hold(cropped, note, crop_origin_x, crop_origin_y)
-            if not should_continue:
-                cap.release()
-                cv2.destroyWindow('Touch-Hold Parser')
-                print(f"\n已退出。已展示 {shown_count} 个 touch-hold，命中帧数 {hit_frame_count}。")
-                return
+            labels = parse_touch_hold(cropped, note, crop_origin_x, crop_origin_y)
+            if len(labels) == 0:
+                continue
+
+            image_filename = f"touch_hold_{frame_number:06d}_{exported_count:06d}.jpg"
+            label_filename = f"touch_hold_{frame_number:06d}_{exported_count:06d}.txt"
+
+            cv_imwrite(os.path.join(images_dir, image_filename), cropped)
+            with open(os.path.join(labels_dir, label_filename), 'w', encoding='utf-8') as f:
+                f.write('\n'.join(labels))
+
+            exported_count += 1
+            for line in labels:
+                if line.startswith("0 "):
+                    class0_count += 1
+                elif line.startswith("1 "):
+                    class1_count += 1
 
         if idx % 10 == 0 or idx == len(sorted_hit_frames):
-            print(f"\r处理进度: {idx}/{len(sorted_hit_frames)} 命中帧 | 已展示: {shown_count}",
+            print(f"\r处理进度: {idx}/{len(sorted_hit_frames)} 命中帧 | 已导出样本: {exported_count}",
                   end="", flush=True)
 
     cap.release()
-    cv2.destroyWindow('Touch-Hold Parser')
-    print(f"\n\n解析完成！命中帧: {hit_frame_count}，展示音符: {shown_count}")
+    print(f"\n\n导出完成！")
+    print(f"命中帧: {hit_frame_count}")
+    print(f"导出样本: {exported_count}")
+    print(f"class 0 (touch框): {class0_count}")
+    print(f"class 1 (进度点框): {class1_count}")
+    print(f"输出目录: {output_dir}")
 
 
 def verify_dataset(output_dir):
