@@ -223,11 +223,8 @@ namespace default_namespace {
                 }
             }
 
-            // 如果有音符，则打印信息
-            if (allNotes.Count > 0)
-            {
-                PrintNoteFrame(currentTime, allNotes);
-            }
+            // 每帧都写入；无音符时由 PrintNoteFrame 写入 NA 标记
+            PrintNoteFrame(currentTime, allNotes);
         }
 
         private static NoteInfo GetNoteInfo(NoteBase noteBase, string noteType, float currentTime)
@@ -510,6 +507,11 @@ namespace default_namespace {
                 // 构建数据行
                 var lines = new List<string>();
                 lines.Add($"Time:{currentTime:F4}|Count:{notes.Count}");
+
+                if (notes.Count == 0)
+                {
+                    lines.Add("NA");
+                }
 
                 foreach (var note in notes.OrderBy(n => n.NoteType).ThenBy(n => n.NoteIndex))
                 {
