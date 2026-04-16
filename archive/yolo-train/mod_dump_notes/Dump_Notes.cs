@@ -2,10 +2,10 @@ using HarmonyLib;
 using MelonLoader;
 using UnityEngine;
 using System;
-using System.Linq;
 using System.Reflection;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using Monitor;
 using Monitor.Game;
 using Manager;
@@ -21,27 +21,68 @@ using MAI2.Util;
 namespace default_namespace {
     public class Dump_notes : MelonMod
     {
-        private static FieldInfo _activeNoteListField;
-        private static FieldInfo _activeSlideListField;
-        private static MethodInfo? _touchHoldGetHoldAmountMethod;
+        private enum NoteCategory
+        {
+            Unknown,
+            Touch,
+            TouchHold,
+            Hold,
+            Star,
+            TapOrBreak,
+            SlideRootStar
+        }
+
+        private static FieldInfo? _activeNoteListField;
+        private static FieldInfo? _activeSlideListField;
         private static bool _fieldsInitialized = false;
-        private static bool _touchHoldProgressWarningLogged = false;
+        private static readonly Dictionary<System.Type, Dictionary<string, FieldInfo?>> _hierarchyFieldCache = new Dictionary<System.Type, Dictionary<string, FieldInfo?>>();
+        private static readonly Dictionary<System.Type, NoteReflectionAccessors> _noteAccessorCache = new Dictionary<System.Type, NoteReflectionAccessors>();
+        private static readonly Dictionary<System.Type, SlideRootReflectionAccessors> _slideAccessorCache = new Dictionary<System.Type, SlideRootReflectionAccessors>();
+        private static readonly Dictionary<string, DateTime> _warningLogTimeMap = new Dictionary<string, DateTime>();
+        private static readonly List<NoteInfo> _frameNotesBuffer = new List<NoteInfo>(256);
+        private static readonly List<string> _lineBuffer = new List<string>(512);
+        private static readonly StringBuilder _lineBuilder = new StringBuilder(192);
         private static string _outputFilePath = "";
+        private static StreamWriter? _outputWriter;
         private static bool _isFileCreated = false;
         private static bool _isDumpEnabled = false;
+        private const int FlushIntervalFrames = 15;
+        private static int _framesSinceLastFlush = 0;
     // 注: 使用 GetKeyDown 进行边沿触发，不再需要上一帧状态
         private static List<string> _currentMusicInfo = new List<string> { "Unknown" };
         private static bool _gameStartDetected = false; // 乐曲开始标志
 
-        public class NoteInfo
+        private class NoteReflectionAccessors
         {
-            public string NoteType { get; set; }
+            public FieldInfo? NoteObjField;
+            public FieldInfo? ColorsObjectField;
+            public FieldInfo? SpriteRenderField;
+            public FieldInfo? AppearMsecField;
+            public FieldInfo? TailMsecField;
+        }
+
+        private class SlideRootReflectionAccessors
+        {
+            public FieldInfo? AppearMsecField;
+            public FieldInfo? StarLaunchMsecField;
+            public FieldInfo? StarArriveMsecField;
+            public FieldInfo? NoteIndexField;
+            public FieldInfo? EndFlagField;
+            public FieldInfo? BreakFlagField;
+            public FieldInfo? FanStarObjsField;
+            public FieldInfo? FanSpriteStarsField;
+            public FieldInfo? BaseStarNoteField;
+            public FieldInfo? BaseSpriteRenderField;
+        }
+
+        private class NoteInfo
+        {
+            public string NoteType { get; set; } = string.Empty;
             public int NoteIndex { get; set; }
+            public NoteCategory Category { get; set; }
             public Vector3 Position { get; set; }
             public Vector3 LocalPosition { get; set; }
-            public string Status { get; set; }
-            public bool IsActive { get; set; }
-            public bool IsEnd { get; set; }
+            public string Status { get; set; } = string.Empty;
             public float AppearMsec { get; set; }
             public bool IsExNote { get; set; }  // EX音符标志 (适用于Tap、Hold、Break)
 
@@ -56,7 +97,6 @@ namespace default_namespace {
             // StarNote相关属性
             public Vector3 StarLocalScale { get; set; }         // StarNote的localScale
             public float UserNoteSize { get; set; }             // 用户设置的音符大小
-            public bool IsSlideRootStar { get; set; }           // 是否为SlideRoot中的第二段星星
             public float StarAlpha { get; set; }                // 星星透明度（第二段）
             public float StarLaunchMsec { get; set; }           // 星星发射时间（第二段）
             public float StarArriveMsec { get; set; }           // 星星到达时间（第二段）
@@ -67,7 +107,6 @@ namespace default_namespace {
             HarmonyInstance.PatchAll(typeof(Dump_notes));
             MelonLogger.Msg($"Load success.");
             MelonLogger.Msg($"  I键: 切换音符数据导出 (默认关闭)");
-            MelonLogger.Msg($"  K键: 打印游戏结束状态调试信息");
         }
 
         static void InitializeFields()
@@ -77,13 +116,6 @@ namespace default_namespace {
             var gameCtrlType = typeof(GameCtrl);
             _activeNoteListField = gameCtrlType.GetField("_activeNoteList", BindingFlags.NonPublic | BindingFlags.Instance);
             _activeSlideListField = gameCtrlType.GetField("_activeSlideList", BindingFlags.NonPublic | BindingFlags.Instance);
-            _touchHoldGetHoldAmountMethod = typeof(TouchHoldC).GetMethod("GetHoldAmount", BindingFlags.NonPublic | BindingFlags.Instance);
-
-            if (_touchHoldGetHoldAmountMethod == null && !_touchHoldProgressWarningLogged)
-            {
-                MelonLogger.Warning("TouchHold progress method not found, fallback formula will be used.");
-                _touchHoldProgressWarningLogged = true;
-            }
 
             _fieldsInitialized = true;
         }
@@ -94,6 +126,8 @@ namespace default_namespace {
         {
             try
             {
+                CloseOutputWriter();
+
                 // 获取乐曲信息
                 _currentMusicInfo = GetCurrentMusicInfo();
                 _gameStartDetected = true;
@@ -117,7 +151,7 @@ namespace default_namespace {
                 if (_gameStartDetected)
                 {
                     // 乐曲结束，重置状态
-                    _isFileCreated = false;
+                    CloseOutputWriter();
                     _gameStartDetected = false;
                     MelonLogger.Msg($"track end, ready for next track.");
                 }
@@ -161,8 +195,8 @@ namespace default_namespace {
         {
             try
             {
-                InitializeFields();
                 if (!_isDumpEnabled) return;
+                InitializeFields();
                 DumpAllNotePositions(__instance);
             }
             catch (Exception e)
@@ -173,52 +207,38 @@ namespace default_namespace {
 
         private static void DumpAllNotePositions(GameCtrl gameCtrl)
         {
-            var allNotes = new List<NoteInfo>();
+            var allNotes = _frameNotesBuffer;
+            allNotes.Clear();
 
             // 获取当前游戏时间
             var currentTime = NotesManager.GetCurrentMsec();
+            float userNoteSize = GetCurrentUserNoteSize();
 
             // 获取活跃音符列表（第一段星星等）
-            if (_activeNoteListField != null)
+            var activeNoteList = _activeNoteListField?.GetValue(gameCtrl) as List<NoteBase>;
+            if (activeNoteList != null)
             {
-                var activeNoteList = (List<NoteBase>)_activeNoteListField.GetValue(gameCtrl);
-                if (activeNoteList != null)
+                foreach (var note in activeNoteList)
                 {
-                    foreach (var note in activeNoteList)
+                    if (note != null && note.gameObject.activeSelf)
                     {
-                        if (note != null && note.gameObject.activeSelf)
-                        {
-                            // 获取音符
-                            string typeName = note.GetType().Name;
-                            var noteInfo = GetNoteInfo(note, typeName, currentTime);
-                            if (noteInfo != null)
-                                allNotes.Add(noteInfo);
-                        }
+                        var noteInfo = GetNoteInfo(note, currentTime, userNoteSize);
+                        if (noteInfo != null)
+                            allNotes.Add(noteInfo);
                     }
                 }
             }
 
             // 获取活跃Slide列表（第二段星星）
-            if (_activeSlideListField != null)
+            var activeSlideList = _activeSlideListField?.GetValue(gameCtrl) as List<SlideRoot>;
+            if (activeSlideList != null)
             {
-                var activeSlideList = _activeSlideListField.GetValue(gameCtrl);
-                if (activeSlideList != null)
+                for (int i = 0; i < activeSlideList.Count; i++)
                 {
-                    // activeSlideList 是 List<SlideRoot>
-                    var slideRootType = activeSlideList.GetType();
-                    var countProp = slideRootType.GetProperty("Count");
-                    var itemProp = slideRootType.GetProperty("Item");
-                    
-                    int count = (int)countProp.GetValue(activeSlideList);
-                    for (int i = 0; i < count; i++)
+                    var slideRoot = activeSlideList[i];
+                    if (slideRoot != null)
                     {
-                        var slideRoot = itemProp.GetValue(activeSlideList, new object[] { i });
-                        if (slideRoot != null)
-                        {
-                            var slideNoteInfo = GetSlideRootStarInfo(slideRoot, currentTime);
-                            if (slideNoteInfo != null)
-                                allNotes.Add(slideNoteInfo);
-                        }
+                        AppendSlideRootStarInfos(slideRoot, currentTime, allNotes);
                     }
                 }
             }
@@ -227,23 +247,33 @@ namespace default_namespace {
             PrintNoteFrame(currentTime, allNotes);
         }
 
-        private static NoteInfo GetNoteInfo(NoteBase noteBase, string noteType, float currentTime)
+        private static NoteInfo? GetNoteInfo(NoteBase noteBase, float currentTime, float userNoteSize)
         {
             try
             {
-                var gameObject = noteBase.gameObject;
+                var noteTypeObj = noteBase.GetType();
+                string noteType = noteTypeObj.Name;
+                bool isTouchHold = noteBase is TouchHoldC;
+                bool isTouch = noteBase is TouchNoteB;
+                bool isHold = noteBase is HoldNote || noteBase is BreakHoldNote;
+                bool isStar = noteBase is StarNote || noteBase is BreakStarNote;
+                bool isTapOrBreak = noteBase is TapNote || noteBase is BreakNote;
+                NoteCategory noteCategory = NoteCategory.Unknown;
+                var accessors = GetNoteReflectionAccessors(noteTypeObj);
 
                 // 获取实际的音符位置
                 Vector3 actualPosition = Vector3.zero;
                 Vector3 actualLocalPosition = Vector3.zero;
 
                 // 通过反射获取 NoteObj
-                var noteObjField = noteBase.GetType().GetField("NoteObj", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                var noteObj = noteObjField.GetValue(noteBase) as GameObject;
+                var noteObj = accessors.NoteObjField?.GetValue(noteBase) as GameObject;
+                if (noteObj == null)
+                    return null;
+
                 actualPosition = noteObj.transform.position;
                 actualLocalPosition = noteObj.transform.localPosition;
 
-                float appearMsec = GetNoteFieldFloat(noteBase, "AppearMsec", -1f);
+                float appearMsec = GetFieldFloat(accessors.AppearMsecField, noteBase, -1f);
 
                 // 初始化尺寸数据
                 Vector3 touchDecorPosition = Vector3.zero;
@@ -253,53 +283,46 @@ namespace default_namespace {
                 Vector3 holdLocalScale = Vector3.zero;
                 Vector3 starLocalScale = Vector3.zero;
                 Vector3 tapLocalScale = Vector3.zero;
-                float userNoteSize = 1f;
 
                 // 处理Touch/Touch-Hold音符尺寸
-                if (noteType.Contains("Touch"))
+                if (isTouch)
                 {
-                    // 获取ColorsObject数组
-                    var colorsField = noteBase.GetType().GetField("ColorsObject", BindingFlags.NonPublic | BindingFlags.Instance);
-                    var colors = colorsField.GetValue(noteBase) as SpriteRenderer[];
-                    touchDecorPosition = colors[0].transform.localPosition;
-                    // 获取透明度（从第一个ColorsObject获取）
-                    touchAlpha = colors[0].color.a;
+                    noteCategory = isTouchHold ? NoteCategory.TouchHold : NoteCategory.Touch;
 
-                    if (noteBase is TouchHoldC)
+                    // 获取ColorsObject数组
+                    var colors = accessors.ColorsObjectField?.GetValue(noteBase) as SpriteRenderer[];
+                    if (colors != null && colors.Length > 0 && colors[0] != null)
+                    {
+                        touchDecorPosition = colors[0].transform.localPosition;
+                        touchAlpha = colors[0].color.a;
+                    }
+
+                    if (isTouchHold)
                     {
                         touchHoldProgress = GetTouchHoldProgress(noteBase, currentTime, appearMsec);
                     }
                 }
                 // 处理Hold音符尺寸
-                else if (noteType.Contains("Hold"))
+                else if (isHold)
                 {
-                    var spriteRenderField = noteBase.GetType().GetField("SpriteRender", BindingFlags.NonPublic | BindingFlags.Instance);
-                    var spriteRender = spriteRenderField.GetValue(noteBase) as SpriteRenderer;
-                    holdBodySize = spriteRender.size;
+                    noteCategory = NoteCategory.Hold;
+                    var spriteRender = accessors.SpriteRenderField?.GetValue(noteBase) as SpriteRenderer;
+                    if (spriteRender != null)
+                        holdBodySize = spriteRender.size;
+
                     holdLocalScale = noteObj.transform.localScale;
                 }
                 // 处理Star音符尺寸
-                else if (noteType.Contains("Star"))
+                else if (isStar)
                 {
+                    noteCategory = NoteCategory.Star;
                     // 获取NoteObj的localScale
                     starLocalScale = noteObj.transform.localScale;
-                    
-                    // 获取用户设置的音符大小
-                    try
-                    {
-                        if (GamePlayManager.Instance != null)
-                        {
-                            userNoteSize = GamePlayManager.Instance.GetGameScore(0).UserOption.NoteSize.GetValue();
-                        }
-                    }
-                    catch
-                    {
-                        userNoteSize = 1f; // 默认值
-                    }
                 }
                 // 处理Tap音符尺寸
-                else if (noteType.Contains("Tap") || noteType.Contains("Break"))
+                else if (isTapOrBreak)
                 {
+                    noteCategory = NoteCategory.TapOrBreak;
                     // 获取NoteObj的localScale
                     tapLocalScale = noteObj.transform.localScale;
                 }
@@ -309,11 +332,10 @@ namespace default_namespace {
                 {
                     NoteType = noteType,
                     NoteIndex = noteBase.GetNoteIndex(),
+                    Category = noteCategory,
                     Position = actualPosition,
                     LocalPosition = actualLocalPosition,
                     Status = noteBase.GetNoteStatus().ToString(),
-                    IsActive = gameObject.activeSelf,
-                    IsEnd = noteBase.IsEnd(),
                     AppearMsec = appearMsec,
                     IsExNote = noteBase.ExNote,  // 获取EX音符标志
 
@@ -332,57 +354,20 @@ namespace default_namespace {
             }
             catch (Exception e)
             {
-                MelonLogger.Warning($"Failed to get note info for {noteType}: {e.Message}");
+                LogWarningThrottled("note-info-" + noteBase.GetType().Name, $"Failed to get note info for {noteBase.GetType().Name}: {e.Message}");
                 return null;
             }
         }
 
         private static float GetTouchHoldProgress(NoteBase noteBase, float currentTime, float appearMsec)
         {
-            if (_touchHoldGetHoldAmountMethod != null)
-            {
-                try
-                {
-                    var result = _touchHoldGetHoldAmountMethod.Invoke(noteBase, null);
-                    if (result is float value)
-                        return ClampProgress(value);
-                    if (result is double valueDouble)
-                        return ClampProgress((float)valueDouble);
-                }
-                catch (Exception e)
-                {
-                    if (!_touchHoldProgressWarningLogged)
-                    {
-                        MelonLogger.Warning($"TouchHold progress reflection failed, use fallback formula: {e.Message}");
-                        _touchHoldProgressWarningLogged = true;
-                    }
-                    _touchHoldGetHoldAmountMethod = null;
-                }
-            }
-
-            float tailMsec = GetNoteFieldFloat(noteBase, "TailMsec", appearMsec);
+            var accessors = GetNoteReflectionAccessors(noteBase.GetType());
+            float tailMsec = GetFieldFloat(accessors.TailMsecField, noteBase, appearMsec);
             if (tailMsec <= appearMsec)
                 return 0f;
 
             float progress = (currentTime - appearMsec) / (tailMsec - appearMsec);
             return ClampProgress(progress);
-        }
-
-        private static float GetNoteFieldFloat(NoteBase noteBase, string fieldName, float defaultValue)
-        {
-            var field = noteBase.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            if (field == null)
-                return defaultValue;
-
-            var value = field.GetValue(noteBase);
-            if (value is float floatValue)
-                return floatValue;
-            if (value is double doubleValue)
-                return (float)doubleValue;
-            if (value is int intValue)
-                return intValue;
-
-            return defaultValue;
         }
 
         private static float ClampProgress(float value)
@@ -392,49 +377,22 @@ namespace default_namespace {
             return Mathf.Clamp01(value);
         }
 
-        private static NoteInfo GetSlideRootStarInfo(object slideRoot, float currentTime)
+        private static void AppendSlideRootStarInfos(object slideRoot, float currentTime, List<NoteInfo> target)
         {
             try
             {
                 var slideRootType = slideRoot.GetType();
-                
-                // 获取_baseStarNote字段
-                var baseStarNoteField = slideRootType.GetField("_baseStarNote", BindingFlags.NonPublic | BindingFlags.Instance);
-                var baseStarNote = baseStarNoteField?.GetValue(slideRoot) as GameObject;
-                
-                if (baseStarNote == null || !baseStarNote.activeSelf)
-                    return null;
+                var accessors = GetSlideRootReflectionAccessors(slideRootType);
 
-                // 获取BaseSpriteRender
-                var baseSpriteRenderField = slideRootType.GetField("BaseSpriteRender", BindingFlags.NonPublic | BindingFlags.Instance);
-                var baseSpriteRender = baseSpriteRenderField?.GetValue(slideRoot) as SpriteRenderer;
-
-                // 获取时间信息
-                var appearMsecField = slideRootType.GetField("AppearMsec", BindingFlags.NonPublic | BindingFlags.Instance);
-                var starLaunchMsecField = slideRootType.GetField("StarLaunchMsec", BindingFlags.NonPublic | BindingFlags.Instance);
-                var starArriveMsecField = slideRootType.GetField("StarArriveMsec", BindingFlags.NonPublic | BindingFlags.Instance);
-                var noteIndexField = slideRootType.GetField("NoteIndex", BindingFlags.NonPublic | BindingFlags.Instance);
-                var endFlagField = slideRootType.GetField("EndFlag", BindingFlags.NonPublic | BindingFlags.Instance);
-                var breakFlagField = slideRootType.GetField("BreakFlag", BindingFlags.NonPublic | BindingFlags.Instance);
-
-                float appearMsec = (float)(appearMsecField?.GetValue(slideRoot) ?? 0f);
-                float starLaunchMsec = (float)(starLaunchMsecField?.GetValue(slideRoot) ?? 0f);
-                float starArriveMsec = (float)(starArriveMsecField?.GetValue(slideRoot) ?? 0f);
-                int noteIndex = (int)(noteIndexField?.GetValue(slideRoot) ?? -1);
-                bool endFlag = (bool)(endFlagField?.GetValue(slideRoot) ?? false);
-                bool breakFlag = (bool)(breakFlagField?.GetValue(slideRoot) ?? false);
+                float appearMsec = GetFieldFloat(accessors.AppearMsecField, slideRoot, 0f);
+                float starLaunchMsec = GetFieldFloat(accessors.StarLaunchMsecField, slideRoot, 0f);
+                float starArriveMsec = GetFieldFloat(accessors.StarArriveMsecField, slideRoot, 0f);
+                int noteIndex = GetFieldInt(accessors.NoteIndexField, slideRoot, -1);
+                bool breakFlag = GetFieldBool(accessors.BreakFlagField, slideRoot, false);
 
                 // 判断是否在第二段的可见范围内（从AppearMsec开始，包括缩放淡入阶段）
                 if (currentTime < appearMsec)
-                    return null;
-
-                // 获取位置和尺寸
-                var position = baseStarNote.transform.position;
-                var localPosition = baseStarNote.transform.localPosition;
-                var localScale = baseStarNote.transform.localScale;
-                
-                // 获取透明度
-                float alpha = baseSpriteRender?.color.a ?? 0f;
+                    return;
 
                 // 确定状态（根据时间判断所处阶段）
                 string status;
@@ -450,62 +408,234 @@ namespace default_namespace {
                 // 确定类型名称（添加-Move后缀）
                 string typeName = breakFlag ? "BreakStarNote-Move" : "StarNote-Move";
 
-                var noteInfo = new NoteInfo
+                // SlideFan(wifi) 是 3 个星星对象：_baseStarObjs + _baseSpriteStars
+                var fanStarObjs = accessors.FanStarObjsField?.GetValue(slideRoot) as GameObject[];
+                var fanSpriteStars = accessors.FanSpriteStarsField?.GetValue(slideRoot) as SpriteRenderer[];
+
+                if (fanStarObjs != null && fanStarObjs.Length > 0)
                 {
-                    NoteType = typeName,
-                    NoteIndex = noteIndex,
-                    Position = position,
-                    LocalPosition = localPosition,
-                    Status = status,
-                    IsActive = baseStarNote.activeSelf,
-                    IsEnd = endFlag,
-                    AppearMsec = appearMsec,
-                    IsExNote = breakFlag, // Break就是EX
+                    for (int lane = 0; lane < fanStarObjs.Length; lane++)
+                    {
+                        var starObj = fanStarObjs[lane];
+                        if (starObj == null || !starObj.activeSelf)
+                            continue;
 
-                    // 第二段星星特有数据
-                    IsSlideRootStar = true,
-                    StarLocalScale = localScale,
-                    StarAlpha = alpha,
-                    StarLaunchMsec = starLaunchMsec,
-                    StarArriveMsec = starArriveMsec,
-                    UserNoteSize = 1f // SlideRoot的星星尺寸已经包含在localScale中
-                };
+                        var sprite = (fanSpriteStars != null && lane < fanSpriteStars.Length) ? fanSpriteStars[lane] : null;
+                        float alpha = sprite?.color.a ?? 0f;
 
-                return noteInfo;
+                        target.Add(CreateSlideStarNoteInfo(
+                            typeName,
+                            noteIndex,
+                            starObj,
+                            status,
+                            appearMsec,
+                            breakFlag,
+                            alpha,
+                            starLaunchMsec,
+                            starArriveMsec));
+                    }
+
+                    return;
+                }
+
+                // 普通 SlideRoot：单个 _baseStarNote + BaseSpriteRender
+                var baseStarNote = accessors.BaseStarNoteField?.GetValue(slideRoot) as GameObject;
+                if (baseStarNote == null || !baseStarNote.activeSelf)
+                    return;
+
+                var baseSpriteRender = accessors.BaseSpriteRenderField?.GetValue(slideRoot) as SpriteRenderer;
+                float baseAlpha = baseSpriteRender?.color.a ?? 0f;
+
+                target.Add(CreateSlideStarNoteInfo(
+                    typeName,
+                    noteIndex,
+                    baseStarNote,
+                    status,
+                    appearMsec,
+                    breakFlag,
+                    baseAlpha,
+                    starLaunchMsec,
+                    starArriveMsec));
             }
             catch (Exception e)
             {
-                MelonLogger.Warning($"Failed to get slide root star info: {e.Message}");
-                return null;
+                LogWarningThrottled("slide-root-info", $"Failed to get slide root star info: {e.Message}");
             }
+        }
+
+        private static NoteInfo CreateSlideStarNoteInfo(
+            string typeName,
+            int noteIndex,
+            GameObject starObj,
+            string status,
+            float appearMsec,
+            bool breakFlag,
+            float alpha,
+            float starLaunchMsec,
+            float starArriveMsec)
+        {
+            return new NoteInfo
+            {
+                NoteType = typeName,
+                NoteIndex = noteIndex,
+                Category = NoteCategory.SlideRootStar,
+                Position = starObj.transform.position,
+                LocalPosition = starObj.transform.localPosition,
+                Status = status,
+                AppearMsec = appearMsec,
+                IsExNote = breakFlag, // Break就是EX
+
+                // 第二段星星特有数据
+                StarLocalScale = starObj.transform.localScale,
+                StarAlpha = alpha,
+                StarLaunchMsec = starLaunchMsec,
+                StarArriveMsec = starArriveMsec,
+                UserNoteSize = 1f // SlideRoot的星星尺寸已经包含在localScale中
+            };
+        }
+
+        private static NoteReflectionAccessors GetNoteReflectionAccessors(System.Type type)
+        {
+            if (_noteAccessorCache.TryGetValue(type, out var cached))
+            {
+                return cached;
+            }
+
+            var accessors = new NoteReflectionAccessors
+            {
+                NoteObjField = GetFieldFromHierarchy(type, "NoteObj"),
+                ColorsObjectField = GetFieldFromHierarchy(type, "ColorsObject"),
+                SpriteRenderField = GetFieldFromHierarchy(type, "SpriteRender"),
+                AppearMsecField = GetFieldFromHierarchy(type, "AppearMsec"),
+                TailMsecField = GetFieldFromHierarchy(type, "TailMsec")
+            };
+
+            _noteAccessorCache[type] = accessors;
+            return accessors;
+        }
+
+        private static SlideRootReflectionAccessors GetSlideRootReflectionAccessors(System.Type type)
+        {
+            if (_slideAccessorCache.TryGetValue(type, out var cached))
+            {
+                return cached;
+            }
+
+            var accessors = new SlideRootReflectionAccessors
+            {
+                AppearMsecField = GetFieldFromHierarchy(type, "AppearMsec"),
+                StarLaunchMsecField = GetFieldFromHierarchy(type, "StarLaunchMsec"),
+                StarArriveMsecField = GetFieldFromHierarchy(type, "StarArriveMsec"),
+                NoteIndexField = GetFieldFromHierarchy(type, "NoteIndex"),
+                EndFlagField = GetFieldFromHierarchy(type, "EndFlag"),
+                BreakFlagField = GetFieldFromHierarchy(type, "BreakFlag"),
+                FanStarObjsField = GetFieldFromHierarchy(type, "_baseStarObjs"),
+                FanSpriteStarsField = GetFieldFromHierarchy(type, "_baseSpriteStars"),
+                BaseStarNoteField = GetFieldFromHierarchy(type, "_baseStarNote"),
+                BaseSpriteRenderField = GetFieldFromHierarchy(type, "BaseSpriteRender")
+            };
+
+            _slideAccessorCache[type] = accessors;
+            return accessors;
+        }
+
+        private static FieldInfo? GetFieldFromHierarchy(System.Type type, string fieldName)
+        {
+            if (!_hierarchyFieldCache.TryGetValue(type, out var fieldsByName))
+            {
+                fieldsByName = new Dictionary<string, FieldInfo?>();
+                _hierarchyFieldCache[type] = fieldsByName;
+            }
+
+            if (fieldsByName.TryGetValue(fieldName, out var cachedField))
+            {
+                return cachedField;
+            }
+
+            var current = type;
+            while (current != null)
+            {
+                var field = current.GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (field != null)
+                {
+                    fieldsByName[fieldName] = field;
+                    return field;
+                }
+
+                current = current.BaseType;
+            }
+
+            fieldsByName[fieldName] = null;
+            return null;
+        }
+
+        private static float GetCurrentUserNoteSize()
+        {
+            try
+            {
+                if (GamePlayManager.Instance != null)
+                {
+                    return GamePlayManager.Instance.GetGameScore(0).UserOption.NoteSize.GetValue();
+                }
+            }
+            catch
+            {
+            }
+
+            return 1f;
+        }
+
+        private static float GetFieldFloat(FieldInfo? field, object instance, float defaultValue)
+        {
+            if (field == null)
+                return defaultValue;
+
+            var value = field.GetValue(instance);
+            if (value is float f)
+                return f;
+            if (value is double d)
+                return (float)d;
+            if (value is int i)
+                return i;
+            return defaultValue;
+        }
+
+        private static int GetFieldInt(FieldInfo? field, object instance, int defaultValue)
+        {
+            if (field == null)
+                return defaultValue;
+
+            var value = field.GetValue(instance);
+            if (value is int i)
+                return i;
+            if (value is float f)
+                return (int)f;
+            if (value is double d)
+                return (int)d;
+            return defaultValue;
+        }
+
+        private static bool GetFieldBool(FieldInfo? field, object instance, bool defaultValue)
+        {
+            if (field == null)
+                return defaultValue;
+
+            var value = field.GetValue(instance);
+            if (value is bool b)
+                return b;
+            return defaultValue;
         }
 
         private static void PrintNoteFrame(float currentTime, List<NoteInfo> notes)
         {
             try
             {
-                // 设置输出文件路径（第一帧时）
-                if (!_isFileCreated)
-                {
-                    var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                    var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                    var musicID = _currentMusicInfo[0];
-                    _outputFilePath = Path.Combine(desktopPath, $"{musicID}_{timestamp}.txt");
-
-                    // 创建文件并写入头部信息
-                    File.WriteAllText(_outputFilePath, $"Note Dump Started at {timestamp}\n");
-                    File.AppendAllText(_outputFilePath, $"Music Info: {string.Join(" - ", _currentMusicInfo)}\n");
-                    File.AppendAllText(_outputFilePath, "Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | IsEX | (Details...)\n");
-                    File.AppendAllText(_outputFilePath, "  Touch: TouchDecor+Alpha(+TouchHoldProgress) | Hold: HoldScale+HoldSize | Tap/Break: TapScale\n");
-                    File.AppendAllText(_outputFilePath, "  Star(1st): StarScale+UserNoteSize | Star-Move(2nd): StarScale+Alpha+LaunchMsec+ArriveMsec\n");
-                    File.AppendAllText(_outputFilePath, "=".PadRight(30, '=') + "\n");
-
-                    _isFileCreated = true;
-                    MelonLogger.Msg($"Note dump output file: {_outputFilePath}");
-                }
+                if (!EnsureOutputWriter())
+                    return;
 
                 // 构建数据行
-                var lines = new List<string>();
+                var lines = _lineBuffer;
+                lines.Clear();
                 lines.Add($"Time:{currentTime:F4}|Count:{notes.Count}");
 
                 if (notes.Count == 0)
@@ -513,60 +643,143 @@ namespace default_namespace {
                     lines.Add("NA");
                 }
 
-                foreach (var note in notes.OrderBy(n => n.NoteType).ThenBy(n => n.NoteIndex))
+                for (int i = 0; i < notes.Count; i++)
                 {
-                    // 基础信息
-                    var line = $"{note.NoteType}-{note.NoteIndex} | " +
-                               $"{note.Position.x:F4}, {note.Position.y:F4} | " +
-                               $"{note.LocalPosition.x:F4}, {note.LocalPosition.y:F4} | " +
-                               $"{note.Status} | {note.AppearMsec:F4} | " +
-                               $"EX:{(note.IsExNote ? "Y" : "N")}";
+                    var note = notes[i];
 
-                    var noteTypeLower = note.NoteType.ToLower();
+                    // 基础信息
+                    _lineBuilder.Clear();
+                    _lineBuilder.Append(note.NoteType).Append('-').Append(note.NoteIndex).Append(" | ");
+                    _lineBuilder.AppendFormat("{0:F4}, {1:F4}", note.Position.x, note.Position.y).Append(" | ");
+                    _lineBuilder.AppendFormat("{0:F4}, {1:F4}", note.LocalPosition.x, note.LocalPosition.y).Append(" | ");
+                    _lineBuilder.Append(note.Status).Append(" | ");
+                    _lineBuilder.AppendFormat("{0:F4}", note.AppearMsec).Append(" | ");
+                    _lineBuilder.Append("EX:").Append(note.IsExNote ? "Y" : "N");
                     
                     // Touch/Touch-Hold音符
-                    if (noteTypeLower.Contains("touch"))
+                    if (note.Category == NoteCategory.Touch || note.Category == NoteCategory.TouchHold)
                     {
                         var decorPosition = note.TouchDecorPosition;
-                        line += $" | TouchDecorPosition: {decorPosition.y:F4} | Alpha: {note.TouchAlpha:F4}";
-                        if (note.NoteType == nameof(TouchHoldC))
+                        _lineBuilder.AppendFormat(" | TouchDecorPosition: {0:F4} | Alpha: {1:F4}", decorPosition.y, note.TouchAlpha);
+                        if (note.Category == NoteCategory.TouchHold)
                         {
-                            line += $" | TouchHoldProgress: {note.TouchHoldProgress:F4}";
+                            _lineBuilder.AppendFormat(" | TouchHoldProgress: {0:F4}", note.TouchHoldProgress);
                         }
                     }
                     // Hold音符
-                    else if (noteTypeLower.Contains("hold"))
+                    else if (note.Category == NoteCategory.Hold)
                     {
-                        line += $" | HoldScale: {note.HoldLocalScale.x:F4},{note.HoldLocalScale.y:F4} | HoldBodySize: {note.HoldBodySize.y:F4}";
+                        _lineBuilder.AppendFormat(" | HoldScale: {0:F4},{1:F4} | HoldBodySize: {2:F4}", note.HoldLocalScale.x, note.HoldLocalScale.y, note.HoldBodySize.y);
                     }
                     // Star音符-Move（第二段）
-                    else if (noteTypeLower.Contains("star") && note.IsSlideRootStar)
+                    else if (note.Category == NoteCategory.SlideRootStar)
                     {
-                        line += $" | StarScale: {note.StarLocalScale.x:F4},{note.StarLocalScale.y:F4}";
-                        line += $" | Alpha: {note.StarAlpha:F4}";
-                        line += $" | LaunchMsec: {note.StarLaunchMsec:F4} | ArriveMsec: {note.StarArriveMsec:F4}";
+                        _lineBuilder.AppendFormat(" | StarScale: {0:F4},{1:F4}", note.StarLocalScale.x, note.StarLocalScale.y);
+                        _lineBuilder.AppendFormat(" | Alpha: {0:F4}", note.StarAlpha);
+                        _lineBuilder.AppendFormat(" | LaunchMsec: {0:F4} | ArriveMsec: {1:F4}", note.StarLaunchMsec, note.StarArriveMsec);
                     }
                     // Star音符（第一段）
-                    else if (noteTypeLower.Contains("star"))
+                    else if (note.Category == NoteCategory.Star)
                     {
-                        line += $" | StarScale: {note.StarLocalScale.x:F4},{note.StarLocalScale.y:F4} | UserNoteSize: {note.UserNoteSize:F4}";
+                        _lineBuilder.AppendFormat(" | StarScale: {0:F4},{1:F4} | UserNoteSize: {2:F4}", note.StarLocalScale.x, note.StarLocalScale.y, note.UserNoteSize);
                     }
                     // Tap音符
-                    else if (noteTypeLower.Contains("tap") || noteTypeLower.Contains("break"))
+                    else if (note.Category == NoteCategory.TapOrBreak)
                     {
-                        line += $" | TapScale: {note.TapLocalScale.x:F4},{note.TapLocalScale.y:F4}";
+                        _lineBuilder.AppendFormat(" | TapScale: {0:F4},{1:F4}", note.TapLocalScale.x, note.TapLocalScale.y);
                     }
 
-                    lines.Add(line);
+                    lines.Add(_lineBuilder.ToString());
                 }
 
-                // 追加到文件
-                File.AppendAllLines(_outputFilePath, lines);
+                if (_outputWriter == null)
+                    return;
+
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    _outputWriter.WriteLine(lines[i]);
+                }
+
+                _framesSinceLastFlush++;
+                if (_framesSinceLastFlush >= FlushIntervalFrames)
+                {
+                    _outputWriter.Flush();
+                    _framesSinceLastFlush = 0;
+                }
             }
             catch (Exception e)
             {
-                MelonLogger.Error($"Failed to write note frame to file: {e.Message}");
+                LogWarningThrottled("write-note-frame", $"Failed to write note frame to file: {e.Message}");
             }
+        }
+
+        private static bool EnsureOutputWriter()
+        {
+            if (_outputWriter != null && _isFileCreated)
+                return true;
+
+            try
+            {
+                var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+                var musicID = _currentMusicInfo.Count > 0 ? _currentMusicInfo[0] : "Unknown";
+                _outputFilePath = Path.Combine(desktopPath, $"{musicID}_{timestamp}.txt");
+
+                _outputWriter = new StreamWriter(_outputFilePath, false, Encoding.UTF8);
+                _outputWriter.WriteLine($"Note Dump Started at {timestamp}");
+                _outputWriter.WriteLine($"Music Info: {string.Join(" - ", _currentMusicInfo)}");
+                _outputWriter.WriteLine("Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | IsEX | (Details...)");
+                _outputWriter.WriteLine("  Touch: TouchDecor+Alpha(+TouchHoldProgress) | Hold: HoldScale+HoldSize | Tap/Break: TapScale");
+                _outputWriter.WriteLine("  Star(1st): StarScale+UserNoteSize | Star-Move(2nd): StarScale+Alpha+LaunchMsec+ArriveMsec");
+                _outputWriter.WriteLine("=".PadRight(30, '='));
+
+                _framesSinceLastFlush = 0;
+                _isFileCreated = true;
+                MelonLogger.Msg($"Note dump output file: {_outputFilePath}");
+                return true;
+            }
+            catch (Exception e)
+            {
+                LogWarningThrottled("create-output-writer", $"Failed to create output file: {e.Message}");
+                CloseOutputWriter();
+                return false;
+            }
+        }
+
+        private static void CloseOutputWriter()
+        {
+            try
+            {
+                if (_outputWriter != null)
+                {
+                    _outputWriter.Flush();
+                    _outputWriter.Dispose();
+                }
+            }
+            catch (Exception e)
+            {
+                LogWarningThrottled("close-output-writer", $"Failed to close output file: {e.Message}");
+            }
+            finally
+            {
+                _outputWriter = null;
+                _framesSinceLastFlush = 0;
+                _isFileCreated = false;
+            }
+        }
+
+        private static void LogWarningThrottled(string key, string message)
+        {
+            var now = DateTime.UtcNow;
+            if (_warningLogTimeMap.TryGetValue(key, out var lastLogTime))
+            {
+                var diff = now - lastLogTime;
+                if (diff.TotalSeconds < 1.0)
+                    return;
+            }
+
+            _warningLogTimeMap[key] = now;
+            MelonLogger.Warning(message);
         }
         
         // 热键监听
@@ -581,112 +794,16 @@ namespace default_namespace {
                 {
                     // 关闭
                     _isDumpEnabled = false;
-                    _isFileCreated = false; 
+                    CloseOutputWriter();
                     MelonLogger.Msg("stop dump notes.");
                 }
                 else
                 {
                     // 开启
-                    _isFileCreated = false;
+                    CloseOutputWriter();
                     _isDumpEnabled = true;
                     MelonLogger.Msg("start dump notes.");
                 }
-            }
-        }
-
-        // 热键调试：K键打印游戏结束状态
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(GameProcess), "OnUpdate")]
-        public static void GameProcess_OnUpdate_Debug(GameProcess __instance)
-        {
-            try
-            {
-                // 检测 K 键按下
-                if (Input.GetKeyDown(KeyCode.K))
-                {
-                    MelonLogger.Msg("=== 游戏结束状态调试信息 ===");
-                    
-                    // 获取GameMonitor数组
-                    var monitorsField = typeof(GameProcess).GetField("_monitors", BindingFlags.NonPublic | BindingFlags.Instance);
-                    var monitors = (Monitor.GameMonitor[])monitorsField.GetValue(__instance);
-                    
-                    if (monitors != null)
-                    {
-                        for (int i = 0; i < monitors.Length; i++)
-                        {
-                            if (monitors[i] != null)
-                            {
-                                var monitorIndex = i;
-                                var gameScore = MAI2.Util.Singleton<GamePlayManager>.Instance.GetGameScore(monitorIndex);
-                                
-                                MelonLogger.Msg($"--- 玩家 {i + 1} 状态 ---");
-                                MelonLogger.Msg($"  IsAllJudged: {gameScore.IsAllJudged()}");
-                                MelonLogger.Msg($"  IsTrackSkip: {gameScore.IsTrackSkip}");
-                                MelonLogger.Msg($"  IsEnable: {gameScore.IsEnable}");
-                                MelonLogger.Msg($"  Life: {gameScore.Life}");
-                                
-                                // 检查音符判定状态
-                                var judgeResultListField = gameScore.GetType().GetField("_judgeResultList", BindingFlags.NonPublic | BindingFlags.Instance);
-                                if (judgeResultListField != null)
-                                {
-                                    var judgeResults = judgeResultListField.GetValue(gameScore);
-                                    if (judgeResults != null)
-                                    {
-                                        var resultsArray = judgeResults as Array;
-                                        if (resultsArray != null)
-                                        {
-                                            int totalNotes = resultsArray.Length;
-                                            int judgedNotes = 0;
-                                            
-                                            for (int j = 0; j < resultsArray.Length; j++)
-                                            {
-                                                var result = resultsArray.GetValue(j);
-                                                var judgedField = result.GetType().GetField("Judged");
-                                                if (judgedField != null && (bool)judgedField.GetValue(result))
-                                                {
-                                                    judgedNotes++;
-                                                }
-                                            }
-                                            
-                                            MelonLogger.Msg($"  音符状态: {judgedNotes}/{totalNotes} 已判定");
-                                        }
-                                    }
-                                }
-                                
-                                // 检查对象状态
-                                var isAllObjectEnd = monitors[i].IsAllObjectEnd();
-                                var isAnyObjectActiveField = typeof(Monitor.GameMonitor).GetField("IsAnyObjectActive", BindingFlags.NonPublic | BindingFlags.Instance);
-                                var isAnyObjectActive = isAnyObjectActiveField?.GetValue(monitors[i]) as bool? ?? false;
-                                
-                                MelonLogger.Msg($"  IsAllObjectEnd: {isAllObjectEnd}");
-                                MelonLogger.Msg($"  IsAnyObjectActive: {isAnyObjectActive}");
-                            }
-                        }
-                    }
-                    
-                    // 检查音乐状态
-                    MelonLogger.Msg($"--- 音乐状态 ---");
-                    MelonLogger.Msg($"  IsEndMusic: {Manager.SoundManager.IsEndMusic()}");
-                    MelonLogger.Msg($"  IsPlayingMusic: {!Manager.SoundManager.IsEndMusic()}");
-                    
-                    // 检查当前游戏序列
-                    var sequenceField = typeof(GameProcess).GetField("_sequence", BindingFlags.NonPublic | BindingFlags.Instance);
-                    if (sequenceField != null)
-                    {
-                        var sequence = sequenceField.GetValue(__instance);
-                        MelonLogger.Msg($"  当前游戏序列: {sequence}");
-                    }
-                    
-                    // 检查当前时间
-                    var currentTime = Manager.NotesManager.GetCurrentMsec();
-                    MelonLogger.Msg($"  当前游戏时间: {currentTime:F2}ms");
-                    
-                    MelonLogger.Msg("=== 调试信息结束 ===");
-                }
-            }
-            catch (Exception e)
-            {
-                MelonLogger.Error($"调试信息获取失败: {e.Message}");
             }
         }
     }
