@@ -231,6 +231,17 @@ def parse_note_line(line, frame_time):
     解析单个note行，返回Note对象
     """
     try:
+        # NA 表示当前时间点明确没有音符，返回占位对象供时间匹配命中。
+        if line.strip().upper() == 'NA':
+            return Note(
+                frameTime=frame_time,
+                type='NA',
+                index=-1,
+                status='NA',
+                isEX=False
+            )
+
+
         # 分割主要部分
         parts = line.split(' | ')
         if len(parts) < 6:
@@ -827,11 +838,7 @@ def draw_touch_hold_note(note, target_time):
 
     if note.touchAlpha < 0.4: return None, None # 忽略过于透明的音符
 
-    if note.touchDecor > 0.01:
-        size = note.touchDecor + 68 # 缩放阶段
-    else:
-        size = note.touchDecor + 100 # 转圈阶段
-
+    size = note.touchDecor + 68 # 缩放阶段
     if is_big_touch:
         size = round(size * 1.3)
 
@@ -877,6 +884,8 @@ def draw_all_notes(frame, notes, target_time):
 
     for note in notes:
         note_type = note.type.lower()
+        if note_type == 'na':
+            continue
         
         # 根据音符类型调用对应的绘制函数
         points = None
@@ -1117,6 +1126,8 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
         if current_notes:
             for note in current_notes:
                 note_type = note.type.lower()
+                if note_type == 'na':
+                    continue
                 class_id = -1
                 points = None
                 center = None
@@ -1191,6 +1202,8 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
         if current_notes:
             for note in current_notes:
                 note_type = note.type.lower()
+                if note_type == 'na':
+                    continue
                 class_id = -1
                 points = None
                 
@@ -1413,7 +1426,7 @@ def export_dataset_touch_hold(video_path, txt_path, time_offset):
     touch_hold_time_entries = []
     for txt_time in sorted(time_notes.keys()):
         notes = time_notes.get(txt_time, [])
-        touch_hold_notes = [n for n in notes if 'touchhold' in n.type.lower()]
+        touch_hold_notes = [n for n in notes if n.type and 'touchhold' in n.type.lower()]
         if len(touch_hold_notes) > 0:
             touch_hold_time_entries.append((txt_time, touch_hold_notes))
 
@@ -1954,6 +1967,8 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
         # 处理每个音符
         for note in current_notes:
             note_type = note.type.lower()
+            if note_type == 'na':
+                continue
             points = None
             center = None
             head = None
