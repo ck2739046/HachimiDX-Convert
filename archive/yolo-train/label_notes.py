@@ -2464,68 +2464,68 @@ if __name__ == "__main__":
 
 
     # dataset1 = [
-        # {
-        #     # 11394 背景亮 autoplay:critical combo数 达成率累加 带开头/结尾动画
-        #     "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_std.mp4",
-        #     "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_2026-04-17_17-55-13.txt",
-        #     "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11394",
-        #     "align_diff": -7208,
-        #     "star_skin": 1, # 粉色尖头星星
-        # },
+    #     {
+    #         # 11394 背景亮 autoplay:critical combo数 达成率累加 带开头/结尾动画
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_2026-04-17_17-55-13.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11394",
+    #         "align_diff": -7208,
+    #         "star_skin": 1, # 粉色尖头星星
+    #     },
 
-        # {
-        #     # 11741 背景暗 autoplay:random 达成率递减 perfect/great/good/miss统计
-        #     "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_std.mp4",
-        #     "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_2026-04-17_21-07-33.txt",
-        #     "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11741",
-        #     "align_diff": 650,
-        #     "star_skin": 0 # 粉色圆头星星
-        # },
+    #     {
+    #         # 11741 背景暗 autoplay:random 达成率递减 perfect/great/good/miss统计
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_2026-04-17_21-07-33.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11741",
+    #         "align_diff": 650,
+    #         "star_skin": 0 # 粉色圆头星星
+    #     },
 
-        # {
-        #     # 11753 背景亮 autoplay:critical combo数 达成率累加
-        #     "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_std.mp4",
-        #     "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_2026-04-17_20-15-41.txt",
-        #     "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11753",
-        #     "align_diff": 658.68,
-        #     "star_skin": 0 # 蓝色圆头星星
-        # },
+    #     {
+    #         # 11753 背景亮 autoplay:critical combo数 达成率累加
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_2026-04-17_20-15-41.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11753",
+    #         "align_diff": 658.68,
+    #         "star_skin": 0 # 蓝色圆头星星
+    #     },
 
-        # {
-        #     # 11818 背景暗 autoplay:random 达成率递减 达成率递减
-        #     "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_std.mp4",
-        #     "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_2026-04-17_20-11-43.txt",
-        #     "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11818",
-        #     "align_diff": 558,
-        #     "star_skin": 1 # 蓝色尖头星星
-        # },
+    #     {
+    #         # 11818 背景暗 autoplay:random 达成率递减 达成率递减
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_2026-04-17_20-11-43.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11818",
+    #         "align_diff": 558,
+    #         "star_skin": 1 # 蓝色尖头星星
+    #     },
 
-        # {
-        #     # 11814 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
-        #     "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_std.mp4",
-        #     "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_2026-04-17_21-03-44.txt",
-        #     "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11814",
-        #     "align_diff": 891.34,
-        #     "star_skin": 0 # 蓝色圆头星星
-        # },
+    #     {
+    #         # 11814 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_2026-04-17_21-03-44.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11814",
+    #         "align_diff": 891.34,
+    #         "star_skin": 0 # 蓝色圆头星星
+    #     },
 
-        # {
-        #     # 11898 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
-        #     "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_std.mp4",
-        #     "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_2026-04-17_21-00-08.txt",
-        #     "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11898",
-        #     "align_diff": 1117,
-        #     "star_skin": 1 # 粉色尖头星星
-        # },
+    #     {
+    #         # 11898 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_2026-04-17_21-00-08.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11898",
+    #         "align_diff": 433.33,
+    #         "star_skin": 0 # 粉色圆头星星
+    #     },
 
-        # {
-        #     # 11820 背景暗 autoplay:critical combo数 达成率累加 带开头/结尾动画
-        #     "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820\11820_std.mp4",
-        #     "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820\11820_2026-04-17_19-39-35.txt",
-        #     "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11820",
-        #     "align_diff": -7324.32,
-        #     "star_skin": 1 # 粉色尖头星星
-        # },
+    #     {
+    #         # 11820 背景暗 autoplay:critical combo数 达成率累加 带开头/结尾动画
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820\11820_std.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820\11820_2026-04-17_19-39-35.txt",
+    #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11820",
+    #         "align_diff": -7324.32,
+    #         "star_skin": 1 # 粉色尖头星星
+    #     },
     # ]
 
     # for song in dataset1:
