@@ -109,6 +109,7 @@ def main(input_video: Path,
             M_Defs.input_path.key: str(input_video.resolve()),
             M_Defs.output_path.key: str(output_path.resolve()),
             M_Defs.duration.key: duration,
+            M_Defs.video_fps.key: 0,
         }
 
         if need_crop:

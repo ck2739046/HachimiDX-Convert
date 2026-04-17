@@ -116,8 +116,12 @@ def _build_video_args(data: MediaModel) -> OpResult[list[str]]:
     args.extend(["-c:v", "libx264"])
     args.extend(["-crf", str(data.video_crf)])
 
-    if data.video_fps:
+    if data.video_fps and data.video_fps > 0:
         args.extend(["-r", str(data.video_fps)])
+    else:
+        # Keep original frame pacing/timestamps when FPS is "original".
+        args.extend(["-fps_mode:v", "passthrough"])
+        args.extend(["-enc_time_base:v", "-1"])
 
     if data.video_gop_optimize:
         args.extend(["-g", "30"])
