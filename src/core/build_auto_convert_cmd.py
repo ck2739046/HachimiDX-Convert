@@ -10,6 +10,7 @@ from .schemas.auto_convert_config import AutoConvertConfig_Definitions as AC_Def
 from .schemas.auto_convert_config import AutoConvertConfig_Definition
 from .schemas.op_result import OpResult, ok, err
 from .schemas.settings_config import SettingsConfig_Definitions as SC_Defs
+from .tools.media_ffprobe_inspect import FFprobeInspect
 from .tools.popup_dialog import show_confirm_dialog
 from .build_worker_cmd import build_cmd_head_python_exe
 
@@ -235,8 +236,6 @@ def _is_video_already_standardized(video_path: Path, data: AutoConvertModel) -> 
         cap = cv2.VideoCapture(str(video_path))
         video_width = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         video_height = round(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        video_total_frames = round(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        video_fps = cap.get(cv2.CAP_PROP_FPS)
         cap.release()
     except Exception as e:
         print(f"Failed to read video file: {video_path}, error: {e}")
@@ -263,7 +262,20 @@ def _is_video_already_standardized(video_path: Path, data: AutoConvertModel) -> 
     else:
         expect_duration = data.duration
 
-    video_duration = video_total_frames / video_fps
+    # 使用 FFprobe 获取视频时长
+    res = FFprobeInspect.inspect_media(str(video_path))
+    if not res.is_ok:
+        print(f"Failed to inspect video by ffprobe: {res.error_msg}")
+        return False
+    try:
+        _aaa = float(res.value.duration)
+        if _aaa <= 0:
+            print(f"Invalid video duration from ffprobe: {_aaa}")
+            return False
+    except Exception as e:
+        print(f"Failed to parse video duration: {res.value.duration}. Error: {e}")
+        return False
+    video_duration = float(res.value.duration)
 
     # 允许时长相差半秒
     if abs(video_duration - expect_duration) > 0.5:
