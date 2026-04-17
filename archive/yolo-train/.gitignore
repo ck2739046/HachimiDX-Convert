@@ -2,8 +2,4 @@ pt/
 mod_dump_notes/build_*.bat
 data_*.yaml
 utils/
-
-dataset1/
-dataset2/
-dataset3/
-dataset4/
+dataset*/

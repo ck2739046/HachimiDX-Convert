@@ -1867,7 +1867,49 @@ def count_dataset_statistics(output_dir):
     print("=" * 50)
 
 
-def export_classification_dataset(video_path, txt_path, time_offset, break_cls_dir, ex_cls_dir, dataset_split='train', video_name=None):
+def extract_frame_numbers_from_images(images_dir):
+    """
+    从 images 目录文件名中解析帧号。
+
+    规则:
+    - 仅处理图片文件（jpg/png/jpeg/bmp/webp）
+    - 使用“文件名最后一个下划线后的纯数字”作为帧号
+      例如: xxx_123.jpg -> 123
+
+    返回:
+        升序且去重后的帧号列表
+    """
+    if not os.path.isdir(images_dir):
+        return []
+
+    image_exts = ('.jpg', '.png', '.jpeg', '.bmp', '.webp')
+    frame_numbers = set()
+    skipped_count = 0
+
+    for filename in os.listdir(images_dir):
+        if not filename.lower().endswith(image_exts):
+            continue
+
+        stem = os.path.splitext(filename)[0]
+        if '_' not in stem:
+            skipped_count += 1
+            continue
+
+        frame_part = stem.rsplit('_', 1)[-1]
+        if frame_part.isdigit():
+            frame_numbers.add(int(frame_part))
+        else:
+            skipped_count += 1
+
+    sorted_frames = sorted(frame_numbers)
+    if skipped_count > 0:
+        print(f"警告: {images_dir} 中有 {skipped_count} 个文件名无法解析帧号，已忽略")
+
+    return sorted_frames
+
+
+def export_classification_dataset(video_path, txt_path, time_offset, break_cls_dir, ex_cls_dir,
+                                  dataset_split='train', video_name=None, selected_frame_numbers=None):
     """
     导出YOLO分类训练数据集
     
@@ -1885,6 +1927,7 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
         ex_cls_dir: EX分类数据集输出目录
         dataset_split: 数据集划分 ('train' 或 'valid')
         video_name: 视频名称（用于文件命名），如果为None则从video_path提取
+        selected_frame_numbers: 仅处理这些帧号；为None时处理全部帧
     """
 
     base_align_diff, align_schedule, schedule_frames = prepare_align_diff(time_offset)
@@ -1929,6 +1972,39 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
         if i % 100 == 0 or i == total_video_frames:
             print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
     print("\r时间戳读取完成！            ")
+
+    available_video_frames = len(frame_timestamps)
+    if available_video_frames == 0:
+        print("错误：无法读取视频时间戳！")
+        cap.release()
+        return 0, {'yes': 0, 'no': 0}, {'yes': 0, 'no': 0}
+
+    if selected_frame_numbers is None:
+        target_frame_numbers = list(range(available_video_frames))
+    else:
+        parsed_target_frames = []
+        invalid_target_count = 0
+        for f in selected_frame_numbers:
+            try:
+                frame_no = int(f)
+            except (TypeError, ValueError):
+                invalid_target_count += 1
+                continue
+            if frame_no >= 0:
+                parsed_target_frames.append(frame_no)
+
+        target_frame_numbers = sorted(set(parsed_target_frames))
+        if invalid_target_count > 0:
+            print(f"警告: 目标帧中有 {invalid_target_count} 个非整数值，已忽略")
+        out_of_range_count = sum(1 for f in target_frame_numbers if f >= available_video_frames)
+        target_frame_numbers = [f for f in target_frame_numbers if f < available_video_frames]
+        if out_of_range_count > 0:
+            print(f"警告: 目标帧中有 {out_of_range_count} 个超出视频帧范围，已忽略")
+
+    if len(target_frame_numbers) == 0:
+        print("警告: 没有可处理的目标帧，跳过当前视频")
+        cap.release()
+        return 0, {'yes': 0, 'no': 0}, {'yes': 0, 'no': 0}
     
     max_time_diff = (1000 / cap.get(cv2.CAP_PROP_FPS)) - 0.1
     
@@ -1950,9 +2026,10 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
     print(f"视频尺寸: {frame_width}x{frame_height}")
     print(f"Break分类输出: {break_cls_dir}")
     print(f"EX分类输出: {ex_cls_dir}")
+    print(f"目标帧数: {len(target_frame_numbers)}")
     
-    # 遍历所有帧
-    for frame_number in range(total_video_frames):
+    # 遍历目标帧
+    for idx, frame_number in enumerate(target_frame_numbers, 1):
         # 读取帧
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
         ret, frame = cap.read()
@@ -2032,8 +2109,8 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
             note_counter += 1
         
         # 显示进度
-        if (frame_number + 1) % 10 == 0 or frame_number == total_video_frames - 1:
-            print(f"\r处理进度: {frame_number + 1}/{total_video_frames} 帧 | 音符数: {note_counter} | Break(yes/no): {break_count['yes']}/{break_count['no']} | EX(yes/no): {ex_count['yes']}/{ex_count['no']}", end="", flush=True)
+        if idx % 10 <= 1 or idx == len(target_frame_numbers):
+            print(f"\r处理进度: {idx}/{len(target_frame_numbers)} 目标帧 | 音符数: {note_counter} | Break(yes/no): {break_count['yes']}/{break_count['no']} | EX(yes/no): {ex_count['yes']}/{ex_count['no']}", end="", flush=True)
     
     print(f"\n\n导出完成！")
     print(f"总音符数: {note_counter}")
@@ -2240,12 +2317,6 @@ def main(video_path, txt_path, output_dir,
     
     elif choice == '5':
         # 导出分类数据集模式 - 批量处理所有配置的视频
-        print("\n准备批量导出分类数据集...")
-        print("将处理以下视频:")
-        print("  Valid集: 11820, 11814")
-        print("  Train集: 11818, 11753, 11741, 11311")
-        print("  仅包含: Tap, Slide, Hold (排除 Touch 和 Touch-Hold)")
-        
         confirm = input("\n是否继续? (y/n): ").strip().lower()
         if confirm != 'y':
             print("已取消导出")
@@ -2272,10 +2343,7 @@ def export_all_classification_datasets():
     """
     批量导出分类数据集
     
-    硬编码配置:
-    - Valid集: 11820, 11814
-    - Train集: 11818, 11753, 11741, 11311
-    - 仅包含: Tap, Slide, Hold (排除 Touch 和 Touch-Hold)
+    仅包含: Tap, Slide, Hold (排除 Touch 和 Touch-Hold)
     """
     
     global star_skin
@@ -2283,51 +2351,195 @@ def export_all_classification_datasets():
     # 定义视频配置
     # Valid集视频
     valid_videos = [
+
+        # dataset 1
         {
-            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11820_120_standardized.mp4",
-            'txt_path': r"C:\Users\ck273\Desktop\train\11820_2025-10-16_19-03-33.txt",
-            'align_diff': -100.0,
-            'star_skin': 1 # 粉色尖头星星
+            # 11814 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_2026-04-17_21-03-44.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11814",
+            "align_diff": 891.34,
+            "star_skin": 0 # 蓝色圆头星星
         },
+
         {
-            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11814_120_standardized.mp4",
-            'txt_path': r"C:\Users\ck273\Desktop\train\11814_2025-10-16_19-17-01.txt",
-            'align_diff': -216.666667,
-            'star_skin': 0 # 蓝色圆头星星
-        }
+            # 11898 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_2026-04-17_21-00-08.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11898",
+            "align_diff": 433.33,
+            "star_skin": 0 # 粉色圆头星星
+        },
+
+        {
+            # 11820 背景暗 autoplay:critical combo数 达成率累加 带开头/结尾动画
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820\11820_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820\11820_2026-04-17_19-39-35.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11820",
+            "align_diff": -7324.32,
+            "star_skin": 1 # 粉色尖头星星
+        },
+
+        # dataset 2
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11898\7 Wonders.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11898\11898_2026-04-16_20-29-47.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11898",
+            "align_diff": [(0, 1833.0), (350, 1816.8), (513, 1833.0), (746, 1816.8), (2461, 1833.0), (2595, 1845), (2908, 1833.0)],
+            "jumps_to": 1900,
+            "touch_alpha": 0.6,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11986\AiAe.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11986\11986_2026-04-16_20-23-20.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11986",
+            "align_diff": [(0, -150), (231, -133.33), (350, -150), (2120, -160.0), (2340, -127), (2777, -133.33), (4037, -140)],
+            "jumps_to": 4000,
+            "touch_alpha": 0.7,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11929\11929_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11929\11929_2026-04-16_20-14-53.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11929",
+            "align_diff": [(0, 2561.8),(492, 2544.9),(1663, 2528.1),(3337, 2511.2),(4345, 2528.1)],
+            "jumps_to": 2300,
+            "touch_alpha": 0.2,
+        },
+
     ]
     
     # Train集视频
     train_videos = [
+
+        # dataset 1
         {
-            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11818_120_standardized.mp4",
-            'txt_path': r"C:\Users\ck273\Desktop\train\11818_2025-10-16_19-08-17.txt",
-            'align_diff': 66.666667,
-            'star_skin': 1 # 蓝色尖头星星
+            # 11394 背景亮 autoplay:critical combo数 达成率累加 带开头/结尾动画
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_2026-04-17_17-55-13.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11394",
+            "align_diff": -7208,
+            "star_skin": 1, # 粉色尖头星星
         },
+
         {
-            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11753_120_standardized.mp4",
-            'txt_path': r"C:\Users\ck273\Desktop\train\11753_2025-10-16_14-59-08.txt",
-            'align_diff': -291.666667,
-            'star_skin': 0 # 蓝色圆头星星
+            # 11741 背景暗 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_2026-04-17_21-07-33.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11741",
+            "align_diff": 650,
+            "star_skin": 0 # 粉色圆头星星
         },
+
         {
-            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11741_120_standardized.mp4",
-            'txt_path': r"C:\Users\ck273\Desktop\train\11741_2025-10-16_18-56-29.txt",
-            'align_diff': -133.333333,
-            'star_skin': 1 # 粉色尖头星星
+            # 11753 背景亮 autoplay:critical combo数 达成率累加
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_2026-04-17_20-15-41.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11753",
+            "align_diff": 658.68,
+            "star_skin": 0 # 蓝色圆头星星
         },
+
         {
-            'video_path': r"D:\git\mai-chart-analyze\yolo-train\temp\11311_120_standardized.mp4",
-            'txt_path': r"C:\Users\ck273\Desktop\train\11311_2025-10-16_19-00-53.txt",
-            'align_diff': -141.666667,
-            'star_skin': 0 # 粉色圆头星星
-        }
+            # 11818 背景暗 autoplay:random 达成率递减 达成率递减
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_2026-04-17_20-11-43.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11818",
+            "align_diff": 558,
+            "star_skin": 1 # 蓝色尖头星星
+        },
+
+
+        # dataset 2
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11905\Daredevil Glaive.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11905\11905_2026-04-16_20-32-59.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11905",
+            "align_diff": [(0, -5400+5), (1890, -5400-5), (2493, -5380), (3725, -5390)],
+            "jumps_to": 3700,
+            "touch_alpha": 0.5,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\10622\バッド・ダンス・ホール.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\10622\10622_2026-04-16_20-18-39.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\10622",
+            "align_diff": [(0, 620), (960, 610), (2463, 633.3), (3611, 620), (3841, 633.3)],
+            "jumps_to": 1800,
+            "touch_alpha": 114514,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11969\TECHNOPOLICE 2085.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11969\11969_2026-04-16_20-26-55.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11969",
+            "align_diff": [(0, -133.33), (1243, -145), (2338, -120)],
+            "jumps_to": 2300,
+            "touch_alpha": 0.6,
+        },
+
+
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_2026-04-16_20-07-19.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11979",
+            "align_diff": [(0, 910.11),(251, 893.3),(1546, 876.4),(3654, 859.6),(4353, 876.4)],
+            "jumps_to": 2300,
+            "touch_alpha": 0.5,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11981\11981_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11981\11981_2026-04-16_20-10-46.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11981",
+            "align_diff": [(0, 185.4),(1181, 168.5),(2748,151.7),(3865,134.9),(4345, 168.5)],
+            "jumps_to": 2300,
+            "touch_alpha": 0.5,
+            "star_skin": 1, # 粉色尖头星星
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11988\11988_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11988\11988_2026-04-16_20-04-24.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11988",
+            "align_diff": [(0, 0), (267, -33.71), (510, -50.6), (1970, -67.4), (2267, -33.7), (3544, -50.6)],
+            "jumps_to": 1500,
+            "touch_alpha": 0.5,
+            "is_big_touch": False,
+        },
+
+
+        # dataset 3
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\hold_plus\hold_plus_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\hold_plus\2026-04-16_16-18-10.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\hold_plus",
+            "align_diff": 100,
+            "star_skin": 1 # 粉色尖头星星
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\touch_hold_plus\touch_hold_plus_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\touch_hold_plus\2026-04-16_19-18-39.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\touch_hold_plus",
+            "align_diff": -83.34,
+            "star_skin": 1 # 粉色尖头星星
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\slide_plus_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-16_19-16-44.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\slide_plus",
+            "align_diff": -16.67,
+            "star_skin": 1 # 粉色尖头星星
+        },
     ]
     
     # 分类数据集输出目录
-    break_cls_dir = r"D:\git\mai-chart-analyze\yolo-train\dataset_break_cls"
-    ex_cls_dir = r"D:\git\mai-chart-analyze\yolo-train\dataset_ex_cls"
+    break_cls_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset_break_cls"
+    ex_cls_dir = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset_ex_cls"
     
     print("=" * 70)
     print("批量导出分类数据集")
@@ -2345,11 +2557,12 @@ def export_all_classification_datasets():
     print(f"{'='*70}")
     
     for idx, config in enumerate(valid_videos, 1):
-        star_skin = config['star_skin']
+        star_skin = config.get('star_skin', 0)
         
         video_path = config['video_path']
         txt_path = config['txt_path']
         align_diff = config['align_diff']
+        source_images_dir = os.path.join(config['output_dir'], 'images')
         
         # 检查文件是否存在
         if not os.path.exists(video_path):
@@ -2358,6 +2571,21 @@ def export_all_classification_datasets():
         
         if not os.path.exists(txt_path):
             print(f"\n错误: 文本文件不存在: {txt_path}")
+            continue
+
+        if not os.path.isdir(source_images_dir):
+            print(f"\n错误: 未找到源图片目录: {source_images_dir}")
+            continue
+
+        target_frame_numbers = extract_frame_numbers_from_images(source_images_dir)
+        if len(target_frame_numbers) == 0:
+            print(f"\n警告: 未从 {source_images_dir} 解析到可用帧号，跳过该视频")
+            continue
+
+        try:
+            prepare_align_diff(align_diff)
+        except Exception as e:
+            print(f"\n错误: align_diff 配置无效，跳过该视频: {e}")
             continue
         
         video_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -2366,11 +2594,14 @@ def export_all_classification_datasets():
         print(f"[Valid] 处理视频 {idx}/{len(valid_videos)}: {video_name}")
         print(f"时间偏移: {align_diff}ms")
         print(f"星星皮肤: {'圆头' if star_skin == 0 else '尖头'}")
+        print(f"源图片目录: {source_images_dir}")
+        print(f"解析帧数: {len(target_frame_numbers)}")
         print(f"{'='*70}")
         
         # 导出到valid集
         export_classification_dataset(video_path, txt_path, align_diff, break_cls_dir, ex_cls_dir, 
-                                     dataset_split='valid', video_name=video_name)
+                         dataset_split='valid', video_name=video_name,
+                         selected_frame_numbers=target_frame_numbers)
     
     # 处理Train集视频
     print(f"\n\n{'='*70}")
@@ -2378,11 +2609,12 @@ def export_all_classification_datasets():
     print(f"{'='*70}")
     
     for idx, config in enumerate(train_videos, 1):
-        star_skin = config['star_skin']
+        star_skin = config.get('star_skin', 0)
         
         video_path = config['video_path']
         txt_path = config['txt_path']
         align_diff = config['align_diff']
+        source_images_dir = os.path.join(config['output_dir'], 'images')
         
         # 检查文件是否存在
         if not os.path.exists(video_path):
@@ -2392,6 +2624,21 @@ def export_all_classification_datasets():
         if not os.path.exists(txt_path):
             print(f"\n错误: 文本文件不存在: {txt_path}")
             continue
+
+        if not os.path.isdir(source_images_dir):
+            print(f"\n错误: 未找到源图片目录: {source_images_dir}")
+            continue
+
+        target_frame_numbers = extract_frame_numbers_from_images(source_images_dir)
+        if len(target_frame_numbers) == 0:
+            print(f"\n警告: 未从 {source_images_dir} 解析到可用帧号，跳过该视频")
+            continue
+
+        try:
+            prepare_align_diff(align_diff)
+        except Exception as e:
+            print(f"\n错误: align_diff 配置无效，跳过该视频: {e}")
+            continue
         
         video_name = os.path.splitext(os.path.basename(video_path))[0]
         
@@ -2399,11 +2646,14 @@ def export_all_classification_datasets():
         print(f"[Train] 处理视频 {idx}/{len(train_videos)}: {video_name}")
         print(f"时间偏移: {align_diff}ms")
         print(f"星星皮肤: {'圆头' if star_skin == 0 else '尖头'}")
+        print(f"源图片目录: {source_images_dir}")
+        print(f"解析帧数: {len(target_frame_numbers)}")
         print(f"{'='*70}")
         
         # 导出到train集
         export_classification_dataset(video_path, txt_path, align_diff, break_cls_dir, ex_cls_dir,
-                                     dataset_split='train', video_name=video_name)
+                         dataset_split='train', video_name=video_name,
+                         selected_frame_numbers=target_frame_numbers)
     
     print(f"\n\n{'='*70}")
     print("所有视频处理完成！")
@@ -2691,3 +2941,6 @@ if __name__ == "__main__":
     #     star_skin = song["star_skin"]
     #     main(video_path, txt_path, output_dir, align_diff, star_skin, speed_3, mode="3", export_half_frame=True)
 
+
+    
+    export_all_classification_datasets() # 生成 cls 数据集
