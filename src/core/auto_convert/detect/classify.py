@@ -138,9 +138,9 @@ def _build_sampling_plan(track_results):
         if note_type == NoteType.HOLD:
             # 尽量选择早期的点，避免在后续长条hold时被闪烁特效干扰
             # 间距不同，防止周期性闪烁全部采样到同一位置
-            sample_positions = [10, 12, 15, 19, 24, 30, 37] # 2-7递增
+            sample_positions = [10, 13, 24, 29, 37]
         else:
-            sample_positions = [20, 27, 35, 44, 54, 65, 77] # 7-12递增
+            sample_positions = [20, 31, 50, 65, 77]
 
         for sample_position in sample_positions:
             sample_idx = int(path_length * sample_position / 100.0)
