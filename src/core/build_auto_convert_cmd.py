@@ -77,19 +77,23 @@ def build_auto_convert_cmd(data: AutoConvertModel) -> OpResult[list[str]]:
 
 
 
+        # add shared inference args
+        if data.is_detect_enabled or data.is_analyze_enabled:
+            res = _get_inference_args_from_settings()
+            if not res.is_ok:
+                return err("Failed to get inference args from settings", inner=res)
+            cmd.extend(res.value)
+
+
+
         # add detect args
         if data.is_detect_enabled:
             cmd.extend(_parse_fields(data, "detect"))
 
-            # 增加模型推理参数
-            res = _get_detect_args_from_settings()
-            if not res.is_ok:
-                return err("Failed to get detect args from settings", inner=res)
-            cmd.extend(res.value)
             # 增加模型路径
             res = _get_detect_model_paths()
             if not res.is_ok:
-                return err("Failed to get model paths", inner=res)
+                return err("Failed to get detect model paths", inner=res)
             cmd.extend(res.value)
 
 
@@ -97,6 +101,12 @@ def build_auto_convert_cmd(data: AutoConvertModel) -> OpResult[list[str]]:
         # add analyze args
         if data.is_analyze_enabled:
             cmd.extend(_parse_fields(data, "analyze"))
+
+            # 增加 touch-hold 分析模型路径
+            res = _get_analyze_model_paths()
+            if not res.is_ok:
+                return err("Failed to get analyze model paths", inner=res)
+            cmd.extend(res.value)
 
 
 
@@ -287,7 +297,7 @@ def _is_video_already_standardized(video_path: Path, data: AutoConvertModel) -> 
 
 
 
-def _get_detect_args_from_settings() -> OpResult[list]:
+def _get_inference_args_from_settings() -> OpResult[list]:
                 
     cmd = []
 
@@ -307,6 +317,12 @@ def _get_detect_args_from_settings() -> OpResult[list]:
     if not res.is_ok:
         return err(f"Failed to get {SC_Defs.predict_batch_size_classify.key} from settings", inner=res)
     cmd.append(f"--{SC_Defs.predict_batch_size_classify.key}")
+    cmd.append(str(res.value))
+
+    res = SettingsManage.get(SC_Defs.predict_batch_size_touch_hold.key)
+    if not res.is_ok:
+        return err(f"Failed to get {SC_Defs.predict_batch_size_touch_hold.key} from settings", inner=res)
+    cmd.append(f"--{SC_Defs.predict_batch_size_touch_hold.key}")
     cmd.append(str(res.value))
 
     return ok(cmd)
@@ -337,5 +353,27 @@ def _get_detect_model_paths() -> OpResult[list]:
     cmd.append(str(paths["cls_break"]))
     cmd.append(f"--cls_ex_model_path")
     cmd.append(str(paths["cls_ex"]))
+
+    return ok(cmd)
+
+
+
+
+def _get_analyze_model_paths() -> OpResult[list]:
+
+    cmd = []
+
+    res = SettingsManage.get(SC_Defs.model_backend.key)
+    if not res.is_ok:
+        return err(f"Failed to get {SC_Defs.model_backend.key} from settings", inner=res)
+    model_backend = res.value
+
+    res = SC_Defs.get_path_by_backend(model_backend)
+    if not res.is_ok:
+        return err(f"Failed to get model paths for backend: {model_backend}", inner=res)
+    paths = res.value
+
+    cmd.append(f"--touch_hold_model_path")
+    cmd.append(str(paths["touch_hold"]))
 
     return ok(cmd)
