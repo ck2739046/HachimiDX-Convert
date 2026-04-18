@@ -13,6 +13,7 @@ class SettingsModel(BaseModel):
     inference_device: str = Field(default=S_Defs.inference_device.default)
     predict_batch_size_detect_obb: Annotated[int, Field(gt=S_Defs.predict_batch_size_detect_obb.constraints["gt"])] = S_Defs.predict_batch_size_detect_obb.default
     predict_batch_size_classify: Annotated[int, Field(gt=S_Defs.predict_batch_size_classify.constraints["gt"])] = S_Defs.predict_batch_size_classify.default
+    predict_batch_size_touch_hold: Annotated[int, Field(gt=S_Defs.predict_batch_size_touch_hold.constraints["gt"])] = S_Defs.predict_batch_size_touch_hold.default
     # FFmpeg 硬件加速相关
     # ffmpeg_hw_accel_vp9: str = Field(default=S_Defs.ffmpeg_hw_accel_vp9.default)
     # ffmpeg_hw_accel_h264: str = Field(default=S_Defs.ffmpeg_hw_accel_h264.default)

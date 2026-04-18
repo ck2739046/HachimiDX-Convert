@@ -46,6 +46,7 @@ class SettingsConfig_Definitions:
                 "obb": PathManage.OBB_PT_PATH,
                 "cls_break": PathManage.CLS_BREAK_PT_PATH,
                 "cls_ex": PathManage.CLS_EX_PT_PATH,
+                "touch_hold": PathManage.TOUCH_HOLD_PT_PATH,
             }
         elif backend == "TensorRT":
             paths = {
@@ -53,6 +54,7 @@ class SettingsConfig_Definitions:
                 "obb": PathManage.OBB_ENGINE_PATH,
                 "cls_break": PathManage.CLS_BREAK_ENGINE_PATH,
                 "cls_ex": PathManage.CLS_EX_ENGINE_PATH,
+                "touch_hold": PathManage.TOUCH_HOLD_ENGINE_PATH,
             }
         elif backend == "DirectML":
             paths = {
@@ -60,6 +62,7 @@ class SettingsConfig_Definitions:
                 "obb": PathManage.OBB_ONNX_PATH,
                 "cls_break": PathManage.CLS_BREAK_ONNX_PATH,
                 "cls_ex": PathManage.CLS_EX_ONNX_PATH,
+                "touch_hold": PathManage.TOUCH_HOLD_ONNX_PATH,
             }
         else:
             paths = {}
@@ -82,6 +85,14 @@ class SettingsConfig_Definitions:
 
     predict_batch_size_classify = SettingsConfig_Definition(
         key="predict_batch_size_classify",
+        type="int",
+        group="model",
+        default=16,
+        constraints={"gt": 0},
+    )
+
+    predict_batch_size_touch_hold = SettingsConfig_Definition(
+        key="predict_batch_size_touch_hold",
         type="int",
         group="model",
         default=16,
