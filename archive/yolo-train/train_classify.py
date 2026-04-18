@@ -1,7 +1,22 @@
 from ultralytics import YOLO
+from ultralytics.data import ClassificationDataset
+from ultralytics.data.augment import DEFAULT_MEAN, DEFAULT_STD
 from ultralytics.models.yolo.classify import ClassificationTrainer
 from ultralytics.utils.loss import FocalLoss
+import numpy as np
 import os
+import torchvision.transforms as T
+import cv2
+
+
+class ResizeNumpyTransform:
+    """可序列化的固定尺寸缩放变换（不保持比例）。"""
+
+    def __init__(self, size: int):
+        self.size = int(size)
+
+    def __call__(self, im):
+        return cv2.resize(np.asarray(im), (self.size, self.size), interpolation=cv2.INTER_LINEAR)
 
 
 class CustomClassificationTrainer(ClassificationTrainer):
@@ -16,6 +31,49 @@ class CustomClassificationTrainer(ClassificationTrainer):
         if hasattr(model, 'criterion'):
             model.criterion = FocalLoss(gamma=2.5, alpha=0.25)
         return model
+
+    def build_dataset(self, img_path: str, mode: str = "train", batch=None):
+        """构建分类数据集，并强制直接 resize 到固定尺寸。"""
+        dataset = ClassificationDataset(root=img_path, args=self.args, augment=mode == "train", prefix=mode)
+        dataset.torch_transforms = build_resize_transforms(self.args, augment=mode == "train")
+        return dataset
+
+    def get_dataloader(self, dataset_path: str, batch_size: int = 16, rank: int = 0, mode: str = "train"):
+        """复用官方 dataloader，但避免把自定义 transforms 写入模型导致保存时 pickle 失败。"""
+        loader = super().get_dataloader(dataset_path, batch_size, rank, mode)
+        if mode != "train":
+            if hasattr(self.model, "module") and hasattr(self.model.module, "transforms"):
+                self.model.module.transforms = None
+            elif hasattr(self.model, "transforms"):
+                self.model.transforms = None
+        return loader
+
+
+def build_resize_transforms(args, augment: bool = False):
+    """构建分类任务的固定尺寸 resize 预处理流程（不保持比例）。"""
+    size = args.imgsz if isinstance(args.imgsz, int) else args.imgsz[0]
+
+    transforms = [
+        ResizeNumpyTransform(size),
+        T.ToPILImage(),
+    ]
+
+    if augment:
+        if args.fliplr > 0:
+            transforms.append(T.RandomHorizontalFlip(p=args.fliplr))
+        if args.flipud > 0:
+            transforms.append(T.RandomVerticalFlip(p=args.flipud))
+        transforms.append(T.ColorJitter(brightness=args.hsv_v, contrast=args.hsv_v, saturation=args.hsv_s, hue=args.hsv_h))
+
+    transforms.extend([
+        T.ToTensor(),
+        T.Normalize(mean=DEFAULT_MEAN, std=DEFAULT_STD),
+    ])
+
+    if augment and args.erasing > 0:
+        transforms.append(T.RandomErasing(p=args.erasing, inplace=True))
+
+    return T.Compose(transforms)
 
 
 def train(model_name=None, dataset_name=None):
