@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import shutil
+import random
 from bisect import bisect_right
 from pathlib import Path
 
@@ -845,7 +846,13 @@ def draw_touch_hold_note(note, target_time):
     center_x = 1080 + note.posX
     center_y = 120 - note.posY
 
-    if note.touchAlpha < 0.4: return None, None # 忽略过于透明的音符
+    note_alpha = note.touchAlpha if note.touchAlpha is not None else -1
+    if filter_touch_alpha > 1:
+        # 与 draw_touch_note 对齐：在特殊过滤模式下按 touchDecor 判定
+        if note.touchDecor > 32.7:
+            return None, None
+    else:
+        if note_alpha < filter_touch_alpha: return None, None # 忽略过于透明的音符
 
     size = note.touchDecor + 68 # 缩放阶段
     if is_big_touch:
@@ -1316,8 +1323,13 @@ def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_
 
     frame_h, frame_w = cropped_frame.shape[:2]
     note_alpha = touch_hold_note.touchAlpha if touch_hold_note.touchAlpha is not None else -1
-    if note_alpha < 0.4:  # 忽略过于透明的音符
-        return []
+    if filter_touch_alpha > 1:
+        # 与 draw_touch_hold_note 对齐：在特殊过滤模式下按 touchDecor 判定
+        if touch_hold_note.touchDecor > 32.7:
+            return []
+    else:
+        if note_alpha < filter_touch_alpha:  # 忽略过于透明的音符
+            return []
 
     labels = []
 
@@ -1399,8 +1411,8 @@ def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_
         progress_x = float(center_on_crop[0] + adjusted_radius * dir_x)
         progress_y = float(center_on_crop[1] + adjusted_radius * dir_y)
 
-        # class 1: 进度点框，边长为 round(width * 0.048)
-        dot_side = max(1, int(round(frame_w * 0.048)))
+        # class 1: 进度点框，边长为 round(width * 0.1)
+        dot_side = max(1, int(round(frame_w * 0.1)))
         half_side = dot_side * 0.5
         append_bbox(1,
                     progress_x - half_side,
@@ -1411,178 +1423,477 @@ def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_
     return labels
 
 
-def export_dataset_touch_hold(video_path, txt_path, time_offset):
+def export_dataset_touch_hold():
     """
-    先遍历 txt 挑出含 touch-hold 的时间帧，再按视频帧顺序导出 YOLO detect 数据集。
+    批量导出 touch-hold 裁剪数据集。
 
     规则:
-    - 先从 txt 中筛出包含 touch-hold 的时间帧
-    - 再映射到视频帧，并按视频帧号顺序处理
-    - 同一帧可包含多个 touch-hold，逐个导出
-    - 裁剪尺寸为 frame_width * 200 / 1080（正方形）
-    - 若 is_big_touch 为 True，则裁剪尺寸再乘 1.3
-    - 贴边不足部分使用黑色填充
-    - 标签类别: class 0 = touch 框, class 1 = 进度点框
+    - 函数内部硬编码配置列表
+    - 先从 output_dir/images 文件名解析目标帧号
+    - 按目标帧号定位视频帧时间，再到 txt 匹配当帧音符
+    - 仅保留 touch-hold 音符，排除其他类型
+    - 输出裁剪图和 YOLO detect 标签（class 0: touch框, class 1: 进度点框）
     """
-    base_align_diff, align_schedule, schedule_frames = prepare_align_diff(time_offset)
+    global is_big_touch
+    global filter_touch_alpha
 
-    time_notes = parse_txt(txt_path)
-    if not time_notes:
-        print("错误：没有找到任何音符数据！")
-        return
+    all_configs = [
 
-    # 先遍历txt，筛出所有包含touch-hold的时间帧
-    touch_hold_time_entries = []
-    for txt_time in sorted(time_notes.keys()):
-        notes = time_notes.get(txt_time, [])
-        touch_hold_notes = [n for n in notes if n.type and 'touchhold' in n.type.lower()]
-        if len(touch_hold_notes) > 0:
-            touch_hold_time_entries.append((txt_time, touch_hold_notes))
+        # dataset 1
+        {
+            # 11814 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_2026-04-17_21-03-44.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11814",
+            "align_diff": 891.34,
+            "star_skin": 0 # 蓝色圆头星星
+        },
 
-    if len(touch_hold_time_entries) == 0:
-        print("未在txt中找到任何 touch-hold 音符。")
-        return
+        {
+            # 11898 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_2026-04-17_21-00-08.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11898",
+            "align_diff": 433.33,
+            "star_skin": 0 # 粉色圆头星星
+        },
 
-    cap = cv2.VideoCapture(video_path)
-    total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    if total_video_frames <= 0:
-        print("错误：视频无可用帧！")
-        cap.release()
-        return
+        {
+            # 11820 背景暗 autoplay:critical combo数 达成率累加 带开头/结尾动画
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820\11820_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820\11820_2026-04-17_19-39-35.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11820",
+            "align_diff": -7324.32,
+            "star_skin": 1 # 粉色尖头星星
+        },
 
-    print("正在读取视频帧时间戳...")
-    frame_timestamps = []
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-    i = 0
-    while i < total_video_frames and cap.grab():
-        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
-        frame_timestamps.append(timestamp)
-        i += 1
-        if i % 100 == 0 or i == total_video_frames:
-            print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
-    print("\r时间戳读取完成！            ")
+        # dataset 2
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11898\7 Wonders.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11898\11898_2026-04-16_20-29-47.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11898",
+            "align_diff": [(0, 1833.0), (350, 1816.8), (513, 1833.0), (746, 1816.8), (2461, 1833.0), (2595, 1845), (2908, 1833.0)],
+            "touch_alpha": 0.6,
+            "is_big_touch": True
+        },
 
-    available_video_frames = len(frame_timestamps)
-    if available_video_frames == 0:
-        print("错误：无法读取视频时间戳！")
-        cap.release()
-        return
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11986\AiAe.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11986\11986_2026-04-16_20-23-20.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11986",
+            "align_diff": [(0, -150), (231, -133.33), (350, -150), (2120, -160.0), (2340, -127), (2777, -133.33), (4037, -140)],
+            "touch_alpha": 0.7,
+            "is_big_touch": True
+        },
 
-    # 预计算每个视频帧对应的虚拟notes时间，后续用于将txt时间帧映射到视频帧
-    aligned_frame_times = []
-    for frame_number in range(available_video_frames):
-        current_align_diff = resolve_align_diff(frame_number, base_align_diff, align_schedule, schedule_frames)
-        aligned_frame_times.append(frame_timestamps[frame_number] + current_align_diff)
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11929\11929_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11929\11929_2026-04-16_20-14-53.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11929",
+            "align_diff": [(0, 2561.8),(492, 2544.9),(1663, 2528.1),(3337, 2511.2),(4345, 2528.1)],
+            "touch_alpha": 0.2,
+            "is_big_touch": True
+        },
 
-    is_monotonic = True
-    for i in range(available_video_frames - 1):
-        if aligned_frame_times[i] > aligned_frame_times[i + 1]:
-            is_monotonic = False
-            break
+        # dataset 1
+        {
+            # 11394 背景亮 autoplay:critical combo数 达成率累加 带开头/结尾动画
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_2026-04-17_17-55-13.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11394",
+            "align_diff": -7208,
+            "star_skin": 1, # 粉色尖头星星
+        },
 
-    # 将txt中的touch-hold时间帧映射到视频帧，同一视频帧会聚合多个touch-hold
-    frame_touch_hold_map = {}
-    for txt_time, touch_hold_notes in touch_hold_time_entries:
-        if is_monotonic:
-            idx = bisect_right(aligned_frame_times, txt_time)
-            candidates = []
-            if idx > 0:
-                candidates.append(idx - 1)
-            if idx < available_video_frames:
-                candidates.append(idx)
-            if len(candidates) == 0:
-                continue
-            frame_number = min(candidates, key=lambda x: abs(aligned_frame_times[x] - txt_time))
-        else:
-            frame_number = min(range(available_video_frames), key=lambda x: abs(aligned_frame_times[x] - txt_time))
+        {
+            # 11741 背景暗 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_2026-04-17_21-07-33.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11741",
+            "align_diff": 650,
+            "star_skin": 0 # 粉色圆头星星
+        },
 
-        if frame_number not in frame_touch_hold_map:
-            frame_touch_hold_map[frame_number] = []
-        frame_touch_hold_map[frame_number].extend(touch_hold_notes)
+        {
+            # 11753 背景亮 autoplay:critical combo数 达成率累加
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_2026-04-17_20-15-41.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11753",
+            "align_diff": 658.68,
+            "star_skin": 0 # 蓝色圆头星星
+        },
 
-    sorted_hit_frames = sorted(frame_touch_hold_map.keys())
-    if len(sorted_hit_frames) == 0:
-        print("未能将 touch-hold 时间帧映射到视频帧。")
-        cap.release()
-        return
+        {
+            # 11818 背景暗 autoplay:random 达成率递减 达成率递减
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_2026-04-17_20-11-43.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11818",
+            "align_diff": 558,
+            "star_skin": 1 # 蓝色尖头星星
+        },
 
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    crop_size = frame_width * 210 / 1080
-    if is_big_touch:
-        crop_size *= 1.3
-    crop_size = max(1, int(round(crop_size)))
+        # dataset 2
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11905\Daredevil Glaive.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11905\11905_2026-04-16_20-32-59.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11905",
+            "align_diff": [(0, -5400+5), (1890, -5400-5), (2493, -5380), (3725, -5390)],
+            "touch_alpha": 0.5,
+            "is_big_touch": True
+        },
 
-    images_dir = os.path.join(output_dir, 'images')
-    labels_dir = os.path.join(output_dir, 'labels')
-    for d in (images_dir, labels_dir):
-        if os.path.exists(d):
-            try:
-                if os.path.isfile(d):
-                    os.remove(d)
-                else:
-                    shutil.rmtree(d)
-            except Exception as e:
-                print(f"Warning: failed to remove {d}: {e}")
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\10622\バッド・ダンス・ホール.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\10622\10622_2026-04-16_20-18-39.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\10622",
+            "align_diff": [(0, 620), (960, 610), (2463, 633.3), (3611, 620), (3841, 633.3)],
+            "touch_alpha": 114514,
+            "is_big_touch": True
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11969\TECHNOPOLICE 2085.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11969\11969_2026-04-16_20-26-55.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11969",
+            "align_diff": [(0, -133.33), (1243, -145), (2338, -120)],
+            "touch_alpha": 0.6,
+            "is_big_touch": True
+        },
+
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_2026-04-16_20-07-19.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11979",
+            "align_diff": [(0, 910.11),(251, 893.3),(1546, 876.4),(3654, 859.6),(4353, 876.4)],
+            "jumps_to": 2300,
+            "touch_alpha": 0.5,
+            "is_big_touch": True
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11981\11981_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11981\11981_2026-04-16_20-10-46.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11981",
+            "align_diff": [(0, 185.4),(1181, 168.5),(2748,151.7),(3865,134.9),(4345, 168.5)],
+            "touch_alpha": 0.5,
+            "star_skin": 1, # 粉色尖头星星
+            "is_big_touch": True
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11988\11988_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11988\11988_2026-04-16_20-04-24.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11988",
+            "align_diff": [(0, 0), (267, -33.71), (510, -50.6), (1970, -67.4), (2267, -33.7), (3544, -50.6)],
+            "touch_alpha": 0.5,
+            "is_big_touch": False,
+        },
+
+        # dataset 3
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\hold_plus\hold_plus_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\hold_plus\2026-04-16_16-18-10.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\hold_plus",
+            "align_diff": 100,
+            "star_skin": 1 # 粉色尖头星星
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\touch_hold_plus\touch_hold_plus_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\touch_hold_plus\2026-04-16_19-18-39.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\touch_hold_plus",
+            "align_diff": -83.34,
+            "star_skin": 1 # 粉色尖头星星
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\slide_plus_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-16_19-16-44.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\slide_plus",
+            "align_diff": -16.67,
+            "star_skin": 1 # 粉色尖头星星
+        },
+    ]
+
+    dataset_root = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset_touch_hold"
+    train_images_dir = os.path.join(dataset_root, 'train', 'images')
+    train_labels_dir = os.path.join(dataset_root, 'train', 'labels')
+    valid_images_dir = os.path.join(dataset_root, 'valid', 'images')
+    valid_labels_dir = os.path.join(dataset_root, 'valid', 'labels')
+
+    if os.path.exists(dataset_root):
+        try:
+            if os.path.isfile(dataset_root):
+                os.remove(dataset_root)
+            else:
+                shutil.rmtree(dataset_root)
+        except Exception as e:
+            print(f"错误: 无法清理旧输出目录: {dataset_root}: {e}")
+            return
+
+    for d in (train_images_dir, train_labels_dir, valid_images_dir, valid_labels_dir):
         os.makedirs(d, exist_ok=True)
 
-    print("\n开始导出 touch-hold detect 数据集 ...")
-    print(f"视频宽度: {frame_width}")
-    print(f"裁剪尺寸: {crop_size}x{crop_size}")
-    print(f"txt命中时间帧: {len(touch_hold_time_entries)}")
-    print(f"映射后视频命中帧: {len(sorted_hit_frames)}")
-    print(f"输出目录:")
-    print(f"  Images: {images_dir}")
-    print(f"  Labels: {labels_dir}")
+    old_is_big_touch = is_big_touch
+    old_filter_touch_alpha = filter_touch_alpha
+    train_stats = {'target_frames': 0, 'hit_frames': 0, 'exported': 0, 'class0': 0, 'class1': 0}
+    moved_stats = {'exported': 0, 'class0': 0, 'class1': 0}
 
-    exported_count = 0
-    class0_count = 0
-    class1_count = 0
-    hit_frame_count = len(sorted_hit_frames)
+    print("=" * 70)
+    print("批量导出 Touch-Hold 裁剪数据集")
+    print("=" * 70)
+    print(f"固定输出目录: {dataset_root}")
+    print(f"标签类别: class 0 = touch框, class 1 = 进度点框")
+    print("导出策略: 先全部导出到 train，再从 train 随机抽取 20% 移动到 valid")
 
-    for idx, frame_number in enumerate(sorted_hit_frames, 1):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-        ret, frame = cap.read()
-        if not ret:
+    print(f"\n\n{'=' * 70}")
+    print("开始处理全部配置（统一导出到 TRAIN）")
+    print(f"配置数量: {len(all_configs)}")
+    print(f"TRAIN 图像目录: {train_images_dir}")
+    print(f"TRAIN 标签目录: {train_labels_dir}")
+    print(f"VALID 图像目录: {valid_images_dir}")
+    print(f"VALID 标签目录: {valid_labels_dir}")
+    print(f"{'=' * 70}")
+
+    for cfg_idx, config in enumerate(all_configs, 1):
+        video_path = config['video_path']
+        txt_path = config['txt_path']
+        source_output_dir = config['output_dir']
+        source_images_dir = os.path.join(source_output_dir, 'images')
+        align_diff = config['align_diff']
+        current_is_big_touch = bool(config.get('is_big_touch', False))
+        current_touch_alpha = config.get('touch_alpha', 0.4)
+        try:
+            current_touch_alpha = float(current_touch_alpha)
+        except (TypeError, ValueError):
+            print(f"警告: touch_alpha 无效({current_touch_alpha})，已回退到 0.4")
+            current_touch_alpha = 0.4
+
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        print(f"\n[ALL] {cfg_idx}/{len(all_configs)}: {video_name}")
+        print(f"source images: {source_images_dir}")
+        print(f"is_big_touch: {current_is_big_touch}")
+        print(f"touch_alpha: {current_touch_alpha}")
+
+        if not os.path.exists(video_path):
+            print(f"错误: 视频文件不存在，跳过: {video_path}")
+            continue
+        if not os.path.exists(txt_path):
+            print(f"错误: 文本文件不存在，跳过: {txt_path}")
+            continue
+        if not os.path.isdir(source_images_dir):
+            print(f"错误: 未找到 source images 目录，跳过: {source_images_dir}")
             continue
 
-        touch_hold_notes = frame_touch_hold_map.get(frame_number, [])
+        try:
+            base_align_diff, align_schedule, schedule_frames = prepare_align_diff(align_diff)
+        except Exception as e:
+            print(f"错误: align_diff 配置无效，跳过: {e}")
+            continue
 
-        for note in touch_hold_notes:
-            center_x = 1080 + note.posX
-            center_y = 120 - note.posY
-            crop_origin_x = int(round(center_x - crop_size / 2))
-            crop_origin_y = int(round(center_y - crop_size / 2))
-            cropped = crop_with_black_padding(frame, center_x, center_y, crop_size, crop_size)
+        target_frame_numbers = extract_frame_numbers_from_images(source_images_dir)
+        if len(target_frame_numbers) == 0:
+            print("警告: source images 未解析到帧号，跳过")
+            continue
 
-            labels = parse_touch_hold(cropped, note, crop_origin_x, crop_origin_y)
-            if len(labels) == 0:
+        time_notes = parse_txt(txt_path)
+        if len(time_notes) == 0:
+            print("警告: txt 无有效音符数据，跳过")
+            continue
+
+        cap = cv2.VideoCapture(video_path)
+        total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_video_frames <= 0:
+            print("错误: 视频无可用帧，跳过")
+            cap.release()
+            continue
+
+        print("正在读取视频帧时间戳...")
+        frame_timestamps = []
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        i = 0
+        while i < total_video_frames and cap.grab():
+            timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
+            frame_timestamps.append(timestamp)
+            i += 1
+            if i % 100 == 0 or i == total_video_frames:
+                print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
+        print("\r时间戳读取完成！            ")
+
+        available_video_frames = len(frame_timestamps)
+        if available_video_frames == 0:
+            print("错误: 无法读取视频时间戳，跳过")
+            cap.release()
+            continue
+
+        out_of_range_count = sum(1 for f in target_frame_numbers if f >= available_video_frames)
+        target_frame_numbers = [f for f in target_frame_numbers if 0 <= f < available_video_frames]
+        if out_of_range_count > 0:
+            print(f"警告: {out_of_range_count} 个目标帧越界，已忽略")
+        if len(target_frame_numbers) == 0:
+            print("警告: 过滤后无可处理目标帧，跳过")
+            cap.release()
+            continue
+
+        sorted_times = sorted(time_notes.keys())
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            print("警告: 视频 FPS 无效，回退到 60")
+            fps = 60.0
+        max_time_diff = (1000 / fps) - 0.1
+
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        crop_size = frame_width * 210 / 1080
+        if current_is_big_touch:
+            crop_size *= 1.3
+        crop_size = max(1, int(round(crop_size)))
+
+        is_big_touch = current_is_big_touch
+        filter_touch_alpha = current_touch_alpha
+
+        train_stats['target_frames'] += len(target_frame_numbers)
+        config_hit_frames = 0
+        exported_before = train_stats['exported']
+
+        print(f"目标帧数: {len(target_frame_numbers)}")
+        print(f"裁剪尺寸: {crop_size}x{crop_size}")
+
+        for idx, frame_number in enumerate(target_frame_numbers, 1):
+            
+            current_video_timestamp = frame_timestamps[frame_number]
+            current_align_diff = resolve_align_diff(frame_number, base_align_diff, align_schedule, schedule_frames)
+            notes_virtual_time = current_video_timestamp + current_align_diff
+            current_notes = find_closest_notes(time_notes, sorted_times, notes_virtual_time, max_time_diff)
+
+            if len(current_notes) == 0:
                 continue
 
-            image_filename = f"touch_hold_{frame_number:06d}_{exported_count:06d}.jpg"
-            label_filename = f"touch_hold_{frame_number:06d}_{exported_count:06d}.txt"
+            touch_hold_notes = [n for n in current_notes if n.type and 'touchhold' in n.type.lower()]
+            if len(touch_hold_notes) == 0:
+                continue
 
-            cv_imwrite(os.path.join(images_dir, image_filename), cropped)
-            with open(os.path.join(labels_dir, label_filename), 'w', encoding='utf-8') as f:
-                f.write('\n'.join(labels))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            ret, frame = cap.read()
+            if not ret:
+                continue
 
-            exported_count += 1
-            for line in labels:
-                if line.startswith("0 "):
-                    class0_count += 1
-                elif line.startswith("1 "):
-                    class1_count += 1
+            frame_has_export = False
+            for note in touch_hold_notes:
+                center_x = 1080 + note.posX
+                center_y = 120 - note.posY
+                crop_origin_x = int(round(center_x - crop_size / 2))
+                crop_origin_y = int(round(center_y - crop_size / 2))
+                cropped = crop_with_black_padding(frame, center_x, center_y, crop_size, crop_size)
 
-        if idx % 10 <= 1 or idx == len(sorted_hit_frames):
-            print(f"\r处理进度: {idx}/{len(sorted_hit_frames)} 命中帧 | 已导出样本: {exported_count}",
-                  end="", flush=True)
+                labels = parse_touch_hold(cropped, note, crop_origin_x, crop_origin_y)
+                if len(labels) == 0:
+                    continue
 
-    cap.release()
-    print(f"\n\n导出完成！")
-    print(f"命中帧: {hit_frame_count}")
-    print(f"导出样本: {exported_count}")
-    print(f"class 0 (touch框): {class0_count}")
-    print(f"class 1 (进度点框): {class1_count}")
-    print(f"输出目录: {output_dir}")
+                sample_index = train_stats['exported']
+                image_filename = f"{video_name}_f{frame_number:06d}_n{sample_index:07d}.jpg"
+                label_filename = f"{video_name}_f{frame_number:06d}_n{sample_index:07d}.txt"
+
+                cv_imwrite(os.path.join(train_images_dir, image_filename), cropped)
+                with open(os.path.join(train_labels_dir, label_filename), 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(labels))
+
+                train_stats['exported'] += 1
+                frame_has_export = True
+
+                for line in labels:
+                    if line.startswith("0 "):
+                        train_stats['class0'] += 1
+                    elif line.startswith("1 "):
+                        train_stats['class1'] += 1
+
+            if frame_has_export:
+                config_hit_frames += 1
+
+            if idx % 10 <= 1 or idx == len(target_frame_numbers):
+                print(
+                    f"\r处理进度: {idx}/{len(target_frame_numbers)} 目标帧 |"
+                    f" 命中帧: {config_hit_frames} | 已导出: {train_stats['exported']}",
+                    end="",
+                    flush=True,
+                )
+
+        cap.release()
+        train_stats['hit_frames'] += config_hit_frames
+
+        print("\n配置完成:")
+        print(f"  新增样本: {train_stats['exported'] - exported_before}")
+        print(f"  命中帧: {config_hit_frames}/{len(target_frame_numbers)}")
+
+    print("\n开始从 TRAIN 随机抽取 20% 移动到 VALID...")
+    train_image_files = [
+        f for f in os.listdir(train_images_dir)
+        if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp', '.webp'))
+    ]
+    total_train_exported = len(train_image_files)
+    valid_target_count = int(total_train_exported * 0.2)
+
+    if valid_target_count > 0:
+        move_candidates = random.sample(train_image_files, valid_target_count)
+        for idx, image_filename in enumerate(move_candidates, 1):
+            image_src = os.path.join(train_images_dir, image_filename)
+            image_dst = os.path.join(valid_images_dir, image_filename)
+            label_filename = os.path.splitext(image_filename)[0] + '.txt'
+            label_src = os.path.join(train_labels_dir, label_filename)
+            label_dst = os.path.join(valid_labels_dir, label_filename)
+
+            if os.path.exists(label_src):
+                with open(label_src, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.startswith("0 "):
+                            moved_stats['class0'] += 1
+                        elif line.startswith("1 "):
+                            moved_stats['class1'] += 1
+
+            shutil.move(image_src, image_dst)
+            if os.path.exists(label_src):
+                shutil.move(label_src, label_dst)
+            moved_stats['exported'] += 1
+
+            if idx % 100 == 0 or idx == valid_target_count:
+                print(f"\r移动进度: {idx}/{valid_target_count}", end="", flush=True)
+        print()
+    else:
+        print("样本数量不足，未抽取到 valid 样本。")
+
+    print(f"\n[TRAIN] 汇总:")
+    print(f"  目标帧: {train_stats['target_frames']}")
+    print(f"  命中帧: {train_stats['hit_frames']}")
+    print(f"  导出样本(移动前): {train_stats['exported']}")
+    print(f"  最终样本(移动后): {train_stats['exported'] - moved_stats['exported']}")
+    print(f"  class 0 (touch框): {train_stats['class0'] - moved_stats['class0']}")
+    print(f"  class 1 (进度点框): {train_stats['class1'] - moved_stats['class1']}")
+
+    print(f"\n[VALID] 汇总:")
+    print(f"  抽样比例: 20%")
+    print(f"  导出样本: {moved_stats['exported']}")
+    print(f"  class 0 (touch框): {moved_stats['class0']}")
+    print(f"  class 1 (进度点框): {moved_stats['class1']}")
+
+    is_big_touch = old_is_big_touch
+    filter_touch_alpha = old_filter_touch_alpha
+
+    total_target_frames = train_stats['target_frames']
+    total_hit_frames = train_stats['hit_frames']
+    total_exported = train_stats['exported']
+    total_class0 = train_stats['class0']
+    total_class1 = train_stats['class1']
+
+    print(f"\n\n{'=' * 70}")
+    print("Touch-Hold 数据集导出完成")
+    print(f"输出目录: {dataset_root}")
+    print(f"总目标帧: {total_target_frames}")
+    print(f"总命中帧: {total_hit_frames}")
+    print(f"总导出样本(移动前): {total_exported}")
+    print(f"总导出样本(移动后): train={total_exported - moved_stats['exported']}, valid={moved_stats['exported']}")
+    print(f"class 0 (touch框): total={total_class0}, train={total_class0 - moved_stats['class0']}, valid={moved_stats['class0']}")
+    print(f"class 1 (进度点框): total={total_class1}, train={total_class1 - moved_stats['class1']}, valid={moved_stats['class1']}")
+    print(f"{'=' * 70}")
 
 
 def verify_dataset(output_dir):
@@ -2248,6 +2559,36 @@ def main(video_path, txt_path, output_dir,
     filter_touch_alpha = filter_touch_alphaa
 
 
+    if mode is None:
+        # 询问用户选择操作模式
+        print("\n请选择操作模式:")
+        print("1. 手动对齐")
+        print("2. 导出数据集")
+        print("3. 验证数据集")
+        print("4. 统计数据集")
+        print("5. 导出分类数据集")
+        print("6. 导出Touch-Hold数据集")
+        choice = input("请输入选择 (1, 2, 3, 4, 5 或 6): ").strip()
+    else:
+        choice = mode
+
+    if choice == '5':
+        # 导出分类数据集模式 - 批量处理所有配置的视频
+        confirm = input("\n是否继续? (y/n): ").strip().lower()
+        if confirm != 'y':
+            print("已取消导出")
+            return
+        
+        # 直接调用批量导出函数
+        export_all_classification_datasets()
+
+    elif choice == '6':
+        # 解析 touch-hold 裁剪模式（批量）
+        print("\n开始批量解析 Touch-Hold 裁剪...")
+        export_dataset_touch_hold()
+        return
+
+
     # check file exist
     if not os.path.exists(video_path):
         print(f"Video file not found: {video_path}")
@@ -2263,19 +2604,6 @@ def main(video_path, txt_path, output_dir,
     if len(time_notes) == 0:
         print("错误：没有找到任何音符数据！")
         return
-    
-    if mode is None:
-        # 询问用户选择操作模式
-        print("\n请选择操作模式:")
-        print("1. 手动对齐")
-        print("2. 导出数据集")
-        print("3. 验证数据集")
-        print("4. 统计数据集")
-        print("5. 导出分类数据集")
-        print("6. 解析Touch-Hold裁剪")
-        choice = input("请输入选择 (1, 2, 3, 4, 5 或 6): ").strip()
-    else:
-        choice = mode
     
     if choice == '1':
         # 手动对齐模式
@@ -2314,23 +2642,7 @@ def main(video_path, txt_path, output_dir,
         # 统计数据集模式
         print(f"\n统计数据集: {output_dir}")
         count_dataset_statistics(output_dir)
-    
-    elif choice == '5':
-        # 导出分类数据集模式 - 批量处理所有配置的视频
-        confirm = input("\n是否继续? (y/n): ").strip().lower()
-        if confirm != 'y':
-            print("已取消导出")
-            return
-        
-        # 直接调用批量导出函数
-        export_all_classification_datasets()
 
-    elif choice == '6':
-        # 解析 touch-hold 裁剪模式
-        print("\n开始解析 Touch-Hold 裁剪...")
-        print(f"使用时间偏移: {align_diff}ms")
-        export_dataset_touch_hold(video_path, txt_path, align_diff)
-    
     else:
         print("无效的选择！")
         return None
@@ -2482,7 +2794,7 @@ def export_all_classification_datasets():
 
 
         {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_std.mp4",
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_std.mp4",
             "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_2026-04-16_20-07-19.txt",
             "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11979",
             "align_diff": [(0, 910.11),(251, 893.3),(1546, 876.4),(3654, 859.6),(4353, 876.4)],
@@ -2712,6 +3024,8 @@ if __name__ == "__main__":
     # detect: 0 Tap, 1 Slide, 2 Touch, 3 TouchHold
     # obb: 0 Hold
 
+    main("", "", "")
+
 
     # dataset1 = [
     #     {
@@ -2852,7 +3166,7 @@ if __name__ == "__main__":
     #     },
 
     #     {
-    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\11979\11979_std.mp4",
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_std.mp4",
     #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_2026-04-16_20-07-19.txt",
     #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11979",
     #         "align_diff": [(0, 910.11),(251, 893.3),(1546, 876.4),(3654, 859.6),(4353, 876.4)],
@@ -2940,7 +3254,3 @@ if __name__ == "__main__":
     #     align_diff = song["align_diff"]
     #     star_skin = song["star_skin"]
     #     main(video_path, txt_path, output_dir, align_diff, star_skin, speed_3, mode="3", export_half_frame=True)
-
-
-    
-    export_all_classification_datasets() # 生成 cls 数据集
