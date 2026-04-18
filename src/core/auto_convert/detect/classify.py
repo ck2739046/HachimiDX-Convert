@@ -67,7 +67,7 @@ def main(std_video_path: Path,
                 continue # skip
             this_frame_sample_plan = sampling_plan[frame_number]
             # 提取当前帧的所有采样图像
-            cropped_images = _extract_note_images_in_frame(frame, this_frame_sample_plan, frame_number, crop_border)
+            cropped_images = _extract_note_images_in_frame(imgsz, frame, this_frame_sample_plan, frame_number, crop_border)
             if cropped_images is None:
                 continue
             # 写入batch
@@ -161,7 +161,7 @@ def _build_sampling_plan(track_results):
 
 
 
-def _extract_note_images_in_frame(frame, this_frame_sample_plan, frame_number, crop_border):
+def _extract_note_images_in_frame(imgsz, frame, this_frame_sample_plan, frame_number, crop_border):
     
     """
     根据 sample_plan 裁剪出一帧内的所有音符的图像
@@ -225,6 +225,8 @@ def _extract_note_images_in_frame(frame, this_frame_sample_plan, frame_number, c
                 return None
             # 裁剪图像
             cropped_image = target_frame[y1:y2, x1:x2]
+            # resize到模型输入大小
+            cropped_image = cv2.resize(cropped_image, (imgsz, imgsz))
             # 保存信息
             cropped_data = {
                 'frame': frame_number,
