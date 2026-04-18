@@ -30,10 +30,11 @@ from src.core.auto_convert.detect.note_definition import get_imgsz
 # 转换为 enigne 时，中间会转换出临时用的 onnx 文件
 # 这个要和正式的 onnx 文件区别开来
 models = [
-    ("detect", PathManage.DETECT_PT_PATH, PathManage.DETECT_ONNX_PATH, PathManage.TEMP_DETECT_ONNX_PATH),
-    ("obb", PathManage.OBB_PT_PATH, PathManage.OBB_ONNX_PATH, PathManage.TEMP_OBB_ONNX_PATH),
-    ("classify", PathManage.CLS_BREAK_PT_PATH, PathManage.CLS_BREAK_ONNX_PATH, PathManage.TEMP_CLS_BREAK_ONNX_PATH),
-    ("classify", PathManage.CLS_EX_PT_PATH, PathManage.CLS_EX_ONNX_PATH, PathManage.TEMP_CLS_EX_ONNX_PATH),
+    ("detect", "detect", PathManage.DETECT_PT_PATH, PathManage.DETECT_ONNX_PATH, PathManage.TEMP_DETECT_ONNX_PATH),
+    ("obb", "obb", PathManage.OBB_PT_PATH, PathManage.OBB_ONNX_PATH, PathManage.TEMP_OBB_ONNX_PATH),
+    ("cls_break", "classify", PathManage.CLS_BREAK_PT_PATH, PathManage.CLS_BREAK_ONNX_PATH, PathManage.TEMP_CLS_BREAK_ONNX_PATH),
+    ("cls_ex", "classify", PathManage.CLS_EX_PT_PATH, PathManage.CLS_EX_ONNX_PATH, PathManage.TEMP_CLS_EX_ONNX_PATH),
+    ("touch_hold", "detect", PathManage.TOUCH_HOLD_PT_PATH, PathManage.TOUCH_HOLD_ONNX_PATH, PathManage.TEMP_TOUCH_HOLD_ONNX_PATH),
 ]
 
 
@@ -41,9 +42,9 @@ models = [
 
 
 
-def _convert_to_tensorrt(detect_obb_batch, cls_batch) -> bool:
+def _convert_to_tensorrt(detect_obb_batch, cls_batch, touch_hold_batch) -> bool:
     try:
-        for task, pt_path, onnx_path, temp_onnx_path in models:
+        for model_name, task, pt_path, onnx_path, temp_onnx_path in models:
 
             # 开始前删
             if temp_onnx_path.exists():
@@ -53,8 +54,13 @@ def _convert_to_tensorrt(detect_obb_batch, cls_batch) -> bool:
 
             model = YOLO(str(pt_path), task=task)
 
-            imgsz = get_imgsz(task)
-            batch = detect_obb_batch if task in {"detect", "obb"} else cls_batch
+            imgsz = get_imgsz(model_name)
+            if model_name in {"detect", "obb"}:
+                batch = detect_obb_batch
+            elif model_name == "touch_hold":
+                batch = touch_hold_batch
+            else:
+                batch = cls_batch
 
             model.export(
                 format="engine",
@@ -80,9 +86,9 @@ def _convert_to_tensorrt(detect_obb_batch, cls_batch) -> bool:
 
 
 
-def _convert_to_onnx(detect_obb_batch, cls_batch) -> bool:
+def _convert_to_onnx(detect_obb_batch, cls_batch, touch_hold_batch) -> bool:
     try:
-        for task, pt_path, onnx_path, temp_onnx_path in models:
+        for model_name, task, pt_path, onnx_path, temp_onnx_path in models:
 
             # 开始前删
             if temp_onnx_path.exists():
@@ -92,8 +98,13 @@ def _convert_to_onnx(detect_obb_batch, cls_batch) -> bool:
 
             model = YOLO(str(pt_path), task=task)
 
-            imgsz = get_imgsz(task)
-            batch = detect_obb_batch if task in {"detect", "obb"} else cls_batch
+            imgsz = get_imgsz(model_name)
+            if model_name in {"detect", "obb"}:
+                batch = detect_obb_batch
+            elif model_name == "touch_hold":
+                batch = touch_hold_batch
+            else:
+                batch = cls_batch
 
             model.export(
                 format="onnx",
@@ -123,24 +134,25 @@ def _convert_to_onnx(detect_obb_batch, cls_batch) -> bool:
 
 
 
-def main(backend, detect_obb_batch, cls_batch) -> bool:
+def main(backend, detect_obb_batch, cls_batch, touch_hold_batch) -> bool:
 
     try:
         backend = str(backend or "").strip().lower()
         detect_obb_batch = int(detect_obb_batch)
         cls_batch = int(cls_batch)
+        touch_hold_batch = int(touch_hold_batch)
     except Exception as e:
         print(f"Invalid arguments: {e}")
         return False
     
-    if detect_obb_batch < 1 or cls_batch < 1:
+    if detect_obb_batch < 1 or cls_batch < 1 or touch_hold_batch < 1:
         print("Batch sizes must be >= 1")
         return False
 
     if backend == "tensorrt":
-        return _convert_to_tensorrt(detect_obb_batch, cls_batch)
+        return _convert_to_tensorrt(detect_obb_batch, cls_batch, touch_hold_batch)
     if backend in {"directml", "onnx"}:
-        return _convert_to_onnx(detect_obb_batch, cls_batch)
+        return _convert_to_onnx(detect_obb_batch, cls_batch, touch_hold_batch)
 
     print(f"Unsupported backend for conversion: {backend}")
     return False
@@ -151,9 +163,9 @@ def main(backend, detect_obb_batch, cls_batch) -> bool:
 
 if __name__ == "__main__":
 
-    if len(sys.argv) <= 4:
-        print("plz provide root, backend, detect_obb_batch, cls_batch in args")
+    if len(sys.argv) <= 5:
+        print("plz provide root, backend, detect_obb_batch, cls_batch, touch_hold_batch in args")
         sys.exit(1)
 
-    result = main(sys.argv[2], sys.argv[3], sys.argv[4])
+    result = main(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
     sys.exit(0 if result else 1)

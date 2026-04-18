@@ -75,11 +75,14 @@ def need_cls(note_type: NoteType) -> bool:
     return note_type in [NoteType.TAP, NoteType.SLIDE, NoteType.HOLD]
     
 
-def get_imgsz(model_type: str) -> int:
-    if model_type == 'detect' or model_type == 'obb':
+def get_imgsz(model_name: str) -> int:
+    if model_name in ('detect', 'obb'):
         return 960
+    elif "touch_hold" in model_name:
+        return 224
     else:
-        return 224 # cls-ex, cls-break
+        # cls-ex, cls-break
+        return 224
 
 
 def print_progress(name, speed_unit, counter, total, last_time, last_counter):
