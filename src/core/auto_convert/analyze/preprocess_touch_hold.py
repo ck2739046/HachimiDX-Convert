@@ -1,12 +1,25 @@
+from collections import defaultdict
+from pathlib import Path
+
+import cv2
 import numpy as np
+from ultralytics import YOLO
 
 from ..detect.note_definition import *
 from .tool import *
 from .shared_context import *
 
 
+TOUCH_HOLD_CLASS_TOUCH = 0
+TOUCH_HOLD_CLASS_PROGRESS = 1
 
-def preprocess_touch_hold_data(shared_context: SharedContext):
+
+
+
+def preprocess_touch_hold_data(shared_context: SharedContext,
+                               inference_device,
+                               batch_touch_hold: int,
+                               touch_hold_model_path: Path):
     '''
     返回格式:
     dict{
@@ -25,58 +38,100 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
 
     touch_hold_data = {}
 
+    frame_plan, track_meta = _build_touch_hold_sampling_plan(shared_context)
+    if not frame_plan:
+        print("preprocess_touch_hold_data: no touch hold data")
+        return {}
+
     dist_end_tolerance = shared_context.touch_hold_travel_dist * 0.25
     dist_start_tolerance = shared_context.touch_hold_travel_dist * 0.1
     valid_dist_end = 0 + dist_end_tolerance
     valid_dist_start = shared_context.touch_hold_travel_dist - dist_start_tolerance
-    touch_hold_max_size = shared_context.touch_hold_max_size
     percent_end_tolerance = 0.03
     percent_start_tolerance = 0.03
-    valid_percent_end = 0.5 - percent_end_tolerance
-    valid_percent_start = 0 + percent_start_tolerance
-    cap = cv2.VideoCapture(shared_context.std_video_path)
+    valid_percent_end = 1 - percent_end_tolerance
+    valid_percent_start = percent_start_tolerance
 
-    # read track data
-    for key, value in shared_context.track_data.items():
+    crop_size = _calc_touch_hold_crop_size(shared_context.std_video_size, shared_context.is_big_touch)
+    total_samples = sum(len(v) for v in frame_plan.values())
 
-        track_id, note_type = key
-        note_geometry_list = value
+    model = YOLO(str(touch_hold_model_path), task="detect")
+    cap = cv2.VideoCapture(str(shared_context.std_video_path))
+    if not cap.isOpened():
+        print(f"preprocess_touch_hold_data: failed to open video: {shared_context.std_video_path}")
+        return {}
 
-        if note_type != NoteType.TOUCH_HOLD: continue
-        if len(note_geometry_list) < 10: continue
+    processed_samples = 0
+    sample_buffer = []
+    observations_by_track = defaultdict(list)
 
-        counter = 0
-        precent_counter = 0
+    try:
+        total_frames = len(shared_context.frame_timestamps_msec)
+        for frame_num in range(total_frames):
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        # read track path
-        valid_track_path = []
-        for note in note_geometry_list:
-
-            print(f"preprocess_touch_hold_data: processing track_id {track_id}, frame_{counter}/{len(note_geometry_list)}   ", end='\r', flush=True)
-            counter += 1
-
-            # 计算三角到中心的距离
-            if precent_counter >= 5: break # 节省时间，hold阶段后半都不用计算了
-            dist, percent_of_hold = get_touch_hold_data(shared_context.std_video_size, note.cx, note.cy, note.frame, cap, touch_hold_max_size)
-            # 过滤前后两端的数据
-            if dist > valid_dist_start:
-                dist = -1 # 掐头
-            elif dist < valid_dist_end:
-                dist = -1 # 去尾
-            if percent_of_hold < valid_percent_start:
-                percent_of_hold = -1 # 掐头
-            elif percent_of_hold > valid_percent_end:
-                percent_of_hold = -1 # 去尾
-                precent_counter += 1
-            #  两个值都无效才跳过
-            if dist == -1 and percent_of_hold == -1:
+            this_frame_plan = frame_plan.get(frame_num)
+            if not this_frame_plan:
                 continue
-            # 计算方位
-            position = calculate_all_position(shared_context.touch_areas, note.cx, note.cy)
-            # 添加轨迹点
-            valid_track_path.append((note.frame, position, dist, percent_of_hold))
 
+            for sample in this_frame_plan:
+                cropped = _crop_with_black_padding(
+                    frame,
+                    sample["cx"],
+                    sample["cy"],
+                    crop_size,
+                    crop_size,
+                )
+                sample_buffer.append({
+                    "track_id": sample["track_id"],
+                    "frame": frame_num,
+                    "position": sample["position"],
+                    "cropped_image": cropped,
+                })
 
+            while len(sample_buffer) >= batch_touch_hold:
+                consumed_batch = sample_buffer[:batch_touch_hold]
+                sample_buffer = sample_buffer[batch_touch_hold:]
+                _consume_touch_hold_batch(
+                    consumed_batch,
+                    model,
+                    inference_device,
+                    shared_context.is_big_touch,
+                    observations_by_track,
+                    valid_dist_start,
+                    valid_dist_end,
+                    valid_percent_start,
+                    valid_percent_end,
+                )
+                processed_samples += len(consumed_batch)
+                if processed_samples % 20 == 0:
+                    print(
+                        f"preprocess_touch_hold_data: processed {processed_samples}/{total_samples} samples   ",
+                        end="\r",
+                        flush=True,
+                    )
+
+        if sample_buffer:
+            _consume_touch_hold_batch(
+                sample_buffer,
+                model,
+                inference_device,
+                shared_context.is_big_touch,
+                observations_by_track,
+                valid_dist_start,
+                valid_dist_end,
+                valid_percent_start,
+                valid_percent_end,
+            )
+            processed_samples += len(sample_buffer)
+
+    finally:
+        cap.release()
+
+    for track_id, meta in track_meta.items():
+        valid_track_path = observations_by_track.get(track_id, [])
 
         # 检查轨迹存在
         if not valid_track_path:
@@ -84,7 +139,7 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
             continue
         
         # 检验长度
-        if len(valid_track_path) < 6:
+        if len(valid_track_path) < 4:
             print(f"preprocess_touch_hold_data: path too short for track_id {track_id}, length: {len(valid_track_path)}")
             continue
 
@@ -98,10 +153,7 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
         valid_track_path.sort(key=lambda x: x[0])
 
         # 检查通过，添加到touch_hold_data
-        note_variant = note_geometry_list[0].note_variant
-        position = positions[0]
-        key = (track_id, note_type, note_variant, position)
-
+        key = (track_id, meta["note_type"], meta["note_variant"], positions[0])
         path = []
         for frame_num, position, dist, percent_of_hold in valid_track_path:
             path.append({
@@ -114,244 +166,226 @@ def preprocess_touch_hold_data(shared_context: SharedContext):
     if not touch_hold_data:
         print("preprocess_touch_hold_data: no touch hold data")
         touch_hold_data = {}
-    
-    cap.release()
+
     print(f"{' '*70}", end='\r', flush=True) # 清除行
     return touch_hold_data
 
 
 
 
-def get_touch_hold_data(std_video_size, cx, cy, frame_num, cap, touch_hold_max_size):
+
+
+
+def _build_touch_hold_sampling_plan(shared_context: SharedContext):
+    frame_plan = defaultdict(list)
+    track_meta = {}
+
+    for key, value in shared_context.track_data.items():
+        track_id, note_type = key
+        note_geometry_list = value
+
+        if note_type != NoteType.TOUCH_HOLD:
+            continue
+        if len(note_geometry_list) < 10:
+            continue
+
+        track_meta[track_id] = {
+            "note_type": note_type,
+            "note_variant": note_geometry_list[0].note_variant,
+        }
+
+        for note in note_geometry_list:
+            frame_num = int(note.frame)
+            position = calculate_all_position(shared_context.touch_areas, note.cx, note.cy)
+            frame_plan[frame_num].append({
+                "track_id": track_id,
+                "cx": float(note.cx),
+                "cy": float(note.cy),
+                "position": position,
+            })
+
+    return frame_plan, track_meta
+
+
+
+
+
+
+
+def _consume_touch_hold_batch(consumed_batch,
+                              model,
+                              inference_device,
+                              is_big_touch: bool,
+                              observations_by_track,
+                              valid_dist_start: float,
+                              valid_dist_end: float,
+                              valid_percent_start: float,
+                              valid_percent_end: float):
+    observations = _run_touch_hold_batch(consumed_batch, model, inference_device, is_big_touch)
+
+    for sample, (dist, percent_of_hold) in zip(consumed_batch, observations):
+        if dist != -1:
+            if dist > valid_dist_start or dist < valid_dist_end:
+                dist = -1
+
+        if percent_of_hold != -1:
+            if percent_of_hold < valid_percent_start or percent_of_hold > valid_percent_end:
+                percent_of_hold = -1
+
+        if dist == -1 and percent_of_hold == -1:
+            continue
+
+        observations_by_track[sample["track_id"]].append(
+            (sample["frame"], sample["position"], dist, percent_of_hold)
+        )
+
+
+
+
+
+
+def _run_touch_hold_batch(consumed_batch, model, inference_device, is_big_touch: bool):
+    images = [item["cropped_image"] for item in consumed_batch]
 
     try:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-        ret, frame = cap.read()
-        if not ret:
-            print(f"get_touch_hold_data: failed to read frame {frame_num}")
-            return -1, -1
+        yolo_results = model.predict(
+            task="detect",
+            source=images,
+            verbose=False,
+            device=inference_device,
+            imgsz=get_imgsz("touch_hold"),
+            half=True,
+            batch=len(images),
+        )
+    except Exception as e:
+        print(f"preprocess_touch_hold_data: touch-hold yolo inference failed: {e}")
+        return [(-1, -1)] * len(consumed_batch)
 
-        roi_radius = touch_hold_max_size / 2
+    observations = []
+    for i in range(len(consumed_batch)):
+        if i >= len(yolo_results):
+            observations.append((-1, -1))
+            continue
+        image = images[i]
+        h, w = image.shape[:2]
+        observations.append(_extract_touch_hold_observation(yolo_results[i], w, h, is_big_touch))
 
-        # 提取ROI区域
-        x_start = round(max(cx - roi_radius, 0))
-        y_start = round(max(cy - roi_radius, 0))
-        x_end = round(min(cx + roi_radius, std_video_size - 1))
-        y_end = round(min(cy + roi_radius, std_video_size - 1))
-        roi = frame[y_start:y_end, x_start:x_end]
-        # 处理roi
-        transformed_roi = diamond_polar_transform(roi)
-        stretched_roi = stretch_transformed_image(transformed_roi)
-        final_roi = apply_hsv_threshold(stretched_roi)
-        h, w = final_roi.shape[:2]
-        # 计算 final_roi 上方 15% - 50% 区域中黑色像素的比例
-        roi_top = final_roi[int(h * 0.15):int(h * 0.5), :, :]
-        black_mask = cv2.inRange(roi_top, (0, 0, 0), (10, 10, 10))
-        black_pixel_count = cv2.countNonZero(black_mask)
-        total_pixel_count = roi_top.shape[0] * roi_top.shape[1]
-        black_pixel_ratio = black_pixel_count / total_pixel_count if total_pixel_count > 0 else 0
-        # 计算dist和percent
-        dist = -1
-        percent_of_hold = -1
+    return observations
 
-        # 视为scale阶段,计算dist
-        if black_pixel_ratio > 0.25:
-            # 动态阈值
-            grey_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-            _, binary_roi = cv2.threshold(grey_roi, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            # 轮廓识别
-            distances = []
-            contours, _ = cv2.findContours(binary_roi, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if not contours: return -1, -1
-            for contour in contours:
-                # 尺寸合适
-                _, radius = cv2.minEnclosingCircle(contour)          
-                if radius < roi_radius * 0.4 or radius > roi_radius * 0.5:
-                    continue
-                # 轮廓是三角形
-                epsilon = 0.04 * cv2.arcLength(contour, True)     # 逼近精度，值越小，越接近原始轮廓。
-                approx = cv2.approxPolyDP(contour, epsilon, True) # 近似多边形
-                if len(approx) != 3: continue
-                #cv2.drawContours(roi, [approx], -1, (0, 255, 0), 2)
-                # 计算三角形每个顶点到中心的距离
-                roi_center = np.array([roi_radius, roi_radius])
-                tri_distances = []
-                for point in approx:
-                    point_coords = point[0] # 获取点的坐标
-                    tri_distance = np.linalg.norm(point_coords - roi_center)
-                    tri_distances.append(tri_distance)
-                # 校验三点距离关系
-                tri_distances.sort()
-                if ((tri_distances[2] - tri_distances[1]) < roi_radius * 0.05 and # 等边三角形
-                    (tri_distances[1] - tri_distances[0]) > roi_radius * 0.4):    # 朝向中心
-                    distances.append(tri_distances[0]) # 取最短距离
-            # 平均距离
-            if distances:
-                dist = np.mean(distances)
-                dist -= roi_radius * 0.02 # 减去尖头的圆球的尺寸
 
-            # # 显示窗口
-            # print(f"frame {frame_num}: dist {dist:.2f}")
-            # cv2.imshow(f'frame {frame_num}', roi)
-            # cv2.waitKey(0)
-            # cv2.destroyAllWindows()
 
-        # 视为hold阶段,计算percent_of_hold
-        else:
-            # 逐列扫描final_roi的左边一半，关注每一列最下面的30%像素
-            # 如果这一列最下面的30%像素中，黑色像素占比小于70%，计数器+1
-            counter = 0
-            for col in range(w // 2):
-                # 获取当前列最下面30%的像素
-                bottom_pixels = final_roi[int(h * 0.7):, col]
-                # 计算黑色像素的数量
-                black_pixels = 0
-                for pixel in bottom_pixels:
-                    if (pixel[0] < 10 and pixel[1] < 10 and pixel[2] < 10):
-                        black_pixels += 1
-                # 如果黑色像素占比小于70%，计数器+1
-                if black_pixels < h * 0.3 * 0.7:
-                    counter += 1
-            # 计算百分比
-            percent_of_hold = counter / (w // 2 - 1) / 2 # 除以2是因为只扫描了一半宽度
 
+
+def _extract_touch_hold_observation(result, crop_w: int, crop_h: int, is_big_touch: bool):
+    dist = -1
+    percent_of_hold = -1
+
+    if result.boxes is None or len(result.boxes) == 0:
         return dist, percent_of_hold
 
-    except Exception as e:
-        print(f"get_touch_hold_data - frame {frame_num}: exception {e}")
-        return -1, -1
+    boxes = result.boxes.cpu().numpy()
+
+    touch_candidate = None
+    progress_candidate = None
+    for i in range(len(boxes)):
+        cls_id = int(boxes.cls[i])
+        conf = float(boxes.conf[i])
+        cx, cy, w, h = boxes.xywh[i]
+
+        if cls_id == TOUCH_HOLD_CLASS_TOUCH:
+            if touch_candidate is None or conf > touch_candidate[0]:
+                touch_candidate = (conf, float(w), float(h))
+        elif cls_id == TOUCH_HOLD_CLASS_PROGRESS:
+            if progress_candidate is None or conf > progress_candidate[0]:
+                progress_candidate = (conf, float(cx), float(cy))
+
+    if touch_candidate is not None:
+        _conf, touch_w, touch_h = touch_candidate
+        dist = _convert_touch_box_to_dist_to_center(touch_w, touch_h, is_big_touch)
+
+    if progress_candidate is not None:
+        _conf, px, py = progress_candidate
+        percent_of_hold = _angle_to_progress(px, py, crop_w / 2.0, crop_h / 2.0)
+
+    return dist, percent_of_hold
 
 
 
 
-def diamond_polar_transform(roi):
-    """
-    菱形极坐标变换
-    """
-    
-    # 获取ROI尺寸
-    h, w = roi.shape[:2]
-    cx, cy = w // 2, h // 2
-    # 输出的矩形的尺寸
-    height = min(cx, cy) - 1 # 防止越界
-    width = height * 4
-    transformed_image = np.zeros((height, width, 3), dtype=np.uint8)
-    # 菱形极坐标变换
-    for y_out in range(height):
-        for x_out in range(width):
-            # 计算菱形极坐标
-            # 径向坐标：从中心到外径
-            r = y_out
-            # 角坐标：沿菱形边界的归一化位置 (0-1)
-            # 左移1/8个圆（45度），让起点从菱形正上方开始
-            angle_frac = (x_out / width + 0.125) % 1.0
-            # 将角坐标转换为菱形边界上的位置
-            # 菱形有4个边，每个边对应90度
-            side_index = int(angle_frac * 4) % 4
-            side_pos = (angle_frac * 4) % 1.0
-            # 根据所在边计算笛卡尔坐标
-            if side_index == 0:  # 上
-                x_diamond = r * (2 * side_pos - 1)
-                y_diamond = -r
-            elif side_index == 1:  # 右
-                x_diamond = r
-                y_diamond = r * (2 * side_pos - 1)
-            elif side_index == 2:  # 下
-                x_diamond = r * (1 - 2 * side_pos)
-                y_diamond = r
-            else:  # 左
-                x_diamond = -r
-                y_diamond = r * (1 - 2 * side_pos)
-            # 转换为ROI中的像素坐标
-            x_roi = int(cx + x_diamond)
-            y_roi = int(cy + y_diamond)
-            # 检查边界并采样
-            if 0 <= x_roi < w and 0 <= y_roi < h:
-                transformed_image[y_out, x_out] = roi[y_roi, x_roi]
 
-    return transformed_image
+def _convert_touch_box_to_dist_to_center(touch_w: float, touch_h: float, is_big_touch: bool) -> float:
+    # label_notes.py 实现:
+    # size = dist_to_center + 68
+    # touch_box_side = 2 * size * scale
+    # 反推 dist_to_center = touch_box_side / scale / 2 - 68
+    touch_size = (float(touch_w) + float(touch_h)) / 2.0
+    scale = 1.3 if is_big_touch else 1.0
+    dist_to_center = touch_size / scale / 2.0 - 68.0
+
+    if np.isfinite(dist_to_center):
+        return float(dist_to_center)
+    return -1
 
 
 
 
-def stretch_transformed_image(roi):
-    """
-    对菱形极坐标变换后的矩形进行后处理
-    从左到右对每一列进行向下拉伸，消除底部的三角形背景区域
-    三角形的底长为矩形宽度的1/4，高度为矩形高度的1/2.4
-    """
-    h, w = roi.shape[:2]
-    # 创建拉伸后的图像（尺寸保持不变）
-    stretched_image = np.zeros_like(roi)
-    # 计算每个列的拉伸参数
-    for x in range(w):
-        # 计算当前列在矩形中的位置
-        pos_frac = x / w
-        # 转换为在一个三角形内的位置 (1/4)
-        while pos_frac > 0.25:
-            pos_frac -= 0.25
-        # 计算此时的三角形的高度
-        # 相似三角形：底:底=高:高
-        if pos_frac < 0.125: # 左边
-            tri_h = (pos_frac / 0.125) * (h / 2.4)
-        else: # 右边
-            tri_h = ((0.25 - pos_frac) / 0.125) * (h / 2.4)
-        # 计算拉伸因子
-        stretch_factor = h / (h - tri_h)
-        stretch_factor = max(stretch_factor, 1) # 防止小于1
 
-        # 对当前列进行拉伸
-        # 使用反向映射避免黑色像素(计算目标像素对应的原始像素)
-        for y_stretched in range(h):
-            # 计算对应的原始y坐标
-            y_orig = y_stretched / stretch_factor
-            # 如果y_orig不是整数，使用上下两个像素进行插值（双线性插值）
-            y0 = int(y_orig)        # 下界
-            y1 = min(y0 + 1, h - 1) # 上界
-            if y0 < h:
-                # 计算插值权重
-                weight = y_orig - y0
-                # 双线性插值
-                if y0 < h - 1:
-                    pixel_value = (1 - weight) * roi[y0, x] + weight * roi[y1, x]
-                    stretched_image[y_stretched, x] = pixel_value.astype(np.uint8)
-                else:
-                    stretched_image[y_stretched, x] = roi[y0, x]
+def _angle_to_progress(px: float, py: float, cx: float, cy: float) -> float:
+    dx = float(px) - float(cx)
+    dy = float(py) - float(cy)
+    if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+        return -1
 
-    return stretched_image
+    # 12点方向为0，顺时针增长到1
+    angle = np.arctan2(dy, dx)
+    progress = ((angle + np.pi / 2.0) % (2.0 * np.pi)) / (2.0 * np.pi)
+
+    if np.isfinite(progress):
+        return float(progress)
+    return -1
 
 
 
 
-def apply_hsv_threshold(roi):
-    """
-    采样展开后的矩形最上面一行的所有像素的平均饱和度和亮度
-    设置饱和度和亮度阈值，过滤背景和黄色光晕特效
-    """
-    h, w = roi.shape[:2]
 
-    # 转换到HSV颜色空间
-    hsv_image = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    # 采样最上面一行的所有像素
-    top_row_hsv = hsv_image[0, :, :]
-    # 计算平均饱和度和亮度
-    avg_saturation = np.mean(top_row_hsv[:, 1])   # 饱和度通道
-    avg_value = np.mean(top_row_hsv[:, 2])        # 亮度通道
-    saturation_threshold = avg_saturation * 0.7   # 使用平均饱和度的70%作为阈值
-    value_threshold = avg_value * 0.75            # 使用平均亮度的75%作为阈值
-    # 对整个图像应用饱和度阈值
-    for y in range(h):
-        for x in range(w):
-            h_val, s_val, v_val = hsv_image[y, x] # 获取当前像素的HSV值
-            if s_val < saturation_threshold:      # 如果饱和度低于阈值，将像素变为黑色
-                roi[y, x] = [0, 0, 0]
-    # 对新的图像的下半30%应用亮度阈值
-    hsv_image = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    for y in range(int(h*0.7), h):
-        for x in range(w):
-            h_val, s_val, v_val = hsv_image[y, x]
-            if v_val < value_threshold:
-                roi[y, x] = [0, 0, 0]
 
-    return roi
+def _calc_touch_hold_crop_size(std_video_size: int, is_big_touch: bool) -> int:
+    crop_size = std_video_size * 210 / 1080 # 与 label_notes.py 一致
+    if is_big_touch:
+        crop_size *= 1.3
+    return max(1, int(round(crop_size)))
+
+
+
+
+
+def _crop_with_black_padding(frame, center_x, center_y, crop_width, crop_height):
+    frame_height, frame_width = frame.shape[:2]
+
+    center_x = float(center_x)
+    center_y = float(center_y)
+    crop_width = max(1, int(crop_width))
+    crop_height = max(1, int(crop_height))
+
+    x1 = int(round(center_x - crop_width / 2))
+    y1 = int(round(center_y - crop_height / 2))
+    x2 = x1 + crop_width
+    y2 = y1 + crop_height
+
+    src_x1 = max(0, x1)
+    src_y1 = max(0, y1)
+    src_x2 = min(frame_width, x2)
+    src_y2 = min(frame_height, y2)
+
+    cropped = np.zeros((crop_height, crop_width, 3), dtype=frame.dtype)
+    if src_x1 >= src_x2 or src_y1 >= src_y2:
+        return cropped
+
+    dst_x1 = src_x1 - x1
+    dst_y1 = src_y1 - y1
+    dst_x2 = dst_x1 + (src_x2 - src_x1)
+    dst_y2 = dst_y1 + (src_y2 - src_y1)
+
+    cropped[dst_y1:dst_y2, dst_x1:dst_x2] = frame[src_y1:src_y2, src_x1:src_x2]
+    return cropped
 
