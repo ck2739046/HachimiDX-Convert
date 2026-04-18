@@ -36,6 +36,7 @@ class PathManage:
     OBB_PT_PATH: Path = MODELS_DIR / "obb.pt"
     CLS_BREAK_PT_PATH: Path = MODELS_DIR / "cls-break.pt"
     CLS_EX_PT_PATH: Path = MODELS_DIR / "cls-ex.pt"
+    TOUCH_HOLD_PT_PATH: Path = MODELS_DIR / "detect-touch-hold.pt"
 
     # worker 脚本
 
@@ -55,16 +56,19 @@ class PathManage:
     OBB_ENGINE_PATH: Path = MODELS_DIR / "obb.engine"
     CLS_BREAK_ENGINE_PATH: Path = MODELS_DIR / "cls-break.engine"
     CLS_EX_ENGINE_PATH: Path = MODELS_DIR / "cls-ex.engine"
+    TOUCH_HOLD_ENGINE_PATH: Path = MODELS_DIR / "detect-touch-hold.engine"
 
     DETECT_ONNX_PATH: Path = MODELS_DIR / "detect_a.onnx"
     OBB_ONNX_PATH: Path = MODELS_DIR / "obb_a.onnx"
     CLS_BREAK_ONNX_PATH: Path = MODELS_DIR / "cls-break_a.onnx"
     CLS_EX_ONNX_PATH: Path = MODELS_DIR / "cls-ex_a.onnx"
+    TOUCH_HOLD_ONNX_PATH: Path = MODELS_DIR / "detect-touch-hold_a.onnx"
 
     TEMP_DETECT_ONNX_PATH: Path = MODELS_DIR / "detect.onnx"
     TEMP_OBB_ONNX_PATH: Path = MODELS_DIR / "obb.onnx"
     TEMP_CLS_BREAK_ONNX_PATH: Path = MODELS_DIR / "cls-break.onnx"
     TEMP_CLS_EX_ONNX_PATH: Path = MODELS_DIR / "cls-ex.onnx"
+    TEMP_TOUCH_HOLD_ONNX_PATH: Path = MODELS_DIR / "detect-touch-hold.onnx"
 
 
 
@@ -89,7 +93,8 @@ class PathManage:
                           cls.FFMPEG_EXE_PATH, cls.FFPROBE_EXE_PATH,
                           cls.MajdataView_EXE_PATH, cls.MajdataEdit_EXE_PATH,
                           cls.DETECT_PT_PATH, cls.OBB_PT_PATH,
-                          cls.CLS_BREAK_PT_PATH, cls.CLS_EX_PT_PATH]:
+                          cls.CLS_BREAK_PT_PATH, cls.CLS_EX_PT_PATH,
+                          cls.TOUCH_HOLD_PT_PATH]:
             if not file_path.is_file():
                 error_msg = f"Critical Error: Required file not found: {file_path}"
                 return err(error_msg)
