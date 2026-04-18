@@ -409,8 +409,21 @@ class SettingsPage(BaseOutputPage):
             )
             return
 
+        touch_hold_batch_result = SettingsManage.get(S_Defs.predict_batch_size_touch_hold.key)
+        if not touch_hold_batch_result.is_ok:
+            show_notify_dialog(
+                i18n.t(f"{I18N_Prefix}.dialog_title"),
+                i18n.t(
+                    f"{I18N_Prefix}.warning_load_failed",
+                    item_key=S_Defs.predict_batch_size_touch_hold.key,
+                    error=touch_hold_batch_result.error_msg,
+                ),
+            )
+            return
+
         detect_batch = detect_batch_result.value
         cls_batch = cls_batch_result.value
+        touch_hold_batch = touch_hold_batch_result.value
 
         self.output_widget.append_text(
             i18n.t(
@@ -420,7 +433,7 @@ class SettingsPage(BaseOutputPage):
         )
 
         cmd = build_cmd_head_python_exe(PathManage.MODEL_CONVERT_WORKER_PATH)
-        cmd.extend([str(backend), str(detect_batch), str(cls_batch)])
+        cmd.extend([str(backend), str(detect_batch), str(cls_batch), str(touch_hold_batch)])
         self._start_worker_cmd(cmd, "convert", backend)
 
 
