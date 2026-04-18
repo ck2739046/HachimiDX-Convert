@@ -183,7 +183,7 @@ class AutoConvertConfig_Definitions:
 	is_big_touch = AutoConvertConfig_Definition(
 		key="is_big_touch",
 		type="bool",
-		group="detect",
+		group="analyze",
 		default=False
 	)
 

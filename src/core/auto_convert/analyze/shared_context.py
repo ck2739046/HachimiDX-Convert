@@ -14,6 +14,7 @@ from ...schemas.op_result import print_op_result
 class SharedContext:
 
     std_video_path: Path
+    is_big_touch: bool
     std_video_size: int
     frame_timestamps_msec: list[float]
     
@@ -111,6 +112,7 @@ def create_shared_context(std_video_path: Path, is_big_touch: bool) -> SharedCon
     
     return SharedContext(
         std_video_path=std_video_path,
+        is_big_touch=is_big_touch,
         std_video_size=std_video_size,
         frame_timestamps_msec=frame_timestamps_msec,
 
