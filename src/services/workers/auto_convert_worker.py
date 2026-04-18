@@ -119,6 +119,9 @@ def main(args: list[str]) -> bool:
                 chart_lv=_get_cfg(cfg, "chart_lv", int),
                 base_denominator=_get_cfg(cfg, "base_denominator", int),
                 duration_denominator=_get_cfg(cfg, "duration_denominator", int),
+                inference_device=_get_cfg(cfg, "inference_device"),
+                batch_touch_hold=_get_cfg(cfg, "predict_batch_size_touch_hold", int),
+                touch_hold_model_path=_get_cfg(cfg, "touch_hold_model_path", Path),
             )
             if not result.is_ok:
                 return _fail(print_op_result(result))
