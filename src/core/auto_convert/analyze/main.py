@@ -31,7 +31,10 @@ def main(std_video_path: Path,
          is_big_touch: bool,
          chart_lv: int,
          base_denominator: int,
-         duration_denominator: int
+         duration_denominator: int,
+         inference_device,
+         batch_touch_hold: int,
+         touch_hold_model_path: Path,
         ) -> OpResult[None]:
     
     try:
@@ -49,7 +52,12 @@ def main(std_video_path: Path,
         tap_data = preprocess_tap_data(shared_context)
         touch_data = preprocess_touch_data(shared_context)
         hold_data = preprocess_hold_data(shared_context)
-        touch_hold_data = preprocess_touch_hold_data(shared_context)
+        touch_hold_data = preprocess_touch_hold_data(
+            shared_context,
+            inference_device,
+            batch_touch_hold,
+            touch_hold_model_path,
+        )
         slide_head_data, slide_tail_data = preprocess_slide_data(shared_context)
 
         # 分析音符流速
