@@ -29,7 +29,7 @@ class CustomClassificationTrainer(ClassificationTrainer):
         # gamma: 聚焦参数，通常设置为 2.0
         # alpha: 类别平衡参数，通常设置为 0.25
         if hasattr(model, 'criterion'):
-            model.criterion = FocalLoss(gamma=2.5, alpha=0.25)
+            model.criterion = FocalLoss(gamma=2.3, alpha=0.25)
         return model
 
     def build_dataset(self, img_path: str, mode: str = "train", batch=None):
@@ -76,13 +76,18 @@ def build_resize_transforms(args, augment: bool = False):
     return T.Compose(transforms)
 
 
+
+
+
+
+
 def train(model_name=None, dataset_name=None):
 
     # 设置数据集
     if dataset_name is None:
         print("未指定数据集名称")
         return
-    dataset_path = os.path.join(os.path.dirname(__file__), dataset_name)
+    dataset_path = os.path.join(os.path.dirname(__file__), 'dataset_cls', dataset_name)
     if not os.path.exists(dataset_path):
         print(f"错误: 未找到数据集路径 {dataset_path}")
         return
@@ -97,35 +102,36 @@ def train(model_name=None, dataset_name=None):
             return
 
     # 加载模型
-    yolo_path = os.path.join(os.path.dirname(__file__), 'yolo11s-cls.pt')
+    yolo_path = os.path.join(os.path.dirname(__file__), 'dataset_cls', 'yolo26s-cls.pt')
     if os.path.exists(yolo_path):
         model = YOLO(yolo_path)
     else:
         print(f"错误: 未找到本地模型文件 {yolo_path}")
-        model = YOLO('yolo11s-cls.pt')
+        model = YOLO('yolo26s-cls.pt')
     
     # 设置项目路径
-    project_path = os.path.join(os.path.dirname(__file__), 'runs', 'classify')
+    project_path = os.path.join(os.path.dirname(__file__), 'dataset_cls', 'result')
     
     if model_name is None:
         print("未指定模型名称")
         return
     
     # 训练参数
-    workers_num = 10
-    batch_num = 64
+    workers_num = 4
+    batch_num = 120
     
-    print("使用 Focal Loss (gamma=2.0, alpha=0.25)")
+    print("使用 Focal Loss (gamma=2.3, alpha=0.25)")
     
     # 开始训练
     print("开始训练...")
     results = model.train(
         trainer=CustomClassificationTrainer,  # 始终使用自定义训练器
         data=dataset_path,
-        epochs=20,
+        epochs=30,
         imgsz=224,
         batch=batch_num,
         patience=10,
+        save_period=1,
         workers=workers_num,
         device=0,
         project=project_path,
@@ -134,11 +140,12 @@ def train(model_name=None, dataset_name=None):
         cache=False,
         verbose=True,
         plots=False,
-        save_period=1,
+        
+        optimizer='auto',
 
-        optimizer='AdamW',
-        lr0=0.001,
-        weight_decay=0.0005
+        hsv_h=0.03,         # HSV色调增强，适应不同光照
+        hsv_s=0.2,          # HSV饱和度增强
+        hsv_v=0.3           # HSV亮度增强
     )
     
     print("训练完成！")
@@ -151,6 +158,13 @@ def main():
 
     model_name = 'ex-cls'
     dataset_name = 'dataset_ex_cls'
+
+    train(model_name, dataset_name)
+
+
+
+    model_name = 'break-cls'
+    dataset_name = 'dataset_break_cls'
 
     train(model_name, dataset_name)
 

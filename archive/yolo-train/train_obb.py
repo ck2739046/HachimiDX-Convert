@@ -37,17 +37,17 @@ def train(model_name=None):
 
     # 参数
     workers_num = 10
-    batch_num = 40
+    batch_num = 45
     
     # 开始训练（使用自定义的 VarifocalLoss 训练器）
     print("开始训练（使用 VarifocalLoss 处理数据集不平衡）...")
     results = model.train(
         trainer=CustomOBBTrainer,  # 使用自定义 OBB 训练器
         data=data_config,
-        epochs=18,     
+        epochs=30,     
         imgsz=960,        
         batch=batch_num,       
-        patience=6,
+        patience=10,
         save_period=1,
         workers=workers_num,    
         device=0,        

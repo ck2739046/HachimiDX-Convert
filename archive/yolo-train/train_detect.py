@@ -25,7 +25,7 @@ def train(model_name=None):
         return
     
     # 加载预训练模型
-    model = YOLO('yolo11m.pt')
+    model = YOLO('yolo26m.pt')
 
     project_path = os.path.join(os.path.dirname(__file__), 'result')
 
@@ -41,10 +41,10 @@ def train(model_name=None):
     results = model.train(
         trainer=CustomDetectionTrainer,  # 使用自定义训练器
         data=data_config,
-        epochs=18,     
+        epochs=30,     
         imgsz=960,        
         batch=batch_num,
-        patience=8, 
+        patience=10, 
         save_period=1,
         workers=workers_num,    
         device=0,        
@@ -61,7 +61,7 @@ def train(model_name=None):
 
         rect=True,
         mosaic=0.4,         # 启用马赛克增强
-        close_mosaic=8,     # 第8轮后关闭马赛克增强
+        close_mosaic=10,    # 第10轮后关闭马赛克增强
 
         hsv_h=0.03,         # HSV色调增强，适应不同光照
         hsv_s=0.2,          # HSV饱和度增强
