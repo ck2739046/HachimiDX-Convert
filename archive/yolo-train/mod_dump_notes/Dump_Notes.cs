@@ -2,6 +2,7 @@ using HarmonyLib;
 using MelonLoader;
 using UnityEngine;
 using System;
+using System.Collections;
 using System.Reflection;
 using System.Collections.Generic;
 using System.IO;
@@ -14,6 +15,8 @@ using Process;
 using DB;
 using Util;
 using MAI2.Util;
+using DiagnosticsProcess = System.Diagnostics.Process;
+using DiagnosticsProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 
 [assembly: MelonInfo(typeof(default_namespace.Dump_notes), "Dump_Notes", "1.0.0", "Simon273")]
 [assembly: MelonGame("sega-interactive", "Sinmai")]
@@ -42,10 +45,31 @@ namespace default_namespace {
         private static readonly List<NoteInfo> _frameNotesBuffer = new List<NoteInfo>(256);
         private static readonly List<string> _lineBuffer = new List<string>(512);
         private static readonly StringBuilder _lineBuilder = new StringBuilder(192);
+        private const int DumpMonitorIndex = 0;
+        private const int MainScreenCaptureX = 0;
+        private const int MainScreenCaptureY = 0;
+        private const int MainScreenCaptureWidth = 1080;
+        private const int MainScreenCaptureHeight = 1080;
+        private const int VideoFramerate = 60;
+        private const int VideoCloseTimeoutMs = 3000;
+        private static readonly Rect _mainScreenCaptureRect = new Rect(MainScreenCaptureX, MainScreenCaptureY, MainScreenCaptureWidth, MainScreenCaptureHeight);
+        private static readonly WaitForEndOfFrame _waitForEndOfFrame = new WaitForEndOfFrame();
+
+        private static string _sessionBaseName = "";
         private static string _outputFilePath = "";
+        private static string _outputVideoPath = "";
         private static StreamWriter? _outputWriter;
+        private static DiagnosticsProcess? _videoProcess;
+        private static Stream? _videoInputStream;
+        private static Texture2D? _captureTexture;
+        private static byte[]? _captureFrameBuffer;
         private static bool _isFileCreated = false;
         private static bool _isDumpEnabled = false;
+        private static bool _isExportSessionActive = false;
+        private static bool _isVideoCaptureReady = false;
+        private static bool _videoCaptureLoopStarted = false;
+        private static int _pendingVideoFrameCaptureRequests = 0;
+        private static int _capturedVideoFrameCount = 0;
         private const int FlushIntervalFrames = 15;
         private static int _framesSinceLastFlush = 0;
     // 注: 使用 GetKeyDown 进行边沿触发，不再需要上一帧状态
@@ -105,6 +129,7 @@ namespace default_namespace {
         public override void OnInitializeMelon()
         {
             HarmonyInstance.PatchAll(typeof(Dump_notes));
+            EnsureVideoCaptureLoopStarted();
             MelonLogger.Msg($"Load success.");
             MelonLogger.Msg($"  I键: 切换音符数据导出 (默认关闭)");
         }
@@ -126,14 +151,17 @@ namespace default_namespace {
         {
             try
             {
-                CloseOutputWriter();
+                StopExportSession("track-start-reset");
 
                 // 获取乐曲信息
                 _currentMusicInfo = GetCurrentMusicInfo();
                 _gameStartDetected = true;
                 MelonLogger.Msg($"track start: {string.Join(" - ", _currentMusicInfo)}");
-                // 不在这里创建文件，仅在真正开始导出并写入首帧时延迟创建
-                _isFileCreated = false;
+
+                if (_isDumpEnabled)
+                {
+                    StartExportSession("track-start");
+                }
                 
             }
             catch (Exception e)
@@ -151,7 +179,7 @@ namespace default_namespace {
                 if (_gameStartDetected)
                 {
                     // 乐曲结束，重置状态
-                    CloseOutputWriter();
+                    StopExportSession("track-end");
                     _gameStartDetected = false;
                     MelonLogger.Msg($"track end, ready for next track.");
                 }
@@ -195,7 +223,16 @@ namespace default_namespace {
         {
             try
             {
-                if (!_isDumpEnabled) return;
+                if (!_isDumpEnabled || !_gameStartDetected) return;
+                if (__instance == null || __instance.MonitorIndex != DumpMonitorIndex) return;
+
+                if (!_isExportSessionActive)
+                {
+                    StartExportSession("update-fallback");
+                    if (!_isExportSessionActive)
+                        return;
+                }
+
                 InitializeFields();
                 DumpAllNotePositions(__instance);
             }
@@ -706,11 +743,105 @@ namespace default_namespace {
                     _outputWriter.Flush();
                     _framesSinceLastFlush = 0;
                 }
+
+                RequestVideoFrameCapture();
             }
             catch (Exception e)
             {
                 LogWarningThrottled("write-note-frame", $"Failed to write note frame to file: {e.Message}");
             }
+        }
+
+        private static void StartExportSession(string reason)
+        {
+            if (_isExportSessionActive)
+                return;
+
+            if (!_isDumpEnabled || !_gameStartDetected)
+                return;
+
+            BuildSessionOutputPaths();
+
+            bool textReady = EnsureOutputWriter();
+            bool videoReady = EnsureVideoWriter();
+            _isExportSessionActive = textReady;
+            _pendingVideoFrameCaptureRequests = 0;
+            _capturedVideoFrameCount = 0;
+
+            if (!textReady)
+            {
+                LogWarningThrottled("start-export-session", "Failed to start export session because txt writer is unavailable.");
+                CloseVideoWriter();
+                return;
+            }
+
+            if (!videoReady)
+            {
+                LogWarningThrottled("start-export-session-video", "Video export disabled for this session. txt export will continue.");
+            }
+
+            MelonLogger.Msg($"export session started ({reason}).");
+        }
+
+        private static void StopExportSession(string reason)
+        {
+            bool hadSessionData = _isExportSessionActive || _isFileCreated || _videoProcess != null || !string.IsNullOrEmpty(_outputFilePath) || !string.IsNullOrEmpty(_outputVideoPath);
+
+            _isExportSessionActive = false;
+            _pendingVideoFrameCaptureRequests = 0;
+
+            CloseOutputWriter();
+            CloseVideoWriter();
+
+            _sessionBaseName = "";
+            _outputFilePath = "";
+            _outputVideoPath = "";
+
+            if (hadSessionData)
+            {
+                MelonLogger.Msg($"export session stopped ({reason}).");
+            }
+        }
+
+        private static void BuildSessionOutputPaths()
+        {
+            if (!string.IsNullOrEmpty(_outputFilePath) && !string.IsNullOrEmpty(_outputVideoPath))
+                return;
+
+            var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
+            var musicIdRaw = _currentMusicInfo.Count > 0 ? _currentMusicInfo[0] : "Unknown";
+            var safeMusicId = SanitizeFileNameToken(musicIdRaw);
+
+            _sessionBaseName = $"{safeMusicId}_{timestamp}";
+            _outputFilePath = Path.Combine(desktopPath, _sessionBaseName + ".txt");
+            _outputVideoPath = Path.Combine(desktopPath, _sessionBaseName + ".mp4");
+        }
+
+        private static string SanitizeFileNameToken(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return "Unknown";
+
+            var invalidChars = Path.GetInvalidFileNameChars();
+            var builder = new StringBuilder(value.Length);
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                bool isInvalid = false;
+                for (int j = 0; j < invalidChars.Length; j++)
+                {
+                    if (c == invalidChars[j])
+                    {
+                        isInvalid = true;
+                        break;
+                    }
+                }
+
+                builder.Append(isInvalid ? '_' : c);
+            }
+
+            return builder.Length > 0 ? builder.ToString() : "Unknown";
         }
 
         private static bool EnsureOutputWriter()
@@ -720,14 +851,20 @@ namespace default_namespace {
 
             try
             {
-                var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
-                var musicID = _currentMusicInfo.Count > 0 ? _currentMusicInfo[0] : "Unknown";
-                _outputFilePath = Path.Combine(desktopPath, $"{musicID}_{timestamp}.txt");
+                if (string.IsNullOrEmpty(_outputFilePath))
+                {
+                    BuildSessionOutputPaths();
+                }
+
+                if (string.IsNullOrEmpty(_outputFilePath))
+                    return false;
+
+                var startedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
 
                 _outputWriter = new StreamWriter(_outputFilePath, false, Encoding.UTF8);
-                _outputWriter.WriteLine($"Note Dump Started at {timestamp}");
+                _outputWriter.WriteLine($"Note Dump Started at {startedAt}");
                 _outputWriter.WriteLine($"Music Info: {string.Join(" - ", _currentMusicInfo)}");
+                _outputWriter.WriteLine($"Video File: {_outputVideoPath}");
                 _outputWriter.WriteLine("Format: Type-Index | PosX, PosY | LocalX, LocalY | Status | AppearMsec | IsEX | (Details...)");
                 _outputWriter.WriteLine("  Touch: TouchDecor+Alpha(+TouchHoldProgress) | Hold: HoldScale+HoldSize | Tap/Break: TapScale");
                 _outputWriter.WriteLine("  Star(1st): StarScale+UserNoteSize | Star-Move(2nd): StarScale+Alpha+LaunchMsec+ArriveMsec");
@@ -742,6 +879,69 @@ namespace default_namespace {
             {
                 LogWarningThrottled("create-output-writer", $"Failed to create output file: {e.Message}");
                 CloseOutputWriter();
+                return false;
+            }
+        }
+
+        private static bool EnsureVideoWriter()
+        {
+            if (_videoProcess != null && !_videoProcess.HasExited && _videoInputStream != null)
+            {
+                _isVideoCaptureReady = true;
+                return true;
+            }
+
+            if (string.IsNullOrEmpty(_outputVideoPath))
+            {
+                BuildSessionOutputPaths();
+            }
+
+            if (string.IsNullOrEmpty(_outputVideoPath))
+                return false;
+
+            if (Screen.width < MainScreenCaptureX + MainScreenCaptureWidth || Screen.height < MainScreenCaptureY + MainScreenCaptureHeight)
+            {
+                LogWarningThrottled("video-capture-rect", $"Screen size is too small for capture rect. screen={Screen.width}x{Screen.height}");
+                return false;
+            }
+
+            try
+            {
+                string ffmpegArgs =
+                    $"-hide_banner -loglevel error -nostats -y -f rawvideo -pixel_format rgb24 -video_size {MainScreenCaptureWidth}x{MainScreenCaptureHeight} -framerate {VideoFramerate} -i - -vf vflip -an -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p \"{_outputVideoPath}\"";
+
+                var startInfo = new DiagnosticsProcessStartInfo
+                {
+                    FileName = "ffmpeg",
+                    Arguments = ffmpegArgs,
+                    UseShellExecute = false,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = false,
+                    RedirectStandardError = false,
+                    CreateNoWindow = true
+                };
+
+                var process = new DiagnosticsProcess();
+                process.StartInfo = startInfo;
+
+                if (!process.Start())
+                {
+                    LogWarningThrottled("video-start", "ffmpeg process did not start.");
+                    _isVideoCaptureReady = false;
+                    return false;
+                }
+
+                _videoProcess = process;
+                _videoInputStream = process.StandardInput.BaseStream;
+                _isVideoCaptureReady = true;
+
+                MelonLogger.Msg($"Note dump video file: {_outputVideoPath}");
+                return true;
+            }
+            catch (Exception e)
+            {
+                LogWarningThrottled("video-start", $"Failed to start ffmpeg: {e.Message}");
+                CloseVideoWriter();
                 return false;
             }
         }
@@ -765,6 +965,148 @@ namespace default_namespace {
                 _outputWriter = null;
                 _framesSinceLastFlush = 0;
                 _isFileCreated = false;
+            }
+        }
+
+        private static void CloseVideoWriter()
+        {
+            _isVideoCaptureReady = false;
+
+            try
+            {
+                if (_videoInputStream != null)
+                {
+                    _videoInputStream.Flush();
+                    _videoInputStream.Dispose();
+                }
+            }
+            catch (Exception e)
+            {
+                LogWarningThrottled("video-close-stream", $"Failed to close ffmpeg input stream: {e.Message}");
+            }
+            finally
+            {
+                _videoInputStream = null;
+            }
+
+            try
+            {
+                if (_videoProcess != null)
+                {
+                    if (!_videoProcess.HasExited)
+                    {
+                        if (!_videoProcess.WaitForExit(VideoCloseTimeoutMs))
+                        {
+                            LogWarningThrottled("video-close-timeout", "ffmpeg did not exit in time, killing process.");
+                            _videoProcess.Kill();
+                            _videoProcess.WaitForExit();
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LogWarningThrottled("video-close-process", $"Failed to close ffmpeg process: {e.Message}");
+            }
+            finally
+            {
+                if (_videoProcess != null)
+                {
+                    _videoProcess.Dispose();
+                    _videoProcess = null;
+                }
+            }
+
+            ReleaseCaptureTexture();
+        }
+
+        private static void EnsureVideoCaptureLoopStarted()
+        {
+            if (_videoCaptureLoopStarted)
+                return;
+
+            MelonCoroutines.Start(VideoCaptureLoop());
+            _videoCaptureLoopStarted = true;
+        }
+
+        private static IEnumerator VideoCaptureLoop()
+        {
+            while (true)
+            {
+                if (!_isExportSessionActive || !_isVideoCaptureReady || _pendingVideoFrameCaptureRequests <= 0)
+                {
+                    yield return null;
+                    continue;
+                }
+
+                yield return _waitForEndOfFrame;
+
+                if (!_isExportSessionActive || !_isVideoCaptureReady || _pendingVideoFrameCaptureRequests <= 0)
+                    continue;
+
+                _pendingVideoFrameCaptureRequests--;
+                TryCaptureMainScreenFrame();
+            }
+        }
+
+        private static void RequestVideoFrameCapture()
+        {
+            if (!_isExportSessionActive || !_isVideoCaptureReady)
+                return;
+
+            if (_pendingVideoFrameCaptureRequests < 2)
+            {
+                _pendingVideoFrameCaptureRequests++;
+            }
+        }
+
+        private static void EnsureCaptureTexture()
+        {
+            if (_captureTexture != null)
+                return;
+
+            _captureTexture = new Texture2D(MainScreenCaptureWidth, MainScreenCaptureHeight, TextureFormat.RGB24, mipChain: false);
+        }
+
+        private static void ReleaseCaptureTexture()
+        {
+            if (_captureTexture != null)
+            {
+                UnityEngine.Object.Destroy(_captureTexture);
+                _captureTexture = null;
+            }
+
+            _captureFrameBuffer = null;
+        }
+
+        private static void TryCaptureMainScreenFrame()
+        {
+            if (!_isVideoCaptureReady || _videoInputStream == null)
+                return;
+
+            try
+            {
+                EnsureCaptureTexture();
+                if (_captureTexture == null)
+                    return;
+
+                _captureTexture.ReadPixels(_mainScreenCaptureRect, 0, 0);
+                _captureTexture.Apply(updateMipmaps: false);
+
+                var rawData = _captureTexture.GetRawTextureData();
+                if (_captureFrameBuffer == null || _captureFrameBuffer.Length != rawData.Length)
+                {
+                    _captureFrameBuffer = new byte[rawData.Length];
+                }
+
+                Buffer.BlockCopy(rawData, 0, _captureFrameBuffer, 0, rawData.Length);
+                _videoInputStream.Write(_captureFrameBuffer, 0, _captureFrameBuffer.Length);
+                _capturedVideoFrameCount++;
+            }
+            catch (Exception e)
+            {
+                LogWarningThrottled("video-write", $"Failed to write video frame: {e.Message}");
+                CloseVideoWriter();
             }
         }
 
@@ -794,15 +1136,22 @@ namespace default_namespace {
                 {
                     // 关闭
                     _isDumpEnabled = false;
-                    CloseOutputWriter();
+                    StopExportSession("hotkey-off");
                     MelonLogger.Msg("stop dump notes.");
                 }
                 else
                 {
                     // 开启
-                    CloseOutputWriter();
                     _isDumpEnabled = true;
-                    MelonLogger.Msg("start dump notes.");
+                    if (_gameStartDetected)
+                    {
+                        StartExportSession("hotkey-on");
+                        MelonLogger.Msg("start dump notes.");
+                    }
+                    else
+                    {
+                        MelonLogger.Msg("dump notes armed. wait track start.");
+                    }
                 }
             }
         }
