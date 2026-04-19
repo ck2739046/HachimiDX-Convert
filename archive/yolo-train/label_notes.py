@@ -1961,124 +1961,455 @@ def verify_dataset(output_dir):
     sorted_frame_keys = sorted(all_frames.keys(), key=lambda x: int(x.split('_')[-1]))
     
     print(f"\n找到 {len(sorted_frame_keys)} 帧数据")
-    print(f"按空格键播放/暂停，左右箭头键切换帧，Q键退出\n")
+    print(f"空格播放/暂停，左右箭头切换帧，Q退出")
+    print(f"支持鼠标拖动已有框，松开后立即保存到对应txt（仅平移，不增删，不改尺寸）\n")
 
     current_frame_idx = 0
-    is_playing = False
+    playback = {'is_playing': False}
     window_name = 'Dataset Verification'
     cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
-    
+
+    detect_class_names = ['TAP', 'SLIDE', 'TOUCH', 'TOUCH-HOLD']
+    obb_class_names = ['HOLD']
+
+    editor_state = {
+        'frame_key': None,
+        'frame_width': 0,
+        'frame_height': 0,
+        'frame_info': None,
+        'detect_label_path': None,
+        'obb_label_path': None,
+        'detect_lines': [],
+        'obb_lines': [],
+        'detect_has_trailing_newline': False,
+        'obb_has_trailing_newline': False,
+        'detect_items': [],
+        'obb_items': [],
+        'dragging': False,
+        'drag_type': None,
+        'drag_idx': -1,
+        'offset_x': 0.0,
+        'offset_y': 0.0,
+        'drag_moved': False,
+    }
+
+    def clamp(value, min_value, max_value):
+        if min_value > max_value:
+            return (min_value + max_value) * 0.5
+        return max(min_value, min(max_value, value))
+
+    def get_obb_center(points):
+        if not points:
+            return 0.0, 0.0
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        return float(sum(xs)) / len(xs), float(sum(ys)) / len(ys)
+
+    def load_label_file_lines(label_path):
+        if not label_path or not os.path.exists(label_path):
+            return [], False
+        with open(label_path, 'r', encoding='utf-8') as f:
+            raw_text = f.read()
+        return raw_text.splitlines(), raw_text.endswith('\n')
+
+    def parse_detect_items(lines, frame_width, frame_height):
+        items = []
+        for line_idx, line in enumerate(lines):
+            parts = line.strip().split()
+            if len(parts) < 5:
+                continue
+            try:
+                class_id = int(parts[0])
+                x_center_norm = float(parts[1])
+                y_center_norm = float(parts[2])
+                width_norm = float(parts[3])
+                height_norm = float(parts[4])
+            except ValueError:
+                continue
+
+            items.append({
+                'line_idx': line_idx,
+                'class_id': class_id,
+                'x_center': x_center_norm * frame_width,
+                'y_center': y_center_norm * frame_height,
+                'width': max(1.0, width_norm * frame_width),
+                'height': max(1.0, height_norm * frame_height),
+            })
+        return items
+
+    def parse_obb_items(lines, frame_width, frame_height):
+        items = []
+        for line_idx, line in enumerate(lines):
+            parts = line.strip().split()
+            if len(parts) < 9:
+                continue
+            try:
+                class_id = int(parts[0])
+                points = []
+                for i in range(4):
+                    x_norm = float(parts[1 + i * 2])
+                    y_norm = float(parts[2 + i * 2])
+                    points.append((x_norm * frame_width, y_norm * frame_height))
+            except ValueError:
+                continue
+
+            items.append({
+                'line_idx': line_idx,
+                'class_id': class_id,
+                'points': points,
+            })
+        return items
+
+    def save_detect_labels():
+        label_path = editor_state['detect_label_path']
+        if not label_path or not os.path.exists(label_path):
+            return False
+
+        lines = list(editor_state['detect_lines'])
+        frame_width = float(editor_state['frame_width'])
+        frame_height = float(editor_state['frame_height'])
+        if frame_width <= 0 or frame_height <= 0:
+            return False
+
+        for item in editor_state['detect_items']:
+            line_idx = item['line_idx']
+            if line_idx < 0 or line_idx >= len(lines):
+                continue
+            x_center_norm = clamp(item['x_center'] / frame_width, 0.0, 1.0)
+            y_center_norm = clamp(item['y_center'] / frame_height, 0.0, 1.0)
+            width_norm = clamp(item['width'] / frame_width, 0.0, 1.0)
+            height_norm = clamp(item['height'] / frame_height, 0.0, 1.0)
+            lines[line_idx] = (
+                f"{item['class_id']} {x_center_norm:.6f} {y_center_norm:.6f} "
+                f"{width_norm:.6f} {height_norm:.6f}"
+            )
+
+        try:
+            text = '\n'.join(lines)
+            if editor_state['detect_has_trailing_newline']:
+                text += '\n'
+            with open(label_path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            editor_state['detect_lines'] = lines
+            return True
+        except Exception as e:
+            print(f"错误：保存 detect 标签失败: {e}")
+            return False
+
+    def save_obb_labels():
+        label_path = editor_state['obb_label_path']
+        if not label_path or not os.path.exists(label_path):
+            return False
+
+        lines = list(editor_state['obb_lines'])
+        frame_width = float(editor_state['frame_width'])
+        frame_height = float(editor_state['frame_height'])
+        if frame_width <= 0 or frame_height <= 0:
+            return False
+
+        for item in editor_state['obb_items']:
+            line_idx = item['line_idx']
+            if line_idx < 0 or line_idx >= len(lines):
+                continue
+
+            coords = []
+            for px, py in item['points']:
+                x_norm = clamp(px / frame_width, 0.0, 1.0)
+                y_norm = clamp(py / frame_height, 0.0, 1.0)
+                coords.append(f"{x_norm:.6f}")
+                coords.append(f"{y_norm:.6f}")
+            lines[line_idx] = f"{item['class_id']} {' '.join(coords)}"
+
+        try:
+            text = '\n'.join(lines)
+            if editor_state['obb_has_trailing_newline']:
+                text += '\n'
+            with open(label_path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            editor_state['obb_lines'] = lines
+            return True
+        except Exception as e:
+            print(f"错误：保存 obb 标签失败: {e}")
+            return False
+
+    def load_frame_labels(frame_key, frame_info, frame_width, frame_height):
+        detect_lines, detect_has_trailing_newline = load_label_file_lines(frame_info.get('detect_label'))
+        obb_lines, obb_has_trailing_newline = load_label_file_lines(frame_info.get('obb_label'))
+
+        editor_state['frame_key'] = frame_key
+        editor_state['frame_info'] = frame_info
+        editor_state['frame_width'] = frame_width
+        editor_state['frame_height'] = frame_height
+        editor_state['detect_label_path'] = frame_info.get('detect_label')
+        editor_state['obb_label_path'] = frame_info.get('obb_label')
+        editor_state['detect_lines'] = detect_lines
+        editor_state['obb_lines'] = obb_lines
+        editor_state['detect_has_trailing_newline'] = detect_has_trailing_newline
+        editor_state['obb_has_trailing_newline'] = obb_has_trailing_newline
+        editor_state['detect_items'] = parse_detect_items(detect_lines, frame_width, frame_height)
+        editor_state['obb_items'] = parse_obb_items(obb_lines, frame_width, frame_height)
+
+        editor_state['dragging'] = False
+        editor_state['drag_type'] = None
+        editor_state['drag_idx'] = -1
+        editor_state['offset_x'] = 0.0
+        editor_state['offset_y'] = 0.0
+        editor_state['drag_moved'] = False
+
+    def find_hit_item(x, y):
+        candidates = []
+
+        for idx, item in enumerate(editor_state['detect_items']):
+            half_w = item['width'] * 0.5
+            half_h = item['height'] * 0.5
+            x1 = item['x_center'] - half_w
+            y1 = item['y_center'] - half_h
+            x2 = item['x_center'] + half_w
+            y2 = item['y_center'] + half_h
+            if x1 <= x <= x2 and y1 <= y <= y2:
+                dx = item['x_center'] - x
+                dy = item['y_center'] - y
+                candidates.append((dx * dx + dy * dy, 'detect', idx))
+
+        for idx, item in enumerate(editor_state['obb_items']):
+            pts = np.array(item['points'], dtype=np.float32).reshape((-1, 1, 2))
+            if cv2.pointPolygonTest(pts, (float(x), float(y)), False) >= 0:
+                center_x, center_y = get_obb_center(item['points'])
+                dx = center_x - x
+                dy = center_y - y
+                candidates.append((dx * dx + dy * dy, 'obb', idx))
+
+        if not candidates:
+            return None, -1
+
+        candidates.sort(key=lambda it: it[0])
+        return candidates[0][1], candidates[0][2]
+
+    def move_detect_item(item_idx, target_center_x, target_center_y):
+        if item_idx < 0 or item_idx >= len(editor_state['detect_items']):
+            return False
+
+        item = editor_state['detect_items'][item_idx]
+        frame_width = float(editor_state['frame_width'])
+        frame_height = float(editor_state['frame_height'])
+        half_w = min(item['width'] * 0.5, max(0.0, (frame_width - 1.0) * 0.5))
+        half_h = min(item['height'] * 0.5, max(0.0, (frame_height - 1.0) * 0.5))
+
+        new_x = clamp(target_center_x, half_w, frame_width - 1.0 - half_w)
+        new_y = clamp(target_center_y, half_h, frame_height - 1.0 - half_h)
+
+        if abs(new_x - item['x_center']) < 1e-4 and abs(new_y - item['y_center']) < 1e-4:
+            return False
+
+        item['x_center'] = new_x
+        item['y_center'] = new_y
+        return True
+
+    def move_obb_item(item_idx, target_center_x, target_center_y):
+        if item_idx < 0 or item_idx >= len(editor_state['obb_items']):
+            return False
+
+        item = editor_state['obb_items'][item_idx]
+        points = item['points']
+        if not points:
+            return False
+
+        current_center_x, current_center_y = get_obb_center(points)
+        dx = target_center_x - current_center_x
+        dy = target_center_y - current_center_y
+
+        frame_width = float(editor_state['frame_width'])
+        frame_height = float(editor_state['frame_height'])
+        xs = [p[0] for p in points]
+        ys = [p[1] for p in points]
+        min_x = min(xs)
+        max_x = max(xs)
+        min_y = min(ys)
+        max_y = max(ys)
+
+        dx = clamp(dx, -min_x, (frame_width - 1.0) - max_x)
+        dy = clamp(dy, -min_y, (frame_height - 1.0) - max_y)
+
+        if abs(dx) < 1e-4 and abs(dy) < 1e-4:
+            return False
+
+        item['points'] = [(px + dx, py + dy) for px, py in points]
+        return True
+
+    def on_mouse(event, x, y, flags, param):
+        if editor_state['frame_key'] is None:
+            return
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            hit_type, hit_idx = find_hit_item(x, y)
+            if hit_idx < 0:
+                return
+
+            playback['is_playing'] = False
+            editor_state['dragging'] = True
+            editor_state['drag_type'] = hit_type
+            editor_state['drag_idx'] = hit_idx
+            editor_state['drag_moved'] = False
+
+            if hit_type == 'detect':
+                item = editor_state['detect_items'][hit_idx]
+                center_x, center_y = item['x_center'], item['y_center']
+            else:
+                item = editor_state['obb_items'][hit_idx]
+                center_x, center_y = get_obb_center(item['points'])
+
+            editor_state['offset_x'] = float(x) - center_x
+            editor_state['offset_y'] = float(y) - center_y
+
+        elif event == cv2.EVENT_MOUSEMOVE and editor_state['dragging']:
+            playback['is_playing'] = False
+            target_center_x = float(x) - editor_state['offset_x']
+            target_center_y = float(y) - editor_state['offset_y']
+
+            if editor_state['drag_type'] == 'detect':
+                moved = move_detect_item(editor_state['drag_idx'], target_center_x, target_center_y)
+            else:
+                moved = move_obb_item(editor_state['drag_idx'], target_center_x, target_center_y)
+
+            if moved:
+                editor_state['drag_moved'] = True
+
+        elif event == cv2.EVENT_LBUTTONUP and editor_state['dragging']:
+            moved = editor_state['drag_moved']
+            drag_type = editor_state['drag_type']
+            drag_idx = editor_state['drag_idx']
+            frame_key = editor_state['frame_key']
+
+            editor_state['dragging'] = False
+            editor_state['drag_type'] = None
+            editor_state['drag_idx'] = -1
+            editor_state['offset_x'] = 0.0
+            editor_state['offset_y'] = 0.0
+            editor_state['drag_moved'] = False
+
+            if not moved:
+                return
+
+            if drag_type == 'detect':
+                saved = save_detect_labels()
+            else:
+                saved = save_obb_labels()
+
+            if saved:
+                print(f"已保存: {frame_key} | {drag_type} | index={drag_idx}")
+
+    cv2.setMouseCallback(window_name, on_mouse)
+
     while True:
         frame_key = sorted_frame_keys[current_frame_idx]
         frame_info = all_frames[frame_key]
-        
+
         # 获取图像路径
         img_path = frame_info.get('img')
-        
+
         if not img_path or not os.path.exists(img_path):
             print(f"警告：无法找到帧 {frame_key} 的图像")
             current_frame_idx = (current_frame_idx + 1) % len(sorted_frame_keys)
             continue
-        
+
         # 读取图像
         frame = cv_imread(img_path)
         if frame is None:
             print(f"警告：无法读取图像 {img_path}")
             current_frame_idx = (current_frame_idx + 1) % len(sorted_frame_keys)
             continue
-        
+
         frame_height, frame_width = frame.shape[:2]
-        
+
+        # 切换帧时重新加载标签缓存，确保不会跨帧拖拽
+        if editor_state['frame_key'] != frame_key:
+            load_frame_labels(frame_key, frame_info, frame_width, frame_height)
+
         # 绘制detect标签（绿色框）
         detect_count = 0
-        if 'detect_label' in frame_info and os.path.exists(frame_info['detect_label']):
-            with open(frame_info['detect_label'], 'r') as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if len(parts) >= 5:
-                        class_id = int(parts[0])
-                        x_center_norm = float(parts[1])
-                        y_center_norm = float(parts[2])
-                        width_norm = float(parts[3])
-                        height_norm = float(parts[4])
-                        
-                        # 反归一化
-                        x_center = int(x_center_norm * frame_width)
-                        y_center = int(y_center_norm * frame_height)
-                        width = int(width_norm * frame_width)
-                        height = int(height_norm * frame_height)
-                        
-                        # 计算左上角和右下角
-                        x1 = int(x_center - width / 2)
-                        y1 = int(y_center - height / 2)
-                        x2 = int(x_center + width / 2)
-                        y2 = int(y_center + height / 2)
-                        
-                        # 绘制绿色矩形框
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        
-                        # 标注类别
-                        class_names = ['TAP', 'SLIDE', 'TOUCH', 'TOUCH-HOLD']
-                        label = class_names[class_id] if class_id < len(class_names) else str(class_id)
-                        cv2.putText(frame, label, (x1, y1 - 5), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                        detect_count += 1
-        
+        for idx, item in enumerate(editor_state['detect_items']):
+            half_w = item['width'] * 0.5
+            half_h = item['height'] * 0.5
+            x1 = int(round(item['x_center'] - half_w))
+            y1 = int(round(item['y_center'] - half_h))
+            x2 = int(round(item['x_center'] + half_w))
+            y2 = int(round(item['y_center'] + half_h))
+
+            is_selected = (
+                editor_state['dragging']
+                and editor_state['drag_type'] == 'detect'
+                and editor_state['drag_idx'] == idx
+            )
+            color = (0, 255, 255) if is_selected else (0, 255, 0)
+            thickness = 3 if is_selected else 2
+
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
+
+            class_id = item['class_id']
+            label = detect_class_names[class_id] if 0 <= class_id < len(detect_class_names) else str(class_id)
+            cv2.putText(frame, label, (x1, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            detect_count += 1
+
         # 绘制obb标签（红色框）
         obb_count = 0
-        if 'obb_label' in frame_info and os.path.exists(frame_info['obb_label']):
-            with open(frame_info['obb_label'], 'r') as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if len(parts) >= 9:
-                        class_id = int(parts[0])
-                        
-                        # 读取4个角点并反归一化
-                        points = []
-                        for i in range(4):
-                            x_norm = float(parts[1 + i*2])
-                            y_norm = float(parts[2 + i*2])
-                            x = int(x_norm * frame_width)
-                            y = int(y_norm * frame_height)
-                            points.append((x, y))
-                        
-                        # 绘制红色多边形
-                        pts = np.array(points, dtype=np.int32)
-                        cv2.polylines(frame, [pts], isClosed=True, color=(0, 0, 255), thickness=2)
-                        
-                        # 标注类别
-                        class_names = ['HOLD']
-                        label = class_names[class_id] if class_id < len(class_names) else str(class_id)
-                        cv2.putText(frame, label, (points[0][0], points[0][1] - 5), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-                        obb_count += 1
-        
+        for idx, item in enumerate(editor_state['obb_items']):
+            points = item['points']
+            if len(points) != 4:
+                continue
+
+            int_points = [(int(round(px)), int(round(py))) for px, py in points]
+            pts = np.array(int_points, dtype=np.int32)
+
+            is_selected = (
+                editor_state['dragging']
+                and editor_state['drag_type'] == 'obb'
+                and editor_state['drag_idx'] == idx
+            )
+            color = (0, 165, 255) if is_selected else (0, 0, 255)
+            thickness = 3 if is_selected else 2
+            cv2.polylines(frame, [pts], isClosed=True, color=color, thickness=thickness)
+
+            class_id = item['class_id']
+            label = obb_class_names[class_id] if 0 <= class_id < len(obb_class_names) else str(class_id)
+            cv2.putText(frame, label, (int_points[0][0], int_points[0][1] - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            obb_count += 1
+
         # 显示信息
-        play_status = "[PLAYING]" if is_playing else "[PAUSED]"
+        play_status = "[PLAYING]" if playback['is_playing'] else "[PAUSED]"
         cv2.putText(frame, f"{play_status} Frame: {current_frame_idx + 1}/{len(sorted_frame_keys)} ({frame_key})",
-                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
         cv2.putText(frame, f"Detect: {detect_count} notes | OBB: {obb_count} notes",
-                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+        if editor_state['dragging']:
+            cv2.putText(frame, "DRAGGING: release mouse to save", (10, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+        cv2.putText(frame, "Mouse: Drag existing box only (auto save on release)",
+                    (10, frame_height - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
         cv2.putText(frame, "Space: Play/Pause | Arrow: Last frame | Q: Quit",
-                   (10, frame_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-        
+                    (10, frame_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+
         cv2.imshow(window_name, frame)
-        
+
         # 等待按键
-        key = cv2.waitKey(15 if is_playing else 1) & 0xFF
-        
+        key = cv2.waitKey(15 if playback['is_playing'] else 1) & 0xFF
+
         if key == ord('q') or key == ord('Q'):  # 退出
             break
         elif key == 32:  # 空格：播放/暂停
-            is_playing = not is_playing
+            if not editor_state['dragging']:
+                playback['is_playing'] = not playback['is_playing']
         elif key == 0:  # 箭头: 上一帧
-            is_playing = False
+            playback['is_playing'] = False
             current_frame_idx = (current_frame_idx - 1) % len(sorted_frame_keys)
-        
+
         # 如果正在播放，自动前进
-        if is_playing:
+        if playback['is_playing'] and not editor_state['dragging']:
             current_frame_idx = (current_frame_idx + 1) % len(sorted_frame_keys)
-    
+
     cv2.destroyWindow(window_name)
     print("\n验证完成！")
 
@@ -2581,6 +2912,7 @@ def main(video_path, txt_path, output_dir,
         
         # 直接调用批量导出函数
         export_all_classification_datasets()
+        return
 
     elif choice == '6':
         # 解析 touch-hold 裁剪模式（批量）
@@ -2632,16 +2964,19 @@ def main(video_path, txt_path, output_dir,
         
         # 导出数据集
         export_dataset(video_path, txt_path, output_dir, align_diff, video_name, export_half_frame)
+        return
     
     elif choice == '3':
         # 验证数据集模式
         print(f"\n验证数据集: {output_dir}")
         verify_dataset(output_dir)
+        return
     
     elif choice == '4':
         # 统计数据集模式
         print(f"\n统计数据集: {output_dir}")
         count_dataset_statistics(output_dir)
+        return
 
     else:
         print("无效的选择！")
