@@ -1,8 +1,9 @@
-import os
+﻿import os
 import cv2
 import numpy as np
 import shutil
 import random
+import re
 from bisect import bisect_right
 from pathlib import Path
 
@@ -1461,12 +1462,14 @@ def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_
     return labels
 
 
-def export_dataset_touch_hold(strict_align=False):
+def export_dataset_touch_hold(all_configs, dataset_root):
     """
     批量导出 touch-hold 裁剪数据集。
 
     规则:
-    - 函数内部硬编码配置列表
+    - all_configs 由调用方传入
+    - dataset_root 由调用方传入
+    - 每首歌单独读取 strict_align，默认 True，除非显式指定为 False
     - 先从 output_dir/images 文件名解析目标帧号
     - 按目标帧号定位视频帧时间，再到 txt 匹配当帧音符
     - 仅保留 touch-hold 音符，排除其他类型
@@ -1475,186 +1478,15 @@ def export_dataset_touch_hold(strict_align=False):
     global is_big_touch
     global filter_touch_alpha
 
-    all_configs = [
+    if not isinstance(all_configs, list) or len(all_configs) == 0:
+        print("错误: all_configs 不能为空，且必须为配置列表")
+        return
 
-        # dataset 1
-        {
-            # 11814 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814\11814_2026-04-17_21-03-44.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11814",
-            "align_diff": 891.34,
-            "star_skin": 0 # 蓝色圆头星星
-        },
+    if not isinstance(dataset_root, str) or dataset_root.strip() == "":
+        print("错误: dataset_root 不能为空")
+        return
 
-        {
-            # 11898 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898\11898_2026-04-17_21-00-08.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11898",
-            "align_diff": 433.33,
-            "star_skin": 0 # 粉色圆头星星
-        },
-
-        {
-            # 11820 背景暗 autoplay:critical combo数 达成率累加 带开头/结尾动画
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820\11820_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820\11820_2026-04-17_19-39-35.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11820",
-            "align_diff": -7324.32,
-            "star_skin": 1 # 粉色尖头星星
-        },
-
-        # dataset 2
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11898\7 Wonders.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11898\11898_2026-04-16_20-29-47.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11898",
-            "align_diff": [(0, 1833.0), (350, 1816.8), (513, 1833.0), (746, 1816.8), (2461, 1833.0), (2595, 1845), (2908, 1833.0)],
-            "touch_alpha": 0.6,
-            "is_big_touch": True
-        },
-
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11986\AiAe.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11986\11986_2026-04-16_20-23-20.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11986",
-            "align_diff": [(0, -150), (231, -133.33), (350, -150), (2120, -160.0), (2340, -127), (2777, -133.33), (4037, -140)],
-            "touch_alpha": 0.7,
-            "is_big_touch": True
-        },
-
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11929\11929_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11929\11929_2026-04-16_20-14-53.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11929",
-            "align_diff": [(0, 2561.8),(492, 2544.9),(1663, 2528.1),(3337, 2511.2),(4345, 2528.1)],
-            "touch_alpha": 0.2,
-            "is_big_touch": True
-        },
-
-        # dataset 1
-        {
-            # 11394 背景亮 autoplay:critical combo数 达成率累加 带开头/结尾动画
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394\11394_2026-04-17_17-55-13.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11394",
-            "align_diff": -7208,
-            "star_skin": 1, # 粉色尖头星星
-        },
-
-        {
-            # 11741 背景暗 autoplay:random 达成率递减 perfect/great/good/miss统计
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741\11741_2026-04-17_21-07-33.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11741",
-            "align_diff": 650,
-            "star_skin": 0 # 粉色圆头星星
-        },
-
-        {
-            # 11753 背景亮 autoplay:critical combo数 达成率累加
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753\11753_2026-04-17_20-15-41.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11753",
-            "align_diff": 658.68,
-            "star_skin": 0 # 蓝色圆头星星
-        },
-
-        {
-            # 11818 背景暗 autoplay:random 达成率递减 达成率递减
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818\11818_2026-04-17_20-11-43.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11818",
-            "align_diff": 558,
-            "star_skin": 1 # 蓝色尖头星星
-        },
-
-        # dataset 2
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11905\Daredevil Glaive.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11905\11905_2026-04-16_20-32-59.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11905",
-            "align_diff": [(0, -5400+5), (1890, -5400-5), (2493, -5380), (3725, -5390)],
-            "touch_alpha": 0.5,
-            "is_big_touch": True
-        },
-
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\10622\バッド・ダンス・ホール.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\10622\10622_2026-04-16_20-18-39.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\10622",
-            "align_diff": [(0, 620), (960, 610), (2463, 633.3), (3611, 620), (3841, 633.3)],
-            "touch_alpha": 114514,
-            "is_big_touch": True
-        },
-
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11969\TECHNOPOLICE 2085.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11969\11969_2026-04-16_20-26-55.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11969",
-            "align_diff": [(0, -133.33), (1243, -145), (2338, -120)],
-            "touch_alpha": 0.6,
-            "is_big_touch": True
-        },
-
-
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_2026-04-16_20-07-19.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11979",
-            "align_diff": [(0, 910.11),(251, 893.3),(1546, 876.4),(3654, 859.6),(4353, 876.4)],
-            "jumps_to": 2300,
-            "touch_alpha": 0.5,
-            "is_big_touch": True
-        },
-
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11981\11981_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11981\11981_2026-04-16_20-10-46.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11981",
-            "align_diff": [(0, 185.4),(1181, 168.5),(2748,151.7),(3865,134.9),(4345, 168.5)],
-            "touch_alpha": 0.5,
-            "star_skin": 1, # 粉色尖头星星
-            "is_big_touch": True
-        },
-
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11988\11988_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11988\11988_2026-04-16_20-04-24.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11988",
-            "align_diff": [(0, 0), (267, -33.71), (510, -50.6), (1970, -67.4), (2267, -33.7), (3544, -50.6)],
-            "touch_alpha": 0.5,
-            "is_big_touch": False,
-        },
-
-        # dataset 3
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\hold_plus\hold_plus_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\hold_plus\2026-04-16_16-18-10.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\hold_plus",
-            "align_diff": 100,
-            "star_skin": 1 # 粉色尖头星星
-        },
-
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\touch_hold_plus\touch_hold_plus_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\touch_hold_plus\2026-04-16_19-18-39.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\touch_hold_plus",
-            "align_diff": -83.34,
-            "star_skin": 1 # 粉色尖头星星
-        },
-
-        {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\slide_plus_std.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-16_19-16-44.txt",
-            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\slide_plus",
-            "align_diff": -16.67,
-            "star_skin": 1 # 粉色尖头星星
-        },
-    ]
-
-    dataset_root = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset_touch_hold"
+    dataset_root = dataset_root.strip()
     train_images_dir = os.path.join(dataset_root, 'train', 'images')
     train_labels_dir = os.path.join(dataset_root, 'train', 'labels')
     valid_images_dir = os.path.join(dataset_root, 'valid', 'images')
@@ -1700,6 +1532,8 @@ def export_dataset_touch_hold(strict_align=False):
         source_output_dir = config['output_dir']
         source_images_dir = os.path.join(source_output_dir, 'images')
         align_diff = config['align_diff']
+        current_strict_align = config.get('strict_align', True)
+        current_strict_align = False if current_strict_align is False else True
         current_is_big_touch = bool(config.get('is_big_touch', False))
         current_touch_alpha = config.get('touch_alpha', 0.4)
         try:
@@ -1711,6 +1545,7 @@ def export_dataset_touch_hold(strict_align=False):
         video_name = os.path.splitext(os.path.basename(video_path))[0]
         print(f"\n[ALL] {cfg_idx}/{len(all_configs)}: {video_name}")
         print(f"source images: {source_images_dir}")
+        print(f"strict_align: {current_strict_align}")
         print(f"is_big_touch: {current_is_big_touch}")
         print(f"touch_alpha: {current_touch_alpha}")
 
@@ -1735,7 +1570,7 @@ def export_dataset_touch_hold(strict_align=False):
             print("警告: source images 未解析到帧号，跳过")
             continue
 
-        time_notes = parse_txt(txt_path, strict_align=strict_align)
+        time_notes = parse_txt(txt_path, strict_align=current_strict_align)
         if len(time_notes) == 0:
             print("警告: txt 无有效音符数据，跳过")
             continue
@@ -1750,7 +1585,7 @@ def export_dataset_touch_hold(strict_align=False):
         frame_timestamps = build_frame_timestamps(
             cap,
             total_video_frames,
-            strict_align=strict_align,
+            strict_align=current_strict_align,
             progress_step=100
         )
 
@@ -1770,7 +1605,7 @@ def export_dataset_touch_hold(strict_align=False):
             continue
 
         sorted_times = sorted(time_notes.keys())
-        max_time_diff = resolve_max_time_diff(cap, strict_align=strict_align, fallback_fps=60.0)
+        max_time_diff = resolve_max_time_diff(cap, strict_align=current_strict_align, fallback_fps=60.0)
 
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         crop_size = frame_width * 210 / 1080
@@ -1939,57 +1774,122 @@ def verify_dataset(output_dir):
         output_dir: 数据集根目录
     """
     
-    # 定义新文件结构的路径
+    image_exts = ('.jpg', '.png', '.jpeg', '.bmp', '.webp')
+
+    # 标准 detect/obb 结构
     images_dir = os.path.join(output_dir, 'images')
     detect_labels_dir = os.path.join(output_dir, 'labels_detect')
     obb_labels_dir = os.path.join(output_dir, 'labels_obb')
-    
-    # 严格检查新文件结构
-    if not os.path.exists(images_dir):
-        print(f"错误：未找到 images 目录！")
-        print(f"期望路径: {images_dir}")
-        print("请确保使用新的数据集文件结构。")
+
+    # touch-hold 结构: train + valid
+    train_images_dir = os.path.join(output_dir, 'train', 'images')
+    train_labels_dir = os.path.join(output_dir, 'train', 'labels')
+    valid_images_dir = os.path.join(output_dir, 'valid', 'images')
+    valid_labels_dir = os.path.join(output_dir, 'valid', 'labels')
+
+    has_standard_layout = os.path.isdir(images_dir)
+    has_touch_hold_layout = os.path.isdir(train_images_dir) and os.path.isdir(valid_images_dir)
+
+    if not has_standard_layout and not has_touch_hold_layout:
+        print("错误：未识别到支持的数据集结构！")
+        print(f"标准结构期望: {images_dir}")
+        print(f"touch-hold结构期望: {train_images_dir} 与 {valid_images_dir}")
         return
-    
-    if not os.path.exists(detect_labels_dir):
-        print(f"警告：未找到 labels_detect 目录！")
-        print(f"期望路径: {detect_labels_dir}")
-    
-    if not os.path.exists(obb_labels_dir):
-        print(f"警告：未找到 labels_obb 目录！")
-        print(f"期望路径: {obb_labels_dir}")
-    
+
     # 收集所有帧的信息
-    all_frames = {}  # {frame_key: {'img': path, 'detect_label': path, 'obb_label': path}}
-    
-    # 从images文件夹收集所有图像
-    for img_file in os.listdir(images_dir):
-        if img_file.endswith(('.jpg', '.png', '.jpeg')):
+    all_frames = {}  # {frame_key: {'img': path, 'detect_label': path, 'obb_label': path, ...}}
+    dataset_mode = 'standard'
+
+    if has_touch_hold_layout:
+        dataset_mode = 'touch_hold'
+
+        split_sources = [
+            ('train', train_images_dir, train_labels_dir),
+            ('valid', valid_images_dir, valid_labels_dir),
+        ]
+
+        for split_name, split_images_dir, split_labels_dir in split_sources:
+            if not os.path.isdir(split_images_dir):
+                print(f"警告：未找到 {split_name} images 目录: {split_images_dir}")
+                continue
+            if not os.path.isdir(split_labels_dir):
+                print(f"警告：未找到 {split_name} labels 目录: {split_labels_dir}")
+
+            for img_file in os.listdir(split_images_dir):
+                if not img_file.lower().endswith(image_exts):
+                    continue
+
+                frame_key = os.path.splitext(img_file)[0]
+                label_file = frame_key + '.txt'
+                unique_frame_key = f"{split_name}:{frame_key}"
+
+                all_frames[unique_frame_key] = {
+                    'img': os.path.join(split_images_dir, img_file),
+                    'split': split_name,
+                    'display_key': frame_key,
+                }
+
+                detect_label_path = os.path.join(split_labels_dir, label_file)
+                if os.path.exists(detect_label_path):
+                    all_frames[unique_frame_key]['detect_label'] = detect_label_path
+    else:
+        if not os.path.exists(detect_labels_dir):
+            print(f"警告：未找到 labels_detect 目录！")
+            print(f"期望路径: {detect_labels_dir}")
+
+        if not os.path.exists(obb_labels_dir):
+            print(f"警告：未找到 labels_obb 目录！")
+            print(f"期望路径: {obb_labels_dir}")
+
+        for img_file in os.listdir(images_dir):
+            if not img_file.lower().endswith(image_exts):
+                continue
+
             frame_key = os.path.splitext(img_file)[0]
             label_file = frame_key + '.txt'
-            
+
             all_frames[frame_key] = {
-                'img': os.path.join(images_dir, img_file)
+                'img': os.path.join(images_dir, img_file),
+                'display_key': frame_key,
             }
-            
-            # 查找对应的detect标签文件
+
             detect_label_path = os.path.join(detect_labels_dir, label_file)
             if os.path.exists(detect_label_path):
                 all_frames[frame_key]['detect_label'] = detect_label_path
-            
-            # 查找对应的obb标签文件
+
             obb_label_path = os.path.join(obb_labels_dir, label_file)
             if os.path.exists(obb_label_path):
                 all_frames[frame_key]['obb_label'] = obb_label_path
-    
+
     if not all_frames:
         print("错误：未找到任何图像文件！")
         return
-    
-    # 按帧号排序
-    sorted_frame_keys = sorted(all_frames.keys(), key=lambda x: int(x.split('_')[-1]))
+
+    def build_frame_sort_key(frame_key):
+        frame_info = all_frames[frame_key]
+        display_key = frame_info.get('display_key', frame_key)
+
+        # touch-hold 导出名: xxx_f000123_n0000001
+        match_f_n = re.search(r'_f(\d+)(?:_n(\d+))?$', display_key)
+        if match_f_n:
+            frame_no = int(match_f_n.group(1))
+            sample_no = int(match_f_n.group(2)) if match_f_n.group(2) is not None else -1
+            split_order = 0 if frame_info.get('split') == 'train' else 1
+            return (0, frame_no, sample_no, split_order, display_key.lower())
+
+        match_tail_num = re.search(r'(\d+)$', display_key)
+        if match_tail_num:
+            return (1, int(match_tail_num.group(1)), 0, 0, display_key.lower())
+
+        return (2, 0, 0, 0, display_key.lower())
+
+    sorted_frame_keys = sorted(all_frames.keys(), key=build_frame_sort_key)
     
     print(f"\n找到 {len(sorted_frame_keys)} 帧数据")
+    if dataset_mode == 'touch_hold':
+        print("检测到 touch-hold 数据集结构: train + valid")
+    else:
+        print("检测到标准 detect/obb 数据集结构")
     print(f"空格播放/暂停，左右箭头切换帧，D删除选中框，R恢复删除框，Q退出")
     print(f"支持鼠标点击选中/拖动已有框，松开后立即保存到对应txt（仅平移，不改尺寸）\n")
 
@@ -1998,8 +1898,12 @@ def verify_dataset(output_dir):
     window_name = 'Dataset Verification'
     cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
 
-    detect_class_names = ['TAP', 'SLIDE', 'TOUCH', 'TOUCH-HOLD']
-    obb_class_names = ['HOLD']
+    if dataset_mode == 'touch_hold':
+        detect_class_names = ['TOUCH_BOX', 'PROGRESS_POINT']
+        obb_class_names = ['HOLD']
+    else:
+        detect_class_names = ['TAP', 'SLIDE', 'TOUCH', 'TOUCH-HOLD']
+        obb_class_names = ['HOLD']
 
     editor_state = {
         'frame_key': None,
@@ -2530,7 +2434,11 @@ def verify_dataset(output_dir):
                  and editor_state['selected_type'] == 'detect'
                  and editor_state['selected_idx'] == idx)
             )
-            color = (0, 255, 255) if is_selected else (0, 255, 0)
+            # touch-hold 数据集下，class 1(PROGRESS_POINT) 使用蓝色
+            if dataset_mode == 'touch_hold' and item['class_id'] == 1:
+                color = (0, 255, 255) if is_selected else (255, 0, 0)
+            else:
+                color = (0, 255, 255) if is_selected else (0, 255, 0)
             thickness = 3 if is_selected else 2
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
@@ -2572,10 +2480,11 @@ def verify_dataset(output_dir):
 
         # 显示信息
         play_status = "[PLAYING]" if playback['is_playing'] else "[PAUSED]"
-        cv2.putText(frame, f"{play_status} Frame: {current_frame_idx + 1}/{len(sorted_frame_keys)} ({frame_key})",
-                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-        cv2.putText(frame, f"Detect: {detect_count} notes | OBB: {obb_count} notes",
-                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        if dataset_mode != 'touch_hold':
+            cv2.putText(frame, f"{play_status} Frame: {current_frame_idx + 1}/{len(sorted_frame_keys)} ({frame_key})",
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            cv2.putText(frame, f"Detect: {detect_count} notes | OBB: {obb_count} notes",
+                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         if editor_state['dragging']:
             cv2.putText(frame, "DRAGGING: release mouse to save", (10, 90),
@@ -2584,10 +2493,11 @@ def verify_dataset(output_dir):
             cv2.putText(frame, f"SELECTED: {editor_state['selected_type']} #{editor_state['selected_idx']} | D delete | R restore",
                         (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-        cv2.putText(frame, "Mouse: Drag existing box only (auto save on release)",
-                    (10, frame_height - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-        cv2.putText(frame, "Space: Play/Pause | Arrow: Last frame | D: Delete | R: Restore | Q: Quit",
-                    (10, frame_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+        if dataset_mode != 'touch_hold':
+            cv2.putText(frame, "Mouse: Drag existing box only (auto save on release)",
+                        (10, frame_height - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+            cv2.putText(frame, "Space: Play/Pause | Arrow: Last frame | D: Delete | R: Restore | Q: Quit",
+                        (10, frame_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
         cv2.imshow(window_name, frame)
 
@@ -3078,7 +2988,7 @@ def main(video_path, txt_path, output_dir,
          align_diff=0, star_skinn=0, note_speedd=7.50,
          is_big_touchh=False, mode=None,
          jumps_to=0, export_half_frame=False, filter_touch_alphaa=0.4,
-         strict_align=False):
+         strict_align=False, all_configs=None, dataset_root=None):
     """
     主函数
     """
@@ -3120,7 +3030,31 @@ def main(video_path, txt_path, output_dir,
     elif choice == '6':
         # 解析 touch-hold 裁剪模式（批量）
         print("\n开始批量解析 Touch-Hold 裁剪...")
-        export_dataset_touch_hold(strict_align=strict_align)
+        if all_configs is None:
+            print("错误: 模式6需要提供 all_configs 参数")
+            return
+        if dataset_root is None:
+            print("错误: 模式6需要提供 dataset_root 参数")
+            return
+        export_dataset_touch_hold(all_configs=all_configs, dataset_root=dataset_root)
+        return
+
+    elif choice == '3' or choice == '4':
+        # 验证/统计模式不依赖 video_path 和 txt_path
+        target_output_dir = output_dir.strip() if isinstance(output_dir, str) else ""
+        if not target_output_dir and isinstance(dataset_root, str):
+            target_output_dir = dataset_root.strip()
+
+        if not target_output_dir:
+            print("错误: 模式3/4需要提供 output_dir 或 dataset_root")
+            return
+
+        if choice == '3':
+            print(f"\n验证数据集: {target_output_dir}")
+            verify_dataset(target_output_dir)
+        else:
+            print(f"\n统计数据集: {target_output_dir}")
+            count_dataset_statistics(target_output_dir)
         return
 
 
@@ -3171,18 +3105,6 @@ def main(video_path, txt_path, output_dir,
                    strict_align=strict_align)
         return
     
-    elif choice == '3':
-        # 验证数据集模式
-        print(f"\n验证数据集: {output_dir}")
-        verify_dataset(output_dir)
-        return
-    
-    elif choice == '4':
-        # 统计数据集模式
-        print(f"\n统计数据集: {output_dir}")
-        count_dataset_statistics(output_dir)
-        return
-
     else:
         print("无效的选择！")
         return None
@@ -3566,7 +3488,200 @@ if __name__ == "__main__":
     # detect: 0 Tap, 1 Slide, 2 Touch, 3 TouchHold
     # obb: 0 Hold
 
-    # main("", "", "")
+    all_configs = [
+
+        # dataset 1
+        {
+            # 11394 背景亮 autoplay:critical combo数 达成率累加
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394_1\11394_2026-04-20_12-29-08.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11394_1\11394_2026-04-20_12-29-08.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11394_1",
+            "align_diff": 0,
+        },
+
+        {
+            # 11741 背景暗 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741_1\11741_2026-04-20_12-53-39.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11741_1\11741_2026-04-20_12-53-39.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11741_1",
+            "align_diff": 0,
+        },
+
+        {
+            # 11746 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11746_1\11746_2026-04-20_12-47-58.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11746_1\11746_2026-04-20_12-47-58.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11746_1",
+            "align_diff": 0,
+        },
+
+        {
+            # 11753 背景亮 autoplay:critical combo数 达成率累加
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753_1\11753_2026-04-20_12-25-21.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11753_1\11753_2026-04-20_12-25-21.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11753_1",
+            "align_diff": 0,
+        },
+
+        {
+            # 11818 背景暗 autoplay:random 达成率递减 达成率递减
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818_1\11818_2026-04-20_12-21-27.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11818_1\11818_2026-04-20_12-21-27.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11818_1",
+            "align_diff": 0,
+        },
+
+        {
+            # 11814 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814_1\11814_2026-04-20_12-36-58.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11814_1\11814_2026-04-20_12-36-58.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11814_1",
+            "align_diff": 0,
+        },
+
+        {
+            # 11820 背景暗 autoplay:critical combo数 达成率累加 带开头/结尾动画
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820_1\11820_2026-04-20_12-15-19.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11820_1\11820_2026-04-20_12-15-19.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11820_1",
+            "align_diff": 0,
+        },
+
+        {
+            # 11885 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11885_1\11885_2026-04-20_12-41-58.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11885_1\11885_2026-04-20_12-41-58.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11885_1",
+            "align_diff": 0,
+        },
+
+        {
+            # 11898 背景亮 autoplay:random 达成率递减 perfect/great/good/miss统计
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898_1\11898_2026-04-20_12-33-28.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\source_data\11898_1\11898_2026-04-20_12-33-28.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset1\seperate_data\11898_1",
+            "align_diff": 0,
+        },
+
+        # dataset 2
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11905\Daredevil Glaive.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11905\11905_2026-04-16_20-32-59.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11905",
+            "align_diff": [(0, -5400+5), (1890, -5400-5), (2493, -5380), (3725, -5390)],
+            "touch_alpha": 0.5,
+            "strict_align": False,
+            "is_big_touch": True,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11898\7 Wonders.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11898\11898_2026-04-16_20-29-47.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11898",
+            "align_diff": [(0, 1833.0), (350, 1816.8), (513, 1833.0), (746, 1816.8), (2461, 1833.0), (2595, 1845), (2908, 1833.0)],
+            "touch_alpha": 0.6,
+            "strict_align": False,
+            "is_big_touch": True,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\10622\バッド・ダンス・ホール.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\10622\10622_2026-04-16_20-18-39.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\10622",
+            "align_diff": [(0, 620), (960, 610), (2463, 633.3), (3611, 620), (3841, 633.3)],
+            "touch_alpha": 114514,
+            "strict_align": False,
+            "is_big_touch": True,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11969\TECHNOPOLICE 2085.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11969\11969_2026-04-16_20-26-55.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11969",
+            "align_diff": [(0, -133.33), (1243, -145), (2338, -120)],
+            "touch_alpha": 0.6,
+            "strict_align": False,
+            "is_big_touch": True,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11986\AiAe.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11986\11986_2026-04-16_20-23-20.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11986",
+            "align_diff": [(0, -150), (231, -133.33), (350, -150), (2120, -160.0), (2340, -127), (2777, -133.33), (4037, -140)],
+            "touch_alpha": 0.7,
+            "strict_align": False,
+            "is_big_touch": True,
+        },
+
+
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11929\11929_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11929\11929_2026-04-16_20-14-53.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11929",
+            "align_diff": [(0, 2561.8),(492, 2544.9),(1663, 2528.1),(3337, 2511.2),(4345, 2528.1)],
+            "touch_alpha": 0.2,
+            "strict_align": False,
+            "is_big_touch": True,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11979\11979_2026-04-16_20-07-19.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11979",
+            "align_diff": [(0, 910.11),(251, 893.3),(1546, 876.4),(3654, 859.6),(4353, 876.4)],
+            "touch_alpha": 0.5,
+            "strict_align": False,
+            "is_big_touch": True,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11981\11981_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11981\11981_2026-04-16_20-10-46.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11981",
+            "align_diff": [(0, 185.4),(1181, 168.5),(2748,151.7),(3865,134.9),(4345, 168.5)],
+            "touch_alpha": 0.5,
+            "strict_align": False,
+            "is_big_touch": True,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11988\11988_std.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\source_data\11988\11988_2026-04-16_20-04-24.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset2\seperate_data\11988",
+            "align_diff": [(0, 0), (267, -33.71), (510, -50.6), (1970, -67.4), (2267, -33.7), (3544, -50.6)],
+            "touch_alpha": 0.5,
+            "is_big_touch": False,
+            "strict_align": False,
+        },
+
+        # dataset 3
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\hold_plus\2026-04-19_17-09-28.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\hold_plus\2026-04-19_17-09-28.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\hold_plus",
+            "align_diff": 0,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\touch_hold_plus\2026-04-20_12-10-40.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\touch_hold_plus\2026-04-20_12-10-40.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\touch_hold_plus",
+            "align_diff": 0,
+        },
+
+        {
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-20_11-54-47.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-20_11-54-47.txt",
+            "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\slide_plus",
+            "align_diff": 0,
+        },
+    ]
+
+    dataset_root = r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset_touch_hold"
+
+    main("", "", "", all_configs=all_configs, dataset_root=dataset_root)
 
 
     # dataset1 = [
@@ -3814,4 +3929,3 @@ if __name__ == "__main__":
     #     align_diff = song["align_diff"]
     #     star_skin = song["star_skin"]
     #     main(video_path, txt_path, output_dir, align_diff, star_skin, speed_3, mode="3", strict_align=True)
- 
