@@ -58,8 +58,8 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
         lcm_denom = base_denominator
 
 
-    init_time = 0
-    last_time = 0
+    init_time = None
+    last_time = None
     base_numerator_counter = 0
     last_position = None
     last_denominator = 0
@@ -98,7 +98,7 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
 
 
 
-            if last_time == 0:
+            if last_time is None:
                 # 第一个音符
                 init_time = note_time
                 last_time = note_time
@@ -117,7 +117,8 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
 
             # update base_numerator_counter
             # 使用最小公倍数分母进行累加 (为了兼容1/12)
-            base_numerator = round(diff_beat * lcm_denom)
+            selected_total_numerator = one * denominator + numerator
+            base_numerator = selected_total_numerator * (lcm_denom // denominator)
             base_numerator_counter += base_numerator
 
             # update last_time
