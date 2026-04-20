@@ -87,7 +87,7 @@ Please don't choose "2" if you don't know what it is.
 def install():
     global USE_PyPI_Mirror
     
-    # ask if use QingHua PIP
+    # ask if use PyPI Mirror
     USE_PyPI_Mirror = ask_use_pypi_mirror()
 
     # define pytorch version
@@ -193,12 +193,12 @@ If you are in other regions, please choose "No".
 3. Exit
 
 -> """
-    use_qinghua = input(info_en if LANGUAGE == "en" else info_zh).strip()
-    if use_qinghua == "1":
+    use_mirror = input(info_en if LANGUAGE == "en" else info_zh).strip()
+    if use_mirror == "1":
         return True
-    elif use_qinghua == "2":
+    elif use_mirror == "2":
         return False
-    elif use_qinghua == "3":
+    elif use_mirror == "3":
         sys.exit(0)
     else:
         print("Defaulting to No.")
@@ -381,7 +381,7 @@ DirectML 能够调用 AMD Intel 的 核显/独显 进行硬件加速。
 你是否想安装 DirectML ?
 
 如果你有支持 DirectML 的 GPU，并且性能显著优于 CPU，强烈建议选择"是"。
-其他情况情选择"否"。
+其他情况请选择"否"。
 
 1. 是
 2. 否 (默认)
