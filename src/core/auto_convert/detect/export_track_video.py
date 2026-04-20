@@ -78,6 +78,12 @@ def main(std_video_path: Path,
         # 存储轨迹历史用于绘制轨迹线
         track_history = defaultdict(list)
         track_last_seen = defaultdict(int)  # 记录轨迹最后出现的帧号
+        label_size_cache: dict[str, tuple[int, int]] = {}
+
+        # 轨迹清理和绘制长度使用同一套 fps 计算，避免长视频后期轨迹过长拖慢绘制
+        fps_for_calc = float(fps) if fps and fps > 0 else 30.0
+        timeout_frames = max(1, int(round(fps_for_calc / 2.0)))
+        max_track_history_len = min(512, max(64, timeout_frames * 4))
         
         # 逐帧处理
         start_time = time.time()
@@ -100,13 +106,14 @@ def main(std_video_path: Path,
                 track_id = track['track_id']
                 note_type = track['note_type']
                 note_variant = track['note_variant']
+                is_obb_note = is_obb(note_type)
                 color = get_color_for_id(track_id)
                 
                 # 记录当前帧中存在的轨迹
                 current_track_ids.add(track_id)
                 
                 # 根据note_type绘制不同类型的音符
-                if is_obb(note_type):
+                if is_obb_note:
                     points = np.array([
                         [track['x1'], track['y1']],
                         [track['x2'], track['y2']],
@@ -120,9 +127,12 @@ def main(std_video_path: Path,
                 
                 # 绘制标签
                 label = f'{note_type.name}.{note_variant.name} ID:{track_id}'
-                label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                label_size = label_size_cache.get(label)
+                if label_size is None:
+                    label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                    label_size_cache[label] = label_size
                 
-                if is_obb(note_type):
+                if is_obb_note:
                     # 找到OBB四个点中最上方的点作为标签位置；若y相同则选择x最小
                     points = [
                         (int(track['x1']), int(track['y1'])),
@@ -143,26 +153,26 @@ def main(std_video_path: Path,
                 
                 # 更新轨迹历史
                 # 计算中心点：OBB 使用四点平均，其他类型使用矩形中心
-                if is_obb(note_type):
+                if is_obb_note:
                     center_x = int(round((track['x1'] + track['x2'] + track['x3'] + track['x4']) / 4.0))
                     center_y = int(round((track['y1'] + track['y2'] + track['y3'] + track['y4']) / 4.0))
                 else:
                     center_x = int(round((track['x1'] + track['x3']) / 2.0))
                     center_y = int(round((track['y1'] + track['y3']) / 2.0))
 
-                track_history[track_id].append((center_x, center_y))
+                history_points = track_history[track_id]
+                history_points.append((center_x, center_y))
                 track_last_seen[track_id] = frame_number
                 
-                if len(track_history[track_id]) > 512:
-                    track_history[track_id].pop(0)
+                if len(history_points) > max_track_history_len:
+                    del history_points[:-max_track_history_len]
             
             # 清理过期的轨迹（超过0.5秒未出现）
             tracks_to_remove = []
-            timeout = fps // 2
             for track_id in list(track_history.keys()):
                 if track_id not in current_track_ids:
                     frames_since_last_seen = frame_number - track_last_seen.get(track_id, frame_number)
-                    if frames_since_last_seen > timeout:  # 超过0.5秒未出现，清理轨迹
+                    if frames_since_last_seen > timeout_frames:  # 超过0.5秒未出现，清理轨迹
                         tracks_to_remove.append(track_id)
             
             for track_id in tracks_to_remove:
@@ -175,12 +185,11 @@ def main(std_video_path: Path,
             for track_id, points in track_history.items():
                 if len(points) > 1:
                     color = get_color_for_id(track_id)
-                    for i in range(1, len(points)):
-                        cv2.line(frame, points[i-1], points[i], color, 3)
+                    polyline_points = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
+                    cv2.polylines(frame, [polyline_points], False, color, 3)
                     
                     # 在轨迹起点绘制小圆点
-                    if points:
-                        cv2.circle(frame, points[0], 3, color, -1)
+                    cv2.circle(frame, points[0], 3, color, -1)
             
             # 写入输出视频
             out.write(frame)
