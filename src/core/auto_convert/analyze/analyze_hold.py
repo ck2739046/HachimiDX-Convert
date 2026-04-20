@@ -65,7 +65,7 @@ def analyze_hold_time(shared_context, hold_data):
         mean_head = np.mean(head_times)
         mean_tail = np.mean(tail_times)
 
-        duration = mean_tail - mean_head
+        duration = max(0, mean_tail - mean_head)
         
         track_id, note_type, note_variant, position = key
         new_position = f"{position}{get_suffix(note_variant)}"

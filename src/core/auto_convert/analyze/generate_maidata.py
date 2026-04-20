@@ -86,6 +86,9 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
                         base_denominator, duration_denominator)
                     # 特例：三段同头直线 slide 压缩为 w 语法
                     position = _try_compress_wifi_special(position)
+                elif note_type == NoteType.HOLD and time[-1] == 0:
+                    # 特例: hold 时值为 0 时不添加时值文本
+                    pass
                 else:
                     duration_syntax = parse_note_duration(one_beat_Msec, note_type, time[-1],
                                                           base_denominator, duration_denominator)
