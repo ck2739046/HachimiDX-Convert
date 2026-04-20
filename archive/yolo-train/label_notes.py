@@ -54,6 +54,7 @@ star_skin = 0 # 0 圆头星星，1 尖头星星
 note_speed = 0
 is_big_touch = False
 filter_touch_alpha = 0
+STRICT_ALIGN_FPS = 30.0
 
 
 def prepare_align_diff(align_diff):
@@ -114,10 +115,13 @@ def resolve_align_diff(frame_number, base_align_diff, align_schedule=None, sched
 
 
 
-def parse_txt(txt_path):
+def parse_txt(txt_path, strict_align=False):
     """
     解析txt文件，返回一个按时间组织的notes字典
     键为时间戳(毫秒)，值为该时间点的notes列表
+
+    参数:
+        strict_align: 为True时，忽略txt中的Time数值，按Time行序号映射到固定30fps
     """
     if not os.path.exists(txt_path):
         return {}
@@ -128,6 +132,7 @@ def parse_txt(txt_path):
         lines = file.readlines()
     
     current_time = None
+    strict_time_index = 0
     
     for line in lines:
         line = line.strip()
@@ -144,10 +149,14 @@ def parse_txt(txt_path):
         
         # 检查是否是Time行
         if line.startswith('Time:'):
-            # 解析时间信息
-            time_parts = line.split('|')
-            time_str = time_parts[0].replace('Time:', '')
-            current_time = float(time_str)
+            if strict_align:
+                current_time = frame_to_time(strict_time_index, STRICT_ALIGN_FPS)
+                strict_time_index += 1
+            else:
+                # 解析时间信息
+                time_parts = line.split('|')
+                time_str = time_parts[0].replace('Time:', '')
+                current_time = float(time_str)
             
             # 初始化这个时间点的notes列表
             if current_time not in time_notes:
@@ -226,6 +235,44 @@ def frame_to_time(frame_number, fps):
         对应的时间(毫秒)
     """
     return (frame_number / fps) * 1000
+
+
+def build_frame_timestamps(cap, total_video_frames, strict_align=False, progress_step=100):
+    """
+    获取每一帧的时间戳。
+    - strict_align=False: 逐帧读取视频真实时间戳（兼容VFR）
+    - strict_align=True: 按固定30fps推导
+    """
+    if strict_align:
+        print(f"strict_align=True，按固定 {STRICT_ALIGN_FPS:.2f}fps 生成帧时间戳...")
+        return [frame_to_time(frame_number, STRICT_ALIGN_FPS) for frame_number in range(total_video_frames)]
+
+    print("正在读取视频帧时间戳...")
+    frame_timestamps = []
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    i = 0
+    while i < total_video_frames and cap.grab():
+        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
+        frame_timestamps.append(timestamp)
+        i += 1
+        if i % progress_step == 0 or i == total_video_frames:
+            print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
+    print("\r时间戳读取完成！            ")
+    return frame_timestamps
+
+
+def resolve_max_time_diff(cap, strict_align=False, fallback_fps=None):
+    """
+    计算 find_closest_notes 的最大时间匹配窗口。
+    """
+    if strict_align:
+        return (1000 / STRICT_ALIGN_FPS) - 0.1
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fallback_fps is not None and fps <= 0:
+        print(f"警告: 视频 FPS 无效，回退到 {fallback_fps}")
+        fps = float(fallback_fps)
+    return (1000 / fps) - 0.1
 
 
 def parse_note_line(line, frame_time):
@@ -351,7 +398,7 @@ def parse_note_line(line, frame_time):
 
 
 
-def manual_align(video_path, txt_path, time_notes, align_diff=0, jumps_to=0):
+def manual_align(video_path, txt_path, time_notes, align_diff=0, jumps_to=0, strict_align=False):
     """
     手动对齐视频帧和时间戳音符数据
     
@@ -390,21 +437,15 @@ def manual_align(video_path, txt_path, time_notes, align_diff=0, jumps_to=0):
         cap.release()
         return 0
 
-    # 预先读取所有帧的时间戳（支持VFR视频）
-    print("正在读取视频帧时间戳...")
-    frame_timestamps = []
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-    i = 0
-    while i < total_video_frames and cap.grab():
-        # 获取当前（已抓取）帧的时间戳（毫秒）
-        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
-        frame_timestamps.append(timestamp)
-        i += 1
-        if (i) % 10 == 0 or i == total_video_frames:
-            print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
-    print("\r时间戳读取完成！            ")
+    # 预先读取所有帧的时间戳（strict_align 时按固定 30fps 推导）
+    frame_timestamps = build_frame_timestamps(
+        cap,
+        total_video_frames,
+        strict_align=strict_align,
+        progress_step=10
+    )
 
-    max_time_diff = (1000 / (cap.get(cv2.CAP_PROP_FPS))) - 0.1 # 最大时间差，1帧时间
+    max_time_diff = resolve_max_time_diff(cap, strict_align=strict_align) # 最大时间差，1帧时间
 
     if jumps_to == 0:
         # 重置视频到第一帧
@@ -1018,7 +1059,8 @@ def calculate_oct_position(circle_center_x, circle_center_y, note_x, note_y):
         return 0
 
 
-def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=None, export_half_frame=False):
+def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=None, export_half_frame=False,
+                   strict_align=False):
     """
     导出YOLO训练数据集
     
@@ -1035,12 +1077,13 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
         time_offset: 时间偏移量(毫秒)，支持 float 或 list[(frame, diff)]
         video_name: 视频名称（用于文件命名），如果为None则从video_path提取
         export_half_frame: 是否隔一帧导出（True时仅导出偶数帧）
+        strict_align: 为True时，视频与txt时间都按固定30fps处理
     """
 
     base_align_diff, align_schedule, schedule_frames = prepare_align_diff(time_offset)
     
     # 解析txt文件
-    time_notes = parse_txt(txt_path)
+    time_notes = parse_txt(txt_path, strict_align=strict_align)
     
     if not time_notes:
         print("错误：没有找到任何音符数据！")
@@ -1071,20 +1114,15 @@ def export_dataset(video_path, txt_path, output_dir, time_offset, video_name=Non
     cap = cv2.VideoCapture(video_path)
     total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    # 预先读取所有帧的时间戳（支持VFR视频）
-    print("正在读取视频帧时间戳...")
-    frame_timestamps = []
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-    i = 0
-    while i < total_video_frames and cap.grab():
-        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
-        frame_timestamps.append(timestamp)
-        i += 1
-        if i % 100 == 0 or i == total_video_frames:
-            print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
-    print("\r时间戳读取完成！            ")
-    
-    max_time_diff = (1000 / cap.get(cv2.CAP_PROP_FPS)) - 0.1
+    # 预先读取所有帧的时间戳（strict_align 时按固定 30fps 推导）
+    frame_timestamps = build_frame_timestamps(
+        cap,
+        total_video_frames,
+        strict_align=strict_align,
+        progress_step=100
+    )
+
+    max_time_diff = resolve_max_time_diff(cap, strict_align=strict_align)
     
     # 重置视频到第一帧
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -1423,7 +1461,7 @@ def parse_touch_hold(cropped_frame, touch_hold_note, crop_origin_x, crop_origin_
     return labels
 
 
-def export_dataset_touch_hold():
+def export_dataset_touch_hold(strict_align=False):
     """
     批量导出 touch-hold 裁剪数据集。
 
@@ -1697,7 +1735,7 @@ def export_dataset_touch_hold():
             print("警告: source images 未解析到帧号，跳过")
             continue
 
-        time_notes = parse_txt(txt_path)
+        time_notes = parse_txt(txt_path, strict_align=strict_align)
         if len(time_notes) == 0:
             print("警告: txt 无有效音符数据，跳过")
             continue
@@ -1709,17 +1747,12 @@ def export_dataset_touch_hold():
             cap.release()
             continue
 
-        print("正在读取视频帧时间戳...")
-        frame_timestamps = []
-        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        i = 0
-        while i < total_video_frames and cap.grab():
-            timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
-            frame_timestamps.append(timestamp)
-            i += 1
-            if i % 100 == 0 or i == total_video_frames:
-                print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
-        print("\r时间戳读取完成！            ")
+        frame_timestamps = build_frame_timestamps(
+            cap,
+            total_video_frames,
+            strict_align=strict_align,
+            progress_step=100
+        )
 
         available_video_frames = len(frame_timestamps)
         if available_video_frames == 0:
@@ -1737,11 +1770,7 @@ def export_dataset_touch_hold():
             continue
 
         sorted_times = sorted(time_notes.keys())
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        if fps <= 0:
-            print("警告: 视频 FPS 无效，回退到 60")
-            fps = 60.0
-        max_time_diff = (1000 / fps) - 0.1
+        max_time_diff = resolve_max_time_diff(cap, strict_align=strict_align, fallback_fps=60.0)
 
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         crop_size = frame_width * 210 / 1080
@@ -2551,7 +2580,8 @@ def extract_frame_numbers_from_images(images_dir):
 
 
 def export_classification_dataset(video_path, txt_path, time_offset, break_cls_dir, ex_cls_dir,
-                                  dataset_split='train', video_name=None, selected_frame_numbers=None):
+                                  dataset_split='train', video_name=None, selected_frame_numbers=None,
+                                  strict_align=False):
     """
     导出YOLO分类训练数据集
     
@@ -2570,12 +2600,13 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
         dataset_split: 数据集划分 ('train' 或 'valid')
         video_name: 视频名称（用于文件命名），如果为None则从video_path提取
         selected_frame_numbers: 仅处理这些帧号；为None时处理全部帧
+        strict_align: 为True时，视频与txt时间都按固定30fps处理
     """
 
     base_align_diff, align_schedule, schedule_frames = prepare_align_diff(time_offset)
     
     # 解析txt文件
-    time_notes = parse_txt(txt_path)
+    time_notes = parse_txt(txt_path, strict_align=strict_align)
     
     if not time_notes:
         print("错误：没有找到任何音符数据！")
@@ -2602,18 +2633,13 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
     cap = cv2.VideoCapture(video_path)
     total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    # 预先读取所有帧的时间戳（支持VFR视频）
-    print("正在读取视频帧时间戳...")
-    frame_timestamps = []
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-    i = 0
-    while i < total_video_frames and cap.grab():
-        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC)
-        frame_timestamps.append(timestamp)
-        i += 1
-        if i % 100 == 0 or i == total_video_frames:
-            print(f"\r进度: {i}/{total_video_frames} 帧", end="", flush=True)
-    print("\r时间戳读取完成！            ")
+    # 预先读取所有帧的时间戳（strict_align 时按固定 30fps 推导）
+    frame_timestamps = build_frame_timestamps(
+        cap,
+        total_video_frames,
+        strict_align=strict_align,
+        progress_step=100
+    )
 
     available_video_frames = len(frame_timestamps)
     if available_video_frames == 0:
@@ -2648,7 +2674,7 @@ def export_classification_dataset(video_path, txt_path, time_offset, break_cls_d
         cap.release()
         return 0, {'yes': 0, 'no': 0}, {'yes': 0, 'no': 0}
     
-    max_time_diff = (1000 / cap.get(cv2.CAP_PROP_FPS)) - 0.1
+    max_time_diff = resolve_max_time_diff(cap, strict_align=strict_align)
     
     # 重置视频到第一帧
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -2875,7 +2901,8 @@ def reorder_obb_points(points):
 def main(video_path, txt_path, output_dir,
          align_diff=0, star_skinn=0, note_speedd=7.50,
          is_big_touchh=False, mode=None,
-         jumps_to=0, export_half_frame=False, filter_touch_alphaa=0.4):
+         jumps_to=0, export_half_frame=False, filter_touch_alphaa=0.4,
+         strict_align=False):
     """
     主函数
     """
@@ -2911,13 +2938,13 @@ def main(video_path, txt_path, output_dir,
             return
         
         # 直接调用批量导出函数
-        export_all_classification_datasets()
+        export_all_classification_datasets(strict_align=strict_align)
         return
 
     elif choice == '6':
         # 解析 touch-hold 裁剪模式（批量）
         print("\n开始批量解析 Touch-Hold 裁剪...")
-        export_dataset_touch_hold()
+        export_dataset_touch_hold(strict_align=strict_align)
         return
 
 
@@ -2931,7 +2958,7 @@ def main(video_path, txt_path, output_dir,
         return
 
     # 解析txt文件
-    time_notes = parse_txt(txt_path)
+    time_notes = parse_txt(txt_path, strict_align=strict_align)
     
     if len(time_notes) == 0:
         print("错误：没有找到任何音符数据！")
@@ -2939,7 +2966,8 @@ def main(video_path, txt_path, output_dir,
     
     if choice == '1':
         # 手动对齐模式
-        time_offset = manual_align(video_path, txt_path, time_notes, align_diff, jumps_to)
+        time_offset = manual_align(video_path, txt_path, time_notes, align_diff, jumps_to,
+                       strict_align=strict_align)
         return
     
     elif choice == '2':
@@ -2963,7 +2991,8 @@ def main(video_path, txt_path, output_dir,
         video_name = os.path.splitext(os.path.basename(video_path))[0]
         
         # 导出数据集
-        export_dataset(video_path, txt_path, output_dir, align_diff, video_name, export_half_frame)
+        export_dataset(video_path, txt_path, output_dir, align_diff, video_name, export_half_frame,
+                   strict_align=strict_align)
         return
     
     elif choice == '3':
@@ -2986,7 +3015,7 @@ def main(video_path, txt_path, output_dir,
 
 
 
-def export_all_classification_datasets():
+def export_all_classification_datasets(strict_align=False):
     """
     批量导出分类数据集
     
@@ -3248,7 +3277,8 @@ def export_all_classification_datasets():
         # 导出到valid集
         export_classification_dataset(video_path, txt_path, align_diff, break_cls_dir, ex_cls_dir, 
                          dataset_split='valid', video_name=video_name,
-                         selected_frame_numbers=target_frame_numbers)
+                         selected_frame_numbers=target_frame_numbers,
+                         strict_align=strict_align)
     
     # 处理Train集视频
     print(f"\n\n{'='*70}")
@@ -3300,7 +3330,8 @@ def export_all_classification_datasets():
         # 导出到train集
         export_classification_dataset(video_path, txt_path, align_diff, break_cls_dir, ex_cls_dir,
                          dataset_split='train', video_name=video_name,
-                         selected_frame_numbers=target_frame_numbers)
+                         selected_frame_numbers=target_frame_numbers,
+                         strict_align=strict_align)
     
     print(f"\n\n{'='*70}")
     print("所有视频处理完成！")
