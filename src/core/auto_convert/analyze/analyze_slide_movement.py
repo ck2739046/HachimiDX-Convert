@@ -733,6 +733,7 @@ def is_outer_loop_qq_clockwise(note_path: list, start_A_zone_id: int, end_A_zone
             optional.append(f'D{id}')
         # 可选激活绕大圈回到终点经过的 E 区
         optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+        optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
         optional.append(f'E{_prev_DE_zone_id(end_A_zone_id)}')
 
     if pos_diff == 3:
@@ -859,6 +860,7 @@ def is_outer_loop_pp_counterclockwise(note_path: list, start_A_zone_id: int, end
             optional.append(f'D{id}')
         # 可选激活绕大圈回到终点经过的 E 区
         optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+        optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
         optional.append(f'E{_next_DE_zone_id(end_A_zone_id)}')
 
     if pos_diff == 3:
