@@ -286,7 +286,7 @@ def _extract_touch_hold_observation(result, crop_w: int, crop_h: int, is_big_tou
     boxes = result.boxes.cpu().numpy()
 
     touch_candidate = None
-    progress_candidate = None
+    progress_candidates = []
     for i in range(len(boxes)):
         cls_id = int(boxes.cls[i])
         conf = float(boxes.conf[i])
@@ -296,16 +296,20 @@ def _extract_touch_hold_observation(result, crop_w: int, crop_h: int, is_big_tou
             if touch_candidate is None or conf > touch_candidate[0]:
                 touch_candidate = (conf, float(w), float(h))
         elif cls_id == TOUCH_HOLD_CLASS_PROGRESS:
-            if progress_candidate is None or conf > progress_candidate[0]:
-                progress_candidate = (conf, float(cx), float(cy))
+            progress_candidates.append((conf, float(cx), float(cy)))
 
     if touch_candidate is not None:
         _conf, touch_w, touch_h = touch_candidate
         dist = _convert_touch_box_to_dist_to_center(touch_w, touch_h, is_big_touch)
 
-    if progress_candidate is not None:
-        _conf, px, py = progress_candidate
-        percent_of_hold = _angle_to_progress(px, py, crop_w / 2.0, crop_h / 2.0)
+    if progress_candidates:
+        # 按置信度从高到低选择第一个合法的进度点
+        progress_candidates.sort(key=lambda x: x[0], reverse=True)
+        for _conf, px, py in progress_candidates:
+            filtered_percent = _progress_point_to_percent_with_dist_filter(px, py, crop_w, crop_h)
+            if filtered_percent != -1:
+                percent_of_hold = filtered_percent
+                break
 
     return dist, percent_of_hold
 
@@ -342,6 +346,55 @@ def _angle_to_progress(px: float, py: float, cx: float, cy: float) -> float:
 
     if np.isfinite(progress):
         return float(progress)
+    return -1
+
+
+
+
+def _progress_point_to_percent_with_dist_filter(px: float, py: float, crop_w: int, crop_h: int) -> float:
+    """
+    先转为角度，再计算该角度的理论 dist_to_center
+    与实际结果比较，如果小于误差才视为合法
+    tolerance: crop_size ±5%
+    """
+
+    cx = float(crop_w) / 2.0
+    cy = float(crop_h) / 2.0
+
+    dx = float(px) - cx
+    dy = float(py) - cy
+    actual_dist_to_center = float(np.hypot(dx, dy))
+    if not np.isfinite(actual_dist_to_center) or actual_dist_to_center < 1e-6:
+        return -1
+
+    angle = np.arctan2(dy, dx)
+    crop_size = min(float(crop_w), float(crop_h))
+    theoretical_dist_to_center = _calc_touch_hold_progress_theoretical_dist(angle, crop_size)
+    if theoretical_dist_to_center == -1:
+        return -1
+
+    tolerance = crop_size * 0.05
+    if abs(actual_dist_to_center - theoretical_dist_to_center) > tolerance:
+        return -1
+
+    return _angle_to_progress(px, py, cx, cy)
+
+
+
+
+def _calc_touch_hold_progress_theoretical_dist(angle: float, crop_size: float) -> float:
+    # 与 label_notes.py 的 parse_touch_hold 保持一致
+    base_radius = float(crop_size) * 0.4
+    shape_p = 1.3
+    dir_x = np.cos(angle)
+    dir_y = np.sin(angle)
+    denom = (abs(dir_x) ** shape_p + abs(dir_y) ** shape_p) ** (1.0 / shape_p)
+    if denom <= 1e-6:
+        return -1
+
+    dist_to_center = base_radius / denom
+    if np.isfinite(dist_to_center):
+        return float(dist_to_center)
     return -1
 
 
