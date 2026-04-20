@@ -16,6 +16,8 @@ def main(std_video_path: Path,
     ) -> OpResult[Path]:
 
     print("开始导出视频模块...")
+    cap = None
+    ffmpeg_process = None
     
     try:
         # 读取追踪结果
@@ -30,12 +32,9 @@ def main(std_video_path: Path,
         # 输出视频设置
         output_dir = std_video_path.parent
         video_name = output_dir.name
-        temp_track_video_path = os.path.join(output_dir, f'{video_name}_tracked_temp.mp4')
-        if os.path.exists(temp_track_video_path):
-            os.remove(temp_track_video_path)
-
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(temp_track_video_path, fourcc, fps, (video_width, video_height))
+        final_track_video_path = os.path.join(output_dir, f'{video_name}_tracked.mp4')
+        if os.path.exists(final_track_video_path):
+            os.remove(final_track_video_path)
 
         # 为不同ID生成不同颜色
         def get_color_for_id(track_id):
@@ -84,6 +83,36 @@ def main(std_video_path: Path,
         fps_for_calc = float(fps) if fps and fps > 0 else 30.0
         timeout_frames = max(1, int(round(fps_for_calc / 2.0)))
         max_track_history_len = min(512, max(64, timeout_frames * 4))
+
+        # 使用 FFmpeg 管道直接编码视频并映射原视频音频，避免临时文件二次编码
+        from src.services import PathManage
+        ffmpeg_exe = str(PathManage.FFMPEG_EXE_PATH)
+        ffmpeg_cmd = [
+            ffmpeg_exe,
+            '-y', '-hide_banner', '-loglevel', 'error',
+            '-f', 'rawvideo',
+            '-pix_fmt', 'bgr24',
+            '-s', f'{video_width}x{video_height}',
+            '-r', str(fps_for_calc),
+            '-i', '-',
+            '-i', str(std_video_path),
+            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac', '-b:a', '192k',
+            '-map', '0:v:0',
+            '-map', '1:a:0?',
+            '-shortest',
+            final_track_video_path,
+        ]
+        print("Running FFmpeg command:", " ".join(ffmpeg_cmd))
+
+        ffmpeg_process = subprocess.Popen(
+            ffmpeg_cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+        if ffmpeg_process.stdin is None:
+            raise Exception("FFmpeg stdin pipe is unavailable")
         
         # 逐帧处理
         start_time = time.time()
@@ -191,8 +220,9 @@ def main(std_video_path: Path,
                     # 在轨迹起点绘制小圆点
                     cv2.circle(frame, points[0], 3, color, -1)
             
-            # 写入输出视频
-            out.write(frame)
+            # 写入输出视频（FFmpeg stdin rawvideo）
+            frame_to_write = frame if frame.flags['C_CONTIGUOUS'] else np.ascontiguousarray(frame)
+            ffmpeg_process.stdin.write(frame_to_write.tobytes())
             
             # 显示进度
             if frame_number % 30 == 0:
@@ -205,52 +235,25 @@ def main(std_video_path: Path,
                 fps_rate = elapsed_frame / elapsed_time if elapsed_time > 0 else 0
                 print(f"导出进度: {frame_number}/{total_frames} ({progress:.1f}%) {fps_rate:.1f}fps", end="\r", flush=True)
         
+        if ffmpeg_process.stdin is not None:
+            ffmpeg_process.stdin.close()
+
+        ffmpeg_return_code = ffmpeg_process.wait()
+        ffmpeg_stderr = ""
+        if ffmpeg_process.stderr is not None:
+            ffmpeg_stderr = ffmpeg_process.stderr.read().decode('utf-8', errors='ignore').strip()
+            ffmpeg_process.stderr.close()
+
+        if ffmpeg_return_code != 0:
+            raise Exception(f"FFmpeg processing failed with code {ffmpeg_return_code}: {ffmpeg_stderr}")
+
         cap.release()
-        out.release()
+        cap = None
+        ffmpeg_process = None
 
         elapsed_time = time.time() - start_time
         average_fps = total_frames / elapsed_time if elapsed_time > 0 else 0
-        print(f"临时视频导出完成，耗时{elapsed_time:.1f}s, 平均{average_fps:.2f}fps               ")
-
-        # 使用ffmpeg添加音频并且crf压缩
-        final_track_video_path = temp_track_video_path.replace('_temp.mp4', '.mp4')
-        if os.path.exists(final_track_video_path):
-            os.remove(final_track_video_path)
-        # 构建ffmpeg命令来合并视频和音频
-        ffmpeg_args = [
-            '-y', '-hide_banner', '-stats', '-loglevel', 'error',
-            '-i', temp_track_video_path, # 无声的跟踪视频
-            '-i', str(std_video_path),  # 原始视频（有音频）
-            '-c:v', 'libx264',  '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
-            '-c:a', 'aac', '-b:a', '192k',  # 转为AAC
-            '-map', '0:v:0',   # 使用第一个输入的视频流
-            '-map', '1:a:0?',  # 使用第二个输入的音频流 (允许无音频)
-            '-shortest',       # 以最短的流为准
-            final_track_video_path
-        ]
-        # 使用subprocess运行ffmpeg命令
-        try:
-            from src.services import PathManage
-            ffmpeg_exe = str(PathManage.FFMPEG_EXE_PATH)
-            cmd = [ffmpeg_exe] + ffmpeg_args
-
-            print("Running FFmpeg command:", " ".join(cmd))
-        
-            result = subprocess.run(
-                cmd,
-                capture_output=False,
-                text=True,
-                encoding='utf-8'
-            )
-
-            if result.returncode == 0:
-                os.remove(temp_track_video_path)
-            else:
-                stderr = (result.stderr or '').strip()
-                raise Exception(f"FFmpeg processing failed: {stderr}")
-        except Exception as e:
-            print(f"Warning: Error adding audio to temp_track_video - {e}")
-            os.rename(temp_track_video_path, final_track_video_path)
+        print(f"追踪视频编码完成，耗时{elapsed_time:.1f}s, 平均{average_fps:.2f}fps               ")
 
         elapsed_time = time.time() - start_time
         print(f"追踪视频导出完成，总耗时{elapsed_time:.1f}s")
@@ -259,4 +262,29 @@ def main(std_video_path: Path,
         return ok(Path(final_track_video_path))
 
     except Exception as e:
+        if cap is not None:
+            try:
+                cap.release()
+            except Exception:
+                pass
+
+        if ffmpeg_process is not None:
+            try:
+                if ffmpeg_process.stdin is not None:
+                    ffmpeg_process.stdin.close()
+            except Exception:
+                pass
+
+            try:
+                if ffmpeg_process.poll() is None:
+                    ffmpeg_process.kill()
+            except Exception:
+                pass
+
+            if ffmpeg_process.stderr is not None:
+                try:
+                    ffmpeg_process.stderr.close()
+                except Exception:
+                    pass
+
         return err("Unexcepted error in auto_convert > detect > export_track_video", e)
