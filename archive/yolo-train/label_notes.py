@@ -1990,8 +1990,8 @@ def verify_dataset(output_dir):
     sorted_frame_keys = sorted(all_frames.keys(), key=lambda x: int(x.split('_')[-1]))
     
     print(f"\n找到 {len(sorted_frame_keys)} 帧数据")
-    print(f"空格播放/暂停，左右箭头切换帧，Q退出")
-    print(f"支持鼠标拖动已有框，松开后立即保存到对应txt（仅平移，不增删，不改尺寸）\n")
+    print(f"空格播放/暂停，左右箭头切换帧，D删除选中框，R恢复删除框，Q退出")
+    print(f"支持鼠标点击选中/拖动已有框，松开后立即保存到对应txt（仅平移，不改尺寸）\n")
 
     current_frame_idx = 0
     playback = {'is_playing': False}
@@ -2020,6 +2020,9 @@ def verify_dataset(output_dir):
         'offset_x': 0.0,
         'offset_y': 0.0,
         'drag_moved': False,
+        'selected_type': None,
+        'selected_idx': -1,
+        'deleted_stack': [],
     }
 
     def clamp(value, min_value, max_value):
@@ -2161,7 +2164,7 @@ def verify_dataset(output_dir):
             print(f"错误：保存 obb 标签失败: {e}")
             return False
 
-    def load_frame_labels(frame_key, frame_info, frame_width, frame_height):
+    def load_frame_labels(frame_key, frame_info, frame_width, frame_height, reset_deleted_stack=True):
         detect_lines, detect_has_trailing_newline = load_label_file_lines(frame_info.get('detect_label'))
         obb_lines, obb_has_trailing_newline = load_label_file_lines(frame_info.get('obb_label'))
 
@@ -2184,6 +2187,10 @@ def verify_dataset(output_dir):
         editor_state['offset_x'] = 0.0
         editor_state['offset_y'] = 0.0
         editor_state['drag_moved'] = False
+        editor_state['selected_type'] = None
+        editor_state['selected_idx'] = -1
+        if reset_deleted_stack:
+            editor_state['deleted_stack'] = []
 
     def find_hit_item(x, y):
         candidates = []
@@ -2265,6 +2272,152 @@ def verify_dataset(output_dir):
         item['points'] = [(px + dx, py + dy) for px, py in points]
         return True
 
+    def save_line_list(label_path, lines, has_trailing_newline):
+        if not label_path:
+            return False
+        try:
+            text = '\n'.join(lines)
+            if has_trailing_newline:
+                text += '\n'
+            with open(label_path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            return True
+        except Exception as e:
+            print(f"错误：保存标签失败: {e}")
+            return False
+
+    def delete_selected_item():
+        selected_type = editor_state['selected_type']
+        selected_idx = editor_state['selected_idx']
+
+        if selected_type == 'detect':
+            if selected_idx < 0 or selected_idx >= len(editor_state['detect_items']):
+                editor_state['selected_type'] = None
+                editor_state['selected_idx'] = -1
+                return False
+
+            item = editor_state['detect_items'][selected_idx]
+            line_idx = item['line_idx']
+            lines = list(editor_state['detect_lines'])
+            if line_idx < 0 or line_idx >= len(lines):
+                return False
+
+            removed_line = lines.pop(line_idx)
+            if not save_line_list(editor_state['detect_label_path'], lines, editor_state['detect_has_trailing_newline']):
+                return False
+
+            editor_state['deleted_stack'].append({
+                'type': 'detect',
+                'line_idx': line_idx,
+                'line_text': removed_line,
+            })
+
+            load_frame_labels(
+                editor_state['frame_key'],
+                editor_state['frame_info'],
+                editor_state['frame_width'],
+                editor_state['frame_height'],
+                reset_deleted_stack=False,
+            )
+            print(f"已删除: {editor_state['frame_key']} | detect | line={line_idx}")
+            return True
+
+        if selected_type == 'obb':
+            if selected_idx < 0 or selected_idx >= len(editor_state['obb_items']):
+                editor_state['selected_type'] = None
+                editor_state['selected_idx'] = -1
+                return False
+
+            item = editor_state['obb_items'][selected_idx]
+            line_idx = item['line_idx']
+            lines = list(editor_state['obb_lines'])
+            if line_idx < 0 or line_idx >= len(lines):
+                return False
+
+            removed_line = lines.pop(line_idx)
+            if not save_line_list(editor_state['obb_label_path'], lines, editor_state['obb_has_trailing_newline']):
+                return False
+
+            editor_state['deleted_stack'].append({
+                'type': 'obb',
+                'line_idx': line_idx,
+                'line_text': removed_line,
+            })
+
+            load_frame_labels(
+                editor_state['frame_key'],
+                editor_state['frame_info'],
+                editor_state['frame_width'],
+                editor_state['frame_height'],
+                reset_deleted_stack=False,
+            )
+            print(f"已删除: {editor_state['frame_key']} | obb | line={line_idx}")
+            return True
+
+        return False
+
+    def restore_last_deleted_item():
+        if not editor_state['deleted_stack']:
+            print("当前帧没有可恢复的删除记录")
+            return False
+
+        restore_item = editor_state['deleted_stack'][-1]
+        item_type = restore_item.get('type')
+        line_idx = int(restore_item.get('line_idx', 0))
+        line_text = restore_item.get('line_text', '')
+
+        if item_type == 'detect':
+            lines = list(editor_state['detect_lines'])
+            insert_idx = max(0, min(len(lines), line_idx))
+            lines.insert(insert_idx, line_text)
+            if not save_line_list(editor_state['detect_label_path'], lines, editor_state['detect_has_trailing_newline']):
+                return False
+
+            editor_state['deleted_stack'].pop()
+            load_frame_labels(
+                editor_state['frame_key'],
+                editor_state['frame_info'],
+                editor_state['frame_width'],
+                editor_state['frame_height'],
+                reset_deleted_stack=False,
+            )
+
+            for idx, item in enumerate(editor_state['detect_items']):
+                if item['line_idx'] == insert_idx:
+                    editor_state['selected_type'] = 'detect'
+                    editor_state['selected_idx'] = idx
+                    break
+
+            print(f"已恢复: {editor_state['frame_key']} | detect | line={insert_idx}")
+            return True
+
+        if item_type == 'obb':
+            lines = list(editor_state['obb_lines'])
+            insert_idx = max(0, min(len(lines), line_idx))
+            lines.insert(insert_idx, line_text)
+            if not save_line_list(editor_state['obb_label_path'], lines, editor_state['obb_has_trailing_newline']):
+                return False
+
+            editor_state['deleted_stack'].pop()
+            load_frame_labels(
+                editor_state['frame_key'],
+                editor_state['frame_info'],
+                editor_state['frame_width'],
+                editor_state['frame_height'],
+                reset_deleted_stack=False,
+            )
+
+            for idx, item in enumerate(editor_state['obb_items']):
+                if item['line_idx'] == insert_idx:
+                    editor_state['selected_type'] = 'obb'
+                    editor_state['selected_idx'] = idx
+                    break
+
+            print(f"已恢复: {editor_state['frame_key']} | obb | line={insert_idx}")
+            return True
+
+        return False
+
     def on_mouse(event, x, y, flags, param):
         if editor_state['frame_key'] is None:
             return
@@ -2272,9 +2425,13 @@ def verify_dataset(output_dir):
         if event == cv2.EVENT_LBUTTONDOWN:
             hit_type, hit_idx = find_hit_item(x, y)
             if hit_idx < 0:
+                editor_state['selected_type'] = None
+                editor_state['selected_idx'] = -1
                 return
 
             playback['is_playing'] = False
+            editor_state['selected_type'] = hit_type
+            editor_state['selected_idx'] = hit_idx
             editor_state['dragging'] = True
             editor_state['drag_type'] = hit_type
             editor_state['drag_idx'] = hit_idx
@@ -2365,9 +2522,13 @@ def verify_dataset(output_dir):
             y2 = int(round(item['y_center'] + half_h))
 
             is_selected = (
-                editor_state['dragging']
-                and editor_state['drag_type'] == 'detect'
-                and editor_state['drag_idx'] == idx
+                (editor_state['dragging']
+                 and editor_state['drag_type'] == 'detect'
+                 and editor_state['drag_idx'] == idx)
+                or
+                (not editor_state['dragging']
+                 and editor_state['selected_type'] == 'detect'
+                 and editor_state['selected_idx'] == idx)
             )
             color = (0, 255, 255) if is_selected else (0, 255, 0)
             thickness = 3 if is_selected else 2
@@ -2391,9 +2552,13 @@ def verify_dataset(output_dir):
             pts = np.array(int_points, dtype=np.int32)
 
             is_selected = (
-                editor_state['dragging']
-                and editor_state['drag_type'] == 'obb'
-                and editor_state['drag_idx'] == idx
+                (editor_state['dragging']
+                 and editor_state['drag_type'] == 'obb'
+                 and editor_state['drag_idx'] == idx)
+                or
+                (not editor_state['dragging']
+                 and editor_state['selected_type'] == 'obb'
+                 and editor_state['selected_idx'] == idx)
             )
             color = (0, 165, 255) if is_selected else (0, 0, 255)
             thickness = 3 if is_selected else 2
@@ -2415,10 +2580,13 @@ def verify_dataset(output_dir):
         if editor_state['dragging']:
             cv2.putText(frame, "DRAGGING: release mouse to save", (10, 90),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        elif editor_state['selected_idx'] >= 0:
+            cv2.putText(frame, f"SELECTED: {editor_state['selected_type']} #{editor_state['selected_idx']} | D delete | R restore",
+                        (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
         cv2.putText(frame, "Mouse: Drag existing box only (auto save on release)",
                     (10, frame_height - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-        cv2.putText(frame, "Space: Play/Pause | Arrow: Last frame | Q: Quit",
+        cv2.putText(frame, "Space: Play/Pause | Arrow: Last frame | D: Delete | R: Restore | Q: Quit",
                     (10, frame_height - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
 
         cv2.imshow(window_name, frame)
@@ -2431,6 +2599,14 @@ def verify_dataset(output_dir):
         elif key == 32:  # 空格：播放/暂停
             if not editor_state['dragging']:
                 playback['is_playing'] = not playback['is_playing']
+        elif key == ord('d') or key == ord('D'):  # 删除当前选中框
+            if not editor_state['dragging']:
+                playback['is_playing'] = False
+                delete_selected_item()
+        elif key == ord('r') or key == ord('R'):  # 恢复当前帧最近删除框
+            if not editor_state['dragging']:
+                playback['is_playing'] = False
+                restore_last_deleted_item()
         elif key == 0:  # 箭头: 上一帧
             playback['is_playing'] = False
             current_frame_idx = (current_frame_idx - 1) % len(sorted_frame_keys)
