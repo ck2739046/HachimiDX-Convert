@@ -40,8 +40,8 @@ def _build_tracker(match_thresh: float, fps: float) -> BOTSORT:
         track_high_thresh=0.25, # 默认，宽容
         track_low_thresh=0.1,   # 默认，宽容
         new_track_thresh=0.25,  # 默认，高敏感度，容易视为新的轨迹ID
-        track_buffer=10,        # real buffer frames = fps / 30 * track_buffer
-                                # 此处 10 = 0.33s
+        track_buffer=5,         # real buffer frames = fps / 30 * track_buffer
+                                # 此处 5 = 0.17s
         match_thresh=match_thresh,
         fuse_score=True,        # 默认，综合考虑conf和iou
         gmc_method='none',      # 画面稳定，不需要gmc补偿
