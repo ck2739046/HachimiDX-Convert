@@ -3672,8 +3672,8 @@ if __name__ == "__main__":
         },
 
         {
-            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-20_11-54-47.mp4",
-            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-20_11-54-47.txt",
+            "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-21_05-49-20.mp4",
+            "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-21_05-49-20.txt",
             "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\slide_plus",
             "align_diff": 0,
         },
@@ -3913,8 +3913,8 @@ if __name__ == "__main__":
     #     },
 
     #     {
-    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-20_11-54-47.mp4",
-    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-20_11-54-47.txt",
+    #         "video_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-21_05-49-20.mp4",
+    #         "txt_path": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\source_data\slide_plus\2026-04-21_05-49-20.txt",
     #         "output_dir": r"C:\git\aaa-HachimiDX-Convert\archive\yolo-train\dataset3\seperate_data\slide_plus",
     #         "align_diff": 0,
     #         "star_skin": 1 # 粉色尖头星星
