@@ -126,6 +126,7 @@ def install():
     i18n = "python-i18n==0.3.9"
     nanoid = "nanoid==2.0.0"
     tkinter = "tkinter-embed==3.13.0"
+    filterpy = "filterpy==1.4.5"
     cmd = f"{sys.executable} -m pip install {pyqt6} {pywin32} {librosa} {pydantic} {i18n} {nanoid} {tkinter} --no-warn-script-location"
     if USE_PyPI_Mirror:
         cmd += f" {QingHua_PyPI_Mirror}"
