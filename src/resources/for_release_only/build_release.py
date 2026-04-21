@@ -52,6 +52,7 @@ def copy_app_resources():
     copy_to_release(PathManage.OBB_PT_PATH)
     copy_to_release(PathManage.CLS_BREAK_PT_PATH)
     copy_to_release(PathManage.CLS_EX_PT_PATH)
+    copy_to_release(PathManage.TOUCH_HOLD_PT_PATH)
 
     # 解压 python 到目录
     python_path = PathManage.RESOURCES_DIR / "for_release_only" / "python portable" / "py3.13.11.zip"
