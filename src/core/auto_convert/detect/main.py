@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .detect import main as detect_module
 from .track import main as track_module
+from .post_track import main as post_track_module
 from .classify import main as classify_module
 from .export_track_video import main as export_video_module
 
@@ -74,6 +75,11 @@ def main(std_video_path,
         result = track_module(std_video_path, total_frames)
         if not result.is_ok:
             return err("追踪模块失败", inner=result)
+
+        # 追踪后处理模块
+        result = post_track_module(std_video_path)
+        if not result.is_ok:
+            return err("追踪后处理模块失败", inner=result)
 
         # 分类模块
         if not skip_cls:
