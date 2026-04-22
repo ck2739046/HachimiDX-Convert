@@ -43,8 +43,8 @@ def _build_botsort_tracker(fps: float) -> BOTSORT:
         # 当一个轨迹在连续若干帧未匹配到检测框时，不会立即删除，而是保留最多 track_buffer 帧
         # 值越高，越不容易视为新 id
         # real buffer frames = fps / 30 * track_buffer
-        # 由于传入了视频 fps，此处 10 固定等于 10/30 秒
-        track_buffer=10,
+        # 由于传入了视频 fps，此处固定等于 x/30 秒
+        track_buffer=2, # 1/15s
 
         # 计算: 阈值 = 1-IOU
         # 值越高，越宽松，允许较大位移 (低iou) 也匹配上，越不容易视为新 id
@@ -84,12 +84,13 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
 
         # 轨迹最大失配帧数：超过后删除该轨迹
         # 与 bot-sort 的 track_buffer 类似
-        # 取 0.2 秒
-        max_age=round(fps * 0.2),
+        # 0.15s
+        max_age=round(fps * 0.15),
 
         # 轨迹最小命中次数：达到后才稳定输出（前 min_hits 帧会放宽）
         # 设置为 1，表示新轨迹一出现就输出，不需要等待稳定，适合追踪短命的 note
-        min_hits=1,
+        # 0.05s，至少2帧
+        min_hits=max(2, round(fps * 0.05)), 
 
         # IoU 匹配阈值：主匹配/补匹配都使用该阈值过滤低质量关联
         # 值越大，越严格，越容易视为新 id
@@ -97,12 +98,11 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
         iou_threshold=0.1,
 
         # 速度方向估计窗口：用于 OCR/VDC 角度代价中的历史观测回看步长
-        # 0.1s, 但不超过10帧
-        delta_t=min(10, round(fps*0.1)),  
+        delta_t=3, # 3帧 
 
         # 方向一致性代价权重：越大越偏好“运动方向一致”的匹配
         # slide 运动比较规律，调高权重
-        inertia=0.6,
+        inertia=0.8,
 
         # 启用 BYTE 二阶段低分框补匹配（0.1 < score < det_thresh）
         use_byte=True,
