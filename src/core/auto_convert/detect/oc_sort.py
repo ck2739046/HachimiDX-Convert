@@ -87,14 +87,15 @@ class _KalmanBoxTracker:
         self.id = _KalmanBoxTracker.count
         _KalmanBoxTracker.count += 1
 
-        self.history: list[np.ndarray] = []
-        self.hits = 0
         self.hit_streak = 0
         self.age = 0
 
         self.last_observation = np.array([-1.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float64)
         self.observations: dict[int, np.ndarray] = {}
         self.history_observations: list[np.ndarray] = []
+        self.history_scores: list[float] = []
+        self.history_classes: list[int] = []
+        self.history_indices: list[int] = []
         self.velocity: np.ndarray | None = None
         self.delta_t = delta_t
 
@@ -125,8 +126,6 @@ class _KalmanBoxTracker:
         self.history_observations.append(obs)
 
         self.time_since_update = 0
-        self.history = []
-        self.hits += 1
         self.hit_streak += 1
 
         self.kf.update(_convert_bbox_to_z(obs[:4]))
@@ -134,6 +133,9 @@ class _KalmanBoxTracker:
         self.score = float(bbox[4]) if len(bbox) > 4 else self.score
         self.cls = int(bbox[5]) if len(bbox) > 5 else self.cls
         self.idx = int(bbox[6]) if len(bbox) > 6 else self.idx
+        self.history_scores.append(self.score)
+        self.history_classes.append(self.cls)
+        self.history_indices.append(self.idx)
 
     def predict(self) -> np.ndarray:
         if (self.kf.x[6] + self.kf.x[2]) <= 0:
@@ -146,8 +148,7 @@ class _KalmanBoxTracker:
             self.hit_streak = 0
         self.time_since_update += 1
 
-        self.history.append(_convert_x_to_bbox(self.kf.x))
-        return self.history[-1]
+        return _convert_x_to_bbox(self.kf.x)
 
     def get_state(self) -> np.ndarray:
         return _convert_x_to_bbox(self.kf.x)
@@ -178,13 +179,21 @@ class OCSort:
         _KalmanBoxTracker.count = 0
 
     @staticmethod
-    def _to_obb_track_row(xyxy: np.ndarray, track_id: int, score: float, cls_id: int, idx: int) -> np.ndarray:
+    def _to_obb_track_row(
+        xyxy: np.ndarray,
+        track_id: int,
+        score: float,
+        cls_id: int,
+        idx: int,
+        frame_offset: int = 0,
+    ) -> np.ndarray:
+        # 返回 track.py 需要的格式
         x1, y1, x2, y2 = xyxy
         w = x2 - x1
         h = y2 - y1
         cx = x1 + w / 2.0
         cy = y1 + h / 2.0
-        return np.array([cx, cy, w, h, 0.0, track_id, score, cls_id, idx], dtype=np.float32)
+        return np.array([cx, cy, w, h, 0.0, track_id, score, cls_id, idx, frame_offset], dtype=np.float32)
 
     def update(self, output_results: np.ndarray | None) -> np.ndarray:
         if output_results is None:
@@ -296,7 +305,27 @@ class OCSort:
                 d = trk.last_observation[:4]
 
             if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
-                ret.append(self._to_obb_track_row(d, trk.id + 1, trk.score, trk.cls, trk.idx))
+                ret.append(self._to_obb_track_row(d, trk.id + 1, trk.score, trk.cls, trk.idx, frame_offset=0))
+
+                # Head Padding: 在轨迹首次达标输出时，补回初始化阶段的历史观测。
+                if trk.hit_streak == self.min_hits:
+                    pad_cnt = min(self.min_hits - 1, len(trk.history_observations) - 1)
+                    for prev_i in range(pad_cnt):
+                        hist_pos = -(prev_i + 2)
+                        prev_obs = trk.history_observations[hist_pos]
+                        prev_score = trk.history_scores[hist_pos]
+                        prev_cls = trk.history_classes[hist_pos]
+                        prev_idx = trk.history_indices[hist_pos]
+                        ret.append(
+                            self._to_obb_track_row(
+                                prev_obs[:4],
+                                trk.id + 1,
+                                prev_score,
+                                prev_cls,
+                                prev_idx,
+                                frame_offset=-(prev_i + 1),
+                            )
+                        )
 
             i -= 1
             if trk.time_since_update > self.max_age:
@@ -304,9 +333,4 @@ class OCSort:
 
         if len(ret) > 0:
             return np.asarray(ret, dtype=np.float32)
-        return np.empty((0, 9), dtype=np.float32)
-
-    def reset(self) -> None:
-        self.trackers = []
-        self.frame_count = 0
-        _KalmanBoxTracker.count = 0
+        return np.empty((0, 10), dtype=np.float32)

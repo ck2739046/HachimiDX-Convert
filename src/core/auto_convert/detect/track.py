@@ -179,7 +179,13 @@ def main(std_video_path: Path,
                 if track_result is None or len(track_result) == 0:
                     continue
                 # 解析追踪结果
-                parsed_track_results = _parse_track_results(track_result, type_detections)
+                parsed_track_results = _parse_track_results(
+                    track_result,
+                    type_detections,
+                    note_type,
+                    frame_number,
+                    detections_by_frame,
+                )
                 # 写入最终结果
                 for local_track_id, original_note_geometry in parsed_track_results:
                     global_track_id = _get_or_assign_global_track_id(
@@ -258,21 +264,38 @@ def _convert_detections_to_ocsort_format(detections):
 
 
 
-def _parse_track_results(track_result, detections):
-    # 利用 idx 建立映射
-    id_map = {}
-    for result in track_result:
-        cx, cy, w, h, r, track_id, score, class_id, idx = result
-        # 此处idx是tracker_input的索引
-        # 利用这个可以轻松找到对应的原始检测框
-        id_map[int(idx)] = int(track_id)
-    # 生成最终结果
+def _parse_track_results(track_result, detections, note_type, frame_number, detections_by_frame):
     parsed_track_results = []
-    for i, note_geometry in enumerate(detections):
-        if i in id_map:
-            track_id = id_map[i]
-            parsed_track_results.append((track_id, note_geometry))
-    # return
+
+    # 当前帧按 idx 快速回查
+    current_idx_to_note = {i: note_geometry for i, note_geometry in enumerate(detections)}
+
+    for result in track_result:
+        # 兼容两种输出:
+        # 1) 9列: [cx, cy, w, h, r, track_id, score, class_id, idx]
+        # 2) 10列: 在末尾增加 frame_offset（head-padding 用）
+        if len(result) < 9:
+            continue
+
+        track_id = int(result[5])
+        idx = int(result[8])
+        frame_offset = int(result[9]) if len(result) >= 10 else 0
+
+        if frame_offset == 0:
+            if idx in current_idx_to_note:
+                parsed_track_results.append((track_id, current_idx_to_note[idx]))
+            continue
+
+        # head-padding: 回查历史帧对应 note_type 的检测列表
+        src_frame = frame_number + frame_offset
+        if src_frame < 0:
+            continue
+
+        src_detections = detections_by_frame.get(src_frame, [])
+        src_type_detections = [d for d in src_detections if d.note_type == note_type]
+        if 0 <= idx < len(src_type_detections):
+            parsed_track_results.append((track_id, src_type_detections[idx]))
+
     return parsed_track_results
 
 
