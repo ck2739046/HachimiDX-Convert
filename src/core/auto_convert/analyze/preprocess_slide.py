@@ -217,7 +217,6 @@ def preprocess_slide_head_data(shared_context: SharedContext, candidate_slide_he
             })
 
         slide_data[key] = path
-        # self.draw_path_on_frame(track_id, path[0]['frame']+3, path)
 
     if not slide_data:
         print("preprocess_slide_head_data: no slide head data")
@@ -324,7 +323,6 @@ def preprocess_slide_tail_data(shared_context: SharedContext, candidate_slide_ta
             })
         
         slide_data[key] = path
-        # self.draw_path_on_frame(track_id, path[0]['frame']+3, path)
 
     if not slide_data:
         print("preprocess_slide_tail_data: no slide tail data")

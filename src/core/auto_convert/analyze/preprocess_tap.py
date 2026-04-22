@@ -101,7 +101,6 @@ def preprocess_tap_data(shared_context: SharedContext):
             })
         
         tap_data[key] = value
-        # self.draw_path_on_frame(track_id, value[0]['frame']+3, value)
 
     if not tap_data:
         print("preprocess_tap_data: no tap data")
