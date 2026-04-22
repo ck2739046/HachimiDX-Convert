@@ -43,7 +43,7 @@ def analyze_slide_tail(shared_context, slide_tail_data):
 
         # 计算运动语法
         # 期望的返回: >5 / <3 / -7
-        result = analyze_slide_tail_movement_syntax(shared_context, note_path)
+        result = analyze_slide_tail_movement_syntax(shared_context, note_path, key[3], key[4])
         if result is None:
             print(f"analyze_slide_tail: failed to analyze movement syntax for track id {key[0]}")
             continue
@@ -72,7 +72,7 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
     '''
     合并slide头尾信息
     输入: for (head_track_id, note_type, note_variant, head_position), head_end_time in slide_head_info.items():
-          for (tail_track_id, note_type, note_variant, tail_start_position): (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+          for (tail_track_id, note_type, note_variant, tail_start_position, tail_end_position): (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
 
     将这两组进行匹配：
     delay = tail_start_time - head_end_time
@@ -139,7 +139,7 @@ def merge_slide_info(shared_context, slide_head_info, slide_tail_info, bpm, dela
 
     # 遍历所有tail，寻找匹配的head
     processed_tails = 0
-    for (tail_track_id, tail_note_type, tail_note_variant, tail_start_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
+    for (tail_track_id, tail_note_type, tail_note_variant, tail_start_position, tail_end_position), (tail_movement_syntax, tail_start_time, tail_end_time) in slide_tail_info.items():
         processed_tails += 1
 
         # 先看看有没有任何与tail位置相同的head

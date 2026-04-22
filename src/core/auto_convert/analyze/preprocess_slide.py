@@ -20,6 +20,8 @@ def preprocess_slide_data(shared_context: SharedContext):
         if note_type != NoteType.SLIDE: continue
         if len(note_geometry_list) < 10: continue
 
+        note_geometry_list.sort(key=lambda x: x.frame) # 按帧排序
+
         segment_type = _classify_segment(shared_context, note_geometry_list)
 
         if segment_type is None:
@@ -235,7 +237,7 @@ def preprocess_slide_tail_data(shared_context: SharedContext, candidate_slide_ta
 
     返回格式:
     dict{
-        key: (track_id, note_type, note_variant, start_position),
+        key: (track_id, note_type, note_variant, start_position, end_position),
         value: note path
         [
             {
@@ -304,13 +306,39 @@ def preprocess_slide_tail_data(shared_context: SharedContext, candidate_slide_ta
         # 按frame排序
         valid_track_path.sort(key=lambda x: x[0])
         
-        # 检查通过，添加到slide_data
-        note_variant = note_geometry_list[0].note_variant
         positions = [x[3] for x in valid_track_path]
         if not positions or len(positions[0]) < 2:
             continue
-        position = positions[0][1] # A1 -> 1
-        key = (track_id, note_type, note_variant, position)
+
+        # 前面分类时可能允许起点不是 A 区，这里要重新计算起点
+        start_pos = positions[0]
+        if not start_pos.startswith('A'):
+            # 构建一个虚拟 note_geometry_list
+            temp_list = []
+            for frame_num, cx, cy, position, dist_to_center in valid_track_path:
+                temp_note = type('Note', (object,), {})() # 创建一个空对象
+                temp_note.cx = cx
+                temp_note.cy = cy
+                temp_list.append(temp_note)
+            # 通过惯性推断起点A区
+            start_pos = _guess_target_a_zone_by_inertia(shared_context.a_zone_endpoint, shared_context.std_video_size, temp_list[::-1])
+        
+        # 计算终点
+        end_pos = positions[-1]
+        if not end_pos.startswith('A'):
+            # 构建一个虚拟 note_geometry_list
+            temp_list = []
+            for frame_num, cx, cy, position, dist_to_center in valid_track_path:
+                temp_note = type('Note', (object,), {})() # 创建一个空对象
+                temp_note.cx = cx
+                temp_note.cy = cy
+                temp_list.append(temp_note)
+            # 通过惯性推断终点A区
+            end_pos = _guess_target_a_zone_by_inertia(shared_context.a_zone_endpoint, shared_context.std_video_size, temp_list)
+        
+        # 检查通过，添加到slide_data
+        note_variant = note_geometry_list[0].note_variant
+        key = (track_id, note_type, note_variant, start_pos[1], end_pos[1]) # A1 -> 1
 
         path = []
         for frame_num, cx, cy, position, dist_to_center in valid_track_path:

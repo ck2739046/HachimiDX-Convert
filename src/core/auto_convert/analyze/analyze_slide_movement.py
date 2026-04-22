@@ -3,7 +3,7 @@ import numpy as np
 shared_context = None
 
 
-def analyze_slide_tail_movement_syntax(input_shared_context, note_path):
+def analyze_slide_tail_movement_syntax(input_shared_context, note_path, start_pos, end_pos):
     '''
     分析运动模式
     '''
@@ -17,7 +17,7 @@ def analyze_slide_tail_movement_syntax(input_shared_context, note_path):
     if not positions or len(positions) < 6:
         return None
     
-    classified_segments = get_syntax(note_path)
+    classified_segments = get_syntax(note_path, start_pos, end_pos)
 
     if not classified_segments:
         return None
@@ -179,9 +179,9 @@ def analyze_slide_tail_movement_syntax(input_shared_context, note_path):
 
 
 
-def get_syntax(note_path):
+def get_syntax(note_path, start_pos, end_pos):
     
-    note_path_segments = _divide_path_by_A_zone(note_path)
+    note_path_segments = _divide_path_by_A_zone(note_path, start_pos, end_pos)
     classified_segments = []
     for note_path_segment, start_A_zone, end_A_zone in note_path_segments:
 
@@ -1125,37 +1125,13 @@ def _is_pass_a_zone_endpoint(cx, cy, input_shared_context) -> tuple[bool, str]:
     return False, ""
 
 
-def _divide_path_by_A_zone(note_path) -> list:
+def _divide_path_by_A_zone(note_path, start_pos, end_pos) -> list:
     """
     将一整条分割成多个小段，分割点是经过了A区 (判定点)
     返回：list[tuple[note_path, start_A_zone_label, end_A_zone_label]]
     """
 
-    def _get_nearest_a_zone_endpoint(cx, cy) -> str:
-        # 获取给定位置最近的A区判定点
-        min_dist = float('inf')
-        nearest_endpoint = None
-        for label, (ex, ey) in shared_context.a_zone_endpoint.items():
-            dist = np.sqrt((cx - ex)**2 + (cy - ey)**2)
-            if dist < min_dist:
-                min_dist = dist
-                nearest_endpoint = label
-        return nearest_endpoint
-
-    positions = [x['position'] for x in note_path]
-    # 在预处理时，不保证起点就在A区
-    # 所以要找到离起点最近的A区判定点
-    start_pos = positions[0]
-    if not start_pos.startswith('A'):
-        start_pos = (_get_nearest_a_zone_endpoint(note_path[0]['cx'],
-                                                  note_path[0]['cy']))
-    # 在预处理中，不保证终点也在A区
-    # 所以要找到离终点最近的A区判定点
-    end_pos = positions[-1]
-    if not end_pos.startswith('A'):
-        end_pos = (_get_nearest_a_zone_endpoint(note_path[-1]['cx'],
-                                                note_path[-1]['cy']))
-        
+    start_pos, end_pos = f'A{start_pos}', f'A{end_pos}'
     note_path_segments = []
     current_segment = []
     current_segment_start_A_zone = None
