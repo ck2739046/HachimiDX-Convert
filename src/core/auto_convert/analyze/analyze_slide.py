@@ -43,7 +43,11 @@ def analyze_slide_tail(shared_context, slide_tail_data):
 
         # 计算运动语法
         # 期望的返回: >5 / <3 / -7
-        movement_syntax, start_pos, end_pos = analyze_slide_tail_movement_syntax(shared_context, note_path)
+        result = analyze_slide_tail_movement_syntax(shared_context, note_path)
+        if result is None:
+            print(f"analyze_slide_tail: failed to analyze movement syntax for track id {key[0]}")
+            continue
+        movement_syntax, start_pos, end_pos = result
         if not movement_syntax:
             print(f"analyze_slide_tail: failed to analyze movement syntax for track id {key[0]}")
             continue
