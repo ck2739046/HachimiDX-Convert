@@ -131,7 +131,7 @@ def _split_touch_notes(tracks: dict, context: _PostTrackContext, next_track_id: 
 
             new_tracks[new_key].extend(segment)
 
-        print(f"post_track: split {note_type.value} track_id {track_id} into {len(segments)} segments")
+        print(f"post_track: split {note_type.value} track_id {track_id} into {len(segments)} segments: {[key[0] for key in segments]}")
 
     return new_tracks, next_track_id
 

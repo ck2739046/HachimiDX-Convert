@@ -1117,7 +1117,7 @@ def _get_between_DE_zones(start_A_zone_id: int, end_A_zone_id: int,
 
 def _is_pass_a_zone_endpoint(cx, cy, input_shared_context) -> tuple[bool, str]:
     # 严格判断是否经过了A区判定点
-    max_dist = input_shared_context.note_travel_dist * 0.15
+    max_dist = input_shared_context.note_travel_dist * 0.13
     for label, (ex, ey) in input_shared_context.a_zone_endpoint.items():
         dist = np.sqrt((cx - ex)**2 + (cy - ey)**2)
         if dist < max_dist:
