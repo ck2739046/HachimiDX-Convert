@@ -4,8 +4,8 @@ from pathlib import Path
 import io
 
 # 解决 Windows 控制台 Unicode 编码问题
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', write_through=True)
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', write_through=True)
 
 
 if len(sys.argv) <= 1:
@@ -122,6 +122,9 @@ def main(args: list[str]) -> bool:
                 inference_device=_get_cfg(cfg, "inference_device"),
                 batch_touch_hold=_get_cfg(cfg, "predict_batch_size_touch_hold", int),
                 touch_hold_model_path=_get_cfg(cfg, "touch_hold_model_path", Path),
+                batch_cls=_get_cfg(cfg, "predict_batch_size_classify", int),
+                cls_break_model_path=_get_cfg(cfg, "cls_break_model_path", Path),
+                cls_ex_model_path=_get_cfg(cfg, "cls_ex_model_path", Path),
             )
             if not result.is_ok:
                 return _fail(print_op_result(result))
