@@ -1,15 +1,18 @@
 import numpy as np
 
 shared_context = None
+track_id = None
 
 
-def analyze_slide_tail_movement_syntax(input_shared_context, note_path, start_pos, end_pos):
+def analyze_slide_tail_movement_syntax(input_shared_context, note_path, start_pos, end_pos, tail_track_id):
     '''
     分析运动模式
     '''
 
     global shared_context
     shared_context = input_shared_context
+    global track_id
+    track_id = tail_track_id
 
     if len(note_path) < 6:
         return None
@@ -180,6 +183,10 @@ def analyze_slide_tail_movement_syntax(input_shared_context, note_path, start_po
 def get_syntax(note_path, start_pos, end_pos):
     
     note_path_segments = _divide_path_by_A_zone(note_path, start_pos, end_pos)
+    if not note_path_segments:
+        print(f"get_syntax: no valid segments after dividing by A zones for track {track_id}")
+        return None
+    
     classified_segments = []
     for note_path_segment, start_A_zone, end_A_zone in note_path_segments:
 
@@ -229,7 +236,7 @@ def get_syntax(note_path, start_pos, end_pos):
 
         # 无法识别, syntax fallback to straight
         classified_segments.append((start_A_zone, end_A_zone, '?'))
-        print(f"get_syntax: unrecognized movement pattern for segment, default to '?' syntax:")
+        print(f"get_syntax: unrecognized movement pattern for segment in track {track_id}, default to '?' syntax:")
         print(", ".join(f"{note['position']}({note['frame']})" for note in note_path_segment))
 
 
@@ -1133,6 +1140,7 @@ def _divide_path_by_A_zone(note_path, start_pos, end_pos) -> list:
     current_segment = []
     current_segment_start_A_zone = None
     current_segment_end_A_zone = None
+    leave_start_A_zone = False
     for i, point in enumerate(note_path):
 
         # 特例：第一个点
@@ -1156,13 +1164,21 @@ def _divide_path_by_A_zone(note_path, start_pos, end_pos) -> list:
         is_pass, a_zone = is_pass_a_zone_endpoint(cx, cy, shared_context)
         # 没经过A区，添加点到当前段
         if not is_pass:
+            leave_start_A_zone = True
             current_segment.append(point)
             continue
-        # 经过A区，但是还在当前段的起点，添加到当前段
+        # 经过A区，且是当前段的起点
         if current_segment_start_A_zone == a_zone:
-            current_segment.append(point)
-            continue
-        # 经过A区，且不是当前段的起点，说明进入了下一个A区
+            if not leave_start_A_zone:
+                # 如果没离开, 添加到当前段
+                current_segment.append(point)
+                continue
+            else:
+                # 从 A 区离开又回到了 A 区，视为当前段已结束，开启新段
+                pass
+        else:
+            # 经过A区，且不是当前段的起点，说明进入了下一个A区
+            pass
         
         # 保存当前段
         current_segment.append(point)
@@ -1174,6 +1190,7 @@ def _divide_path_by_A_zone(note_path, start_pos, end_pos) -> list:
         current_segment = [point]
         current_segment_start_A_zone = a_zone
         current_segment_end_A_zone = None
+        leave_start_A_zone = False # reset
 
 
     return note_path_segments
