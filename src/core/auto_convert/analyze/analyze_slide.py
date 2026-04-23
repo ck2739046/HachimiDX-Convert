@@ -453,7 +453,7 @@ def merge_slide_info(shared_context, matched_tails_by_head: dict, unmatched_head
 
             # 分析 tail 运动语法
             tail_movement_syntax = analyze_slide_tail_movement_syntax(
-                shared_context, note_path, f"A{tail_start_position_id}", f"A{tail_end_position_id}"
+                shared_context, note_path, f"A{tail_start_position_id}", f"A{tail_end_position_id}", tail_track_id
             )
             if not tail_movement_syntax:
                 print(f"merge_slide_info: failed to analyze movement syntax for tail track id {tail_track_id}")
@@ -462,6 +462,10 @@ def merge_slide_info(shared_context, matched_tails_by_head: dict, unmatched_head
             seg_full_syntax = f"{head_start_pos}{get_suffix(note_variant)}{tail_movement_syntax}{get_suffix(tail_note_variant)}"
             segment_syntax_list.append(seg_full_syntax)
             segment_durations.append(tail_end_time - tail_start_time)
+
+        if not segment_syntax_list:
+            # 所有 tail 均未生成有效语法，跳过此 head
+            continue
 
         # 组装链式语法（仅语法，不含时值）
         merged_movement_syntax = segment_syntax_list[0] # 第一个segment完整保留
