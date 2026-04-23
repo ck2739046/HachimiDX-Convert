@@ -82,10 +82,8 @@ def analyze_slide_tail_movement_syntax(input_shared_context, note_path, start_po
         return None
 
     movement_syntax = ''.join(merged_tokens)
-    start_pos = classified_segments[0][0]  # 起始位置
-    end_pos = classified_segments[-1][1]   # 终止位置
 
-    return movement_syntax, start_pos, end_pos
+    return movement_syntax
 
 
 
@@ -1131,7 +1129,6 @@ def _divide_path_by_A_zone(note_path, start_pos, end_pos) -> list:
     返回：list[tuple[note_path, start_A_zone_label, end_A_zone_label]]
     """
 
-    start_pos, end_pos = f'A{start_pos}', f'A{end_pos}'
     note_path_segments = []
     current_segment = []
     current_segment_start_A_zone = None
