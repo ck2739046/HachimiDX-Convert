@@ -47,22 +47,22 @@ def copy_app_resources():
     # test videos
     copy_to_release(PathManage.TEST_H264_PATH)
     copy_to_release(PathManage.TEST_VP9_PATH)
-    # models
-    copy_to_release(PathManage.DETECT_PT_PATH)
-    copy_to_release(PathManage.OBB_PT_PATH)
-    copy_to_release(PathManage.CLS_BREAK_PT_PATH)
-    copy_to_release(PathManage.CLS_EX_PT_PATH)
-    copy_to_release(PathManage.TOUCH_HOLD_PT_PATH)
+
+    # 解压 models
+    models_dir = PathManage.RESOURCES_DIR / "for_release_only" / "models"
+    for model_zip in models_dir.glob("*.zip"):
+        target_dir = RELEASE_DIR / "src" / "resources" / "models"
+        extract_with_bandizip(model_zip, target_dir, mode='file')
 
     # 解压 python 到目录
     python_path = PathManage.RESOURCES_DIR / "for_release_only" / "python portable" / "py3.13.11.zip"
     python_target_path = RELEASE_DIR / "python"
-    extract_with_bandizip(python_path, python_target_path)
+    extract_with_bandizip(python_path, python_target_path, mode='dir')
 
     # 解压 ffmpeg 到目录
     ffmpeg_path = PathManage.RESOURCES_DIR / "for_release_only" / "ffmpeg-8.0.1-essentials_build.7z"
     ffmpeg_target_path = RELEASE_DIR / "src" / "resources" / "ffmpeg"
-    extract_with_bandizip(ffmpeg_path, ffmpeg_target_path)
+    extract_with_bandizip(ffmpeg_path, ffmpeg_target_path, mode='dir')
 
     # 复制 majdata
     majdata_dir = PathManage.RESOURCES_DIR / "for_release_only" / "majdata"
@@ -95,16 +95,25 @@ def copy_root():
 
 
 
-def extract_with_bandizip(archive_path: Path, extract_path: Path):
+def extract_with_bandizip(archive_path: Path, extract_path: Path, mode: str):
     # Bandizip 智能解压到此处
-    # 因为会在目标文件夹内新建一个压缩包同名文件夹，所以解压地址要使用 extract_path.parent
-    cmd = ["bandizip", "bx", f"-o:{extract_path.parent}", "-target:auto", str(archive_path)]
-    result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"Bandizip 解压失败: {result.stderr}")
-    # 重命名文件夹
-    real_extracted_dir = extract_path.parent / archive_path.stem
-    os.rename(real_extracted_dir, extract_path)
+    if mode == 'dir':
+        # 因为会在目标文件夹内新建一个压缩包同名文件夹，所以解压地址要使用 extract_path.parent
+        cmd = ["bandizip", "bx", f"-o:{extract_path.parent}", "-target:auto", str(archive_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"Bandizip 解压失败: {result.stderr}")
+        # 重命名文件夹
+        real_extracted_dir = extract_path.parent / archive_path.stem
+        os.rename(real_extracted_dir, extract_path)
+    elif mode == 'file':
+        # 解压到目标路径时不创建压缩包同名文件夹
+        cmd = ["bandizip", "x", f"-o:{extract_path}", str(archive_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"Bandizip 解压失败: {result.stderr}")
+    else:
+        print(f"extract_with_bandizip: Invalid mode: {mode}")
 
 
 
@@ -141,7 +150,7 @@ def copy_to_release(input_path: Path, target_path: Path = None):
         dest_file.write_bytes(input_path.read_bytes())
 
     else:
-        print(f"Warning: {input_path} is not a file or dir, skipping.")
+        print(f"copy_to_release: Warning: {input_path} is not a file or dir, skipping.")
 
 
 
