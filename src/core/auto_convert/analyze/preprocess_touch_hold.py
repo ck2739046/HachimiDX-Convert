@@ -61,6 +61,7 @@ def preprocess_touch_hold_data(shared_context: SharedContext,
         print(f"preprocess_touch_hold_data: failed to open video: {shared_context.std_video_path}")
         return {}
 
+    last_printed_samples = 0
     processed_samples = 0
     sample_buffer = []
     observations_by_track = defaultdict(list)
@@ -106,12 +107,15 @@ def preprocess_touch_hold_data(shared_context: SharedContext,
                     valid_percent_end,
                 )
                 processed_samples += len(consumed_batch)
-                if processed_samples % batch_touch_hold == 0:
+
+                if processed_samples - last_printed_samples >= batch_touch_hold:
+                    last_printed_samples = processed_samples
                     print(
-                        f"preprocess_touch_hold_data: processed {processed_samples}/{total_samples} samples   ",
+                        f"preprocess_touch_hold_data: processed {processed_samples}/{total_samples} samples...",
                         end="\r",
                         flush=True,
                     )
+
 
         if sample_buffer:
             _consume_touch_hold_batch(
@@ -126,6 +130,8 @@ def preprocess_touch_hold_data(shared_context: SharedContext,
                 valid_percent_end,
             )
             processed_samples += len(sample_buffer)
+
+        print(f"preprocess_touch_hold_data: processed {total_samples}/{total_samples} samples... Done")
 
     finally:
         cap.release()

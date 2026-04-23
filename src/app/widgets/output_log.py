@@ -331,8 +331,13 @@ class OutputLogWidget(QWidget):
                         clean_line = self._strip_ansi(final_text)
                         self._append_output(clean_line, replace_last=False)
                     else:
-                        # 即使是空行，也要发送以固定进度行
-                        self._append_output("", replace_last=False)
+                        # 只有当进度内容未被过滤时，才发送空行以固定进度行
+                        if len(parts) >= 2:
+                            progress_clean = self._strip_ansi(parts[-2])
+                            if not self._should_ignore_line(progress_clean):
+                                self._append_output("", replace_last=False)
+                        else:
+                            self._append_output("", replace_last=False)
                 else:
                     # 没有 \\r，直接追加
                     if line.strip():

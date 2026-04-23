@@ -41,6 +41,7 @@ def main(std_video_path: Path,
         ) -> OpResult[None]:
     
     try:
+        print('开始音符分析...')
         shared_context = create_shared_context(std_video_path, is_big_touch)
         tap_speed_print_info = "tap speed not estimated (no tap data)"
         touch_speed_print_info = "touch speed not estimated (no touch data)"
