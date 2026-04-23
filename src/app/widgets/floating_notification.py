@@ -22,7 +22,7 @@ class FloatingNotificationManager(QObject):
     FIXED_HEIGHT: int = 35
     SPACING: int = 7
     MARGIN: int = 15
-    AUTO_CLOSE_MS: int = 10000 # 10秒后自动关闭
+    AUTO_CLOSE_MS: int = 5000 # 5秒后自动关闭
     
     # 重新定位请求信号
     reposition_requested = pyqtSignal(QWidget)
