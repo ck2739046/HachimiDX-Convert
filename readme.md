@@ -24,7 +24,7 @@ A tool designed for the rhythm game `maimai`. Accepts chart confirmation videos 
     - Everything is done through a visual interface.
 
 - **Built-in editors**
-    - Integrates `MajdataEdit` and `MajdataView` so convertion results can be previewed and modified in one place.
+    - Integrates [`MajdataEdit`](https://github.com/LingFeng-bbben/MajdataView) and [`MajdataView`](https://github.com/TeamMajdata/MajdataView/tree/431-NC-TH) so convertion results can be previewed and modified in one place.
 
 - **Flexible inference backends**
     - Supports CPU / NVIDIA TensorRT / DirectML inference backends for compatibility with a range of hardware.

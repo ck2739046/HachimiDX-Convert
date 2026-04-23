@@ -26,7 +26,7 @@
     - 全程使用可视化图形界面。
 
 - **内置谱面编辑器**
-    - 内嵌 `MajdataEdit` 和 `MajdataView`，识别结果一站式预览与修改。
+    - 内嵌 [`MajdataEdit`](https://github.com/LingFeng-bbben/MajdataView) 和 [`MajdataView`](https://github.com/TeamMajdata/MajdataView/tree/431-NC-TH)，识别结果一站式预览与修改。
 
 - **多后台推理支持**
     - 支持 CPU / NVIDIA TensorRT / DirectML 多种深度学习推理后端，兼容多种硬件。
