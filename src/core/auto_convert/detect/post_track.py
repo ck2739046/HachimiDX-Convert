@@ -5,7 +5,7 @@ from pathlib import Path
 import cv2
 
 from ...schemas.op_result import OpResult, err, ok
-from ..analyze.analyze_slide_movement import _is_pass_a_zone_endpoint
+from ..analyze.analyze_slide_movement import is_pass_a_zone_endpoint
 from ..analyze.preprocess_slide import (
     _guess_target_a_zone_by_inertia,
     _is_close_to_A_zone_endpoint,
@@ -294,7 +294,7 @@ def _classify_segment(context: _PostTrackContext, note_geometry_list, track_id, 
     for i, note in enumerate(note_geometry_list):
         # 判断是否接近A区判定点
         cx, cy = note.cx, note.cy
-        is_pass, _a_zone = _is_pass_a_zone_endpoint(cx, cy, context)
+        is_pass, _a_zone = is_pass_a_zone_endpoint(cx, cy, context)
         if not is_pass:
             continue
         # 找到了第一个A区判定点作为分割点

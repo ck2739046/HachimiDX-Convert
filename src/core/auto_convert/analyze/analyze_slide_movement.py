@@ -1113,7 +1113,7 @@ def _get_between_DE_zones(start_A_zone_id: int, end_A_zone_id: int,
 
     
 
-def _is_pass_a_zone_endpoint(cx, cy, input_shared_context) -> tuple[bool, str]:
+def is_pass_a_zone_endpoint(cx, cy, input_shared_context) -> tuple[bool, str]:
     # 严格判断是否经过了A区判定点
     max_dist = input_shared_context.note_travel_dist * 0.13
     for label, (ex, ey) in input_shared_context.a_zone_endpoint.items():
@@ -1153,7 +1153,7 @@ def _divide_path_by_A_zone(note_path, start_pos, end_pos) -> list:
 
         # 普通：其他的轨迹点
         cx, cy = point['cx'], point['cy']
-        is_pass, a_zone = _is_pass_a_zone_endpoint(cx, cy, shared_context)
+        is_pass, a_zone = is_pass_a_zone_endpoint(cx, cy, shared_context)
         # 没经过A区，添加点到当前段
         if not is_pass:
             current_segment.append(point)
