@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import cv2
-from typing import Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any
 
 from ..detect.track import _load_track_results
 from ...tools.media_ffprobe_inspect import FFprobeInspect
@@ -40,6 +40,7 @@ class SharedContext:
     touch_areas: Dict[str, Tuple[int, int]] = None
     a_zone_endpoint: Dict[str, Tuple[int, int]] = None
     track_data: Dict[Any, Any] = None
+    max_track_id: int = None
 
     
 
@@ -51,6 +52,21 @@ class SharedContext:
                 f"frame index out of range, frame={frame_idx}, timestamps={len(self.frame_timestamps_msec)}"
             )
         return self.frame_timestamps_msec[frame_idx]
+    
+    def get_frames_in_msec_range(self, start_msec: float, end_msec: float) -> List[int]:
+        if start_msec > end_msec:
+            raise ValueError(f"start_msec must be <= end_msec, got: start_msec={start_msec}, end_msec={end_msec}")
+        if start_msec > self.frame_timestamps_msec[-1] or end_msec < self.frame_timestamps_msec[0]:
+            raise ValueError(
+                f"msec range is out of bounds of frame timestamps, "
+                f"start_msec={start_msec}, end_msec={end_msec}, "
+                f"timestamp_range=({self.frame_timestamps_msec[0]}, {self.frame_timestamps_msec[-1]})"
+            )
+        frames = []
+        for idx, timestamp in enumerate(self.frame_timestamps_msec):
+            if start_msec <= timestamp <= end_msec:
+                frames.append(idx)
+        return frames
 
     def frame_delta_msec(self, start_frame: int, end_frame: int) -> float:
         if end_frame == start_frame:
@@ -96,6 +112,7 @@ def create_shared_context(std_video_path: Path, is_big_touch: bool) -> SharedCon
     touch_areas = get_touch_areas(std_video_size, std_video_cx, std_video_cy)
     a_zone_endpoint = get_a_zone_endpoint(std_video_size, std_video_cx, std_video_cy)
     track_data = _load_track_results(std_video_path.parent)
+    max_track_id = get_max_track_id(track_data)
 
     # 验证track_data中的frame索引不超过视频帧数
     max_track_frame = None
@@ -131,6 +148,7 @@ def create_shared_context(std_video_path: Path, is_big_touch: bool) -> SharedCon
         touch_areas=touch_areas,
         a_zone_endpoint=a_zone_endpoint,
         track_data=track_data,
+        max_track_id=max_track_id
     )
 
 
@@ -189,3 +207,14 @@ def get_a_zone_endpoint(std_video_size, std_video_cx, std_video_cy) -> dict:
 
     A_zone_endpoint_on_judgeline = new_dict
     return A_zone_endpoint_on_judgeline
+
+
+
+def get_max_track_id(track_data: dict) -> int:
+    max_track_id = 0
+    for track_id, note_type in track_data.keys():
+        try:
+            max_track_id = max(max_track_id, int(track_id))
+        except Exception:
+            pass
+    return max_track_id

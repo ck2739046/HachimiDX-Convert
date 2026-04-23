@@ -106,7 +106,7 @@ def preprocess_touch_hold_data(shared_context: SharedContext,
                     valid_percent_end,
                 )
                 processed_samples += len(consumed_batch)
-                if processed_samples % 20 == 0:
+                if processed_samples % batch_touch_hold == 0:
                     print(
                         f"preprocess_touch_hold_data: processed {processed_samples}/{total_samples} samples   ",
                         end="\r",

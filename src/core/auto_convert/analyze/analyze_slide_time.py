@@ -33,7 +33,8 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, start_position,
     last_cx = None
     last_cy = None
     last_frame = None
-    min_dist = shared_context.std_video_size * 0.04 # 1080p下约为40像素
+    # 这个值应该比 analyze_slide_movement._is_pass_a_zone_endpoint() 的阈值要大一点点
+    min_dist = shared_context.note_travel_dist * 0.131
     frame_speeds = []
 
     for point in note_path:
