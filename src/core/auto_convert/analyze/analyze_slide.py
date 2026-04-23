@@ -1,7 +1,10 @@
 import numpy as np
 from collections import defaultdict
 
+from ultralytics import YOLO
+
 from ..detect.note_definition import *
+from ..detect.classify import classify_note_path
 from .shared_context import *
 from .analyze_tap import analyze_tap_time
 
@@ -10,7 +13,9 @@ from .analyze_slide_movement import analyze_slide_tail_movement_syntax, is_pass_
 
 
 
-def analyze_slide_time(shared_context, slide_head_data, slide_tail_data, bpm):
+def analyze_slide_time(shared_context, slide_head_data, slide_tail_data, bpm,
+                       cls_ex_model_path, cls_break_model_path,
+                       inference_device, batch_cls):
 
     # 处理星星头的时间，视为 tap 处理
     slide_head_info = analyze_tap_time(shared_context, slide_head_data)
@@ -33,7 +38,10 @@ def analyze_slide_time(shared_context, slide_head_data, slide_tail_data, bpm):
     if unmatched_heads:
         # 一笔画的多个星星尾可能会被视为一条，可能需要分割
         matched_tails_by_head, unmatched_heads = try_split_slide_tail(
-            shared_context, matched_tails_by_head, unmatched_heads, std_delay, split_delay_tolerance
+            shared_context, matched_tails_by_head, unmatched_heads,
+            std_delay, split_delay_tolerance,
+            cls_ex_model_path, cls_break_model_path,
+            inference_device, batch_cls,
         )
 
     # 合并头尾，生成最终slide信息
@@ -175,7 +183,9 @@ def slide_head_tail_match_by_time(shared_context, slide_head_info, slide_tail_in
 
 
 def try_split_slide_tail(shared_context, matched_tails_by_head: dict, unmatched_heads: list,
-                         std_delay: float, split_delay_tolerance: float):
+                         std_delay: float, split_delay_tolerance: float,
+                         cls_ex_model_path, cls_break_model_path,
+                         inference_device, batch_cls):
     '''
     一笔画的多个星星尾可能会被视为一条，可能需要分割
 
@@ -215,6 +225,12 @@ def try_split_slide_tail(shared_context, matched_tails_by_head: dict, unmatched_
     
     print(f"try_split_slide_tail: trying to split tails for {len(unmatched_heads)} unmatched heads")
 
+    # 加载模型
+    cls_ex_model = YOLO(cls_ex_model_path, task="classify")
+    cls_break_model = YOLO(cls_break_model_path, task="classify")
+
+    next_track_id = shared_context.max_track_id + 1
+
     # 按 head_end_time 从大到小排序
     unmatched_heads = sorted(unmatched_heads, key=lambda x: x[1], reverse=True)
 
@@ -238,7 +254,6 @@ def try_split_slide_tail(shared_context, matched_tails_by_head: dict, unmatched_
         
         # 遍历所有 tail
         is_head_matched = False
-        next_track_id = shared_context.max_track_id + 1
         for (matched_head_key, matched_head_value), tail_list in list(matched_tails_by_head.items()):
             for matched_tail_key, matched_tail_value in tail_list:
                 tail_track_id, tail_note_type, tail_note_variant, tail_start_position_id, tail_end_position_id = matched_tail_key
@@ -294,11 +309,30 @@ def try_split_slide_tail(shared_context, matched_tails_by_head: dict, unmatched_
                 new_tail_track_id_late = next_track_id
                 next_track_id += 1 # update
 
+                # 对新的 tail note paths 重新分裂
+                new_tail_note_variant_early = _classify_note_path(
+                    shared_context, new_note_path_early, (tail_track_id, tail_note_type),
+                    cls_ex_model, cls_break_model, inference_device, batch_cls
+                ) or tail_note_variant # fallback
+                # if new_tail_note_variant_early:
+                #     print(f"try_split_slide_tail: - re-classified early tail {new_tail_track_id_early} -> {new_tail_note_variant_early}")
+                # else:
+                #     new_tail_note_variant_early = tail_note_variant
+
+                new_tail_note_variant_late = _classify_note_path(
+                    shared_context, new_note_path_late, (tail_track_id, tail_note_type),
+                    cls_ex_model, cls_break_model, inference_device, batch_cls
+                ) or tail_note_variant # fallback
+                # if new_tail_note_variant_late:
+                #     print(f"try_split_slide_tail: - re-classified late tail {new_tail_track_id_late} -> {new_tail_note_variant_late}")
+                # else:
+                #     new_tail_note_variant_late = tail_note_variant
+
                 # 生成新的 tail_key 和 tail_value
-                new_tail_key_early = (new_tail_track_id_early, tail_note_type, tail_note_variant, tail_start_position_id, head_position[0])
+                new_tail_key_early = (new_tail_track_id_early, tail_note_type, new_tail_note_variant_early, tail_start_position_id, head_position[0])
                 new_tail_value_early = (new_tail_start_time_early, new_tail_end_time_early, new_note_path_early)
 
-                new_tail_key_late = (new_tail_track_id_late, tail_note_type, tail_note_variant, head_position[0], tail_end_position_id)
+                new_tail_key_late = (new_tail_track_id_late, tail_note_type, new_tail_note_variant_late, head_position[0], tail_end_position_id)
                 new_tail_value_late = (new_tail_start_time_late, new_tail_end_time_late, new_note_path_late)
 
                 # 更新 matched_tails_by_head
@@ -306,7 +340,7 @@ def try_split_slide_tail(shared_context, matched_tails_by_head: dict, unmatched_
                 matched_tails_by_head[(matched_head_key, matched_head_value)].append((new_tail_key_early, new_tail_value_early))
                 matched_tails_by_head[(unmatched_head_key, unmatched_head_value)].append((new_tail_key_late, new_tail_value_late))
                 is_head_matched = True
-                print(f"try_split_slide_tail: - split tail {tail_track_id} at frame {frame_num} triggered by head {head_track_id} -> {new_tail_track_id_early} {new_tail_track_id_late}")
+                print(f"try_split_slide_tail: - split tail {tail_track_id} at frame {frame_num} triggered by head {head_track_id} -> {new_tail_track_id_early}/{new_tail_track_id_late}")
 
         if is_head_matched:
             unmatched_heads.remove((unmatched_head_key, unmatched_head_value))
@@ -316,6 +350,37 @@ def try_split_slide_tail(shared_context, matched_tails_by_head: dict, unmatched_
     return matched_tails_by_head, unmatched_heads
 
 
+
+
+
+
+
+
+
+def _classify_note_path(shared_context, note_path, tract_data_key,
+                       cls_ex_model, cls_break_model,
+                       inference_device, batch_cls):
+
+    try:
+        note_geometry_list = shared_context.track_data.get(tract_data_key, None)
+        if note_geometry_list:
+            frames = {n['frame'] for n in note_path}
+            target_geometry_list = [geo for geo in note_geometry_list if geo.frame in frames]
+            target_geometry_list.sort(key=lambda g: g.frame)
+            if target_geometry_list:
+                variant = classify_note_path(
+                    target_geometry_list,
+                    shared_context.std_video_path,
+                    cls_ex_model, cls_break_model,
+                    inference_device, batch_cls,
+                )
+                if variant:
+                    return variant
+        
+        return None
+    except Exception as e:
+        print(f"try_split_slide_tail: failed to re-classify tail {track_id}: {e}")
+        return None
 
 
 

@@ -376,4 +376,9 @@ def _get_analyze_model_paths() -> OpResult[list]:
     cmd.append(f"--touch_hold_model_path")
     cmd.append(str(paths["touch_hold"]))
 
+    cmd.append(f"--cls_break_model_path")
+    cmd.append(str(paths["cls_break"]))
+    cmd.append(f"--cls_ex_model_path")
+    cmd.append(str(paths["cls_ex"]))
+
     return ok(cmd)

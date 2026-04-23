@@ -161,6 +161,65 @@ def _build_sampling_plan(track_results):
 
 
 
+def _crop_single_note_image(imgsz, frame, note_geometry, crop_border):
+    
+    """
+    从视频帧中裁剪单个音符图像。
+    
+    输入:
+        imgsz: 目标图像尺寸
+        frame: 视频帧 (numpy array)
+        note_geometry: Note_Geometry 对象
+        crop_border: 裁剪边界扩展像素数
+    
+    返回:
+        cropped_image: 裁剪并resize后的图像 (numpy array)
+        或 None (裁剪失败)
+    """
+    
+    try:
+        # 对于普通矩形框，裁剪范围就是(x1, y1, x3, y3)
+        if not is_obb(note_geometry.note_type):
+            x1, y1, x2, y2 = note_geometry.x1, note_geometry.y1, note_geometry.x3, note_geometry.y3
+            target_frame = frame
+        else:
+            # obb需要先将检测框和图像旋转为水平
+            points = np.array([
+                [note_geometry.x1, note_geometry.y1],
+                [note_geometry.x2, note_geometry.y2],
+                [note_geometry.x3, note_geometry.y3],
+                [note_geometry.x4, note_geometry.y4]
+            ], dtype=np.float32)
+            angle = (note_geometry.r * 180 / np.pi) - 90
+            rotation_matrix = cv2.getRotationMatrix2D((note_geometry.cx, note_geometry.cy), angle, 1.0)
+            target_frame = cv2.warpAffine(frame, rotation_matrix, (frame.shape[1], frame.shape[0]))
+            rotated_points = cv2.transform(points.reshape(1, -1, 2), rotation_matrix).reshape(-1, 2)
+            x_coords = rotated_points[:, 0]
+            y_coords = rotated_points[:, 1]
+            x1, y1 = np.min(x_coords), np.min(y_coords)
+            x2, y2 = np.max(x_coords), np.max(y_coords)
+
+        # 稍微扩展一圈
+        x1 -= crop_border
+        y1 -= crop_border
+        x2 += crop_border
+        y2 += crop_border
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        x1 = max(0, x1)
+        y1 = max(0, y1)
+        x2 = min(target_frame.shape[1], x2)
+        y2 = min(target_frame.shape[0], y2)
+        if x1 >= x2 or y1 >= y2:
+            return None
+        cropped_image = target_frame[y1:y2, x1:x2]
+        cropped_image = cv2.resize(cropped_image, (imgsz, imgsz))
+        return cropped_image
+    except Exception as e:
+        print(f"裁剪音符图像时出错: {e}")
+        return None
+
+
+
 def _extract_note_images_in_frame(imgsz, frame, this_frame_sample_plan, frame_number, crop_border):
     
     """
@@ -177,57 +236,10 @@ def _extract_note_images_in_frame(imgsz, frame, this_frame_sample_plan, frame_nu
             sample_position = sample_data['sample_position']
             note = sample_data['note_geometry']
 
-            # 对于普通矩形框，裁剪范围就是(x1, y1, x3, y3)
-            if not is_obb(note.note_type):
-                x1, y1, x2, y2 = note.x1, note.y1, note.x3, note.y3
-                target_frame = frame
+            cropped_image = _crop_single_note_image(imgsz, frame, note, crop_border)
+            if cropped_image is None:
+                continue
 
-            # obb需要先将检测框和图像旋转为水平
-            else:
-                # 获取检测框四个点坐标
-                points = np.array([
-                    [note.x1, note.y1],
-                    [note.x2, note.y2],
-                    [note.x3, note.y3],
-                    [note.x4, note.y4]
-                ], dtype=np.float32)
-                # 计算旋转角度
-                angle = (note.r * 180 / np.pi) - 90
-                # dx = box['x2'] - box['x1']
-                # dy = box['y2'] - box['y1']
-                # angle = np.arctan2(dy, dx) * 180 / np.pi
-                # 获取旋转矩阵
-                rotation_matrix = cv2.getRotationMatrix2D((note.cx, note.cy), angle, 1.0)
-                # 旋转整个图像为水平
-                target_frame = cv2.warpAffine(frame, rotation_matrix, (frame.shape[1], frame.shape[0]))
-                # 旋转四个点为水平
-                rotated_points = cv2.transform(points.reshape(1, -1, 2), rotation_matrix).reshape(-1, 2)
-                # 计算旋转后的边界框
-                x_coords = rotated_points[:, 0]
-                y_coords = rotated_points[:, 1]
-                x1, y1 = np.min(x_coords), np.min(y_coords)
-                x2, y2 = np.max(x_coords), np.max(y_coords)
-
-            # 稍微扩展一圈
-            x1 -= crop_border
-            y1 -= crop_border
-            x2 += crop_border
-            y2 += crop_border
-            # 转为整数
-            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-            # 裁剪范围边界检查
-            x1 = max(0, x1)
-            y1 = max(0, y1)
-            x2 = min(target_frame.shape[1], x2)
-            y2 = min(target_frame.shape[0], y2)
-            if x1 >= x2 or y1 >= y2:
-                print(f"无效的裁剪区域: {frame_number}: ({x1}, {y1}), ({x2}, {y2}), {note.note_type.name}")
-                return None
-            # 裁剪图像
-            cropped_image = target_frame[y1:y2, x1:x2]
-            # resize到模型输入大小
-            cropped_image = cv2.resize(cropped_image, (imgsz, imgsz))
-            # 保存信息
             cropped_data = {
                 'frame': frame_number,
                 'track_id': track_id,
@@ -370,3 +382,130 @@ def _merge_cls_into_track_results(track_results, cls_results_all):
             note_geometry.note_variant = final_note_variant
 
     return track_results
+
+
+
+def classify_note_path(
+    path_to_classify: list[Note_Geometry],
+    std_video_path: Path,
+    cls_ex_model, cls_break_model,
+    inference_device: str, batch_cls: int,
+) -> NoteVariant | None:
+    """
+    对单个音符路径进行分类，返回路径的 NoteVariant。
+
+    输入:
+        path_to_classify: list of Note_Geometry — 单个音符路径的所有检测框
+        std_video_path: 标准视频路径
+        cls_ex_model: YOLO EX 分类模型
+        cls_break_model: YOLO BREAK 分类模型
+        inference_device: 推理设备
+        batch_cls: batch size
+
+    返回:
+        NoteVariant (或 None，若分类失败)
+    """
+    if not path_to_classify:
+        return None
+
+    imgsz = get_imgsz('cls')
+
+    # 构建采样计划
+    sampling_plan = defaultdict(list)
+    path_length = len(path_to_classify)
+    sample_positions = [20, 31, 50, 65, 77]
+    for sp_idx, sample_position in enumerate(sample_positions):
+        sample_idx = int(path_length * sample_position / 100.0)
+        if sample_idx >= path_length:
+            continue
+        note = path_to_classify[sample_idx]
+        sampling_plan[note.frame].append({
+            'sample_position': sample_position,
+            'note_geometry': note,
+        })
+
+    if not sampling_plan:
+        return None
+
+    # 打开视频
+    cap = cv2.VideoCapture(str(std_video_path))
+    crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.003)
+
+    cls_results_all = []
+    images_batch_buffer = []
+
+    # 按帧遍历
+    last_frame_number = -1
+    sorted_frames = sorted(sampling_plan.keys())
+    for frame_number in sorted_frames:
+        # 速度优化，如果是连续帧，跳过 seek
+        if frame_number - last_frame_number != 1:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        # 读取当前帧
+        ret, frame = cap.read()
+        if not ret: continue
+        last_frame_number = frame_number
+
+        for sample_data in sampling_plan[frame_number]:
+            note = sample_data['note_geometry']
+            cropped = _crop_single_note_image(imgsz, frame, note, crop_border)
+            if cropped is None:
+                continue
+            images_batch_buffer.append({
+                'track_id': 0,
+                'frame': frame_number,
+                'sample_position': sample_data['sample_position'],
+                'note_type': note.note_type,
+                'cropped_image': cropped,
+            })
+
+            while len(images_batch_buffer) >= batch_cls:
+                consumed = images_batch_buffer[:batch_cls]
+                images_batch_buffer = images_batch_buffer[batch_cls:]
+                batch_results = _classify_image_batch(
+                    consumed, cls_ex_model, cls_break_model, inference_device, imgsz
+                )
+                if batch_results:
+                    cls_results_all.extend(batch_results)
+
+    # 处理剩余 buffer
+    if images_batch_buffer:
+        batch_results = _classify_image_batch(
+            images_batch_buffer, cls_ex_model, cls_break_model, inference_device, imgsz
+        )
+        if batch_results:
+            cls_results_all.extend(batch_results)
+
+    cap.release()
+
+    if not cls_results_all:
+        return None
+
+    # 投票决定 variant
+    variant_counts = defaultdict(int)
+    for result in cls_results_all:
+        is_ex = result['is_ex']
+        is_break = result['is_break']
+
+        if is_break and is_ex:
+            variant = NoteVariant.BREAK_EX
+        elif is_ex and not is_break:
+            variant = NoteVariant.EX
+        elif not is_ex and is_break:
+            variant = NoteVariant.BREAK
+        else:
+            variant = NoteVariant.NORMAL
+
+        variant_counts[variant] += 1
+
+    # 取多数
+    if not variant_counts:
+        return None
+
+    max_count = max(variant_counts.values())
+    most_common = [k for k, v in variant_counts.items() if v == max_count]
+    if len(most_common) == 1:
+        return most_common[0]
+    else:
+        print(f"警告: 路径分类结果不一致，采用默认分类 NORMAL")
+        return NoteVariant.NORMAL

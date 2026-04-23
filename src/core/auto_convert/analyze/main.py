@@ -35,6 +35,9 @@ def main(std_video_path: Path,
          inference_device,
          batch_touch_hold: int,
          touch_hold_model_path: Path,
+         batch_cls: int = 16,
+         cls_break_model_path: Path = None,
+         cls_ex_model_path: Path = None,
         ) -> OpResult[None]:
     
     try:
@@ -71,7 +74,11 @@ def main(std_video_path: Path,
         touch_info = analyze_touch_time(shared_context, touch_data)
         hold_info = analyze_hold_time(shared_context, hold_data)
         touch_hold_info = analyze_touch_hold_time(shared_context, touch_hold_data)
-        slide_info = analyze_slide_time(shared_context, slide_head_data, slide_tail_data, bpm)
+        slide_info = analyze_slide_time(
+            shared_context, slide_head_data, slide_tail_data, bpm,
+            cls_ex_model_path, cls_break_model_path,
+            inference_device, batch_cls
+        )
 
         # merge/sort/save preprocess info
         final_note_info = merge_preprocess_info(std_video_path, tap_info, slide_info, touch_info, hold_info, touch_hold_info)
