@@ -333,10 +333,11 @@ def is_arc(note_path: list, start_A_zone_id: int, end_A_zone_id: int) -> tuple[b
     required.append(f'A{start_A_zone_id}')
     required.append(f'A{end_A_zone_id}')
 
-    # 可选激活之间的 D 区
-    between_DE_zones_id = _get_between_DE_zones(start_A_zone_id, end_A_zone_id)
-    for id in between_DE_zones_id:
-        optional.append(f'D{id}')
+    # 可选激活 D 区
+    optional.append(f'D{_prev_DE_zone_id(start_A_zone_id)}')
+    optional.append(f'D{_next_DE_zone_id(start_A_zone_id)}')
+    optional.append(f'D{_prev_DE_zone_id(end_A_zone_id)}')
+    optional.append(f'D{_next_DE_zone_id(end_A_zone_id)}')
 
     # 检查
     if _ckeck_zones(positions, required, optional, banned):
