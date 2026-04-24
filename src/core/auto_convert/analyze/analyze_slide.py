@@ -9,7 +9,7 @@ from .shared_context import *
 from .analyze_tap import analyze_tap_time
 
 from .analyze_slide_time import analyze_slide_tail_start_end_time
-from .analyze_slide_movement import analyze_slide_tail_movement_syntax, is_pass_a_zone_endpoint
+from .analyze_slide_movement import analyze_slide_tail_movement_syntax, is_line_pass_a_zone_endpoint
 
 
 
@@ -261,11 +261,17 @@ def try_split_slide_tail(shared_context, matched_tails_by_head: dict, unmatched_
 
                 # 规则1: tail 必须在这些视频帧内经过了 head_position A 区, 才能触发分割
                 frame_num = None
-                for note in note_path:
-                    if note['frame'] in target_frames:
-                        is_pass, A_zone = is_pass_a_zone_endpoint(note['cx'], note['cy'], shared_context)
+                for k in range(1, len(note_path)):
+                    curr = note_path[k]
+                    if curr['frame'] in target_frames:
+                        prev = note_path[k - 1]
+                        is_pass, A_zone = is_line_pass_a_zone_endpoint(
+                            prev['cx'], prev['cy'],
+                            curr['cx'], curr['cy'],
+                            shared_context
+                        )
                         if is_pass and A_zone == head_position_A_zone:
-                            frame_num = note['frame']
+                            frame_num = curr['frame']
                             break
                 
                 if frame_num is None:
@@ -379,7 +385,7 @@ def _classify_note_path(shared_context, note_path, tract_data_key,
         
         return None
     except Exception as e:
-        print(f"try_split_slide_tail: failed to re-classify tail {track_id}: {e}")
+        print(f"try_split_slide_tail: failed to re-classify tail {tract_data_key[0]}: {e}")
         return None
 
 

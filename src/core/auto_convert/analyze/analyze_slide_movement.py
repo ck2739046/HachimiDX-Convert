@@ -237,6 +237,7 @@ def get_syntax(note_path, start_pos, end_pos):
         # 无法识别, syntax fallback to straight
         classified_segments.append((start_A_zone, end_A_zone, '?'))
         print(f"get_syntax: unrecognized movement pattern for segment in track {track_id}, default to '?' syntax:")
+        print(f"start_A_zone: {start_A_zone}, end_A_zone: {end_A_zone}")
         print(", ".join(f"{note['position']}({note['frame']})" for note in note_path_segment))
 
 
@@ -1120,13 +1121,34 @@ def _get_between_DE_zones(start_A_zone_id: int, end_A_zone_id: int,
 
     
 
-def is_pass_a_zone_endpoint(cx, cy, input_shared_context) -> tuple[bool, str]:
-    # 严格判断是否经过了A区判定点
+
+def is_line_pass_a_zone_endpoint(x1, y1, x2, y2, input_shared_context) -> tuple[bool, str]:
+    """
+    判断线段 (x1,y1)→(x2,y2) 是否经过 A 区判定点附近。
+    用点到线段的垂直距离代替点到点的距离，解决低帧率下逐帧点漏判的问题。
+    """
     max_dist = input_shared_context.note_travel_dist * 0.13
+
+    dx = x2 - x1
+    dy = y2 - y1
+    seg_len_sq = dx*dx + dy*dy
+
     for label, (ex, ey) in input_shared_context.a_zone_endpoint.items():
-        dist = np.sqrt((cx - ex)**2 + (cy - ey)**2)
+
+        if seg_len_sq < 1e-6:
+            # 线段退化（两点重合），fallback 到点到点距离
+            dist = np.sqrt((x1 - ex)**2 + (y1 - ey)**2)
+        else:
+            # 点到线段的最短距离：投影法
+            t = ((ex - x1) * dx + (ey - y1) * dy) / seg_len_sq
+            t = max(0.0, min(1.0, t))  # clamp 到线段范围内
+            proj_x = x1 + t * dx
+            proj_y = y1 + t * dy
+            dist = np.sqrt((ex - proj_x)**2 + (ey - proj_y)**2)
+
         if dist < max_dist:
             return True, label
+
     return False, ""
 
 
@@ -1160,8 +1182,13 @@ def _divide_path_by_A_zone(note_path, start_pos, end_pos) -> list:
             break
 
         # 普通：其他的轨迹点
-        cx, cy = point['cx'], point['cy']
-        is_pass, a_zone = is_pass_a_zone_endpoint(cx, cy, shared_context)
+        # 检查上一帧 -> 当前帧的连线是否经过 A 区判定点
+        prev_point = note_path[i - 1]
+        is_pass, a_zone = is_line_pass_a_zone_endpoint(
+            prev_point['cx'], prev_point['cy'],
+            point['cx'], point['cy'],
+            shared_context
+        )
         # 没经过A区，添加点到当前段
         if not is_pass:
             leave_start_A_zone = True

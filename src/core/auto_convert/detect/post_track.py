@@ -5,7 +5,7 @@ from pathlib import Path
 import cv2
 
 from ...schemas.op_result import OpResult, err, ok
-from ..analyze.analyze_slide_movement import is_pass_a_zone_endpoint
+from ..analyze.analyze_slide_movement import is_line_pass_a_zone_endpoint
 from ..analyze.preprocess_slide import (
     _guess_target_a_zone_by_inertia,
     _is_close_to_A_zone_endpoint,
@@ -291,13 +291,14 @@ def _classify_segment(context: _PostTrackContext, note_geometry_list, track_id, 
     # 是否到达A区
     # yes: 按第一个A区分割, 第一段视为星星头, 第二段视为星星尾, 递归
     # no:  可能是异常数据, 丢弃, return
-    for i, note in enumerate(note_geometry_list):
-        # 判断是否接近A区判定点
-        cx, cy = note.cx, note.cy
-        is_pass, _a_zone = is_pass_a_zone_endpoint(cx, cy, context)
+    for i in range(1, len(note_geometry_list)):
+        prev = note_geometry_list[i - 1]
+        curr = note_geometry_list[i]
+        # 判断线段是否接近A区判定点
+        is_pass, _a_zone = is_line_pass_a_zone_endpoint(prev.cx, prev.cy, curr.cx, curr.cy, context)
         if not is_pass:
             continue
-        # 找到了第一个A区判定点作为分割点
+        # 找到了第一个经过A区判定点的线段，在 curr 处分割
         head_segment = note_geometry_list[:i]
         tail_segment = note_geometry_list[i:]
         # 递归处理头部和尾部
