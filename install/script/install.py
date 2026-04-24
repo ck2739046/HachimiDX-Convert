@@ -119,15 +119,17 @@ def install():
             if not is_success: sys.exit(1)
         
     # install others
-    pyqt6 = "PyQt6==6.10.2"
-    pywin32 = "pywin32==311"
-    librosa = "librosa==0.11.0"
-    pydantic = "pydantic==2.12.5"
-    i18n = "python-i18n==0.3.9"
-    nanoid = "nanoid==2.0.0"
-    tkinter = "tkinter-embed==3.13.0"
-    filterpy = "filterpy==1.4.5"
-    cmd = f"{sys.executable} -m pip install {pyqt6} {pywin32} {librosa} {pydantic} {i18n} {nanoid} {tkinter} --no-warn-script-location"
+    dependencies = [
+        "PyQt6==6.10.2",
+        "pywin32==311",
+        "librosa==0.11.0",
+        "pydantic==2.12.5",
+        "python-i18n==0.3.9",
+        "nanoid==2.0.0",
+        "tkinter-embed==3.13.0",
+        "filterpy==1.4.5",
+    ]
+    cmd = f"{sys.executable} -m pip install {' '.join(dependencies)} --no-warn-script-location"
     if USE_PyPI_Mirror:
         cmd += f" {QingHua_PyPI_Mirror}"
     is_success = general_pip_install("Other dependencies", cmd)
