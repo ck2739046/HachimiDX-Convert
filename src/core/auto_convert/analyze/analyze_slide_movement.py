@@ -1144,7 +1144,8 @@ def _divide_path_by_A_zone(note_path, start_pos, end_pos) -> list:
         )
         # 没经过A区，添加点到当前段
         if not is_pass:
-            leave_start_A_zone = True
+            if point['position'] != current_segment_start_A_zone:
+                leave_start_A_zone = True
             current_segment.append(point)
             continue
         # 经过A区，且是当前段的起点
