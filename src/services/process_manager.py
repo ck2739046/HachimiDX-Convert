@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from typing import Any, Optional
+import time
 
 from PyQt6.QtCore import QObject, QProcess, QTimer, pyqtSignal
 
@@ -113,7 +114,7 @@ class ProcessManager(QObject):
         process.errorOccurred.connect(lambda e, rid=rid: self._on_error(rid, e))
 
         # 延迟发送开始文本
-        start_msg = f"\n-\n{'=' * 30}\n[{rid}] Process start.\n-\n{", ".join(cmd)}\n-\n"
+        start_msg = f"\n-\n{'=' * 30}\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Task_id '{rid}' start.\n-\n{", ".join(cmd)}\n-\n"
         QTimer.singleShot(0, lambda rid=rid: self.signals.runner_output.emit(rid, bytes(start_msg, 'utf-8')))
         
         process.start()
@@ -268,7 +269,7 @@ class ProcessManager(QObject):
     def _emit_and_cleanup_ended(self, runner_id: str, ended: RunnerEnded) -> None:
         try:
             # 先发送结束文本
-            end_msg = f"\n-\n[{runner_id}] Process ended.\n-\n"
+            end_msg = f"\n-\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Task_id '{runner_id}' ended.\n-\n"
             self.signals.runner_output.emit(runner_id, bytes(end_msg, 'utf-8'))
             # 然后发送 ended 信号
             self.signals.runner_ended.emit(runner_id, ended)
