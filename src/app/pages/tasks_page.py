@@ -282,9 +282,9 @@ class TasksPage(BaseOutputPage):
         def key(t: TaskInfo) -> datetime:
             return t.accepted_at or datetime.min
 
-        running.sort(key=key, reverse=True)
-        pending.sort(key=key, reverse=True)
-        ended.sort(key=key, reverse=True)
+        running.sort(key=key)             # 越早接受的任务在上面
+        pending.sort(key=key)             # 越早接受的任务在上面
+        ended.sort(key=key, reverse=True) # 越晚结束的任务在上面
 
         return running + pending + ended
 
