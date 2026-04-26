@@ -110,7 +110,7 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
         # 中心距离硬门控：候选框中心距离 ≤ max_ratio * 轨迹最后观测框的 max(w,h)
         # 如 20x21 框 max=21，max_ratio=2 → 允许中心距≤42
         # 值越大越宽松，越小越严格
-        max_ratio=2.5,
+        max_ratio=1.7,
 
         # 尺寸变小门控：候选框 max(w,h) ≥ 轨迹历史 avg_max_side * size_ratio
         # 如轨迹历史平均 max_side=30，size_ratio=0.85 → 候选框 max_side 须 ≥ 25.5
