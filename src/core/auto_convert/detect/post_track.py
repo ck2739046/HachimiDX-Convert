@@ -11,7 +11,7 @@ from ..analyze.preprocess_slide import (
     _is_close_to_A_zone_endpoint,
 )
 from ..analyze.shared_context import get_a_zone_endpoint, get_touch_areas
-from ..analyze.tool import calculate_all_position, calculate_oct_position
+from ..analyze.tool import calculate_all_position, calculate_oct_position, catmull_rom_spline
 from .note_definition import NoteType
 from .track import _load_track_results, _save_track_results
 
@@ -291,16 +291,26 @@ def _classify_segment(context: _PostTrackContext, note_geometry_list, track_id, 
     # 是否到达A区
     # yes: 按第一个A区分割, 第一段视为星星头, 第二段视为星星尾, 递归
     # no:  可能是异常数据, 丢弃, return
-    for i in range(1, len(note_geometry_list)):
-        prev = note_geometry_list[i - 1]
-        curr = note_geometry_list[i]
-        # 判断线段是否接近A区判定点
-        is_pass, _a_zone = is_line_pass_a_zone_endpoint(prev.cx, prev.cy, curr.cx, curr.cy, context)
+    # 使用 Catmull-Rom 样条对轨迹中心点插值，再逐子段判定 A 区穿越，
+    # 解决低帧率/稀疏追踪点下逐点线段漏判的问题
+    num_samples = 4
+    center_points = [(note.cx, note.cy) for note in note_geometry_list]
+    interp = catmull_rom_spline(center_points, num_samples=num_samples)
+    interp_pts = interp.reshape(-1, 2)
+
+    for j in range(len(interp_pts) - 1):
+        x1, y1 = float(interp_pts[j][0]), float(interp_pts[j][1])
+        x2, y2 = float(interp_pts[j + 1][0]), float(interp_pts[j + 1][1])
+        is_pass, _a_zone = is_line_pass_a_zone_endpoint(x1, y1, x2, y2, context)
         if not is_pass:
             continue
-        # 找到了第一个经过A区判定点的线段，在 curr 处分割
-        head_segment = note_geometry_list[:i]
-        tail_segment = note_geometry_list[i:]
+        # 映射回原始索引：每 num_samples 个插值子段对应一个原始段
+        # j 是插值子段起点索引，原始段索引 = j // num_samples
+        # 分割点在原始段的 curr 处，即 original_seg_idx + 1
+        original_seg_idx = j // num_samples
+        split_idx = min(original_seg_idx + 1, len(note_geometry_list) - 1)
+        head_segment = note_geometry_list[:split_idx]
+        tail_segment = note_geometry_list[split_idx:]
         # 递归处理头部和尾部
         head_result, _, _ = _classify_segment(context, head_segment, track_id, is_segmented=True)
         _, tail_result, _ = _classify_segment(context, tail_segment, track_id, is_segmented=True)
