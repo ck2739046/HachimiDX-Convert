@@ -253,10 +253,7 @@ def main(std_video_path: Path,
 
         elapsed_time = time.time() - start_time
         average_fps = total_frames / elapsed_time if elapsed_time > 0 else 0
-        print(f"追踪视频编码完成，耗时{elapsed_time:.1f}s, 平均{average_fps:.2f}fps               ")
-
-        elapsed_time = time.time() - start_time
-        print(f"追踪视频导出完成，总耗时{elapsed_time:.1f}s")
+        print(f"追踪视频导出完成，耗时{elapsed_time:.1f}s, 平均{average_fps:.2f}fps               ")
         print(f"追踪视频已保存到：{final_track_video_path}")
 
         return ok(Path(final_track_video_path))
