@@ -12,10 +12,10 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, start_position,
     持续时间 = 停止时间 - 开始时间
     '''
 
-    if len(note_path) < 6:
+    if len(note_path) < 5:
         return None, None
     positions = [x['position'] for x in note_path]
-    if not positions or len(positions) < 6:
+    if not positions or len(positions) < 5:
         return None, None
     
     # 起点

@@ -39,7 +39,7 @@ def preprocess_hold_data(shared_context: SharedContext):
         note_geometry_list = value
 
         if note_type != NoteType.HOLD: continue
-        if len(note_geometry_list) < 10: continue
+        if len(note_geometry_list) < 5: continue
 
 
         # read note path
@@ -70,7 +70,7 @@ def preprocess_hold_data(shared_context: SharedContext):
             continue
 
         # 检验长度
-        if len(valid_track_path) < 6:
+        if len(valid_track_path) < 5:
             print(f"preprocess_hold_data: valid_track_path too short for track_id {track_id}, length: {len(valid_track_path)}")
             continue
 

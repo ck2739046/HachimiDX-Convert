@@ -198,7 +198,7 @@ def _split_slide_notes(tracks: dict, context: _PostTrackContext, next_track_id: 
             new_tracks[key].extend(note_geometry_list)
             continue
 
-        if len(note_geometry_list) < 10:
+        if len(note_geometry_list) < 5:
             new_tracks[key].extend(note_geometry_list)
             continue
 
@@ -239,7 +239,7 @@ def _split_slide_notes(tracks: dict, context: _PostTrackContext, next_track_id: 
 # 从 analyze/preprocess_slide.py 迁移而来
 # 递归分类音符
 def _classify_segment(context: _PostTrackContext, note_geometry_list, track_id, is_segmented=False):
-    if len(note_geometry_list) < 10:
+    if len(note_geometry_list) < 5:
         return None, None, False
 
     oct_positions = [

@@ -36,7 +36,7 @@ def preprocess_tap_data(shared_context: SharedContext):
         note_geometry_list = value
 
         if note_type != NoteType.TAP: continue
-        if len(note_geometry_list) < 10: continue
+        if len(note_geometry_list) < 5: continue
 
         # read note path
         valid_path = []
@@ -62,7 +62,7 @@ def preprocess_tap_data(shared_context: SharedContext):
             continue
 
         # 检验长度
-        if len(valid_path) < 6:
+        if len(valid_path) < 5:
             print(f"preprocess_tap_data: valid_path too short for track_id {track_id}, length: {len(valid_path)}")
             continue
 

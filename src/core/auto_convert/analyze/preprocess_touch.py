@@ -34,7 +34,7 @@ def preprocess_touch_data(shared_context: SharedContext):
         note_geometry_list = value
 
         if note_type != NoteType.TOUCH: continue
-        if len(note_geometry_list) < 10: continue
+        if len(note_geometry_list) < 5: continue
 
         # read track path
         valid_track_path = []

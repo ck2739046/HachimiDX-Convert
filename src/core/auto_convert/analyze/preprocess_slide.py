@@ -1,4 +1,4 @@
-import numpy as np
+﻿import numpy as np
 
 from ..detect.note_definition import *
 from .tool import *
@@ -18,7 +18,7 @@ def preprocess_slide_data(shared_context: SharedContext):
         note_geometry_list = value
 
         if note_type != NoteType.SLIDE: continue
-        if len(note_geometry_list) < 10: continue
+        if len(note_geometry_list) < 5: continue
 
         note_geometry_list.sort(key=lambda x: x.frame) # 按帧排序
 
@@ -61,7 +61,7 @@ def _classify_segment(shared_context: SharedContext, note_geometry_list) -> str 
     # 一般在移动了 30% 后才会分开，被识别成两个星星
 
     # 段长度不足, 丢弃, return
-    if len(note_geometry_list) < 10:
+    if len(note_geometry_list) < 5:
         return None
 
     # 判断所有 pos 是否一致, 因为星星尾是从一个A区移动到另一个A区的, 所以 pos 一定不一致
@@ -148,7 +148,7 @@ def preprocess_slide_head_data(shared_context: SharedContext, candidate_slide_he
         note_geometry_list = value
 
         if note_type != NoteType.SLIDE: continue
-        if len(note_geometry_list) < 10: continue
+        if len(note_geometry_list) < 5: continue
 
 
         # read track path
@@ -174,7 +174,7 @@ def preprocess_slide_head_data(shared_context: SharedContext, candidate_slide_he
             continue
 
         # 检验长度
-        if len(valid_track_path) < 6:
+        if len(valid_track_path) < 5:
             print(f"preprocess_slide_head_data: valid_track_path too short for track_id {track_id}, length: {len(valid_track_path)}")
             continue
 
@@ -261,7 +261,7 @@ def preprocess_slide_tail_data(shared_context: SharedContext, candidate_slide_ta
         note_geometry_list = value
 
         if note_type != NoteType.SLIDE: continue
-        if len(note_geometry_list) < 10: continue
+        if len(note_geometry_list) < 5: continue
 
 
         # 开头在分类时已经检查过，此处仅检查结尾
@@ -299,7 +299,7 @@ def preprocess_slide_tail_data(shared_context: SharedContext, candidate_slide_ta
             continue
 
         # 检验长度
-        if len(valid_track_path) < 6:
+        if len(valid_track_path) < 5:
             print(f"preprocess_slide_tail_data: valid_track_path too short for track_id {track_id}, length: {len(valid_track_path)}")
             continue
 

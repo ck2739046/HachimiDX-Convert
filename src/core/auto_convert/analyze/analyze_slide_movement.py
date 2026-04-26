@@ -16,10 +16,10 @@ def analyze_slide_tail_movement_syntax(input_shared_context, note_path, start_po
     global track_id
     track_id = tail_track_id
 
-    if len(note_path) < 6:
+    if len(note_path) < 5:
         return None
     positions = [x['position'] for x in note_path]
-    if not positions or len(positions) < 6:
+    if not positions or len(positions) < 5:
         return None
     
     classified_segments = get_syntax(note_path, start_pos, end_pos)
