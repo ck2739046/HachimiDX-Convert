@@ -1,5 +1,7 @@
 import numpy as np
 
+from .tool import catmull_rom_spline, calculate_all_position
+
 shared_context = None
 track_id = None
 
@@ -1080,6 +1082,33 @@ def _divide_path_by_A_zone(note_path, start_pos, end_pos) -> list:
     current_segment_start_A_zone = None
     current_segment_end_A_zone = None
     leave_start_A_zone = False
+
+    # 使用 Catmull-Rom 样条插值扩充 note_path
+    # 每对相邻原始点之间插入 num_samples 个插值点，frame 同段起点
+    num_samples = 4
+    center_points = [(p['cx'], p['cy']) for p in note_path]
+    interp = catmull_rom_spline(center_points, num_samples=num_samples)
+    interp_pts = interp.reshape(-1, 2)
+
+    enriched_path = []
+    n = len(note_path)
+    for i in range(n):
+        enriched_path.append(note_path[i])
+        if i < n - 1:
+            seg_start = i * num_samples
+            seg_end = seg_start + num_samples
+            for k in range(seg_start, seg_end):
+                cx = float(interp_pts[k][0])
+                cy = float(interp_pts[k][1])
+                interp_point = {
+                    'cx': cx,
+                    'cy': cy,
+                    'position': calculate_all_position(shared_context.touch_areas, cx, cy),
+                    'frame': note_path[i]['frame'],
+                }
+                enriched_path.append(interp_point)
+    note_path = enriched_path
+
     for i, point in enumerate(note_path):
 
         # 特例：第一个点
