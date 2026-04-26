@@ -162,6 +162,35 @@ def center_distance_gate(
     return matched_indices[ok], matched_indices[~ok, 0], matched_indices[~ok, 1]
 
 
+def size_consistency_gate(
+    matched_indices: np.ndarray,
+    det_boxes: np.ndarray,
+    trk_avg_sizes: np.ndarray,
+    size_ratio: float = 0.85,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """过滤候选框 max(w,h) < trk_avg_max_side * size_ratio 的匹配。
+
+    候选框尺寸不应明显小于该轨迹已有框的平均尺寸。
+    trk_avg_sizes[i] 为轨迹 i 的 avg_max_side；值为 0 表示无历史，不设限。
+    """
+    if matched_indices.shape[0] == 0 or size_ratio <= 0:
+        return matched_indices, np.array([], dtype=int), np.array([], dtype=int)
+
+    det_idx = matched_indices[:, 0]
+    trk_idx = matched_indices[:, 1]
+
+    det_w = det_boxes[det_idx, 2] - det_boxes[det_idx, 0]
+    det_h = det_boxes[det_idx, 3] - det_boxes[det_idx, 1]
+    det_max_side = np.maximum(det_w, det_h)
+
+    trk_avg = np.asarray(trk_avg_sizes, dtype=np.float64)[trk_idx]
+    threshold = trk_avg * size_ratio
+
+    # avg=0 表示轨迹无历史，通过所有匹配
+    ok = (trk_avg == 0.0) | (det_max_side >= threshold)
+    return matched_indices[ok], matched_indices[~ok, 0], matched_indices[~ok, 1]
+
+
 def associate(
     detections: np.ndarray,
     trackers: np.ndarray,
@@ -171,6 +200,8 @@ def associate(
     vdc_weight: float,
     trk_last_boxes: np.ndarray | None = None,
     max_ratio: float = 2.0,
+    trk_avg_sizes: np.ndarray | None = None,
+    size_ratio: float = 0.85,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if len(trackers) == 0:
         return np.empty((0, 2), dtype=int), np.arange(len(detections)), np.empty((0,), dtype=int)
@@ -210,6 +241,13 @@ def associate(
         matched_indices, _, _ = center_distance_gate(
             matched_indices, detections, trackers, trk_last_boxes,
             max_ratio=max_ratio,
+        )
+
+    # 尺寸一致性门控：候选框不应明显小于轨迹历史平均尺寸
+    if trk_avg_sizes is not None and matched_indices.shape[0] > 0:
+        matched_indices, _, _ = size_consistency_gate(
+            matched_indices, detections, trk_avg_sizes,
+            size_ratio=size_ratio,
         )
 
     return _split_matches(matched_indices, len(detections), len(trackers))

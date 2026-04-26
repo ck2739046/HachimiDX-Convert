@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from filterpy.kalman import KalmanFilter
 
-from .oc_sort_association import associate, center_distance_gate, diou_batch, iou_batch, linear_assignment
+from .oc_sort_association import associate, center_distance_gate, diou_batch, iou_batch, linear_assignment, size_consistency_gate
 
 
 def _k_previous_obs(observations: dict[int, np.ndarray], cur_age: int, k: int) -> np.ndarray:
@@ -96,6 +96,7 @@ class _KalmanBoxTracker:
         self.history_scores: list[float] = []
         self.history_classes: list[int] = []
         self.history_indices: list[int] = []
+        self.history_max_sides: list[float] = []
         self.velocity: np.ndarray | None = None
         self.delta_t = delta_t
 
@@ -136,6 +137,9 @@ class _KalmanBoxTracker:
         self.history_scores.append(self.score)
         self.history_classes.append(self.cls)
         self.history_indices.append(self.idx)
+        w = obs[2] - obs[0]
+        h = obs[3] - obs[1]
+        self.history_max_sides.append(max(w, h))
 
     def predict(self) -> np.ndarray:
         if (self.kf.x[6] + self.kf.x[2]) <= 0:
@@ -153,6 +157,13 @@ class _KalmanBoxTracker:
     def get_state(self) -> np.ndarray:
         return _convert_x_to_bbox(self.kf.x)
 
+    @property
+    def avg_max_side(self) -> float:
+        """已匹配框 max(w,h) 的平均值；无历史时返回 0.0。"""
+        if not self.history_max_sides:
+            return 0.0
+        return float(np.mean(self.history_max_sides))
+
 
 class OCSort:
     def __init__(
@@ -165,6 +176,7 @@ class OCSort:
         inertia: float = 0.2,
         use_byte: bool = False,
         max_ratio: float = 2.0,
+        size_ratio: float = 0.85,
     ):
         self.max_age = int(max_age)
         self.min_hits = int(min_hits)
@@ -177,6 +189,7 @@ class OCSort:
         self.use_byte = bool(use_byte)
         self.low_thresh = 0.1
         self.max_ratio = float(max_ratio)
+        self.size_ratio = float(size_ratio)
 
         _KalmanBoxTracker.count = 0
 
@@ -236,10 +249,12 @@ class OCSort:
             k_observations = np.array([
                 _k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers
             ])
+            trk_avg_sizes = np.array([trk.avg_max_side for trk in self.trackers], dtype=np.float64)
         else:
             velocities = np.empty((0, 2), dtype=np.float64)
             last_boxes = np.empty((0, 5), dtype=np.float64)
             k_observations = np.empty((0, 5), dtype=np.float64)
+            trk_avg_sizes = np.empty((0,), dtype=np.float64)
 
         matched, unmatched_dets, unmatched_trks = associate(
             dets_assoc,
@@ -250,6 +265,8 @@ class OCSort:
             self.inertia,
             trk_last_boxes=last_boxes,
             max_ratio=self.max_ratio,
+            trk_avg_sizes=trk_avg_sizes,
+            size_ratio=self.size_ratio,
         )
 
         for det_idx, trk_idx in matched:
@@ -266,6 +283,12 @@ class OCSort:
                     raw_indices, dets_second_assoc, u_trks,
                     trk_last_boxes=last_boxes[unmatched_trks],
                     max_ratio=self.max_ratio,
+                )
+                # 尺寸一致性门控
+                gate_ok, _, _ = size_consistency_gate(
+                    gate_ok, dets_second_assoc,
+                    trk_avg_sizes=trk_avg_sizes[unmatched_trks],
+                    size_ratio=self.size_ratio,
                 )
                 to_remove = []
                 for det_idx2, trk_pos in gate_ok:
@@ -287,6 +310,12 @@ class OCSort:
                     raw_indices, left_dets, left_trks,
                     trk_last_boxes=left_trks,
                     max_ratio=self.max_ratio,
+                )
+                # 尺寸一致性门控
+                gate_ok, _, _ = size_consistency_gate(
+                    gate_ok, left_dets,
+                    trk_avg_sizes=trk_avg_sizes[unmatched_trks],
+                    size_ratio=self.size_ratio,
                 )
                 to_remove_det_indices = []
                 to_remove_trk_indices = []
