@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from filterpy.kalman import KalmanFilter
 
-from .oc_sort_association import associate, center_distance_gate, diou_batch, iou_batch, linear_assignment, size_consistency_gate
+from .oc_sort_association import associate, center_distance_gate, diou_batch, iou_batch, linear_assignment, max_size_increase_gate, size_consistency_gate
 
 
 def _k_previous_obs(observations: dict[int, np.ndarray], cur_age: int, k: int) -> np.ndarray:
@@ -177,6 +177,7 @@ class OCSort:
         use_byte: bool = False,
         max_ratio: float = 2.0,
         size_ratio: float = 0.85,
+        max_size_increase_ratio: float = 0.10,
     ):
         self.max_age = int(max_age)
         self.min_hits = int(min_hits)
@@ -190,6 +191,7 @@ class OCSort:
         self.low_thresh = 0.1
         self.max_ratio = float(max_ratio)
         self.size_ratio = float(size_ratio)
+        self.max_size_increase_ratio = float(max_size_increase_ratio)
 
         _KalmanBoxTracker.count = 0
 
@@ -250,11 +252,18 @@ class OCSort:
                 _k_previous_obs(trk.observations, trk.age, self.delta_t) for trk in self.trackers
             ])
             trk_avg_sizes = np.array([trk.avg_max_side for trk in self.trackers], dtype=np.float64)
+            trk_last_max_sides = np.array([
+                max(trk.last_observation[2] - trk.last_observation[0],
+                    trk.last_observation[3] - trk.last_observation[1])
+                if trk.last_observation.sum() >= 0 else 0.0
+                for trk in self.trackers
+            ], dtype=np.float64)
         else:
             velocities = np.empty((0, 2), dtype=np.float64)
             last_boxes = np.empty((0, 5), dtype=np.float64)
             k_observations = np.empty((0, 5), dtype=np.float64)
             trk_avg_sizes = np.empty((0,), dtype=np.float64)
+            trk_last_max_sides = np.empty((0,), dtype=np.float64)
 
         matched, unmatched_dets, unmatched_trks = associate(
             dets_assoc,
@@ -267,6 +276,8 @@ class OCSort:
             max_ratio=self.max_ratio,
             trk_avg_sizes=trk_avg_sizes,
             size_ratio=self.size_ratio,
+            trk_last_max_sides=trk_last_max_sides,
+            max_size_increase_ratio=self.max_size_increase_ratio,
         )
 
         for det_idx, trk_idx in matched:
@@ -289,6 +300,12 @@ class OCSort:
                     gate_ok, dets_second_assoc,
                     trk_avg_sizes=trk_avg_sizes[unmatched_trks],
                     size_ratio=self.size_ratio,
+                )
+                # 尺寸增大门控
+                gate_ok, _, _ = max_size_increase_gate(
+                    gate_ok, dets_second_assoc,
+                    trk_last_max_sides=trk_last_max_sides[unmatched_trks],
+                    max_size_increase_ratio=self.max_size_increase_ratio,
                 )
                 to_remove = []
                 for det_idx2, trk_pos in gate_ok:
@@ -316,6 +333,12 @@ class OCSort:
                     gate_ok, left_dets,
                     trk_avg_sizes=trk_avg_sizes[unmatched_trks],
                     size_ratio=self.size_ratio,
+                )
+                # 尺寸增大门控
+                gate_ok, _, _ = max_size_increase_gate(
+                    gate_ok, left_dets,
+                    trk_last_max_sides=trk_last_max_sides[unmatched_trks],
+                    max_size_increase_ratio=self.max_size_increase_ratio,
                 )
                 to_remove_det_indices = []
                 to_remove_trk_indices = []

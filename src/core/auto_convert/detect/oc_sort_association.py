@@ -191,6 +191,38 @@ def size_consistency_gate(
     return matched_indices[ok], matched_indices[~ok, 0], matched_indices[~ok, 1]
 
 
+def max_size_increase_gate(
+    matched_indices: np.ndarray,
+    det_boxes: np.ndarray,
+    trk_last_max_sides: np.ndarray,
+    max_size_increase_ratio: float = 0.10,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """过滤候选框 max(w,h) > trk_last_max_side * (1 + ratio) 的匹配。
+
+    候选框尺寸不应明显大于轨迹最后一个观测框的最大边长。
+    trk_last_max_sides[i] 为轨迹 i 的 last_observation 的 max(w,h)；
+    值为 0 表示新轨迹尚无有效历史，不设限。
+
+    与 size_consistency_gate（下限）互补，本门控为上限。
+    """
+    if matched_indices.shape[0] == 0 or max_size_increase_ratio < 0:
+        return matched_indices, np.array([], dtype=int), np.array([], dtype=int)
+
+    det_idx = matched_indices[:, 0]
+    trk_idx = matched_indices[:, 1]
+
+    det_w = det_boxes[det_idx, 2] - det_boxes[det_idx, 0]
+    det_h = det_boxes[det_idx, 3] - det_boxes[det_idx, 1]
+    det_max_side = np.maximum(det_w, det_h)
+
+    trk_last_max = np.asarray(trk_last_max_sides, dtype=np.float64)[trk_idx]
+    threshold = trk_last_max * (1.0 + max_size_increase_ratio)
+
+    # trk_last_max == 0 表示轨迹无历史，通过所有匹配
+    ok = (trk_last_max == 0.0) | (det_max_side <= threshold)
+    return matched_indices[ok], matched_indices[~ok, 0], matched_indices[~ok, 1]
+
+
 def associate(
     detections: np.ndarray,
     trackers: np.ndarray,
@@ -202,6 +234,8 @@ def associate(
     max_ratio: float = 2.0,
     trk_avg_sizes: np.ndarray | None = None,
     size_ratio: float = 0.85,
+    trk_last_max_sides: np.ndarray | None = None,
+    max_size_increase_ratio: float = 0.10,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if len(trackers) == 0:
         return np.empty((0, 2), dtype=int), np.arange(len(detections)), np.empty((0,), dtype=int)
@@ -248,6 +282,13 @@ def associate(
         matched_indices, _, _ = size_consistency_gate(
             matched_indices, detections, trk_avg_sizes,
             size_ratio=size_ratio,
+        )
+
+    # 尺寸增大门控：候选框不应明显大于轨迹最后一个框的 max(w,h)
+    if trk_last_max_sides is not None and matched_indices.shape[0] > 0:
+        matched_indices, _, _ = max_size_increase_gate(
+            matched_indices, detections, trk_last_max_sides,
+            max_size_increase_ratio=max_size_increase_ratio,
         )
 
     return _split_matches(matched_indices, len(detections), len(trackers))

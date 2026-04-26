@@ -112,10 +112,15 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
         # 值越大越宽松，越小越严格
         max_ratio=2.5,
 
-        # 尺寸一致性门控：候选框 max(w,h) ≥ 轨迹历史 avg_max_side * size_ratio
+        # 尺寸变小门控：候选框 max(w,h) ≥ 轨迹历史 avg_max_side * size_ratio
         # 如轨迹历史平均 max_side=30，size_ratio=0.85 → 候选框 max_side 须 ≥ 25.5
         # 值越小越宽松（容忍更大尺寸波动），越大越严格
         size_ratio=0.85,
+
+        # 尺寸变大门控：候选框 max(w,h) ≤ 轨迹最后一个框 max(w,h) * (1 + ratio)
+        # 如最后一个框 max=30，ratio=0.10 → 候选框 max_side 须 ≤ 33
+        # 值越大越宽松，越小越严格；设为极大值可实质关闭此门控
+        max_size_increase_ratio=0.15,
     )
 
 
