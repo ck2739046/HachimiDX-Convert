@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from filterpy.kalman import KalmanFilter
 
-from .oc_sort_association import associate, diou_batch, iou_batch, linear_assignment
+from .oc_sort_association import associate, center_distance_gate, diou_batch, iou_batch, linear_assignment
 
 
 def _k_previous_obs(observations: dict[int, np.ndarray], cur_age: int, k: int) -> np.ndarray:
@@ -164,6 +164,7 @@ class OCSort:
         delta_t: int = 3,
         inertia: float = 0.2,
         use_byte: bool = False,
+        max_ratio: float = 2.0,
     ):
         self.max_age = int(max_age)
         self.min_hits = int(min_hits)
@@ -175,6 +176,7 @@ class OCSort:
         self.inertia = float(inertia)
         self.use_byte = bool(use_byte)
         self.low_thresh = 0.1
+        self.max_ratio = float(max_ratio)
 
         _KalmanBoxTracker.count = 0
 
@@ -246,6 +248,8 @@ class OCSort:
             velocities,
             k_observations,
             self.inertia,
+            trk_last_boxes=last_boxes,
+            max_ratio=self.max_ratio,
         )
 
         for det_idx, trk_idx in matched:
@@ -256,9 +260,15 @@ class OCSort:
             diou_left = np.array(diou_batch(dets_second_assoc, u_trks))
             # DIoU 替代 IoU：零交集时中心距离提供梯度，优先选较近匹配
             if diou_left.size > 0 and diou_left.max() > 0:
-                matched_indices = linear_assignment(-diou_left)
+                raw_indices = linear_assignment(-diou_left)
+                # 中心距离硬门控：用轨迹最后观测框尺寸做上限
+                gate_ok, _, gate_rejected_trk = center_distance_gate(
+                    raw_indices, dets_second_assoc, u_trks,
+                    trk_last_boxes=last_boxes[unmatched_trks],
+                    max_ratio=self.max_ratio,
+                )
                 to_remove = []
-                for det_idx2, trk_pos in matched_indices:
+                for det_idx2, trk_pos in gate_ok:
                     trk_idx = unmatched_trks[trk_pos]
                     self.trackers[trk_idx].update(dets_second[det_idx2])
                     to_remove.append(trk_idx)
@@ -271,10 +281,16 @@ class OCSort:
             diou_left = np.array(diou_batch(left_dets, left_trks))
             # DIoU 替代 IoU：零交集时中心距离提供梯度
             if diou_left.size > 0 and diou_left.max() > 0:
-                rematched_indices = linear_assignment(-diou_left)
+                raw_indices = linear_assignment(-diou_left)
+                # 中心距离硬门控：left_trks 本身就是 last_boxes
+                gate_ok, _, _ = center_distance_gate(
+                    raw_indices, left_dets, left_trks,
+                    trk_last_boxes=left_trks,
+                    max_ratio=self.max_ratio,
+                )
                 to_remove_det_indices = []
                 to_remove_trk_indices = []
-                for det_pos, trk_pos in rematched_indices:
+                for det_pos, trk_pos in gate_ok:
                     det_idx = unmatched_dets[det_pos]
                     trk_idx = unmatched_trks[trk_pos]
                     self.trackers[trk_idx].update(dets[det_idx])

@@ -106,6 +106,11 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
 
         # 启用 BYTE 二阶段低分框补匹配（0.1 < score < det_thresh）
         use_byte=True,
+
+        # 中心距离硬门控：候选框中心距离 ≤ max_ratio * 轨迹最后观测框的 max(w,h)
+        # 如 20x21 框 max=21，max_ratio=2 → 允许中心距≤42
+        # 值越大越宽松，越小越严格
+        max_ratio=2.5,
     )
 
 

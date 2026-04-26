@@ -129,6 +129,39 @@ def _split_matches(
     return matches, unmatched_dets.astype(int), unmatched_trks.astype(int)
 
 
+def center_distance_gate(
+    matched_indices: np.ndarray,
+    det_boxes: np.ndarray,
+    trk_boxes: np.ndarray,
+    trk_last_boxes: np.ndarray,
+    max_ratio: float = 2.0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """过滤中心距离超过 max_ratio × 轨迹最后观测框 max(w,h) 的匹配。
+
+    返回 (good_matches, rejected_det_indices, rejected_trk_indices)。
+    rejected 索引会被加入 unmatched 集合。
+    """
+    if matched_indices.shape[0] == 0:
+        return matched_indices, np.array([], dtype=int), np.array([], dtype=int)
+
+    det_idx = matched_indices[:, 0]
+    trk_idx = matched_indices[:, 1]
+
+    det_cx = (det_boxes[det_idx, 0] + det_boxes[det_idx, 2]) / 2.0
+    det_cy = (det_boxes[det_idx, 1] + det_boxes[det_idx, 3]) / 2.0
+    trk_cx = (trk_boxes[trk_idx, 0] + trk_boxes[trk_idx, 2]) / 2.0
+    trk_cy = (trk_boxes[trk_idx, 1] + trk_boxes[trk_idx, 3]) / 2.0
+    center_dist = np.sqrt((det_cx - trk_cx) ** 2 + (det_cy - trk_cy) ** 2)
+
+    trk_w = trk_last_boxes[trk_idx, 2] - trk_last_boxes[trk_idx, 0]
+    trk_h = trk_last_boxes[trk_idx, 3] - trk_last_boxes[trk_idx, 1]
+    max_side = np.maximum(trk_w, trk_h)
+
+    # max_side ≤ 0 表示新轨迹尚无有效观测（last_observation 为占位值 [-1,-1,-1,-1,-1]），不设限
+    ok = (max_side <= 0.0) | (center_dist <= max_ratio * max_side)
+    return matched_indices[ok], matched_indices[~ok, 0], matched_indices[~ok, 1]
+
+
 def associate(
     detections: np.ndarray,
     trackers: np.ndarray,
@@ -136,6 +169,8 @@ def associate(
     velocities: np.ndarray,
     previous_obs: np.ndarray,
     vdc_weight: float,
+    trk_last_boxes: np.ndarray | None = None,
+    max_ratio: float = 2.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if len(trackers) == 0:
         return np.empty((0, 2), dtype=int), np.arange(len(detections)), np.empty((0,), dtype=int)
@@ -169,5 +204,12 @@ def associate(
         matched_indices = linear_assignment(-(diou_matrix + angle_diff_cost))
     else:
         matched_indices = np.empty((0, 2), dtype=int)
+
+    # 中心距离硬门控：过滤距离超过 max_ratio × 轨迹最后框 max(w,h) 的匹配
+    if trk_last_boxes is not None and matched_indices.shape[0] > 0:
+        matched_indices, _, _ = center_distance_gate(
+            matched_indices, detections, trackers, trk_last_boxes,
+            max_ratio=max_ratio,
+        )
 
     return _split_matches(matched_indices, len(detections), len(trackers))
