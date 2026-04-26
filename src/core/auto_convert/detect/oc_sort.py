@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from filterpy.kalman import KalmanFilter
 
-from .oc_sort_association import associate, iou_batch, linear_assignment
+from .oc_sort_association import associate, diou_batch, iou_batch, linear_assignment
 
 
 def _k_previous_obs(observations: dict[int, np.ndarray], cur_age: int, k: int) -> np.ndarray:
@@ -253,15 +253,13 @@ class OCSort:
 
         if self.use_byte and len(dets_second_assoc) > 0 and unmatched_trks.shape[0] > 0:
             u_trks = trks[unmatched_trks]
-            iou_left = np.array(iou_batch(dets_second_assoc, u_trks))
-            if iou_left.size > 0 and iou_left.max() > self.iou_threshold:
-                matched_indices = linear_assignment(-iou_left)
+            diou_left = np.array(diou_batch(dets_second_assoc, u_trks))
+            # DIoU 替代 IoU：零交集时中心距离提供梯度，优先选较近匹配
+            if diou_left.size > 0 and diou_left.max() > 0:
+                matched_indices = linear_assignment(-diou_left)
                 to_remove = []
-                for m in matched_indices:
-                    det_idx2, trk_pos = m[0], m[1]
+                for det_idx2, trk_pos in matched_indices:
                     trk_idx = unmatched_trks[trk_pos]
-                    if iou_left[det_idx2, trk_pos] < self.iou_threshold:
-                        continue
                     self.trackers[trk_idx].update(dets_second[det_idx2])
                     to_remove.append(trk_idx)
                 if to_remove:
@@ -270,17 +268,15 @@ class OCSort:
         if unmatched_dets.shape[0] > 0 and unmatched_trks.shape[0] > 0:
             left_dets = dets_assoc[unmatched_dets]
             left_trks = last_boxes[unmatched_trks]
-            iou_left = np.array(iou_batch(left_dets, left_trks))
-            if iou_left.size > 0 and iou_left.max() > self.iou_threshold:
-                rematched_indices = linear_assignment(-iou_left)
+            diou_left = np.array(diou_batch(left_dets, left_trks))
+            # DIoU 替代 IoU：零交集时中心距离提供梯度
+            if diou_left.size > 0 and diou_left.max() > 0:
+                rematched_indices = linear_assignment(-diou_left)
                 to_remove_det_indices = []
                 to_remove_trk_indices = []
-                for m in rematched_indices:
-                    det_pos, trk_pos = m[0], m[1]
+                for det_pos, trk_pos in rematched_indices:
                     det_idx = unmatched_dets[det_pos]
                     trk_idx = unmatched_trks[trk_pos]
-                    if iou_left[det_pos, trk_pos] < self.iou_threshold:
-                        continue
                     self.trackers[trk_idx].update(dets[det_idx])
                     to_remove_det_indices.append(det_idx)
                     to_remove_trk_indices.append(trk_idx)

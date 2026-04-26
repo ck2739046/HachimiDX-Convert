@@ -29,6 +29,56 @@ def iou_batch(bboxes1: np.ndarray, bboxes2: np.ndarray) -> np.ndarray:
     return wh / np.maximum(union, 1e-12)
 
 
+def diou_batch(bboxes1: np.ndarray, bboxes2: np.ndarray) -> np.ndarray:
+    """Compute pairwise DIoU (Distance-IoU) for boxes in [x1, y1, x2, y2, ...] format.
+
+    DIoU = IoU - ρ²(b_d, b_t) / c², rescaled from [-1, 1] to [0, 1].
+
+    当 IoU=0 时，中心距离 ρ 提供梯度，优先匹配距离较近的框。
+    Ref: https://arxiv.org/abs/1902.09630
+    """
+    bboxes1 = np.asarray(bboxes1)
+    bboxes2 = np.asarray(bboxes2)
+
+    if bboxes1.size == 0 or bboxes2.size == 0:
+        return np.zeros((len(bboxes1), len(bboxes2)), dtype=np.float64)
+
+    bboxes2 = np.expand_dims(bboxes2, 0)
+    bboxes1 = np.expand_dims(bboxes1, 1)
+
+    # --- IoU part ---
+    xx1 = np.maximum(bboxes1[..., 0], bboxes2[..., 0])
+    yy1 = np.maximum(bboxes1[..., 1], bboxes2[..., 1])
+    xx2 = np.minimum(bboxes1[..., 2], bboxes2[..., 2])
+    yy2 = np.minimum(bboxes1[..., 3], bboxes2[..., 3])
+    w = np.maximum(0.0, xx2 - xx1)
+    h = np.maximum(0.0, yy2 - yy1)
+    wh = w * h
+    union = (
+        (bboxes1[..., 2] - bboxes1[..., 0]) * (bboxes1[..., 3] - bboxes1[..., 1])
+        + (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1])
+        - wh
+    )
+    iou = wh / np.maximum(union, 1e-12)
+
+    # --- Center distance part ---
+    cx1 = (bboxes1[..., 0] + bboxes1[..., 2]) / 2.0
+    cy1 = (bboxes1[..., 1] + bboxes1[..., 3]) / 2.0
+    cx2 = (bboxes2[..., 0] + bboxes2[..., 2]) / 2.0
+    cy2 = (bboxes2[..., 1] + bboxes2[..., 3]) / 2.0
+    inner_diag = (cx1 - cx2) ** 2 + (cy1 - cy2) ** 2
+
+    # --- Outer enclosing box diagonal ---
+    xxc1 = np.minimum(bboxes1[..., 0], bboxes2[..., 0])
+    yyc1 = np.minimum(bboxes1[..., 1], bboxes2[..., 1])
+    xxc2 = np.maximum(bboxes1[..., 2], bboxes2[..., 2])
+    yyc2 = np.maximum(bboxes1[..., 3], bboxes2[..., 3])
+    outer_diag = (xxc2 - xxc1) ** 2 + (yyc2 - yyc1) ** 2 + 1e-12
+
+    diou = iou - inner_diag / outer_diag
+    return (diou + 1.0) / 2.0  # rescale [-1, 1] → [0, 1]
+
+
 def speed_direction_batch(dets: np.ndarray, tracks: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     tracks = tracks[..., np.newaxis]
     cx1 = (dets[:, 0] + dets[:, 2]) / 2.0
@@ -58,22 +108,19 @@ def linear_assignment(cost_matrix: np.ndarray) -> np.ndarray:
         return np.array(list(zip(x, y)), dtype=int)
 
 
-def _filter_matches(
+def _split_matches(
     matched_indices: np.ndarray,
-    iou_matrix: np.ndarray,
-    iou_threshold: float,
     num_dets: int,
     num_trks: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """将 Hungarian 配对结果拆分为 matched / unmatched_dets / unmatched_trks。
+
+    不按 IoU 硬门控过滤，完全信任代价矩阵 + Hungarian 的全局最优解。
+    """
     if matched_indices.shape[0] > 0:
         unmatched_dets = np.setdiff1d(np.arange(num_dets), matched_indices[:, 0])
         unmatched_trks = np.setdiff1d(np.arange(num_trks), matched_indices[:, 1])
-        iou_vals = iou_matrix[matched_indices[:, 0], matched_indices[:, 1]]
-        low_iou_mask = iou_vals < iou_threshold
-
-        unmatched_dets = np.concatenate([unmatched_dets, matched_indices[low_iou_mask, 0]])
-        unmatched_trks = np.concatenate([unmatched_trks, matched_indices[low_iou_mask, 1]])
-        matches = matched_indices[~low_iou_mask]
+        matches = matched_indices
     else:
         unmatched_dets = np.arange(num_dets)
         unmatched_trks = np.arange(num_trks)
@@ -109,7 +156,7 @@ def associate(
     valid_mask = np.ones(previous_obs.shape[0])
     valid_mask[previous_obs[:, 4] < 0] = 0
 
-    iou_matrix = iou_batch(detections, trackers)
+    diou_matrix = diou_batch(detections, trackers)
     scores = detections[:, -1][:, np.newaxis]
     valid_mask = valid_mask[:, np.newaxis]
 
@@ -117,13 +164,10 @@ def associate(
     angle_diff_cost = angle_diff_cost.T
     angle_diff_cost = angle_diff_cost * scores
 
-    if min(iou_matrix.shape) > 0:
-        binary_ok = (iou_matrix > iou_threshold).astype(np.int32)
-        if binary_ok.sum(1).max() == 1 and binary_ok.sum(0).max() == 1:
-            matched_indices = np.stack(np.where(binary_ok), axis=1)
-        else:
-            matched_indices = linear_assignment(-(iou_matrix + angle_diff_cost))
+    if min(diou_matrix.shape) > 0:
+        # DIoU + VDC 联合代价，IoU=0 时中心距离提供梯度，优先选较近匹配
+        matched_indices = linear_assignment(-(diou_matrix + angle_diff_cost))
     else:
         matched_indices = np.empty((0, 2), dtype=int)
 
-    return _filter_matches(matched_indices, iou_matrix, iou_threshold, len(detections), len(trackers))
+    return _split_matches(matched_indices, len(detections), len(trackers))
