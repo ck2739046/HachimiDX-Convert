@@ -117,7 +117,8 @@ class AutoConvertPage(BaseOutputPage):
          select_output_dir_help
         ) = create_directory_selection_row(
             button_text=i18n.t(f"{I18N_Prefix}.ui_selected_output_dir_button"),
-            help_text=i18n.t(f"{I18N_Prefix}.ui_selected_output_dir_help")
+            help_text=i18n.t(f"{I18N_Prefix}.ui_selected_output_dir_help"),
+            on_button_clicked_handler=lambda path: self._sync_taskname_from_name(Path(path).name)
         )
         # 此处手动创建是要保存 row 引用，以便后续控制 显示/隐藏
         self.select_output_dir_row = _create_row(
@@ -139,8 +140,16 @@ class AutoConvertPage(BaseOutputPage):
             return
         # 更新 Song Name
         self.song_name_line_edit.setText(Path(self.chart_confirm_video_input.get_path()).stem)
+        # 同步 Task Name
+        self._sync_taskname_from_name(Path(self.chart_confirm_video_input.get_path()).stem)
         # 更新视频范围可视化器
         self._update_video_range_visualizer()
+
+    def _sync_taskname_from_name(self, name: str) -> None:
+        """更新 task name 输入框内容为给定的名称（文件名/文件夹名）。"""
+        if self.taskname_line_edit is None:
+            return
+        self.taskname_line_edit.setText(name)
 
 
 
