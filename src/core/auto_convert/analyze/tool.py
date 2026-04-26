@@ -86,6 +86,71 @@ def draw_path_on_frame(screen_cx, screen_cy, judgeline_end, judgeline_start,
 
 
 
+
+
+
+def catmull_rom_spline(points: list, num_samples: int = 4, tension: float = 1.5) -> np.ndarray:
+    """对控制点列表使用 Catmull-Rom 样条插值生成平滑曲线点。
+
+    Args:
+        points: 控制点列表 [(x, y), ...]
+        num_samples: 每段采样点数（包含段起点，不含段终点）
+        tension:  张力系数。=1.0 标准 Catmull-Rom；>1.0 放大切线产生更大过冲（更松弛）；
+                  <1.0 收紧曲线趋近折线。
+
+    Returns:
+        shape (N, 1, 2) 的 np.int32 数组
+    """
+    n = len(points)
+    if n < 2:
+        return np.array([], dtype=np.int32).reshape((-1, 1, 2))
+
+    pts = np.asarray(points, dtype=np.float64)
+    s = float(tension)
+
+    if n == 2:
+        t = np.linspace(0, 1, num_samples + 1, endpoint=True, dtype=np.float64)
+        interp = pts[0] + (pts[1] - pts[0]) * t[:, None]
+        return np.asarray(np.round(interp), dtype=np.int32).reshape((-1, 1, 2))
+
+    # n >= 3: 全向量化一次计算所有段的所有插值点
+    n_seg = n - 1
+
+    # 控制点矩阵 (n_seg, 2)，每个段的 P0 P1 P2 P3
+    # 边界：首段 P0=P1，尾段 P3=P2
+    p0 = pts[np.clip(np.arange(n_seg) - 1, 0, n - 1)]
+    p1 = pts[np.arange(n_seg)]
+    p2 = pts[np.arange(n_seg) + 1]
+    p3 = pts[np.clip(np.arange(n_seg) + 2, 0, n - 1)]
+
+    # t 网格 (num_samples, n_seg)
+    t = np.arange(num_samples, dtype=np.float64) / num_samples
+    t2 = t * t
+    t3 = t2 * t
+
+    # 基函数 (num_samples, n_seg)
+    c0 = s * (-t + 2.0 * t2 - t3)[:, None]
+    c1 = (2.0 + (s - 6.0) * t2 + (4.0 - s) * t3)[:, None]
+    c2 = (s * t + (6.0 - 2.0 * s) * t2 + (s - 4.0) * t3)[:, None]
+    c3 = s * (-t2 + t3)[:, None]
+
+    # 广播聚合: (num_samples, n_seg, 2)
+    result = 0.5 * (c0[..., None] * p0[None, ...] +
+                    c1[..., None] * p1[None, ...] +
+                    c2[..., None] * p2[None, ...] +
+                    c3[..., None] * p3[None, ...])
+
+    # 转置为 (n_seg, num_samples, 2) → 展平 → 追加末点
+    result = np.ascontiguousarray(result.transpose(1, 0, 2).reshape(-1, 2))
+    result = np.vstack([result, pts[-1][None, :]])
+
+    return np.asarray(np.round(result), dtype=np.int32).reshape((-1, 1, 2))
+
+
+
+
+
+
 if __name__ == "__main__":
 
     import cv2

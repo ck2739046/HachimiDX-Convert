@@ -9,6 +9,9 @@ from pathlib import Path
 from ...schemas.op_result import OpResult, ok, err
 from .note_definition import *
 from .track import _load_track_results
+from ..analyze.tool import catmull_rom_spline
+
+
 
 
 def main(std_video_path: Path,
@@ -77,6 +80,7 @@ def main(std_video_path: Path,
         # 存储轨迹历史用于绘制轨迹线
         track_history = defaultdict(list)
         track_last_seen = defaultdict(int)  # 记录轨迹最后出现的帧号
+        track_note_type: dict[int, NoteType] = {}  # 记录轨迹对应的音符类型，用于区分 SLIDE 样条绘制
         label_size_cache: dict[str, tuple[int, int]] = {}
 
         # 轨迹清理和绘制长度使用同一套 fps 计算，避免长视频后期轨迹过长拖慢绘制
@@ -192,7 +196,8 @@ def main(std_video_path: Path,
                 history_points = track_history[track_id]
                 history_points.append((center_x, center_y))
                 track_last_seen[track_id] = frame_number
-                
+                track_note_type[track_id] = note_type
+
                 if len(history_points) > max_track_history_len:
                     del history_points[:-max_track_history_len]
             
@@ -209,12 +214,18 @@ def main(std_video_path: Path,
                     del track_history[track_id]
                 if track_id in track_last_seen:
                     del track_last_seen[track_id]
+                if track_id in track_note_type:
+                    del track_note_type[track_id]
             
             # 绘制轨迹线
             for track_id, points in track_history.items():
                 if len(points) > 1:
                     color = get_color_for_id(track_id)
-                    polyline_points = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
+                    note_type_for_trail = track_note_type.get(track_id)
+                    if note_type_for_trail is NoteType.SLIDE:
+                        polyline_points = catmull_rom_spline(points)
+                    else:
+                        polyline_points = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
                     cv2.polylines(frame, [polyline_points], False, color, 3)
                     
                     # 在轨迹起点绘制小圆点
