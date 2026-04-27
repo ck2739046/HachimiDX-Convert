@@ -38,7 +38,8 @@ class MediaInputProbeWidget(QWidget):
         # data
         self.selected_file_duration = None
         self.selected_file_type = MediaType.UNKNOWN
-        
+        self.selected_video_fps = None
+
         self._init_ui(select_file_button_help,
                       select_file_button_text,
                       select_file_button_length)
@@ -108,6 +109,7 @@ class MediaInputProbeWidget(QWidget):
             self.probe_result_display_label.setText(MediaType.UNKNOWN.name)
             self.selected_file_duration = None
             self.selected_file_type = MediaType.UNKNOWN
+            self.selected_video_fps = None
             # emit signal
             error_msg = i18n.t(f"{I18N_Prefix}.warning_ffprobe_inspect_failed", error_msg = print_op_result(result))
             self.media_loaded.emit(error_msg)
@@ -118,6 +120,7 @@ class MediaInputProbeWidget(QWidget):
         # 更新公共变量
         self.selected_file_duration = ffprobe_result.duration
         self.selected_file_type = ffprobe_result.media_type
+        self.selected_video_fps = ffprobe_result.video_stream.get("avg_frame_rate")
         # 显示检测结果
         display_text = self._build_probe_result_text(ffprobe_result)
         self.probe_result_display_label.setText(display_text)

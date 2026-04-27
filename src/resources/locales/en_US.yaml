@@ -169,6 +169,12 @@ en_US:
         ui_reference_file_help: "Audio or video file used as the alignment reference."
         ui_target_file_help: "Audio or video file to align against the reference."
 
+        ui_generate_video_label: "Generate MajdataView Reference Video: "
+        ui_generate_video_button: "Generate"
+        notice_video_generate_start: "Start generating reference video..."
+        notice_video_generate_success: "Reference video generated.\nOutput file: %{output_path}"
+        warning_video_generate_failed: "Failed to generate reference video:\n%{error}"
+        warning_video_generate_failed_log: "Failed to generate reference video."
 
 
       run_ffmpeg:
