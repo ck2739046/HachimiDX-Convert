@@ -164,14 +164,14 @@ class MediaConfig_Definitions:
     def get_audio_bitrate_by_audio_format(audio_format: str) -> OpResult[tuple[str, list[str]]]:
         """return (default, options)"""
         if audio_format == "mp3":
-            options = ["vbr 0 (245k)", "vbr 1 (225k)", "vbr 2 (190k)"]
-            return ok((options[1], options))
+            options = ["vbr 0 (250k)", "vbr 1 (224k)", "vbr 2 (192k)", "vbr 3 (175k)", "vbr 4 (160k)", "vbr 5 (128k)"]
+            return ok((options[2], options))
         elif audio_format == "aac":
-            options = ["cbr 160k", "cbr 192k", "cbr 224k"]
-            return ok((options[1], options))
+            options = ["cbr 256k", "cbr 224k", "cbr 192k", "cbr 160k", "cbr 128k"]
+            return ok((options[2], options))
         elif audio_format == "ogg":
-            options = ["vbr 6 (191k)", "vbr 7 (224k)", "vbr 8 (256k)"]
-            return ok((options[1], options))
+            options = ["vbr 8 (256k)", "vbr 7 (224k)", "vbr 6 (192k)", "vbr 5 (160k)", "vbr 4 (128k)"]
+            return ok((options[2], options))
         else:
             return err(f"No valid audio_bitrate for the given audio_format: {audio_format}")
 
