@@ -326,11 +326,12 @@ def _extract_touch_hold_observation(result, crop_w: int, crop_h: int, is_big_tou
 def _convert_touch_box_to_dist_to_center(touch_w: float, touch_h: float, is_big_touch: bool) -> float:
     # label_notes.py 实现:
     # size = dist_to_center + 68
-    # touch_box_side = 2 * size * scale
-    # 反推 dist_to_center = touch_box_side / scale / 2 - 68
+    # touch_box_side = 2 * size
+    # 反推 dist_to_center = touch_box_side / 2 - 68
+    # 以上是正常情况, 如果 is_big_touch, 常量 68 要变 1.3x
     touch_size = (float(touch_w) + float(touch_h)) / 2.0
     scale = 1.3 if is_big_touch else 1.0
-    dist_to_center = touch_size / scale / 2.0 - 68.0
+    dist_to_center = touch_size / 2.0 - 68.0 * scale
 
     if np.isfinite(dist_to_center):
         return float(dist_to_center)
