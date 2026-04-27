@@ -20,7 +20,9 @@ _WIFI_ENDPOINT_SEQ = {
 
 
 
-def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denominator, duration_denominator, notes_info):
+def generate_maidata(shared_context: SharedContext, bpm, chart_lv,
+                     base_denominator, duration_denominator, notes_info,
+                     note_speed: float, touch_speed: float):
 
 
     # 准备输出txt文件
@@ -37,7 +39,11 @@ def generate_maidata(shared_context: SharedContext, bpm, chart_lv, base_denomina
         f.write('&first=0\n')
         f.write(f'&des_{chart_lv}=default\n')
         f.write(f'&lv_{chart_lv}=15\n')
-        f.write(f'&inote_{chart_lv}=({bpm})' + '{1},')
+        f.write(f'&inote_{chart_lv}=({bpm})' + '{1},\n')
+        # 打印流速信息
+        note_speed_str = f"{note_speed:.2f}" if note_speed else "N/A"
+        touch_speed_str = f"{touch_speed:.2f}" if touch_speed else "N/A"
+        f.write(f"|| note speed: {note_speed_str}, touch speed: {touch_speed_str}")
 
     # 打印基础信息
     level_label = ['zero', 'easy', 'basic', 'advanced', 'expert', 'master', 'remaster', 'special']
