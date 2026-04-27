@@ -102,7 +102,7 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
 
         # 方向一致性代价权重：越大越偏好“运动方向一致”的匹配
         # slide 运动比较规律，调高权重
-        inertia=0.8,
+        inertia=0.7,
 
         # 启用 BYTE 二阶段低分框补匹配（0.1 < score < det_thresh）
         use_byte=True,
