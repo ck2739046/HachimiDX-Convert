@@ -119,6 +119,7 @@ def _split_touch_notes(tracks: dict, context: _PostTrackContext, next_track_id: 
             new_tracks[key].extend(note_geometry_list)
             continue
 
+        assigned_track_ids = []
         for segment_idx, segment in enumerate(segments):
             if not segment:
                 continue
@@ -129,9 +130,10 @@ def _split_touch_notes(tracks: dict, context: _PostTrackContext, next_track_id: 
                 new_key = (next_track_id, note_type)
                 next_track_id += 1
 
+            assigned_track_ids.append(new_key[0])
             new_tracks[new_key].extend(segment)
 
-        print(f"post_track: split {note_type.value} track_id {track_id} into {len(segments)} segments: {[key[0] for key in segments]}")
+        print(f"post_track: split {note_type.value} track_id {track_id} into {assigned_track_ids}")
 
     return new_tracks, next_track_id
 
