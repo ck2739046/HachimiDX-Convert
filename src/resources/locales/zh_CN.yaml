@@ -358,7 +358,7 @@ zh_CN:
         建议单位时间 ≥30ms，如果 BPM 较高，需要适当降低分辨率以保证准确性。
         
         注: 此选项仅适用于 slide 和 touch-hold 音符的时值，
-             hold 音符的时值的分辨率与“音符间隔分辨率”相同。
+            hold 音符的时值的分辨率与“音符间隔分辨率”相同。
 
       ui_enable_standardize_label: "启用视频标准化模块: "
       ui_enable_standardize_help: |
@@ -387,7 +387,7 @@ zh_CN:
       ui_model_divider: "模型推理"
       ui_model_backend_label: "模型后端: "
       ui_model_backend_help: |
-        CPU:        最慢，不需要 GPU。
+        CPU:      最慢，不需要 GPU。
         TensorRT: 最快，需要 NVIDIA GPU。
         DirectML: 中等，需要兼容的 GPU（NVIDIA、AMD、Intel）。
       ui_check_model_button: "检测"

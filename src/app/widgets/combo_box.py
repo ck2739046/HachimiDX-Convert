@@ -92,6 +92,7 @@ class ToolTipComboBox(QComboBox):
         # 显示 tooltip（粗体文字)
         QToolTip.showText(tooltip_pos, text, viewport)
         font = QToolTip.font()
+        font.setFamilies(['Consolas', 'Microsoft YaHei UI'])
         font.setBold(True)
         QToolTip.setFont(font)
 

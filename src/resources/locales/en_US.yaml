@@ -362,7 +362,7 @@ en_US:
         Recommended unit time is >=30ms. If BPM is high, lower the denominator for better accuracy.
 
         Note: This option only applies to slide and touch-hold durations.
-             Hold duration uses the same denominator as "Base Denominator".
+              Hold duration uses the same denominator as "Base Denominator".
 
       ui_enable_standardize_label: "Enable Video Standardization: "
       ui_enable_standardize_help: |
@@ -391,7 +391,7 @@ en_US:
       ui_model_divider: "Model Inference"
       ui_model_backend_label: "Model Backend: "
       ui_model_backend_help: |
-        CPU:        slowest, no GPU required.
+        CPU:      slowest, no GPU required.
         TensorRT: fastest, requires NVIDIA GPU.
         DirectML: medium, requires compatible GPU (NVIDIA, AMD, Intel).
       ui_check_model_button: "Check"
