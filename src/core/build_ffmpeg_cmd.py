@@ -4,7 +4,62 @@ from src.services.path_manage import PathManage
 from .schemas.media_config import MediaType
 from .schemas.media_model import MediaModel
 from src.core.schemas.op_result import OpResult, ok, err
+from src.services.settings_manage import SettingsManage
+from src.core.schemas.settings_config import SettingsConfig_Definitions as S_Defs
 
+
+
+
+# 编解码映射
+
+ENCODER_MAP = {
+    "CPU":    {"codec": "libx264",
+               "quality_param": "-crf",
+               "quality_default": "23",
+               "preset": "veryfast",
+               "pix_fmt": "yuv420p"},
+    "Nvidia": {"codec": "h264_nvenc",
+               "quality_param": "-cq",
+               "quality_default": "28",
+               "preset": "p2",
+               "pix_fmt": "nv12"},
+    "Intel":  {"codec": "h264_qsv",
+               "quality_param": "-global_quality",
+               "quality_default": "23",
+               "preset": "faster",
+               "pix_fmt": "nv12"},
+}
+
+DECODER_MAP = {
+    "CPU":    [],
+    "D3D 11": ["-hwaccel", "d3d11va", "-hwaccel_output_format", "nv12"],
+}
+
+
+def _resolve_video_encoder() -> OpResult[dict]:
+    res = SettingsManage.get(S_Defs.ffmpeg_hw_encoder.key)
+    if not res.is_ok:
+        return err("Failed to read ffmpeg_hw_encoder setting", inner=res)
+
+    encoder_id = str(res.value).strip()
+    entry = ENCODER_MAP.get(encoder_id)
+    if entry is None:
+        return err(f"Unknown ffmpeg_hw_encoder: {encoder_id}")
+
+    return ok(entry)
+
+
+def _resolve_video_decoder() -> OpResult[list[str]]:
+    res = SettingsManage.get(S_Defs.ffmpeg_hw_decoder.key)
+    if not res.is_ok:
+        return err("Failed to read ffmpeg_hw_decoder setting", inner=res)
+
+    decoder_id = str(res.value).strip()
+    args = DECODER_MAP.get(decoder_id)
+    if args is None:
+        return err(f"Unknown ffmpeg_hw_decoder: {decoder_id}")
+
+    return ok(args)
 
 
 
@@ -86,6 +141,13 @@ def _build_common_args(data: MediaModel) -> OpResult[list[str]]:
 
     args = []
 
+    # 如果是视频，注入硬件解码参数
+    if data.media_type in (MediaType.VIDEO_WITH_AUDIO, MediaType.VIDEO_WITHOUT_AUDIO):
+        video_dec_res = _resolve_video_decoder()
+        if not video_dec_res.is_ok:
+            return err("Failed to resolve video decoder args", inner=video_dec_res)
+        args.extend(video_dec_res.value)
+
     # 输入文件
     args.extend(["-i", str(data.input_path)])
 
@@ -112,9 +174,14 @@ def _build_video_args(data: MediaModel) -> OpResult[list[str]]:
            data.media_type == MediaType.VIDEO_WITHOUT_AUDIO):
         return ok(args)  # 非视频类型，无需视频参数
     
-    args.extend(["-pix_fmt", "yuv420p"])
-    args.extend(["-c:v", "libx264"])
-    args.extend(["-crf", str(data.video_crf)])
+    encoder_res = _resolve_video_encoder()
+    if not encoder_res.is_ok:
+        return err("Failed to resolve video encoder", inner=encoder_res)
+    entry = encoder_res.value
+
+    args.extend(["-c:v", entry["codec"]])
+    args.extend(["-pix_fmt", entry["pix_fmt"]])
+    args.extend([entry["quality_param"], str(data.video_crf)])
 
     if data.video_fps and data.video_fps > 0:
         args.extend(["-r", str(data.video_fps)])
