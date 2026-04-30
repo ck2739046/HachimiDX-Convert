@@ -64,8 +64,9 @@ def analyze_slide_tail_start_end_time(shared_context, note_path, start_position,
     # 获取第60%的速度 (比中位数偏右一点)
     if not frame_speeds:
         return None, None
-    index = round(len(frame_speeds) * 0.6)
     sorted_speeds = sorted(frame_speeds)
+    index = min(round(len(sorted_speeds) * 0.6), len(sorted_speeds) - 1)
+    index = max(index, 0)
     note_speed = sorted_speeds[index]
 
 
