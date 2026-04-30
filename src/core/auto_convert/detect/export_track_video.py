@@ -16,6 +16,7 @@ from ..analyze.tool import catmull_rom_spline
 
 def main(std_video_path: Path,
      total_frames: int,
+     export_track_video_ffmpeg_args: str,
     ) -> OpResult[Path]:
 
     print("开始导出视频模块...")
@@ -97,10 +98,10 @@ def main(std_video_path: Path,
             '-f', 'rawvideo',
             '-pix_fmt', 'bgr24',
             '-s', f'{video_width}x{video_height}',
-            '-r', str(fps_for_calc),
-            '-i', '-',
+            '-r', str(round(fps_for_calc, 2)),
+            '-i', '-', # 从管道读取视频帧
             '-i', str(std_video_path),
-            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p',
+            *export_track_video_ffmpeg_args.split(),
             '-c:a', 'aac', '-b:a', '192k',
             '-map', '0:v:0',
             '-map', '1:a:0?',
