@@ -399,7 +399,6 @@ en_US:
       ui_cancel_convert_model_button: "Cancel"
 
       ui_ffmpeg_divider: "FFmpeg Hardware Acceleration"
-      ui_ffmpeg_vp9_label: "VP9: "
       ui_ffmpeg_h264_label: "H264: "
 
       ui_general_divider: "General"

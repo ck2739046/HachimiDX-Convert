@@ -15,7 +15,6 @@ class SettingsModel(BaseModel):
     predict_batch_size_classify: Annotated[int, Field(gt=S_Defs.predict_batch_size_classify.constraints["gt"])] = S_Defs.predict_batch_size_classify.default
     predict_batch_size_touch_hold: Annotated[int, Field(gt=S_Defs.predict_batch_size_touch_hold.constraints["gt"])] = S_Defs.predict_batch_size_touch_hold.default
     # FFmpeg 硬件加速相关
-    # ffmpeg_hw_accel_vp9: str = Field(default=S_Defs.ffmpeg_hw_accel_vp9.default)
     # ffmpeg_hw_accel_h264: str = Field(default=S_Defs.ffmpeg_hw_accel_h264.default)
     # 应用通用设置
     language: str = Field(default=S_Defs.language.default)
@@ -48,16 +47,6 @@ class SettingsModel(BaseModel):
         if v not in allowed:
             raise ValueError(f"inference_device must be one of {allowed}")
         return v
-
-
-
-    # @field_validator("ffmpeg_hw_accel_vp9")
-    # @classmethod
-    # def validate_ffmpeg_hw_accel_vp9_options(cls, v: str) -> str:
-    #     allowed = S_Defs.ffmpeg_hw_accel_vp9.constraints["options"]
-    #     if v not in allowed:
-    #         raise ValueError(f"ffmpeg_hw_accel_vp9 must be one of {allowed}")
-    #     return v
 
 
 

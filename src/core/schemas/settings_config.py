@@ -120,14 +120,6 @@ class SettingsConfig_Definitions:
 
     # ffmpeg
 
-    # ffmpeg_hw_accel_vp9 = SettingsConfig_Definition(
-    #     key="ffmpeg_hw_accel_vp9",
-    #     type="str",
-    #     group="ffmpeg",
-    #     default="cpu",
-    #     constraints={"options": ["cpu", "nvidia"]},
-    # )
-
     # ffmpeg_hw_accel_h264 = SettingsConfig_Definition(
     #     key="ffmpeg_hw_accel_h264",
     #     type="str",

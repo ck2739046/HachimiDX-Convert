@@ -46,7 +46,6 @@ def copy_app_resources():
     copy_to_release(PathManage.CLICK_TEMPLATE_PATH)
     # test videos
     copy_to_release(PathManage.TEST_H264_PATH)
-    copy_to_release(PathManage.TEST_VP9_PATH)
 
     # 解压 models
     models_dir = PathManage.RESOURCES_DIR / "for_release_only" / "models"

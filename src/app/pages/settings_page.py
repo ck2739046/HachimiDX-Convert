@@ -29,7 +29,6 @@ class SettingsPage(BaseOutputPage):
         self._active_convert_runner_id = None
         self._backend_snapshot = None
 
-        # self.ffmpeg_vp9_combo_box = None
         # self.ffmpeg_h264_combo_box = None
 
         self.language_combo_box = None
@@ -44,7 +43,6 @@ class SettingsPage(BaseOutputPage):
 
         self._save_order_keys = [
             S_Defs.model_backend.key,
-            # S_Defs.ffmpeg_hw_accel_vp9.key,
             #S_Defs.ffmpeg_hw_accel_h264.key,
             S_Defs.language.key,
             S_Defs.main_app_init_size.key,
@@ -102,15 +100,10 @@ class SettingsPage(BaseOutputPage):
     # def _build_ffmpeg_section(self) -> None:
     #     self.content_layout.addWidget(create_divider(i18n.t(f"{I18N_Prefix}.ui_ffmpeg_divider")))
 
-    #     vp9_label = create_label(i18n.t(f"{I18N_Prefix}.ui_ffmpeg_vp9_label"))
-    #     self.ffmpeg_vp9_combo_box = self._create_combo_from_definition(S_Defs.ffmpeg_hw_accel_vp9, length=80)
-
     #     h264_label = create_label(i18n.t(f"{I18N_Prefix}.ui_ffmpeg_h264_label"))
     #     self.ffmpeg_h264_combo_box = self._create_combo_from_definition(S_Defs.ffmpeg_hw_accel_h264, length=80)
 
     #     row = _create_row(
-    #         vp9_label,
-    #         self.ffmpeg_vp9_combo_box,
     #         h264_label,
     #         self.ffmpeg_h264_combo_box,
     #         add_stretch=True,
@@ -208,7 +201,6 @@ class SettingsPage(BaseOutputPage):
 
         _set_combo_value(self.model_backend_combo_box, settings[S_Defs.model_backend.key])
         self._refresh_model_buttons(reason="backend_changed")
-        # _set_combo_value(self.ffmpeg_vp9_combo_box, settings[S_Defs.ffmpeg_hw_accel_vp9.key])
         # _set_combo_value(self.ffmpeg_h264_combo_box, settings[S_Defs.ffmpeg_hw_accel_h264.key])
         _set_combo_value(self.language_combo_box, settings[S_Defs.language.key])
 
@@ -227,9 +219,7 @@ class SettingsPage(BaseOutputPage):
 
         return {
             S_Defs.model_backend.key: self.model_backend_combo_box.currentText().strip(),
-            # S_Defs.ffmpeg_hw_accel_vp9.key: self.ffmpeg_vp9_combo_box.currentText().strip(),
             # S_Defs.ffmpeg_hw_accel_h264.key: self.ffmpeg_h264_combo_box.currentText().strip(),
-            S_Defs.language.key: self.language_combo_box.currentText().strip(),
             S_Defs.main_app_init_size.key: (
                 self.init_width_line_edit.text().strip(),
                 self.init_height_line_edit.text().strip(),

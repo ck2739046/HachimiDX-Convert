@@ -23,7 +23,6 @@ class PathManage:
     APP_ICON_PATH: Path = RESOURCES_DIR / "icon.ico"
     CLICK_TEMPLATE_PATH: Path = RESOURCES_DIR / "click_template.wav"
     TEST_H264_PATH: Path = RESOURCES_DIR / "test_h264.mp4"
-    TEST_VP9_PATH: Path = RESOURCES_DIR / "test_vp9.webm"
 
     FFMPEG_EXE_PATH: Path = RESOURCES_DIR / "ffmpeg" / "bin" / "ffmpeg.exe"
     FFPROBE_EXE_PATH: Path = RESOURCES_DIR / "ffmpeg" / "bin" / "ffprobe.exe"
@@ -89,7 +88,7 @@ class PathManage:
         
         # 检查资源文件是否存在
         for file_path in [cls.APP_ICON_PATH, cls.CLICK_TEMPLATE_PATH,
-                          cls.TEST_H264_PATH, cls.TEST_VP9_PATH,
+                          cls.TEST_H264_PATH,
                           cls.FFMPEG_EXE_PATH, cls.FFPROBE_EXE_PATH,
                           cls.MajdataView_EXE_PATH, cls.MajdataEdit_EXE_PATH,
                           cls.DETECT_PT_PATH, cls.OBB_PT_PATH,
