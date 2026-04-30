@@ -207,17 +207,22 @@ class MediaConfig_Definitions:
 
     # video
 
-    video_crf = MediaConfig_Definition(
-        key="video_crf",
+    video_quality = MediaConfig_Definition(
+        key="video_quality",
         type="int",
         group="video",
-        default=23,
+        default=None, # auto
         constraints={
             "ge": 20,
             "le": 28,
             "options": list(range(20, 28+1))
         }
     )
+
+    @staticmethod
+    def get_default_video_quality_by_encoder(encoder: str) -> int:
+        dict = {"CPU": 23, "Nvidia": 28, "Intel": 23}
+        return dict.get(encoder, 23) # fallback
 
     video_side_resolution = MediaConfig_Definition(
         key="video_side_resolution",

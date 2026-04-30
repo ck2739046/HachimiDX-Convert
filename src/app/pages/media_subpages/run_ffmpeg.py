@@ -12,6 +12,8 @@ from src.core.tools import show_notify_dialog
 from src.core.schemas.op_result import OpResult, ok, err, print_op_result
 from src.core.schemas.media_config import MediaType, MediaConfig_Definition
 from src.core.schemas.media_config import MediaConfig_Definitions as M_Defs
+from src.core.schemas.settings_config import SettingsConfig_Definitions as S_Defs
+from src.services.settings_manage import SettingsManage
 import i18n
 
 
@@ -27,7 +29,7 @@ class RunFFmpegPage(BaseOutputPage):
         self.media_input = None
 
         # video widgets
-        self.video_crf_combo_box = None
+        self.video_quality_combo_box = None
         self.video_resolution_combo_box = None
         self.video_fps_combo_box = None
         self.video_gop_optimize_check_box = None
@@ -75,13 +77,13 @@ class RunFFmpegPage(BaseOutputPage):
         video_divider = create_divider(i18n.t("app.media_subpages.run_ffmpeg.ui_video_divider"))
         self.content_layout.addWidget(video_divider)
         # labels
-        video_crf_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_crf_label"))
+        video_quality_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_quality_label"))
         video_resolution_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_resolution_label"))
         video_fps_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_fps_label"))
         video_gop_optimize_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_gop_optimize_label"))
         video_mute_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_video_mute_label"))
         # help icons
-        video_crf_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_crf_help"))
+        video_quality_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_quality_help"))
         video_resolution_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_resolution_help"))
         video_fps_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_fps_help"))
         video_gop_optimize_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_video_gop_optimize_help"))
@@ -90,7 +92,7 @@ class RunFFmpegPage(BaseOutputPage):
         video_panel = QWidget()
         video_layout = QVBoxLayout(video_panel)
         video_layout.setContentsMargins(0, 0, 0, 0)
-        row = _create_row(video_crf_label, self.video_crf_combo_box, video_crf_help,
+        row = _create_row(video_quality_label, self.video_quality_combo_box, video_quality_help,
                           video_resolution_label, self.video_resolution_combo_box, video_resolution_help,
                           video_fps_label, self.video_fps_combo_box, video_fps_help,
                           video_gop_optimize_label, self.video_gop_optimize_check_box, video_gop_optimize_help,
@@ -253,9 +255,16 @@ class RunFFmpegPage(BaseOutputPage):
 
     def init_ffmpeg_widgets(self):
 
-        # video crf combo box
-        self.video_crf_combo_box = self._create_ffmpeg_widget(
-            widget_type="combo_box", param=M_Defs.video_crf, length=50)
+        # video quality combo box
+        # 根据编码器覆盖默认值
+        encoder_res = SettingsManage.get(S_Defs.ffmpeg_hw_encoder.key)
+        default_quality = M_Defs.get_default_video_quality_by_encoder(
+            str(encoder_res.value).strip()) if encoder_res.is_ok else ""
+        options = M_Defs.video_quality.constraints["options"]
+        default_index = options.index(default_quality)
+        self.video_quality_combo_box = create_combo_box(
+            length=50, items=options, default_index=default_index)
+
         # video resolution combo box
         self.video_resolution_combo_box = self._create_ffmpeg_widget(
             widget_type="combo_box", param=M_Defs.video_side_resolution, length=102, transfer_fn=self.transfer_res)
@@ -476,7 +485,7 @@ class RunFFmpegPage(BaseOutputPage):
                 M_Defs.input_path.key: self.media_input.get_path() or "",
                 M_Defs.output_path.key: self.output_full_path_display.text().strip() or "",
                 # video stream
-                M_Defs.video_crf.key: try_int(self.video_crf_combo_box.currentText().strip()),
+                M_Defs.video_quality.key: try_int(self.video_quality_combo_box.currentText().strip()),
                 M_Defs.video_side_resolution.key: self.transfer_res(self.video_resolution_combo_box.currentText().strip()),
                 M_Defs.video_fps.key: self.transfer_fps(self.video_fps_combo_box.currentText().strip()),
                 M_Defs.video_gop_optimize.key: self.video_gop_optimize_check_box.isChecked(),

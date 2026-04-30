@@ -185,8 +185,8 @@ en_US:
         ui_common_divider: "Common"
 
         # ---- Video Settings ----
-        ui_video_crf_label: "CRF: "
-        ui_video_crf_help: |
+        ui_video_quality_label: "Quality: "
+        ui_video_quality_help: |
           Control the output video quality
 
           Lower values = higher quality, larger files.

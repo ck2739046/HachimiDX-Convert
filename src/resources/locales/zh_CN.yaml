@@ -185,8 +185,8 @@ zh_CN:
         ui_common_divider: "通用设置"
 
         # ---- 视频设置 ----
-        ui_video_crf_label: "CRF: "
-        ui_video_crf_help: |
+        ui_video_quality_label: "质量: "
+        ui_video_quality_help: |
           控制输出视频的质量
 
           数值越低，质量越高，文件越大。

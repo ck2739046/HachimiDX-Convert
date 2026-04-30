@@ -6,7 +6,7 @@ from .schemas.media_model import MediaModel
 from src.core.schemas.op_result import OpResult, ok, err
 from src.services.settings_manage import SettingsManage
 from src.core.schemas.settings_config import SettingsConfig_Definitions as S_Defs
-
+from src.core.schemas.media_config import MediaConfig_Definitions as M_Defs
 
 
 
@@ -15,17 +15,17 @@ from src.core.schemas.settings_config import SettingsConfig_Definitions as S_Def
 ENCODER_MAP = {
     "CPU":    {"codec": "libx264",
                "quality_param": "-crf",
-               "quality_default": "23",
+               "quality_default": M_Defs.get_default_video_quality_by_encoder("CPU"),
                "preset": "veryfast",
                "pix_fmt": "yuv420p"},
     "Nvidia": {"codec": "h264_nvenc",
                "quality_param": "-cq",
-               "quality_default": "28",
+               "quality_default": M_Defs.get_default_video_quality_by_encoder("Nvidia"),
                "preset": "p2",
                "pix_fmt": "nv12"},
     "Intel":  {"codec": "h264_qsv",
                "quality_param": "-global_quality",
-               "quality_default": "23",
+               "quality_default": M_Defs.get_default_video_quality_by_encoder("Intel"),
                "preset": "faster",
                "pix_fmt": "nv12"},
 }
@@ -181,7 +181,7 @@ def _build_video_args(data: MediaModel) -> OpResult[list[str]]:
 
     args.extend(["-c:v", entry["codec"]])
     args.extend(["-pix_fmt", entry["pix_fmt"]])
-    args.extend([entry["quality_param"], str(data.video_crf)])
+    args.extend([entry["quality_param"], str(data.video_quality)])
 
     if data.video_fps and data.video_fps > 0:
         args.extend(["-r", str(data.video_fps)])

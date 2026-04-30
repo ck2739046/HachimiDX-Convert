@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field, FilePath, field_validator, model_validato
 from .media_config import MediaType
 from .media_config import MediaConfig_Definitions as M_Defs
 from ..tools.popup_dialog import show_confirm_dialog
+from src.services.settings_manage import SettingsManage
+from src.core.schemas.settings_config import SettingsConfig_Definitions as S_Defs
 
 
 
@@ -68,10 +70,10 @@ class MediaModel(BaseModel):
 
     # Video fields
 
-    video_crf: Optional[int] = Field(
-        default=M_Defs.video_crf.default,
-        ge=M_Defs.video_crf.constraints["ge"],
-        le=M_Defs.video_crf.constraints["le"]
+    video_quality: Optional[int] = Field(
+        default=M_Defs.video_quality.default,
+        ge=M_Defs.video_quality.constraints["ge"],
+        le=M_Defs.video_quality.constraints["le"]
     )
     
     video_side_resolution: Optional[int] = Field(default=M_Defs.video_side_resolution.default)
@@ -227,7 +229,31 @@ class MediaModel(BaseModel):
             raise ValueError(f"audio_bitrate must be one of {audio_bitrate_options}, got {self.audio_bitrate}")
 
         return self
+    
 
+
+    @model_validator(mode='after')
+    def validate_video_quality(self):
+        """根据编码器获取 video_quality 默认值并校验"""
+
+        # 非视频类型跳过
+        if self.media_type not in (MediaType.VIDEO_WITH_AUDIO, MediaType.VIDEO_WITHOUT_AUDIO):
+            return self
+
+        quality_options = M_Defs.video_quality.constraints["options"]
+
+        if self.video_quality is None:
+            # 从设置读取当前编码器，获取默认值
+            encoder_res = SettingsManage.get(S_Defs.ffmpeg_hw_encoder.key)
+            if not encoder_res.is_ok:
+                raise ValueError(f"Failed to read ffmpeg_hw_encoder: {encoder_res.error_msg}")
+            encoder = str(encoder_res.value).strip()
+            self.video_quality = M_Defs.get_default_video_quality_by_encoder(encoder)
+
+        if self.video_quality not in quality_options:
+            raise ValueError(f"video_quality must be one of {quality_options}, got {self.video_quality}")
+
+        return self
 
 
     @model_validator(mode='after')
