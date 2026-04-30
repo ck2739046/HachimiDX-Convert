@@ -22,6 +22,7 @@ class PathManage:
     
     APP_ICON_PATH: Path = RESOURCES_DIR / "icon.ico"
     CLICK_TEMPLATE_PATH: Path = RESOURCES_DIR / "click_template.wav"
+    # https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4
     TEST_H264_PATH: Path = RESOURCES_DIR / "test_h264.mp4"
 
     FFMPEG_EXE_PATH: Path = RESOURCES_DIR / "ffmpeg" / "bin" / "ffmpeg.exe"
@@ -43,6 +44,7 @@ class PathManage:
     CHECK_DEVICE_WORKER_PATH: Path = WORKERS_DIR / "check_device_worker.py"
     MODEL_CONVERT_WORKER_PATH: Path = WORKERS_DIR / "model_convert_worker.py"
     AUDIO_ALIGN_WORKER_PATH: Path = WORKERS_DIR / "audio_align_worker.py"
+    CHECK_FFMPEG_HW_ACCEL_WORKER_PATH: Path = WORKERS_DIR / "check_ffmpeg_hw_accel_worker.py"
 
     # 初始化时可以不存在的路径
 
@@ -101,7 +103,8 @@ class PathManage:
         # 检查 worker 是否存在
         for file_path in [cls.AUTO_CONVERT_WORKER_PATH,
                           cls.CHECK_DEVICE_WORKER_PATH,
-                          cls.MODEL_CONVERT_WORKER_PATH]:
+                          cls.MODEL_CONVERT_WORKER_PATH,
+                          cls.CHECK_FFMPEG_HW_ACCEL_WORKER_PATH]:
             if not file_path.is_file():
                 error_msg = f"Critical Error: Required worker script not found: {file_path}"
                 return err(error_msg)

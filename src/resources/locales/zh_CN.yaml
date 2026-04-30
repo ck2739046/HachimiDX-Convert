@@ -395,7 +395,16 @@ zh_CN:
       ui_cancel_convert_model_button: "取消"
 
       ui_ffmpeg_divider: "FFmpeg 硬件加速"
-      ui_ffmpeg_h264_label: "H264: "
+      ui_ffmpeg_encoder_label: "编码器: "
+      ui_ffmpeg_encoder_help: |
+        CPU:    libx264 软件编码。
+        Intel:  Intel QSV (h264_qsv) 硬件编码。
+        Nvidia: NVIDIA NVENC (h264_nvenc) 硬件编码。
+      ui_ffmpeg_decoder_label: "解码器: "
+      ui_ffmpeg_decoder_help: |
+        CPU:    软件解码。
+        D3D 11: d3d11va 硬件加速解码。
+      ui_auto_detect_hw_button: "自动检测最佳设置"
 
       ui_general_divider: "通用设置"
       ui_language_label: "语言: "
@@ -434,3 +443,8 @@ zh_CN:
       notice_convert_cancelled: "模型转换已取消: %{backend}"
       notice_cancel_requested: "已发送取消请求，等待进程结束..."
       notice_cpu_don't_need_convert_model: "-\n提示：CPU 不需要转换模型，可以直接使用。"
+
+      notice_hw_detect_start: "开始检测 FFmpeg 硬件加速支持..."
+      notice_hw_detect_result: "检测完成: 编码器=%{encoder}, 解码器=%{decoder}"
+      warning_hw_detect_failed: "FFmpeg 硬件加速检测失败"
+      notice_hw_detect_cancelled: "硬件加速检测已取消"
