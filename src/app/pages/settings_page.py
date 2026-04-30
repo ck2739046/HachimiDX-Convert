@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from PyQt6.QtWidgets import QVBoxLayout, QMessageBox
 import i18n
 
@@ -11,6 +13,25 @@ from src.services import SettingsManage, process_manager_api
 from src.services.path_manage import PathManage
 
 I18N_Prefix = "app.settings_page"
+
+
+@dataclass(slots=True)
+class _SettingsTaskState:
+    task_type: str | None = None
+    runner_id: str | None = None
+    backend: str | None = None
+
+    @property
+    def is_busy(self) -> bool:
+        return self.runner_id is not None
+
+    @property
+    def is_model_task(self) -> bool:
+        return self.task_type in {"check", "convert"}
+
+    @property
+    def can_cancel(self) -> bool:
+        return self.is_busy and self.is_model_task
  
 
 class SettingsPage(BaseOutputPage):
@@ -24,12 +45,12 @@ class SettingsPage(BaseOutputPage):
         self.check_model_button = None
         self.convert_model_button = None
         self.cancel_convert_model_button = None
+        self.ffmpeg_hw_encoder_combo_box = None
+        self.ffmpeg_hw_decoder_combo_box = None
+        self.check_ffmpeg_hw_accel_button = None
 
-        self._active_check_runner_id = None
-        self._active_convert_runner_id = None
-        self._backend_snapshot = None
-
-        # self.ffmpeg_h264_combo_box = None
+        self._task_state = _SettingsTaskState()
+        self._show_convert_model_button = False
 
         self.language_combo_box = None
 
@@ -43,14 +64,15 @@ class SettingsPage(BaseOutputPage):
 
         self._save_order_keys = [
             S_Defs.model_backend.key,
-            #S_Defs.ffmpeg_hw_accel_h264.key,
+            S_Defs.ffmpeg_hw_encoder.key,
+            S_Defs.ffmpeg_hw_decoder.key,
             S_Defs.language.key,
             S_Defs.main_app_init_size.key,
             S_Defs.main_app_min_size.key,
         ]
 
         self._build_model_section()
-        # self._build_ffmpeg_section()
+        self._build_ffmpeg_section()
         self._build_common_section()
         self._build_window_section()
         self._build_actions()
@@ -91,24 +113,39 @@ class SettingsPage(BaseOutputPage):
         self.check_model_button.clicked.connect(self.on_check_model_clicked)
         self.convert_model_button.clicked.connect(self.on_convert_model_clicked)
         self.cancel_convert_model_button.clicked.connect(self.on_cancel_convert_model_button_clicked)
-        self.model_backend_combo_box.currentTextChanged.connect(
-            lambda _text: self._refresh_model_buttons(reason="backend_changed"))
+        self.model_backend_combo_box.currentTextChanged.connect(self._on_backend_changed)
 
 
 
+    def _build_ffmpeg_section(self) -> None:
+        self.content_layout.addWidget(create_divider(i18n.t(f"{I18N_Prefix}.ui_ffmpeg_divider")))
 
-    # def _build_ffmpeg_section(self) -> None:
-    #     self.content_layout.addWidget(create_divider(i18n.t(f"{I18N_Prefix}.ui_ffmpeg_divider")))
+        encoder_label = create_label(i18n.t(f"{I18N_Prefix}.ui_ffmpeg_encoder_label"))
+        self.ffmpeg_hw_encoder_combo_box = self._create_combo_from_definition(S_Defs.ffmpeg_hw_encoder, length=80)
+        encoder_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_ffmpeg_encoder_help"))
 
-    #     h264_label = create_label(i18n.t(f"{I18N_Prefix}.ui_ffmpeg_h264_label"))
-    #     self.ffmpeg_h264_combo_box = self._create_combo_from_definition(S_Defs.ffmpeg_hw_accel_h264, length=80)
+        decoder_label = create_label(i18n.t(f"{I18N_Prefix}.ui_ffmpeg_decoder_label"))
+        self.ffmpeg_hw_decoder_combo_box = self._create_combo_from_definition(S_Defs.ffmpeg_hw_decoder, length=80)
+        decoder_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_ffmpeg_decoder_help"))
 
-    #     row = _create_row(
-    #         h264_label,
-    #         self.ffmpeg_h264_combo_box,
-    #         add_stretch=True,
-    #     )
-    #     self.content_layout.addWidget(row)
+        self.check_ffmpeg_hw_accel_button = create_stated_button(i18n.t(f"{I18N_Prefix}.ui_auto_detect_hw_button"))
+        self.check_ffmpeg_hw_accel_button.clicked.connect(self.on_check_ffmpeg_hw_accel_clicked)
+
+        row = _create_row(
+            encoder_label,
+            self.ffmpeg_hw_encoder_combo_box,
+            encoder_help,
+
+            decoder_label,
+            self.ffmpeg_hw_decoder_combo_box,
+            decoder_help,
+
+            self.check_ffmpeg_hw_accel_button,
+            add_stretch=True,
+        )
+        self.content_layout.addWidget(row)
+
+        
 
 
 
@@ -179,14 +216,62 @@ class SettingsPage(BaseOutputPage):
 
 
 
+    def _set_combo_value(self, combo_box, value: str) -> None:
+        idx = combo_box.findText(str(value))
+        if idx >= 0:
+            combo_box.setCurrentIndex(idx)
+
+
+
+    def _refresh_combo_options(self, combo_box, definition, selected_value: str | None = None) -> None:
+        options = [str(item) for item in definition.constraints["options"]]
+        current_value = combo_box.currentText().strip()
+
+        combo_box.blockSignals(True)
+        combo_box.clear()
+        combo_box.addItems(options)
+
+        if selected_value is not None:
+            self._set_combo_value(combo_box, selected_value)
+        elif current_value:
+            self._set_combo_value(combo_box, current_value)
+
+        if combo_box.currentIndex() < 0 and options:
+            combo_box.setCurrentIndex(0)
+
+        combo_box.blockSignals(False)
+
+
+
+    def _refresh_ffmpeg_hw_accel_ui(self, encoder_value: str | None = None, decoder_value: str | None = None) -> None:
+        self._refresh_combo_options(self.ffmpeg_hw_encoder_combo_box, S_Defs.ffmpeg_hw_encoder, encoder_value)
+        self._refresh_combo_options(self.ffmpeg_hw_decoder_combo_box, S_Defs.ffmpeg_hw_decoder, decoder_value)
+
+
+
+    @staticmethod
+    def _parse_ffmpeg_hw_accel_results(recent_output: str) -> tuple[str | None, str | None]:
+        encoder_value = None
+        decoder_value = None
+
+        for line in recent_output.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.startswith("FFMPEG_HW_ENCODER_RESULT:"):
+                encoder_value = line.partition(":")[2].strip() or None
+                continue
+
+            if line.startswith("FFMPEG_HW_DECODER_RESULT:"):
+                decoder_value = line.partition(":")[2].strip() or None
+
+        return encoder_value, decoder_value
+
+
+
 
     def _load_settings_to_ui(self) -> None:
-
-        def _set_combo_value(combo_box, value: str) -> None:
-            idx = combo_box.findText(str(value))
-            if idx >= 0:
-                combo_box.setCurrentIndex(idx)
-
         settings = {}
 
         for key in self._save_order_keys:
@@ -199,10 +284,10 @@ class SettingsPage(BaseOutputPage):
                 return
             settings[key] = result.value
 
-        _set_combo_value(self.model_backend_combo_box, settings[S_Defs.model_backend.key])
-        self._refresh_model_buttons(reason="backend_changed")
-        # _set_combo_value(self.ffmpeg_h264_combo_box, settings[S_Defs.ffmpeg_hw_accel_h264.key])
-        _set_combo_value(self.language_combo_box, settings[S_Defs.language.key])
+        self._set_combo_value(self.model_backend_combo_box, settings[S_Defs.model_backend.key])
+        self._set_combo_value(self.ffmpeg_hw_encoder_combo_box, settings[S_Defs.ffmpeg_hw_encoder.key])
+        self._set_combo_value(self.ffmpeg_hw_decoder_combo_box, settings[S_Defs.ffmpeg_hw_decoder.key])
+        self._set_combo_value(self.language_combo_box, settings[S_Defs.language.key])
 
         init_size = settings[S_Defs.main_app_init_size.key]
         min_size = settings[S_Defs.main_app_min_size.key]
@@ -211,6 +296,7 @@ class SettingsPage(BaseOutputPage):
         self.init_height_line_edit.setText(str(init_size[1]))
         self.min_width_line_edit.setText(str(min_size[0]))
         self.min_height_line_edit.setText(str(min_size[1]))
+        self._sync_ui_state()
 
 
 
@@ -219,7 +305,9 @@ class SettingsPage(BaseOutputPage):
 
         return {
             S_Defs.model_backend.key: self.model_backend_combo_box.currentText().strip(),
-            # S_Defs.ffmpeg_hw_accel_h264.key: self.ffmpeg_h264_combo_box.currentText().strip(),
+            S_Defs.ffmpeg_hw_encoder.key: self.ffmpeg_hw_encoder_combo_box.currentText().strip(),
+            S_Defs.ffmpeg_hw_decoder.key: self.ffmpeg_hw_decoder_combo_box.currentText().strip(),
+            S_Defs.language.key: self.language_combo_box.currentText().strip(),
             S_Defs.main_app_init_size.key: (
                 self.init_width_line_edit.text().strip(),
                 self.init_height_line_edit.text().strip(),
@@ -303,30 +391,39 @@ class SettingsPage(BaseOutputPage):
 
 
 
-    def _refresh_model_buttons(self, reason):
-        if reason == "backend_changed":
-            if not self._has_active_runner():
-                self.convert_model_button.setVisible(False)
-        
-        if reason == "runner_state_changed":
-            is_busy = self._has_active_runner()
-            self.model_backend_combo_box.setEnabled(not is_busy)
-            self.check_model_button.setEnabled(not is_busy)
-            self.convert_model_button.setEnabled(not is_busy)
-            self.save_button.setEnabled(not is_busy)
-            self.reset_button.setEnabled(not is_busy)
-            self.cancel_convert_model_button.setVisible(is_busy)
-            self.cancel_convert_model_button.setEnabled(is_busy)
+    def _sync_ui_state(self) -> None:
+        is_busy = self._task_state.is_busy
+
+        self.model_backend_combo_box.setEnabled(not is_busy)
+        self.check_model_button.setEnabled(not is_busy)
+        self.convert_model_button.setEnabled(not is_busy)
+        self.ffmpeg_hw_encoder_combo_box.setEnabled(not is_busy)
+        self.ffmpeg_hw_decoder_combo_box.setEnabled(not is_busy)
+        self.check_ffmpeg_hw_accel_button.setEnabled(not is_busy)
+        self.save_button.setEnabled(not is_busy)
+        self.reset_button.setEnabled(not is_busy)
+
+        self.convert_model_button.setVisible(self._show_convert_model_button and not is_busy)
+        self.cancel_convert_model_button.setVisible(self._task_state.can_cancel)
+        self.cancel_convert_model_button.setEnabled(self._task_state.can_cancel)
+
+
+    def _on_backend_changed(self, _text: str) -> None:
+        if not self._task_state.is_busy:
+            self._show_convert_model_button = False
+        self._sync_ui_state()
 
 
     def _has_active_runner(self) -> bool:
-        return bool(self._active_check_runner_id or self._active_convert_runner_id)
+        return self._task_state.is_busy
 
 
-    def _start_worker_cmd(self, cmd: list[str], worker_type: str, backend: str):
+    def _start_worker_cmd(self, cmd: list[str], worker_type: str, backend: str | None = None):
 
-        if self._has_active_runner(): return
-        if worker_type not in {"check", "convert"}: return
+        if self._has_active_runner():
+            return
+        if worker_type not in {"check", "convert", "ffmpeg_hw_accel_check"}:
+            return
 
         result = process_manager_api.start(cmd)
         if not result.is_ok:
@@ -337,16 +434,9 @@ class SettingsPage(BaseOutputPage):
             return None
 
         runner_id = result.value
+        self._task_state = _SettingsTaskState(task_type=worker_type, runner_id=runner_id, backend=backend)
         self.output_widget.bind_current_runner_id(runner_id)
-
-        if worker_type == "check":
-            self._active_check_runner_id = runner_id
-        elif worker_type == "convert":
-            self._active_convert_runner_id = runner_id
-
-        self._backend_snapshot = backend # 备份
-
-        self._refresh_model_buttons(reason="runner_state_changed")
+        self._sync_ui_state()
         return
 
 
@@ -355,12 +445,22 @@ class SettingsPage(BaseOutputPage):
     def on_check_model_clicked(self) -> None:
         if self._has_active_runner():
             return
-        self.convert_model_button.setVisible(False)
+        self._show_convert_model_button = False
+        self._sync_ui_state()
         backend = self.model_backend_combo_box.currentText().strip()
         self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_check_start", backend=backend))
         cmd = build_cmd_head_python_exe(PathManage.CHECK_DEVICE_WORKER_PATH)
         cmd.append(backend.lower())
         self._start_worker_cmd(cmd, "check", backend)
+
+
+
+    def on_check_ffmpeg_hw_accel_clicked(self) -> None:
+        if self._has_active_runner():
+            return
+
+        cmd = build_cmd_head_python_exe(PathManage.CHECK_FFMPEG_HW_ACCEL_WORKER_PATH)
+        self._start_worker_cmd(cmd, "ffmpeg_hw_accel_check")
 
 
 
@@ -430,7 +530,10 @@ class SettingsPage(BaseOutputPage):
 
 
     def on_cancel_convert_model_button_clicked(self) -> None:
-        runner_id = self._active_convert_runner_id or self._active_check_runner_id
+        if not self._task_state.can_cancel:
+            return
+
+        runner_id = self._task_state.runner_id
         if not runner_id:
             return
 
@@ -449,27 +552,31 @@ class SettingsPage(BaseOutputPage):
 
     def _on_runner_ended(self, runner_id: str, ended) -> None:
 
-        backend = self._backend_snapshot
+        if self._task_state.runner_id != runner_id:
+            return
 
-        if runner_id == self._active_check_runner_id:
-            self._active_check_runner_id = None
-            self._handle_check_runner_ended(backend, ended)
-        if runner_id == self._active_convert_runner_id:
-            self._active_convert_runner_id = None
-            self._handle_convert_runner_ended(backend, ended)
+        task_state = self._task_state
+        self._task_state = _SettingsTaskState()
+        self._sync_ui_state()
 
-        self._refresh_model_buttons(reason="runner_state_changed")
+        if task_state.task_type == "check":
+            self._handle_check_runner_ended(task_state.backend, ended)
+        elif task_state.task_type == "convert":
+            self._handle_convert_runner_ended(task_state.backend, ended)
+        elif task_state.task_type == "ffmpeg_hw_accel_check":
+            self._handle_ffmpeg_hw_accel_runner_ended(ended)
 
 
 
 
     def _handle_check_runner_ended(self, backend: str, ended) -> None:
 
-        self.convert_model_button.setVisible(False)
+        self._show_convert_model_button = False
 
         # 用户主动取消
         if getattr(ended, "cancelled", False):
             self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_check_cancelled", backend=backend))
+            self._sync_ui_state()
             return
 
         # 进程异常结束
@@ -480,6 +587,7 @@ class SettingsPage(BaseOutputPage):
 
         if failed:
             self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.warning_check_failed", backend=backend))
+            self._sync_ui_state()
             return
 
         # 进程正常结束
@@ -495,6 +603,7 @@ class SettingsPage(BaseOutputPage):
             # 特例 cpu 提示无需转换
             if backend == "CPU":
                 self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_cpu_don't_need_convert_model"))
+                self._sync_ui_state()
             return
 
         # 模型检查失败
@@ -512,21 +621,24 @@ class SettingsPage(BaseOutputPage):
                 i18n.t(f"{I18N_Prefix}.dialog_title"),
                 i18n.t(f"{I18N_Prefix}.warning_cpu_model_missing", error=path_result.error_msg),
             )
+            self._sync_ui_state()
             return
         
         # 其他情况下，显示转换按钮，允许用户转换模型
-        self.convert_model_button.setVisible(True)
+        self._show_convert_model_button = True
+        self._sync_ui_state()
 
         
 
 
     def _handle_convert_runner_ended(self, backend: str, ended) -> None:
 
-        self.convert_model_button.setVisible(True)
+        self._show_convert_model_button = True
 
         # 用户主动取消
         if getattr(ended, "cancelled", False):
             self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_convert_cancelled", backend=backend))
+            self._sync_ui_state()
             return
 
         # 进程异常结束
@@ -537,6 +649,7 @@ class SettingsPage(BaseOutputPage):
 
         if failed:
             self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.warning_convert_failed", backend=backend))
+            self._sync_ui_state()
             return
 
         # 进程正常结束，二次复查模型文件是否存在
@@ -549,8 +662,28 @@ class SettingsPage(BaseOutputPage):
                     error=path_result.error_msg,
                 )
             )
+            self._sync_ui_state()
             return
 
         # 模型转换成功
-        self.convert_model_button.setVisible(False)
+        self._show_convert_model_button = False
         self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_convert_success", backend=backend))
+        self._sync_ui_state()
+
+
+
+    def _handle_ffmpeg_hw_accel_runner_ended(self, ended) -> None:
+        if getattr(ended, "cancelled", False):
+            return
+
+        failed = bool(getattr(ended, "crashed", False))
+        exit_code = getattr(ended, "exit_code", None)
+        if exit_code is None or exit_code != 0:
+            failed = True
+
+        if failed:
+            return
+
+        self.output_widget.flush_buffer()
+        encoder_value, decoder_value = self._parse_ffmpeg_hw_accel_results(self.output_widget.get_recent_lines(7))
+        self._refresh_ffmpeg_hw_accel_ui(encoder_value, decoder_value)

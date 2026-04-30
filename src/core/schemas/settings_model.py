@@ -15,7 +15,8 @@ class SettingsModel(BaseModel):
     predict_batch_size_classify: Annotated[int, Field(gt=S_Defs.predict_batch_size_classify.constraints["gt"])] = S_Defs.predict_batch_size_classify.default
     predict_batch_size_touch_hold: Annotated[int, Field(gt=S_Defs.predict_batch_size_touch_hold.constraints["gt"])] = S_Defs.predict_batch_size_touch_hold.default
     # FFmpeg 硬件加速相关
-    # ffmpeg_hw_accel_h264: str = Field(default=S_Defs.ffmpeg_hw_accel_h264.default)
+    ffmpeg_hw_encoder: str = Field(default=S_Defs.ffmpeg_hw_encoder.default)
+    ffmpeg_hw_decoder: str = Field(default=S_Defs.ffmpeg_hw_decoder.default)
     # 应用通用设置
     language: str = Field(default=S_Defs.language.default)
     # 窗口大小
@@ -50,13 +51,22 @@ class SettingsModel(BaseModel):
 
 
 
-    # @field_validator("ffmpeg_hw_accel_h264")
-    # @classmethod
-    # def validate_ffmpeg_hw_accel_h264_options(cls, v: str) -> str:
-    #     allowed = S_Defs.ffmpeg_hw_accel_h264.constraints["options"]
-    #     if v not in allowed:
-    #         raise ValueError(f"ffmpeg_hw_accel_h264 must be one of {allowed}")
-    #     return v
+    @field_validator("ffmpeg_hw_encoder")
+    @classmethod
+    def validate_ffmpeg_hw_encoder_options(cls, v: str) -> str:
+        allowed = S_Defs.ffmpeg_hw_encoder.constraints["options"]
+        if v not in allowed:
+            raise ValueError(f"ffmpeg_hw_encoder must be one of {allowed}")
+        return v
+
+
+    @field_validator("ffmpeg_hw_decoder")
+    @classmethod
+    def validate_ffmpeg_hw_decoder_options(cls, v: str) -> str:
+        allowed = S_Defs.ffmpeg_hw_decoder.constraints["options"]
+        if v not in allowed:
+            raise ValueError(f"ffmpeg_hw_decoder must be one of {allowed}")
+        return v
 
 
 

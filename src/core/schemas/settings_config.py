@@ -120,13 +120,21 @@ class SettingsConfig_Definitions:
 
     # ffmpeg
 
-    # ffmpeg_hw_accel_h264 = SettingsConfig_Definition(
-    #     key="ffmpeg_hw_accel_h264",
-    #     type="str",
-    #     group="ffmpeg",
-    #     default="cpu",
-    #     constraints={"options": ["cpu", "nvidia"]},
-    # )
+    ffmpeg_hw_encoder = SettingsConfig_Definition(
+        key="ffmpeg_hw_encoder",
+        type="str",
+        group="ffmpeg",
+        default="CPU",
+        constraints={"options": ["CPU", "Intel", "Nvidia"]},
+    )
+
+    ffmpeg_hw_decoder = SettingsConfig_Definition(
+        key="ffmpeg_hw_decoder",
+        type="str",
+        group="ffmpeg",
+        default="CPU",
+        constraints={"options": ["CPU", "D3D 11"]},
+    )
 
     # general
 
