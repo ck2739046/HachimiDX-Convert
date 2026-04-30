@@ -7,9 +7,30 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from PyQt6.QtWidgets import QApplication, QStyleFactory
+from PyQt6.QtGui import QFont
 from src.core.schemas.op_result import print_op_result
 from src.app import MainWindow
 from src.services import AllServices, static_shutdown_majdata
+
+
+def setup_font(app: QApplication) -> None:
+    try:
+        # 加载外部字体文件
+        # font_path = PathManage.FONT_EN_PATH
+        # font_id = QFontDatabase.addApplicationFont(str(font_path))
+        # if font_id == -1:
+            # print(f"[Font] 外部字体文件加载失败: {font_path.name}")
+            # return
+        # loaded = QFontDatabase.applicationFontFamilies(font_id)
+        # if not loaded:
+            # print(f"[Font] 外部字体注册后未获取到 family 名称")
+            # return
+        families = ["Microsoft YaHei UI"]
+        font = QFont()
+        font.setFamilies(families)
+        app.setFont(font)
+    except Exception as e:
+        print(f"Error setting up font: {e}")
 
 
 def build_str(input) -> str:
@@ -38,6 +59,9 @@ def main() -> int:
         available_styles = QStyleFactory.keys()
         if "windows11" in available_styles:
             app.setStyle("windows11")
+
+        # 设置全局字体
+        setup_font(app)
 
         result = AllServices.initialize_all()
         if not result.is_ok:
