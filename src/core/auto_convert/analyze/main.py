@@ -46,6 +46,9 @@ def main(std_video_path: Path,
         tap_speed_print_info = "tap speed not estimated (no tap data)"
         touch_speed_print_info = "touch speed not estimated (no touch data)"
 
+        note_SpeedIndex = None
+        touch_SpeedIndex = None
+
         tap_info = {}
         touch_info = {}
         hold_info = {}
