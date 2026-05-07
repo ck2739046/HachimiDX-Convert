@@ -3,7 +3,7 @@ from importlib import import_module
 from .path_manage import PathManage
 from .settings_manage import SettingsManage
 from .i18n_manage import I18nManage
-from .majdata_session import MajdataSession, static_shutdown_majdata, pause_majdata
+from .majdata_session import MajdataSession, pause_majdata
 from .majdata_sync_server import VideoSyncServer
 
 # 暴露接口模块作为命名空间，以区分同名函数（如 cancel, get_signals）
@@ -30,7 +30,7 @@ __all__ = [
     "PathManage",
     "SettingsManage",
     "I18nManage",
-    "MajdataSession", "static_shutdown_majdata", "pause_majdata",
+    "MajdataSession", "pause_majdata",
     "VideoSyncServer",
 
     "AutoConvertPipeline",

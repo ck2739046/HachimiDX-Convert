@@ -1,3 +1,5 @@
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -11,7 +13,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox, QStyleFactory
 from PyQt6.QtGui import QFont
 from src.core.schemas.op_result import print_op_result
 from src.app import MainWindow
-from src.services import AllServices, static_shutdown_majdata
+from src.services import AllServices
 
 
 def setup_font(app: QApplication) -> None:
@@ -60,36 +62,43 @@ def main() -> int:
     if not shared_memory.create(1, QSharedMemory.AccessMode.ReadWrite):
         print("程序已在运行中。\nApp is already running.")
         return 0
+    
+    # 启动 watchdog (清理 Majdata 进程)
+    watchdog_path = project_root / "src" / "services" / "watchdog.py"
+    subprocess.Popen(
+        [sys.executable, str(watchdog_path), str(os.getpid())],
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
 
-    try:
-        app = QApplication(sys.argv)
-        app.aboutToQuit.connect(AllServices.shutdown_all)
+    # 创建应用
+    app = QApplication(sys.argv)
+    app.aboutToQuit.connect(AllServices.shutdown_all)
 
-        app._single_instance_lock = shared_memory # 保持引用
+    app._single_instance_lock = shared_memory # 保持引用
 
-        # print(f"Available styles: {QStyleFactory.keys()}")
-        # print(f"Current style: {app.style().objectName()}")
-        available_styles = QStyleFactory.keys()
-        if "windows11" in available_styles:
-            app.setStyle("windows11")
+    # 设置界面风格
+    # print(f"Available styles: {QStyleFactory.keys()}")
+    # print(f"Current style: {app.style().objectName()}")
+    available_styles = QStyleFactory.keys()
+    if "windows11" in available_styles:
+        app.setStyle("windows11")
 
-        # 设置全局字体
-        setup_font(app)
+    # 设置全局字体
+    setup_font(app)
 
-        result = AllServices.initialize_all()
-        if not result.is_ok:
-            print(build_str("Initialization Error:"))
-            print(print_op_result(result))
-            print(build_str("End of Initialization Error."))
-            return 1
+    # 初始化
+    result = AllServices.initialize_all()
+    if not result.is_ok:
+        print(build_str("Initialization Error:"))
+        print(print_op_result(result))
+        print(build_str("End of Initialization Error."))
+        return 1
 
-        window = MainWindow()
-        window.show()
-        return app.exec()
+    # 启动主窗口
+    window = MainWindow()
+    window.show()
 
-    finally:
-        # 确保清理外部程序
-        static_shutdown_majdata()
+    return app.exec()
 
 
 if __name__ == "__main__":
