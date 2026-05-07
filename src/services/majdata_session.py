@@ -4,8 +4,7 @@ try:
     import win32gui
 except ImportError:
     from win32 import win32gui
-import subprocess
-import psutil
+
 import time
 from typing import Optional
 
@@ -54,19 +53,20 @@ class MajdataSession(QObject):
         self._majdataedit_hwnd: Optional[int] = None
 
         self._poll_timer = QTimer(self)
-        self._poll_timer.setInterval(100)
+        self._poll_timer.setInterval(20)
         self._poll_timer.timeout.connect(self._poll_hwnds)
         self._poll_started_at: Optional[float] = None
-        self._poll_timeout_s: float = 10.0
+        self._poll_timeout_s: float = 5.0
 
         self._shutdown_in_progress: bool = False
         
         self._shutdown_timer = QTimer(self)
-        self._shutdown_timer.setInterval(100)
+        self._shutdown_timer.setInterval(20)
         self._shutdown_timer.timeout.connect(self._poll_majdataedit_exit)
         self._shutdown_started_at: Optional[float] = None
         self._shutdown_timeout_s: float = 10.0
-
+        # 此处设置 10s 是因为 majdataedit 退出时可能有弹窗提示用户是否保存谱面更改
+        # 留 10s 时间让用户看到弹窗并点击，然后再强制退出
 
     
 
@@ -102,11 +102,8 @@ class MajdataSession(QObject):
         self._majdataview_proc.readyReadStandardOutput.connect(self._on_majdataview_stdout_ready)
         self._majdataedit_proc.readyReadStandardOutput.connect(self._on_majdataedit_stdout_ready)
 
-        # majdataedit 在启动时会尝试启动 majdataview
-        # 为了避免启动多个 majdataview
-        # 先启动 majdataview，再延迟 0.5s 启动 majdataedit
         self._majdataview_proc.start()
-        QTimer.singleShot(500, self._majdataedit_proc.start)
+        self._majdataedit_proc.start()
 
         self._majdataview_hwnd = None
         self._majdataedit_hwnd = None
@@ -211,7 +208,7 @@ class MajdataSession(QObject):
 
         # 1) 先暂停 majdata
         pause_majdata()
-        time.sleep(0.6) # 因为 watcher 有 500ms 的间隔，所以这里多等一点
+        time.sleep(0.6) # 因为 MajdataEdit ControlFileWatcher 有 500ms 延时，所以这里多等一点
 
         # majdataedit 退出时会弹窗提示是否要关闭 majdataview
         # 为了避免弹窗，先退出 majdataview 再退出 majdataedit
