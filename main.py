@@ -6,7 +6,8 @@ project_root = Path(__file__).parent.resolve()
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from PyQt6.QtWidgets import QApplication, QStyleFactory
+from PyQt6.QtCore import QSharedMemory
+from PyQt6.QtWidgets import QApplication, QMessageBox, QStyleFactory
 from PyQt6.QtGui import QFont
 from src.core.schemas.op_result import print_op_result
 from src.app import MainWindow
@@ -50,9 +51,21 @@ def main() -> int:
     # 设置全局异常处理器
     sys.excepthook = exception_handler
 
+    # 单实例检测
+    shared_memory = QSharedMemory("HachimiDX_SingleInstance")
+    if shared_memory.attach(QSharedMemory.AccessMode.ReadOnly):
+        shared_memory.detach()
+        print("程序已在运行中。\nApp is already running.")
+        return 0
+    if not shared_memory.create(1, QSharedMemory.AccessMode.ReadWrite):
+        print("程序已在运行中。\nApp is already running.")
+        return 0
+
     try:
         app = QApplication(sys.argv)
         app.aboutToQuit.connect(AllServices.shutdown_all)
+
+        app._single_instance_lock = shared_memory # 保持引用
 
         # print(f"Available styles: {QStyleFactory.keys()}")
         # print(f"Current style: {app.style().objectName()}")
