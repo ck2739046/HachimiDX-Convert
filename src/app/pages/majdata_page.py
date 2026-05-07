@@ -181,14 +181,15 @@ class MajdataPage(QWidget):
                      and f.lower() not in ("track_result.txt", "detect_result.txt", "note_preprocess_result.txt")]
         if txt_files:
             txt_files = sorted(txt_files)
-            self._maidata_combo.addItems(txt_files)
-            # 如果有 maidata.txt，优先选择它
-            if "maidata.txt" in txt_files:
-                index = txt_files.index("maidata.txt")
-                self._maidata_combo.setCurrentIndex(index)
-            # 否则默认选择第一个
-            else:
-                self._maidata_combo.setCurrentIndex(0)
+        txt_files.insert(0, "---")  # 添加默认空选项
+        self._maidata_combo.addItems(txt_files)
+        # 如果有 maidata.txt，优先选择它
+        if "maidata.txt" in txt_files:
+            index = txt_files.index("maidata.txt")
+            self._maidata_combo.setCurrentIndex(index)
+        # 否则默认选择第一个
+        else:
+            self._maidata_combo.setCurrentIndex(0)
 
         # scan mp3/ogg and add to track_combo
         audio_files = [f for f in os.listdir(song_path)
@@ -226,7 +227,7 @@ class MajdataPage(QWidget):
         selected_video = self._video_combo.currentText()
         is_play_video = self._play_video_checkbox.isChecked()
 
-        if not selected_maidata or not selected_track:
+        if not selected_maidata or not selected_track or selected_maidata == "---":
             self.reset_majdataview()
             return
 

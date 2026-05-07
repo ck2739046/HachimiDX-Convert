@@ -287,7 +287,7 @@ en_US:
         3. Video files (*.mp4)
 
         To clear the bottom-left video player,
-        simply select any folder that does not contain the above three types of files,
+        select the "---" option in the first dropdown menu on the right,
         then click the "Load" button.
       ui_play_video_help: |
         checked: The video will play in both the top-left MajdataView and the bottom-left video player.
