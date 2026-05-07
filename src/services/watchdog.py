@@ -15,9 +15,9 @@ def _find_pids_by_process_name(target: str) -> Optional[list[int]]:
     for proc in psutil.process_iter(['pid', 'name']):
 
         try:
-            name = proc.info['name'].lower()
-            pid = proc.info['pid']
-            if name.startswith(target.lower()) and "hachimidx" not in name:
+            name = proc.info['name']
+            if name and name == target:
+                pid = proc.info['pid']
                 found_pids.append(pid)
 
         except Exception:
@@ -48,10 +48,10 @@ def shutdown_majdata() -> None:
     """
 
     # 1) Kill MajdataView first (force)
-    _force_kill_process_by_name("MajdataView")
+    _force_kill_process_by_name("MajdataView.exe")
 
     # 2) Then kill MajdataEdit (force)
-    _force_kill_process_by_name("MajdataEdit")
+    _force_kill_process_by_name("MajdataEdit.exe")
 
 
 

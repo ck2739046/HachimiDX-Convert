@@ -179,31 +179,20 @@ class MajdataSession(QObject):
             self._poll_timer.stop()
             self.error.emit("MajdataSession: timed out waiting for MajdataView/MajdataEdit windows.")
             return
+        
+        def _find_hwnd(keyword: str) -> Optional[int]:
+            hwnd = win32gui.FindWindow(None, keyword)
+            return int(hwnd) if hwnd else None
 
         if self._majdataview_hwnd is None:
-            self._majdataview_hwnd = self._find_hwnd("MajdataView")
+            self._majdataview_hwnd = _find_hwnd("MajdataView")
         if self._majdataedit_hwnd is None:
-            self._majdataedit_hwnd = self._find_hwnd("MajdataEdit")
+            self._majdataedit_hwnd = _find_hwnd("MajdataEdit (v4.3.1)")
 
         if self._majdataview_hwnd is not None and self._majdataedit_hwnd is not None:
             self._poll_timer.stop()
             self.ready.emit(int(self._majdataview_hwnd), int(self._majdataedit_hwnd))
 
-
-    @staticmethod
-    def _find_hwnd(keyword: str) -> Optional[int]:
-
-        def callback(hwnd: int, extra: list[int]) -> bool:
-            name = win32gui.GetWindowText(hwnd)
-            # 通过排除 'hachimidx' 来避免找到 Explorer.exe 窗口
-            name_l, keyword_l = name.lower(), keyword.lower()
-            if name_l.startswith(keyword_l) and "hachimidx" not in name_l:
-                extra.append(hwnd)
-            return True
-
-        found = []
-        win32gui.EnumWindows(callback, found)
-        return found[0] if found else None
 
 
 
