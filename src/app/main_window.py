@@ -7,7 +7,7 @@ from typing import Optional
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt, QSize, QObject, pyqtSignal, pyqtSlot, QUrl
 from PyQt6.QtGui import QIcon, QWindow
-from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 
 from .widgets import SquareWidget
@@ -193,7 +193,6 @@ class MainWindow(QMainWindow):
 
         # Video player
         self._media_player: Optional[QMediaPlayer] = None
-        self._audio_output: Optional[QAudioOutput] = None
         self._video_widget: Optional[QVideoWidget] = None
 
         # Cross-thread callback executor (for sync server)
@@ -268,9 +267,6 @@ class MainWindow(QMainWindow):
 
         self._media_player = QMediaPlayer()
         self._media_player.setVideoOutput(self._video_widget)
-        self._audio_output = QAudioOutput()
-        self._media_player.setAudioOutput(self._audio_output)
-        self._audio_output.setMuted(True)
         
         self.left_panel.set_video_widget(self._video_widget)
         self.right_panel.set_majdata_page_video_player(self._media_player)
