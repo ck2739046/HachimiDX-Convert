@@ -310,8 +310,10 @@ class SimplyAlignPage(BaseOutputPage):
         target_duration = self.target_media_input.selected_file_duration
 
         raw_fps = self.target_media_input.selected_video_fps
-        fps_float = raw_fps if raw_fps is not None else 0.0
-        video_fps = 60 if fps_float > 45 else 30
+        if raw_fps is not None and raw_fps > 130: # 允许有一点波动
+            video_fps = 120  # 最高 120 帧
+        else:
+            video_fps = None # 保持原始帧率
 
         output_path = self._build_sync_output_path(target_path)
 
