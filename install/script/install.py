@@ -61,6 +61,7 @@ Please don't choose "2" if you don't know what it is.
 如果你不清楚选项 2 是什么，请不要选择此选项。
 
 -> """
+    print("\n-----")
     choice = input(main_menu_en if LANGUAGE == "en" else main_menu_zh).strip()
     if choice == "1":
         install()
@@ -156,6 +157,7 @@ Please select your language:
 3. 退出
 
 -> """
+    print("\n-----")
     language = input(info).strip()
     if language == "1":
         return "en"
@@ -195,6 +197,7 @@ If you are in other regions, please choose "No".
 3. Exit
 
 -> """
+    print("\n-----")
     use_mirror = input(info_en if LANGUAGE == "en" else info_zh).strip()
     if use_mirror == "1":
         return True
@@ -234,6 +237,7 @@ In other cases, please choose "No".
 3. Exit
 
 -> """
+    print("\n-----")
     install_trt = input(info_en if LANGUAGE == "en" else info_zh).strip()
     if install_trt == "1":
         return True
@@ -411,6 +415,7 @@ In other cases, please choose "No".
 3. Exit
 
 -> """
+    print("\n-----")
     install_dml = input(info_en if LANGUAGE == "en" else info_zh).strip()
     if install_dml == "1":
         return True
@@ -490,7 +495,7 @@ def modify_ultralytics_for_dml(recover = False) -> bool:
 def general_pip_install(package_name, cmd) -> bool:
     
     # 执行安装命令
-    print("")
+    print("\n-----\n")
     info_en = f"Installing {package_name}...\n\n{cmd}"
     info_zh = f"正在安装 {package_name}...\n\n{cmd}"
     print(f"{info_en if LANGUAGE == 'en' else info_zh}")
