@@ -92,8 +92,8 @@ def install():
 
     # define pytorch version
     torch_version = "cpu" # default
-    has_nvidia_gpu = ask_nvidia_gpu_installed()
-    if has_nvidia_gpu:
+    install_trt = ask_install_trt()
+    if install_trt:
         torch_cuda_version = detect_cuda_version_for_torch()
         if torch_cuda_version:
             torch_version = torch_cuda_version
@@ -103,7 +103,7 @@ def install():
     if not is_success: sys.exit(1)
 
     # install ultralytics + onnxruntime
-    is_success = install_ultralytics_onnx(has_nvidia_gpu)
+    is_success = install_ultralytics_onnx(install_trt)
     if not is_success: sys.exit(1)
 
     # model inference acceleration
@@ -210,28 +210,37 @@ If you are in other regions, please choose "No".
 
 
 
-def ask_nvidia_gpu_installed() -> bool:
+def ask_install_trt() -> bool:
     info_zh = """
-你是否安装了 NVIDIA GPU ?
+NVIDIA TensorRT 能够调用 NVIDIA GPU 进行推理加速，显著提升推理速度。
+你是否想安装 NVIDIA TensorRT ?
+
+如果你有 NVIDIA GPU，强烈建议选择"是"。
+其他情况请选择"否"。
+
 1. 是
 2. 否 (默认)
 3. 退出
 
 -> """
     info_en = """
-Do you have an NVIDIA GPU installed?
+NVIDIA TensorRT can leverage NVIDIA GPUs for inference acceleration, significantly improving inference speed.
+Do you want to install NVIDIA TensorRT?
+
+If you have an NVIDIA GPU, it is highly recommended to choose "Yes".
+In other cases, please choose "No".
+
 1. Yes
 2. No (Default)
 3. Exit
 
-
 -> """
-    gpu_installed = input(info_en if LANGUAGE == "en" else info_zh).strip()
-    if gpu_installed == "1":
+    install_trt = input(info_en if LANGUAGE == "en" else info_zh).strip()
+    if install_trt == "1":
         return True
-    elif gpu_installed == "2":
+    elif install_trt == "2":
         return False
-    elif gpu_installed == "3":
+    elif install_trt == "3":
         sys.exit(0)
     else:
         print("Defaulting to No.")
@@ -380,7 +389,7 @@ def install_tensorrt(torch_version) -> bool:
 
 def ask_install_dml() -> bool:
     info_zh = """
-DirectML 能够调用 AMD Intel 的 核显/独显 进行硬件加速。
+DirectML 能够调用多个品牌的 GPU（如 AMD、Intel、NVIDIA 等）进行硬件加速。
 你是否想安装 DirectML ?
 
 如果你有支持 DirectML 的 GPU，并且性能显著优于 CPU，强烈建议选择"是"。
@@ -392,7 +401,7 @@ DirectML 能够调用 AMD Intel 的 核显/独显 进行硬件加速。
 
 -> """
     info_en = """
-DirectML can leverage AMD and Intel integrated/discrete GPUs for hardware acceleration.
+DirectML can leverage GPUs from multiple brands (such as AMD, Intel, NVIDIA, etc.) for hardware acceleration.
 Do you want to install DirectML?
 
 If you have a GPU that supports DirectML and offers significantly better performance than CPU, it is highly recommended to choose "Yes".
