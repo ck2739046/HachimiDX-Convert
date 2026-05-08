@@ -2,17 +2,13 @@ import cv2
 import numpy as np
 from pathlib import Path
 from typing import Dict, Optional, Tuple
-import tkinter as tk
+import ctypes
 import time
 import os
 
 from ...schemas.op_result import OpResult, ok, err
 from src.services.path_manage import PathManage
 
-# 设置 Tcl 库路径（便携版 Python 需要）
-_tcl_path = PathManage.ROOT_DIR / "python" / "Lib" / "site-packages" / "tcl" / "tcl8.6"
-if _tcl_path.exists():
-    os.environ["TCL_LIBRARY"] = str(_tcl_path)
 
 
 
@@ -148,11 +144,10 @@ class PerspectiveCorrection:
             cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
             cv2.resizeWindow(window_name, self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
             cv2.setMouseCallback(window_name, self._on_mouse_event)
-            # 使用 Tkinter 获取屏幕尺寸
-            temp_root = tk.Tk()
-            screen_width = temp_root.winfo_screenwidth()
-            screen_height = temp_root.winfo_screenheight()
-            temp_root.destroy()
+            # 使用 ctypes 获取屏幕尺寸
+            user32 = ctypes.windll.user32
+            screen_width = user32.GetSystemMetrics(0)
+            screen_height = user32.GetSystemMetrics(1)
             # 每次打开窗口都默认居中显示
             pos_x = (screen_width - self.WINDOW_WIDTH) // 2
             pos_y = (screen_height - self.WINDOW_HEIGHT) // 2

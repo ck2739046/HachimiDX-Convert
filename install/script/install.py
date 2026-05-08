@@ -126,7 +126,6 @@ def install():
         "pydantic==2.12.5",
         "python-i18n==0.3.9",
         "nanoid==2.0.0",
-        "tkinter-embed==3.13.0",
         "filterpy==1.4.5",
     ]
     cmd = f"{sys.executable} -m pip install {' '.join(dependencies)} --no-warn-script-location"
