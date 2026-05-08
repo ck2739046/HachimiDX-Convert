@@ -336,6 +336,12 @@ en_US:
       ui_skip_export_tracked_label: "Skip Export Tracked: "
       ui_skip_export_tracked_help: "Skip exporting the video with note tracking overlays."
 
+      ui_enable_reid_label: "Enable ReID: "
+      ui_enable_reid_help: |
+        Enable appearance Re-Identification (ReID) to assist tracking TAP/HOLD notes.
+        Enabling this option can improve the stability and accuracy of tracking, but it will significantly increase the tracking time.
+        Recommended to enable only for videos with 30/60 FPS.
+
       ui_bpm_label: "BPM: "
       ui_bpm_help: "Only static BPM is supported (no tempo changes).\nSupports integers or up to 3 decimal places"
       ui_is_big_touch_label: "Larger Touch: "

@@ -178,6 +178,7 @@ def _reverse_track_slide(track_geos, check_frame, unmatched_dets, fps):
 
 def main(std_video_path: Path,
          total_frames: int,
+         enable_reid: bool,
         ) -> OpResult[None]:
     try:
         # 读取检测结果
@@ -195,8 +196,8 @@ def main(std_video_path: Path,
         for note_type in TRACKER_NOTE_TYPES:
             if note_type == NoteType.SLIDE:
                 trackers_by_type[note_type] = _build_ocsort_tracker(fps)
-            elif note_type == NoteType.TAP:
-                trackers_by_type[note_type] = _build_botsort_tracker(fps, with_reid=True)
+            elif note_type == NoteType.TAP or note_type == NoteType.HOLD:
+                trackers_by_type[note_type] = _build_botsort_tracker(fps, with_reid=enable_reid)
             else:
                 trackers_by_type[note_type] = _build_botsort_tracker(fps, with_reid=False)
 

@@ -44,11 +44,16 @@ class AutoConvertPage(BaseOutputPage):
         # target_res 暂时不设置
 
         # detect panel
-        self.detect_divider = None # adv
-        self.detect_row = None # adv 包含以下三个勾选框
+        self.enable_reid_check_box = None
+        self.skip_detect_label = None # adv 由row控制
         self.skip_detect_check_box = None # adv 由row控制
+        self.skip_detect_help = None # adv 由row控制
+        self.skip_cls_label = None # adv 由row控制
         self.skip_cls_check_box = None # adv 由row控制
+        self.skip_cls_help = None # adv 由row控制
+        self.skip_export_label = None # adv 由row控制
         self.skip_export_tracked_check_box = None # adv 由row控制
+        self.skip_export_help = None # adv 由row控制
 
         # analyze panel
         self.bpm_line_edit = None
@@ -257,38 +262,37 @@ class AutoConvertPage(BaseOutputPage):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # divider
-        self.detect_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_detect_divider"))
-        layout.addWidget(self.detect_divider)
+        detect_divider = create_divider(i18n.t(f"{I18N_Prefix}.ui_detect_divider"))
+        layout.addWidget(detect_divider)
 
         # Settings
-        skip_detect_label = create_label(i18n.t(f"{I18N_Prefix}.ui_skip_detect_label"))
+        enable_reid_label = create_label(i18n.t(f"{I18N_Prefix}.ui_enable_reid_label"))
+        self.enable_reid_check_box = create_check_box(AC_Defs.enable_reid.default)
+        enable_reid_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_enable_reid_help"))
+
+        self.skip_detect_label = create_label(i18n.t(f"{I18N_Prefix}.ui_skip_detect_label"))
         self.skip_detect_check_box = create_check_box(AC_Defs.skip_detect.default)
-        skip_detect_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_skip_detect_help"))
+        self.skip_detect_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_skip_detect_help"))
 
-        skip_cls_label = create_label(i18n.t(f"{I18N_Prefix}.ui_skip_cls_label"))
+        self.skip_cls_label = create_label(i18n.t(f"{I18N_Prefix}.ui_skip_cls_label"))
         self.skip_cls_check_box = create_check_box(AC_Defs.skip_cls.default)
-        skip_cls_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_skip_cls_help"))
+        self.skip_cls_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_skip_cls_help"))
 
-        skip_export_label = create_label(i18n.t(f"{I18N_Prefix}.ui_skip_export_tracked_label"))
+        self.skip_export_label = create_label(i18n.t(f"{I18N_Prefix}.ui_skip_export_tracked_label"))
         self.skip_export_tracked_check_box = create_check_box(AC_Defs.skip_export_tracked_video.default)
-        skip_export_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_skip_export_tracked_help"))
+        self.skip_export_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_skip_export_tracked_help"))
 
         # 此处手动创建是要保存 row 引用，以便后续控制 显示/隐藏
-        self.detect_row = _create_row(skip_detect_label, self.skip_detect_check_box, skip_detect_help,
-                                      skip_cls_label, self.skip_cls_check_box, skip_cls_help,
-                                      skip_export_label, self.skip_export_tracked_check_box, skip_export_help,
-                                      add_stretch=True)
-        layout.addWidget(self.detect_row)
+        row = _create_row(enable_reid_label, self.enable_reid_check_box, enable_reid_help,
+                          self.skip_detect_label, self.skip_detect_check_box, self.skip_detect_help,
+                          self.skip_cls_label, self.skip_cls_check_box, self.skip_cls_help,
+                          self.skip_export_label, self.skip_export_tracked_check_box, self.skip_export_help,
+                          add_stretch=True)
+        layout.addWidget(row)
 
         self.content_layout.addWidget(detect_panel)
         self.overlay_detect = OverlayWidget(detect_panel)
 
-
-
-    def _reset_detect_row(self):
-        self.skip_detect_check_box.setChecked(AC_Defs.skip_detect.default)
-        self.skip_cls_check_box.setChecked(AC_Defs.skip_cls.default)
-        self.skip_export_tracked_check_box.setChecked(AC_Defs.skip_export_tracked_video.default)
 
 
 
@@ -416,11 +420,6 @@ class AutoConvertPage(BaseOutputPage):
 
 
 
-    def _reset_enable_modules_row(self):
-        self.enable_standardize_check_box.setChecked(AC_Defs.is_standardize_enabled.default)
-        self.enable_detect_check_box.setChecked(AC_Defs.is_detect_enabled.default)
-        self.enable_analyze_check_box.setChecked(AC_Defs.is_analyze_enabled.default)
-
 
 
 
@@ -452,15 +451,30 @@ class AutoConvertPage(BaseOutputPage):
 
         is_advanced_mode = self.advanced_mode_check_box.isChecked()
 
-        # advanced mode
-        self.detect_divider.setVisible(is_advanced_mode)
-        self.detect_row.setVisible(is_advanced_mode)
+        # toggle advanced mode settings visibility
+        # detect
+        self.skip_detect_label.setVisible(is_advanced_mode)
+        self.skip_detect_check_box.setVisible(is_advanced_mode)
+        self.skip_detect_help.setVisible(is_advanced_mode)
+        self.skip_cls_label.setVisible(is_advanced_mode)
+        self.skip_cls_check_box.setVisible(is_advanced_mode)
+        self.skip_cls_help.setVisible(is_advanced_mode)
+        self.skip_export_label.setVisible(is_advanced_mode)
+        self.skip_export_tracked_check_box.setVisible(is_advanced_mode)
+        self.skip_export_help.setVisible(is_advanced_mode)
+        # general
         self.enable_modules_row.setVisible(is_advanced_mode)
 
         # reset checkbox
         if not is_advanced_mode:
-            self._reset_detect_row()
-            self._reset_enable_modules_row()
+            # detect
+            self.skip_detect_check_box.setChecked(AC_Defs.skip_detect.default)
+            self.skip_cls_check_box.setChecked(AC_Defs.skip_cls.default)
+            self.skip_export_tracked_check_box.setChecked(AC_Defs.skip_export_tracked_video.default)
+            # general
+            self.enable_standardize_check_box.setChecked(AC_Defs.is_standardize_enabled.default)
+            self.enable_detect_check_box.setChecked(AC_Defs.is_detect_enabled.default)
+            self.enable_analyze_check_box.setChecked(AC_Defs.is_analyze_enabled.default)
 
         
 
@@ -518,6 +532,7 @@ class AutoConvertPage(BaseOutputPage):
                     AC_Defs.skip_detect.key: self.skip_detect_check_box.isChecked(),
                     AC_Defs.skip_cls.key: self.skip_cls_check_box.isChecked(),
                     AC_Defs.skip_export_tracked_video.key: self.skip_export_tracked_check_box.isChecked(),
+                    AC_Defs.enable_reid.key: self.enable_reid_check_box.isChecked(),
                 })
                 
             if raw_data[AC_Defs.is_analyze_enabled.key]:

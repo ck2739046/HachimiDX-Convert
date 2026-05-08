@@ -167,6 +167,13 @@ class AutoConvertConfig_Definitions:
 		default=False
 	)
 
+	enable_reid = AutoConvertConfig_Definition(
+		key="enable_reid",
+		type="bool",
+		group="detect",
+		default=True
+	)
+
 
 
 
