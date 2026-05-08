@@ -1,4 +1,6 @@
 from PyQt6.QtWidgets import QVBoxLayout
+from pathlib import Path
+
 from ..base_output_page import BaseOutputPage
 from ...widgets import *
 from ...ui_style import UI_Style
@@ -10,7 +12,6 @@ from src.services import process_manager_api
 from src.services.path_manage import PathManage
 from src.services.pipeline import MediaPipeline
 import i18n
-from pathlib import Path
 
 from src.core.schemas.media_config import MediaType
 from src.core.schemas.media_config import MediaConfig_Definitions as M_Defs
@@ -37,6 +38,12 @@ class SimplyAlignPage(BaseOutputPage):
         self._media_output_path = None
         self._offset_action = None
         self._offset_value_ms = None
+
+        self.quick_export_divider = None
+        self.quick_trim_label = None
+        self.quick_trim_line_edit = None
+        self.quick_delay_label = None
+        self.quick_delay_line_edit = None
         self.generate_video_label = None
         self.generate_video_button = None
 
@@ -60,25 +67,35 @@ class SimplyAlignPage(BaseOutputPage):
             help_text=i18n.t(f"{I18N_Simply_Align_Prefix}.ui_reference_file_help"),
         )
         self.create_row(reference_button, reference_help, self.reference_path_display)
-        self.reference_path_display.textChanged.connect(self._hide_generate_controls)
 
         self.target_media_input = MediaInputProbeWidget(
             select_file_button_help=i18n.t(f"{I18N_Simply_Align_Prefix}.ui_target_file_help")
         )
-        self.target_media_input.media_loaded.connect(self.on_target_input_selected)
         self.content_layout.addWidget(self.target_media_input)
+
+        self.reference_path_display.textChanged.connect(lambda: self._set_quick_export_visible(False))
+        self.target_media_input.media_loaded.connect(self.on_target_input_selected)
 
 
 
     def _build_action_section(self) -> None:
+        # Action button + offset display
         self.run_button = create_stated_button(i18n.t(f"{I18N_Prefix}.ui_run_button"), isbig=True)
-        self.run_button.clicked.connect(self.on_run_clicked)
-
         self.offset_label = create_label(bold=True)
-        self.offset_label.hide()
-
         self.content_layout.addSpacing(UI_Style.widget_spacing)
         self.create_row(self.run_button, self.offset_label, add_stretch=True)
+
+        # Quick export: divider
+        self.quick_export_divider = create_divider(i18n.t(f"{I18N_Simply_Align_Prefix}.ui_quick_export_divider"))
+        self.content_layout.addWidget(self.quick_export_divider)
+
+        # Quick export: trim
+        self.quick_trim_label = create_label(i18n.t(f"{I18N_Simply_Align_Prefix}.ui_quick_trim_label"))
+        self.quick_trim_line_edit = create_line_edit(validator='int', length=100)
+
+        # Quick export: delay
+        self.quick_delay_label = create_label(i18n.t(f"{I18N_Simply_Align_Prefix}.ui_quick_delay_label"))
+        self.quick_delay_line_edit = create_line_edit(validator='int', length=100)
 
         self.generate_video_label = create_label(
             i18n.t(f"{I18N_Simply_Align_Prefix}.ui_generate_video_label")
@@ -86,15 +103,22 @@ class SimplyAlignPage(BaseOutputPage):
         self.generate_video_button = create_stated_button(
             i18n.t(f"{I18N_Simply_Align_Prefix}.ui_generate_video_button")
         )
+        
+        self.create_row(
+            self.quick_trim_label, self.quick_trim_line_edit,
+            self.quick_delay_label, self.quick_delay_line_edit,
+            self.generate_video_label, self.generate_video_button,
+            add_stretch=True
+        )
+
+        self.run_button.clicked.connect(self.on_run_clicked)
         self.generate_video_button.clicked.connect(self.on_generate_video_clicked)
-        self.generate_video_label.hide()
-        self.generate_video_button.hide()
-        self.create_row(self.generate_video_label, self.generate_video_button, add_stretch=True)
+        self._set_quick_export_visible(False)
 
 
 
     def on_target_input_selected(self, error_msg: str) -> None:
-        self._hide_generate_controls()
+        self._set_quick_export_visible(False)
         if len(error_msg) > 0:
             show_notify_dialog(i18n.t(f"{I18N_Simply_Align_Prefix}.dialog_title"), error_msg)
 
@@ -122,8 +146,7 @@ class SimplyAlignPage(BaseOutputPage):
 
         self.run_button.setEnabled(False)
         self.offset_label.setText("")
-        self.offset_label.hide()
-        self._hide_generate_controls()
+        self._set_quick_export_visible(False)
 
         try:
             res = self._parse_inputs()
@@ -249,34 +272,52 @@ class SimplyAlignPage(BaseOutputPage):
             self._offset_action = offset_action
             self._offset_value_ms = offset_value_ms
             self.offset_label.setText(f"  Offset: {offset_action} {offset_value_ms} ms ")
-            self.offset_label.show()
-            self._show_generate_controls()
+            if offset_action == "trim":
+                self.quick_trim_line_edit.setText(str(offset_value_ms))
+            else:
+                self.quick_delay_line_edit.setText(str(offset_value_ms))
+            self._set_quick_export_visible(True)
         elif offset_action == "aligned":
             self._offset_action = "aligned"
             self._offset_value_ms = 0
-            self.offset_label.hide()
-            self._hide_generate_controls()
+            self._set_quick_export_visible(False)
         else:
             self.output_widget.append_text("ui: failed to parse offset from output")
             self._offset_action = None
             self._offset_value_ms = None
+            self._set_quick_export_visible(False)
+
+
+
+    def _set_quick_export_visible(self, is_show: bool) -> None:
+        if is_show:
+            target_type = self.target_media_input.selected_file_type
+            if target_type not in (MediaType.VIDEO_WITH_AUDIO, MediaType.VIDEO_WITHOUT_AUDIO):
+                return
+            self.offset_label.show()
+            self.quick_export_divider.show()
+            self.generate_video_label.show()
+            self.generate_video_button.show()
+            # 根据 action 显示对应控件
+            if self._offset_action == "trim":
+                self.quick_trim_label.show()
+                self.quick_trim_line_edit.show()
+                self.quick_delay_label.hide()
+                self.quick_delay_line_edit.hide()
+            else:
+                self.quick_delay_label.show()
+                self.quick_delay_line_edit.show()
+                self.quick_trim_label.hide()
+                self.quick_trim_line_edit.hide()
+        else:
             self.offset_label.hide()
-            self._hide_generate_controls()
-
-
-
-    def _show_generate_controls(self) -> None:
-        target_type = self.target_media_input.selected_file_type
-        if target_type not in (MediaType.VIDEO_WITH_AUDIO, MediaType.VIDEO_WITHOUT_AUDIO):
-            return
-        self.generate_video_label.show()
-        self.generate_video_button.show()
-
-
-
-    def _hide_generate_controls(self) -> None:
-        self.generate_video_label.hide()
-        self.generate_video_button.hide()
+            self.quick_export_divider.hide()
+            self.quick_trim_label.hide()
+            self.quick_trim_line_edit.hide()
+            self.quick_delay_label.hide()
+            self.quick_delay_line_edit.hide()
+            self.generate_video_label.hide()
+            self.generate_video_button.hide()
 
 
 
@@ -292,7 +333,19 @@ class SimplyAlignPage(BaseOutputPage):
 
 
     def on_generate_video_clicked(self) -> None:
-        if not self._offset_action or self._offset_value_ms is None:
+        if not self._offset_action:
+            return
+        # 从当前激活的 line edit 读取用户修改后的值
+        active_edit = self.quick_trim_line_edit if self._offset_action == "trim" else self.quick_delay_line_edit
+        try:
+            offset_ms = int(active_edit.text().strip())
+        except Exception:
+            return
+        if offset_ms < 0:
+            show_notify_dialog(
+                i18n.t(f"{I18N_Simply_Align_Prefix}.dialog_title"),
+                i18n.t(f"{I18N_Simply_Align_Prefix}.warning_negative_quick_offset"),
+            )
             return
 
         target_file = self.target_media_input.get_path().strip()
@@ -317,7 +370,7 @@ class SimplyAlignPage(BaseOutputPage):
 
         output_path = self._build_sync_output_path(target_path)
 
-        offset_sec = round(self._offset_value_ms / 1000.0, 3)
+        offset_sec = round(offset_ms / 1000.0, 3)
         pad_start = offset_sec if self._offset_action == "delay" else None
         start = offset_sec if self._offset_action == "trim" else None
 
