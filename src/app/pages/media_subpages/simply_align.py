@@ -7,7 +7,7 @@ from ...ui_style import UI_Style
 
 from src.core.build_worker_cmd import build_cmd_head_python_exe
 from src.core.schemas.op_result import OpResult, ok, err, print_op_result
-from src.core.tools import show_notify_dialog
+from src.core.tools import show_confirm_dialog, show_notify_dialog
 from src.services import process_manager_api
 from src.services.path_manage import PathManage
 from src.services.pipeline import MediaPipeline
@@ -321,11 +321,29 @@ class SimplyAlignPage(BaseOutputPage):
 
 
 
-    @staticmethod
-    def _build_sync_output_path(target_path: Path) -> Path:
-        for i in range(0, 1000):
-            candidate_name = "sync" if i == 0 else f"sync_{i}"
-            candidate = target_path.parent / f"{candidate_name}.mp4"
+
+    def _get_sync_output_path(self, target_path: Path) -> Path:
+        """获取输出路径，若 sync.mp4 已存在则询问是否删除，否则加后缀 < _int >"""
+        sync_path = target_path.parent / "sync.mp4"
+        if not sync_path.exists():
+            return sync_path
+
+        title = i18n.t(f"{I18N_Simply_Align_Prefix}.dialog_title")
+        prompt = i18n.t(f"{I18N_Simply_Align_Prefix}.warning_sync_file_exists", path=str(sync_path))
+        
+        # 用户选择删除
+        if show_confirm_dialog(title, prompt):
+            try:
+                from src.app.pages.majdata_page import MajdataPage
+                MajdataPage.try_unload_video_if_matches(target_path)
+                sync_path.unlink()
+            except Exception as e:
+                print(f'Failed to delete "{sync_path}": {e}')
+            return sync_path
+
+        # 用户选择不删除，加后缀
+        for i in range(1, 1000):
+            candidate = target_path.parent / f"sync_{i}.mp4"
             if not candidate.exists():
                 return candidate
         return target_path.parent / "sync.mp4"
@@ -368,7 +386,7 @@ class SimplyAlignPage(BaseOutputPage):
         else:
             video_fps = None # 保持原始帧率
 
-        output_path = self._build_sync_output_path(target_path)
+        output_path = self._get_sync_output_path(target_path)
 
         offset_sec = round(offset_ms / 1000.0, 3)
         pad_start = offset_sec if self._offset_action == "delay" else None
