@@ -115,7 +115,7 @@
 
 从以下仓库编译，编译后放入 `src/resources/majdata`：
 
-- [MajdataEdit](https://github.com/ck2739046/MajdataEdit) & [MajdataView](https://github.com/ck2739046/MajdataView)
+- [MajdataEdit](https://github.com/ck2739046/MajdataEdit/tree/v4.3.1) & [MajdataView](https://github.com/ck2739046/MajdataView/tree/431-NC-TH)
 
 请自行从其他渠道获取 `SFX` 和 `Skin`，放入文件夹中。
 

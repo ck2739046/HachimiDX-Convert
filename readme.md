@@ -113,7 +113,7 @@ Code lives in `src/`, organized in three layers:
 
 Compile from the following repositories and place the outputs into `src/resources/majdata`:
 
-- [MajdataEdit](https://github.com/ck2739046/MajdataEdit) & [MajdataView](https://github.com/ck2739046/MajdataView)
+- [MajdataEdit](https://github.com/ck2739046/MajdataEdit/tree/v4.3.1) & [MajdataView](https://github.com/ck2739046/MajdataView/tree/431-NC-TH)
 
 Obtain `SFX` and `Skin` from other placess and put them in the folder.
 
