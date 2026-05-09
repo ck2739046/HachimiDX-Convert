@@ -135,7 +135,7 @@ def preprocess_frame(frame, mode: str):
 
     # 如果是录屏，直接固定阈值二值化
     if mode == 'source video':
-        _, binary = cv2.threshold(gray, 30, 255, cv2.THRESH_BINARY)
+        _, binary = cv2.threshold(gray, 60, 255, cv2.THRESH_BINARY)
 
     # 如果是摄屏，使用自适应 Canny 边缘检测    
     else: # mode == 'camera footage'
