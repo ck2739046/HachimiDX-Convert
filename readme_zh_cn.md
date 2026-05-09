@@ -96,14 +96,30 @@
 
 ## 🏃 从源码运行
 
-Release 包含了独立的嵌入式 Python 3.13，因此无需预先在系统中安装 Python。如果要从源码运行，有以下两种方式可选：
+### 1. 配置 Python 环境
 
-1. 将 [`嵌入式 Python`](src/resources/for_release_only/python%20portable/py3.13.11.zip) 解压到项目根目录，然后使用 `./python/python.exe` 运行脚本。
-2. 预先安装 Python 并创建虚拟环境 (venv)。
+- 方式一：将 [`嵌入式 Python`](src/resources/for_release_only/python%20portable/py3.13.11.zip) 解压到项目根目录，用 `./python/python.exe` 运行脚本。
+- 方式二：自行安装 Python 并创建虚拟环境 (venv)。
+  > 本项目使用 **Python 3.13.11**；Python 3.10+ 似乎大概都可以运行，仅猜测，未经实际验证。
 
-配置好 Python 环境后，运行 `install/script/install.py` 安装项目依赖，然后运行 `main.py` 启动应用。
+  > **注意 (2026.05.09):**<br>
+  > NVIDIA TensorRT 目前不支持 Python 3.14。使用 `DirectML` 或 `PyTorch` 推理时，Python 3.14 可用；使用 `TensorRT` 时，最高支持到 Python 3.13。
 
-**最低可用版本:** Python 3.10、3.11、3.12 似乎大概有可能支持，纯猜的，未经实际验证。
+### 2. 解压资源文件
 
-> **注意 (2026.05.09):**<br>
-> NVIDIA TensorRT 目前不支持 Python 3.14。使用 `DirectML` 或 `PyTorch` 推理时，Python 3.14 可用；使用 `TensorRT` 时，最高支持到 Python 3.13。
+- 将 [`models/`](src/resources/for_release_only/models/) 下的所有 `.zip` 解压到 `src/resources/models/`。
+- 将 [`ffmpeg`](src/resources/for_release_only/ffmpeg-8.0.1-essentials_build.7z) 解压到 `src/resources/ffmpeg/`。
+- （可选）自行编译 [`启动器`](src/resources/for_release_only/launcher) 并放到项目根目录。
+
+### 3. 获取 Majdata 编辑器与查看器
+
+从以下仓库编译，编译后放入 `src/resources/majdata`：
+
+- [MajdataEdit](https://github.com/ck2739046/MajdataEdit) & [MajdataView](https://github.com/ck2739046/MajdataView)
+
+请自行从其他渠道获取 `SFX` 和 `Skin`，放入文件夹中。
+
+### 4. 安装并启动
+
+运行 `install/script/install.py` 安装依赖。<br>
+运行 `main.py` 启动程序。

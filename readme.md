@@ -94,14 +94,30 @@ Code lives in `src/`, organized in three layers:
 
 ## 🏃 Running from Source
 
-The release package ships with an embedded Python 3.13 interpreter, so no pre-installed Python is required. To run from source, there are two approaches:
+### 1. Set up the Python environment
 
-1. Extract [`embedded_python`](src/resources/for_release_only/python%20portable/py3.13.11.zip) to the project root directory, then use `./python/python.exe` to run scripts.
-2. Install Python and create a virtual environment (venv).
+- Option A: Extract [`embedded Python`](src/resources/for_release_only/python%20portable/py3.13.11.zip) to the project root and use `./python/python.exe` to run scripts.
+- Option B: Install Python and create a virtual environment (venv).
+  > This project uses **Python 3.13.11**; Python 3.10+ may work, but this is only a rough guess and has not been verified.
 
-After setting up the Python environment, run `install/script/install.py` to install project dependencies, then run `main.py` to launch the application.
+  > **Note (2026.05.09):**<br>
+  > NVIDIA TensorRT currently does not support Python 3.14. When using `DirectML` or `PyTorch` inference, Python 3.14 works fine. For `TensorRT`, Python 3.13 is the highest supported version.
 
-**Minimum supported version:** Python 3.10, 3.11, and 3.12 may work, but this is only a rough guess and has not been verified.
+### 2. Extract resource files
 
-> **Note (2026.05.09):**<br>
-> NVIDIA TensorRT currently does not support Python 3.14. When using `DirectML` or `PyTorch` inference, Python 3.14 works fine. For `TensorRT`, Python 3.13 is the highest supported version.
+- Extract all `.zip` files from [`models/`](src/resources/for_release_only/models/) into `src/resources/models/`.
+- Extract [`ffmpeg`](src/resources/for_release_only/ffmpeg-8.0.1-essentials_build.7z) into `src/resources/ffmpeg/`.
+- (Optional) Compile the [`launcher`](src/resources/for_release_only/launcher) and place it in the project root.
+
+### 3. Obtain Majdata Editor & Viewer
+
+Compile from the following repositories and place the outputs into `src/resources/majdata`:
+
+- [MajdataEdit](https://github.com/ck2739046/MajdataEdit) & [MajdataView](https://github.com/ck2739046/MajdataView)
+
+Obtain `SFX` and `Skin` from other placess and put them in the folder.
+
+### 4. Install & launch
+
+Run `install/script/install.py` to install dependencies.<br>
+Run `main.py` to launch the application.
