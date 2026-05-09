@@ -84,13 +84,11 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
 
         # 轨迹最大失配帧数：超过后删除该轨迹
         # 与 bot-sort 的 track_buffer 类似
-        # 0.15s
-        max_age=round(fps * 0.15),
+        max_age=round(fps * 0.1), # 0.1s
 
         # 轨迹最小命中次数：达到后才稳定输出（前 min_hits 帧会放宽）
         # 设置为 1，表示新轨迹一出现就输出，不需要等待稳定，适合追踪短命的 note
-        # 0.05s，至少2帧
-        min_hits=max(2, round(fps * 0.05)), 
+        min_hits=max(2, round(fps * 0.05)), # 0.05s，at least 2
 
         # IoU 匹配阈值：主匹配/补匹配都使用该阈值过滤低质量关联
         # 值越大，越严格，越容易视为新 id
@@ -98,11 +96,11 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
         iou_threshold=0.1,
 
         # 速度方向估计窗口：用于 OCR/VDC 角度代价中的历史观测回看步长
-        delta_t=3, # 3帧 
+        delta_t=3, # 3帧
 
         # 方向一致性代价权重：越大越偏好“运动方向一致”的匹配
         # slide 运动比较规律，调高权重
-        inertia=0.7,
+        inertia=0.8,
 
         # 启用 BYTE 二阶段低分框补匹配（0.1 < score < det_thresh）
         use_byte=True,
@@ -121,6 +119,14 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
         # 如最后一个框 max=30，ratio=0.10 → 候选框 max_side 须 ≤ 33
         # 值越大越宽松，越小越严格；设为极大值可实质关闭此门控
         max_size_increase_ratio=0.15,
+
+        # 共享候选框认领资格：hit_streak ≥ 此值才有资格认领已被其他轨迹认领的候选框
+        # 值越大越严格，短轨迹不能抢共享框
+        min_track_hits_for_shared=max(2, round(fps * 0.05)), # 0.05s, at least 2
+
+        # 最多连续认领共享框次数：超过后必须认领一个独占框才能重置计数器
+        # 值越大越宽松，越小越限制轨迹连续"蹭"别人的框
+        max_consecutive_shared=max(2, round(fps * 0.05)), # 0.05s, at least 2
     )
 
 

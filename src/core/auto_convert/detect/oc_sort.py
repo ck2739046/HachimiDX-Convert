@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from filterpy.kalman import KalmanFilter
 
-from .oc_sort_association import associate, center_distance_gate, diou_batch, iou_batch, linear_assignment, max_size_increase_gate, size_consistency_gate
+from .oc_sort_association import _greedy_match_many_to_one
 
 
 def _k_previous_obs(observations: dict[int, np.ndarray], cur_age: int, k: int) -> np.ndarray:
@@ -103,6 +103,7 @@ class _KalmanBoxTracker:
         self.score = float(bbox[4]) if len(bbox) > 4 else 0.0
         self.cls = int(bbox[5]) if len(bbox) > 5 else 0
         self.idx = int(bbox[6]) if len(bbox) > 6 else -1
+        self._consecutive_shared_count: int = 0
 
     def update(self, bbox: np.ndarray | None) -> None:
         if bbox is None:
@@ -164,6 +165,24 @@ class _KalmanBoxTracker:
             return 0.0
         return float(np.mean(self.history_max_sides))
 
+    def can_claim_shared(self, min_track_hits_for_shared: int, max_consecutive_shared: int) -> bool:
+        """轨迹是否有资格认领已被其他轨迹认领的共享候选框。"""
+        return (
+            self.hit_streak >= min_track_hits_for_shared
+            and self._consecutive_shared_count < max_consecutive_shared
+        )
+
+    def mark_claimed(self, is_shared: bool) -> None:
+        """标记本次认领是否为共享框。
+        
+        is_shared=True 时连续共享计数器+1；
+        is_shared=False（独占框）时计数器归零。
+        """
+        if is_shared:
+            self._consecutive_shared_count += 1
+        else:
+            self._consecutive_shared_count = 0
+
 
 class OCSort:
     def __init__(
@@ -178,6 +197,8 @@ class OCSort:
         max_ratio: float = 2.0,
         size_ratio: float = 0.85,
         max_size_increase_ratio: float = 0.10,
+        min_track_hits_for_shared: int = 10,
+        max_consecutive_shared: int = 3,
     ):
         self.max_age = int(max_age)
         self.min_hits = int(min_hits)
@@ -192,6 +213,8 @@ class OCSort:
         self.max_ratio = float(max_ratio)
         self.size_ratio = float(size_ratio)
         self.max_size_increase_ratio = float(max_size_increase_ratio)
+        self.min_track_hits_for_shared = int(min_track_hits_for_shared)
+        self.max_consecutive_shared = int(max_consecutive_shared)
 
         _KalmanBoxTracker.count = 0
 
@@ -265,13 +288,16 @@ class OCSort:
             trk_avg_sizes = np.empty((0,), dtype=np.float64)
             trk_last_max_sides = np.empty((0,), dtype=np.float64)
 
-        matched, unmatched_dets, unmatched_trks = associate(
+        matched, unmatched_dets, unmatched_trks, det_claim_count = _greedy_match_many_to_one(
             dets_assoc,
             trks,
             self.iou_threshold,
             velocities,
             k_observations,
             self.inertia,
+            tracker_objects=self.trackers,
+            min_track_hits_for_shared=self.min_track_hits_for_shared,
+            max_consecutive_shared=self.max_consecutive_shared,
             trk_last_boxes=last_boxes,
             max_ratio=self.max_ratio,
             trk_avg_sizes=trk_avg_sizes,
@@ -284,80 +310,76 @@ class OCSort:
             self.trackers[trk_idx].update(dets[det_idx])
 
         if self.use_byte and len(dets_second_assoc) > 0 and unmatched_trks.shape[0] > 0:
-            u_trks = trks[unmatched_trks]
-            diou_left = np.array(diou_batch(dets_second_assoc, u_trks))
-            # DIoU 替代 IoU：零交集时中心距离提供梯度，优先选较近匹配
-            if diou_left.size > 0 and diou_left.max() > 0:
-                raw_indices = linear_assignment(-diou_left)
-                # 中心距离硬门控：用轨迹最后观测框尺寸做上限
-                gate_ok, _, gate_rejected_trk = center_distance_gate(
-                    raw_indices, dets_second_assoc, u_trks,
-                    trk_last_boxes=last_boxes[unmatched_trks],
-                    max_ratio=self.max_ratio,
+            u_indices = unmatched_trks
+            u_tracker_objs = [self.trackers[i] for i in u_indices]
+            byte_matched, _, byte_unmatched_local, _ = _greedy_match_many_to_one(
+                dets_second_assoc,
+                trks[u_indices],
+                self.iou_threshold,
+                velocities[u_indices],
+                k_observations[u_indices],
+                self.inertia,
+                tracker_objects=u_tracker_objs,
+                min_track_hits_for_shared=self.min_track_hits_for_shared,
+                max_consecutive_shared=self.max_consecutive_shared,
+                trk_last_boxes=last_boxes[u_indices],
+                max_ratio=self.max_ratio,
+                trk_avg_sizes=trk_avg_sizes[u_indices],
+                size_ratio=self.size_ratio,
+                trk_last_max_sides=trk_last_max_sides[u_indices],
+                max_size_increase_ratio=self.max_size_increase_ratio,
+            )
+
+            for det_idx2, trk_pos in byte_matched:
+                trk_idx = u_indices[trk_pos]
+                self.trackers[trk_idx].update(dets_second[det_idx2])
+
+            if byte_matched.shape[0] > 0:
+                matched_local = set(byte_matched[:, 1])
+                unmatched_trks = np.array(
+                    [u_indices[i] for i in range(len(u_indices)) if i not in matched_local],
+                    dtype=int,
                 )
-                # 尺寸一致性门控
-                gate_ok, _, _ = size_consistency_gate(
-                    gate_ok, dets_second_assoc,
-                    trk_avg_sizes=trk_avg_sizes[unmatched_trks],
-                    size_ratio=self.size_ratio,
-                )
-                # 尺寸增大门控
-                gate_ok, _, _ = max_size_increase_gate(
-                    gate_ok, dets_second_assoc,
-                    trk_last_max_sides=trk_last_max_sides[unmatched_trks],
-                    max_size_increase_ratio=self.max_size_increase_ratio,
-                )
-                to_remove = []
-                for det_idx2, trk_pos in gate_ok:
-                    trk_idx = unmatched_trks[trk_pos]
-                    self.trackers[trk_idx].update(dets_second[det_idx2])
-                    to_remove.append(trk_idx)
-                if to_remove:
-                    unmatched_trks = np.setdiff1d(unmatched_trks, np.array(to_remove, dtype=int))
 
         if unmatched_dets.shape[0] > 0 and unmatched_trks.shape[0] > 0:
             left_dets = dets_assoc[unmatched_dets]
-            left_trks = last_boxes[unmatched_trks]
-            diou_left = np.array(diou_batch(left_dets, left_trks))
-            # DIoU 替代 IoU：零交集时中心距离提供梯度
-            if diou_left.size > 0 and diou_left.max() > 0:
-                raw_indices = linear_assignment(-diou_left)
-                # 中心距离硬门控：left_trks 本身就是 last_boxes
-                gate_ok, _, _ = center_distance_gate(
-                    raw_indices, left_dets, left_trks,
-                    trk_last_boxes=left_trks,
-                    max_ratio=self.max_ratio,
-                )
-                # 尺寸一致性门控
-                gate_ok, _, _ = size_consistency_gate(
-                    gate_ok, left_dets,
-                    trk_avg_sizes=trk_avg_sizes[unmatched_trks],
-                    size_ratio=self.size_ratio,
-                )
-                # 尺寸增大门控
-                gate_ok, _, _ = max_size_increase_gate(
-                    gate_ok, left_dets,
-                    trk_last_max_sides=trk_last_max_sides[unmatched_trks],
-                    max_size_increase_ratio=self.max_size_increase_ratio,
-                )
-                to_remove_det_indices = []
-                to_remove_trk_indices = []
-                for det_pos, trk_pos in gate_ok:
-                    det_idx = unmatched_dets[det_pos]
-                    trk_idx = unmatched_trks[trk_pos]
-                    self.trackers[trk_idx].update(dets[det_idx])
-                    to_remove_det_indices.append(det_idx)
-                    to_remove_trk_indices.append(trk_idx)
+            u_indices = unmatched_trks
+            u_tracker_objs = [self.trackers[i] for i in u_indices]
 
-                if to_remove_det_indices:
-                    unmatched_dets = np.setdiff1d(unmatched_dets, np.array(to_remove_det_indices, dtype=int))
-                if to_remove_trk_indices:
-                    unmatched_trks = np.setdiff1d(unmatched_trks, np.array(to_remove_trk_indices, dtype=int))
+            rec_matched, _, rec_unmatched_local, rec_claim = _greedy_match_many_to_one(
+                left_dets,
+                last_boxes[u_indices],
+                self.iou_threshold,
+                velocities[u_indices],
+                k_observations[u_indices],
+                self.inertia,
+                tracker_objects=u_tracker_objs,
+                min_track_hits_for_shared=self.min_track_hits_for_shared,
+                max_consecutive_shared=self.max_consecutive_shared,
+                trk_last_boxes=last_boxes[u_indices],
+                max_ratio=self.max_ratio,
+                trk_avg_sizes=trk_avg_sizes[u_indices],
+                size_ratio=self.size_ratio,
+                trk_last_max_sides=trk_last_max_sides[u_indices],
+                max_size_increase_ratio=self.max_size_increase_ratio,
+            )
+
+            to_remove_trk = []
+            for det_pos, trk_pos in rec_matched:
+                det_idx = unmatched_dets[det_pos]
+                trk_idx = u_indices[trk_pos]
+                self.trackers[trk_idx].update(dets[det_idx])
+                to_remove_trk.append(trk_idx)
+                det_claim_count[det_idx] += 1
+
+            if to_remove_trk:
+                unmatched_trks = np.setdiff1d(unmatched_trks, np.array(to_remove_trk, dtype=int))
 
         for trk_idx in unmatched_trks:
             self.trackers[trk_idx].update(None)
 
-        for det_idx in unmatched_dets:
+        # 仅未被任何轨迹认领的候选框才能创建新轨迹
+        for det_idx in np.where(det_claim_count == 0)[0]:
             self.trackers.append(_KalmanBoxTracker(dets[det_idx], delta_t=self.delta_t))
 
         ret = []
