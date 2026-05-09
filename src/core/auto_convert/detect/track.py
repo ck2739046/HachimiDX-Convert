@@ -227,9 +227,10 @@ def main(std_video_path: Path,
         for frame_number in range(total_frames):
 
             # 读取当前视频帧（用于 ReID 特征提取）
-            ret, frame = cap.read()
-            if not ret:
-                frame = None
+            frame = None
+            if enable_reid:
+                ret, frame = cap.read()
+                if not ret: frame = None
 
             # 获取当前帧的检测结果
             single_frame_detections = detections_by_frame.get(frame_number, [])
@@ -278,6 +279,7 @@ def main(std_video_path: Path,
                 last_time, last_counter = print_progress('追踪', 'fps', counter, total_frames, last_time, last_counter)   
                         
         # 结束
+        if cap and cap.isOpened(): cap.release()
         finish_time = time.time()
         print(f"追踪模块完成, 耗时{finish_time - start_time:.1f}s, 平均{total_frames / (finish_time - start_time):.1f}fps          ")
 
@@ -324,7 +326,6 @@ def main(std_video_path: Path,
             print(f"反向追踪: 为 {reverse_count} 条 slide track 补充了首帧")
 
         # 保存到文件
-        cap.release()
         _save_track_results(final_tracked_results, std_video_path.parent, call_fn="track")
         return ok()
 
