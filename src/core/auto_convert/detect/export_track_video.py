@@ -133,18 +133,56 @@ def main(std_video_path: Path,
             
             # 更新当前帧中存在的轨迹
             current_track_ids = set()
-            
+
+            # --- SLIDE 候选框 many-to-one 去重 ---
+            # 同帧内坐标完全一致的 SLIDE 框合并为一个绘制单元，
+            # 用 "/" 连接多个 track_id 显示。
+            _box_key_precision = 2 # 如果坐标精确到2位小数相同，视为同一个框
+
+            def _slide_box_key(t):
+                """用全部 8 个坐标值生成去重键。"""
+                return (
+                    round(t['x1'], _box_key_precision), round(t['y1'], _box_key_precision),
+                    round(t['x2'], _box_key_precision), round(t['y2'], _box_key_precision),
+                    round(t['x3'], _box_key_precision), round(t['y3'], _box_key_precision),
+                    round(t['x4'], _box_key_precision), round(t['y4'], _box_key_precision),
+                )
+
+            slide_tracks = [t for t in current_tracks if t['note_type'] == NoteType.SLIDE]
+            other_tracks = [t for t in current_tracks if t['note_type'] != NoteType.SLIDE]
+
+            slide_groups: dict[tuple, list] = {}
+            for t in slide_tracks:
+                slide_groups.setdefault(_slide_box_key(t), []).append(t)
+
+            dedup_items: list = []
+            for group_tracks in slide_groups.values():
+                merged_ids = '/'.join(str(t['track_id']) for t in group_tracks)
+                rep = dict(group_tracks[0])
+                rep['_display_track_id'] = merged_ids
+                rep['_group_track_ids'] = [t['track_id'] for t in group_tracks]
+                # 使用第一个 track_id 作为颜色代表
+                rep['_color_track_id'] = group_tracks[0]['track_id']
+                dedup_items.append(rep)
+
+            for t in other_tracks:
+                t['_display_track_id'] = str(t['track_id'])
+                t['_group_track_ids'] = [t['track_id']]
+                t['_color_track_id'] = t['track_id']
+                dedup_items.append(t)
+
             # 绘制当前帧的音符
-            for track in current_tracks:
-                track_id = track['track_id']
+            for track in dedup_items:
+                track_id_display = track['_display_track_id']
                 note_type = track['note_type']
                 note_variant = track['note_variant']
                 is_obb_note = is_obb(note_type)
-                color = get_color_for_id(track_id)
-                
+                color = get_color_for_id(track['_color_track_id'])
+
                 # 记录当前帧中存在的轨迹
-                current_track_ids.add(track_id)
-                
+                for tid in track['_group_track_ids']:
+                    current_track_ids.add(tid)
+
                 # 根据note_type绘制不同类型的音符
                 if is_obb_note:
                     points = np.array([
@@ -157,12 +195,12 @@ def main(std_video_path: Path,
                 else:
                     x1, y1, x2, y2 = int(track['x1']), int(track['y1']), int(track['x3']), int(track['y3'])
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                
-                # 绘制标签
-                label = f'{note_type.name}.{note_variant.name} ID:{track_id}'
+
+                # 绘制标签（SLIDE 去重后 track_id 用 "/" 连接）
+                label = f'{note_type.name}.{note_variant.name} ID:{track_id_display}'
                 label_size = label_size_cache.get(label)
                 if label_size is None:
-                    label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                    label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)[0]
                     label_size_cache[label] = label_size
                 
                 if is_obb_note:
@@ -193,13 +231,14 @@ def main(std_video_path: Path,
                     center_x = int(round((track['x1'] + track['x3']) / 2.0))
                     center_y = int(round((track['y1'] + track['y3']) / 2.0))
 
-                history_points = track_history[track_id]
-                history_points.append((center_x, center_y))
-                track_last_seen[track_id] = frame_number
-                track_note_type[track_id] = note_type
+                for tid in track['_group_track_ids']:
+                    history_points = track_history[tid]
+                    history_points.append((center_x, center_y))
+                    track_last_seen[tid] = frame_number
+                    track_note_type[tid] = note_type
 
-                if len(history_points) > max_track_history_len:
-                    del history_points[:-max_track_history_len]
+                    if len(history_points) > max_track_history_len:
+                        del history_points[:-max_track_history_len]
             
             # 清理过期的轨迹（超过0.5秒未出现）
             tracks_to_remove = []
