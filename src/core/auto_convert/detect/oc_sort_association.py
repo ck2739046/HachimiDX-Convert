@@ -439,7 +439,22 @@ def _greedy_match_many_to_one(
     angle_diff_cost = angle_diff_cost.T  # (D, T)
     angle_diff_cost = angle_diff_cost * scores  # (D,T)
 
-
+    # --- VDC 禁用阈值 ---
+    # 候选框到轨迹上一帧的中心位移 / 候选框 max(w,h) < 阈值 → 方向不可信，VDC=0
+    det_w = detections[:, 2] - detections[:, 0]
+    det_h = detections[:, 3] - detections[:, 1]
+    det_max_side = np.maximum(det_w, det_h)  # (D,)
+    prev_cx = (previous_obs[:, 0] + previous_obs[:, 2]) / 2.0  # (T,)
+    prev_cy = (previous_obs[:, 1] + previous_obs[:, 3]) / 2.0  # (T,)
+    det_cx = (detections[:, 0] + detections[:, 2]) / 2.0  # (D,)
+    det_cy = (detections[:, 1] + detections[:, 3]) / 2.0  # (D,)
+    center_dist = np.sqrt(
+        (det_cx[np.newaxis, :] - prev_cx[:, np.newaxis]) ** 2
+        + (det_cy[np.newaxis, :] - prev_cy[:, np.newaxis]) ** 2
+    )  # (T, D)
+    rel_disp = np.divide(center_dist, np.maximum(det_max_side[np.newaxis, :], 1.0))  # (T, D)
+    vdc_enabled = (rel_disp >= vdc_disable_threshold).astype(np.float64)  # (T, D), 小于阈值 → 0
+    angle_diff_cost = angle_diff_cost * vdc_enabled.T  # (D,T)
 
     cost_matrix = -(diou_matrix + angle_diff_cost)  # 负号：cost 越小越好
 
