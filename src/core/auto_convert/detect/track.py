@@ -130,23 +130,27 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
 
 
 
-def _reverse_track_slide(track_geos, check_frame, unmatched_dets, fps):
-    """反向追踪：将slide轨道反转后重新走OC-SORT，检查首帧前一帧是否有可匹配的 SLIDE 检测框。
+def _reverse_track_slide(track_geos, fps, detections_by_frame):
+    """反向追踪：将slide轨道反转后重新走OC-SORT，逐帧向前搜索可匹配的 SLIDE 检测框。
 
-    将整个track按帧降序喂入全新的OCSort实例，重建Kalman运动状态，
-    然后将check_frame的未匹配 SLIDE 检测框作为候选输入，判断是否能关联上。
+    将整个track按帧降序喂入全新的OCSort实例（参数与正向追踪完全一致），重建Kalman运动状态，
+    然后从首帧前一帧开始逐帧向前搜索，最多向前添加 max_reverse_frames 个点。
+    同个候选框可被多条轨迹同时选中（many-to-one，规则与正向追踪一致）。
 
     Args:
         track_geos: 正向追踪的slide轨道 Note_Geometry 列表（帧升序）
-        check_frame: 待检查的帧号（= track首帧 - 1）
-        unmatched_dets: check_frame 中未被任何track匹配的检测框列表（含所有类型）
         fps: 视频帧率
+        detections_by_frame: {frame: [Note_Geometry, ...]} 所有帧的全部检测结果
 
     Returns:
-        匹配到的 Note_Geometry，或 None
+        匹配到的 Note_Geometry 列表（帧升序，从最早到最晚），可能为空
     """
-    if not track_geos or not unmatched_dets:
-        return None
+
+    # 向前添加的最大帧数/点数
+    max_reverse_frames = 1 if fps < 70 else 2
+
+    if not track_geos or max_reverse_frames <= 0:
+        return []
 
     tracker = _build_ocsort_tracker(fps)
 
@@ -156,26 +160,47 @@ def _reverse_track_slide(track_geos, check_frame, unmatched_dets, fps):
         ocsort_input = _convert_detections_to_ocsort_format([geo])
         tracker.update(ocsort_input)
 
-    # 候选框必须与当前 track 同类型（仅 SLIDE），避免跨类型误匹配
-    slide_candidates = [d for d in unmatched_dets if d.note_type == NoteType.SLIDE]
-    if not slide_candidates:
-        return None
+    first_frame = track_geos[0].frame
+    matched_geos: list = []  # 帧降序收集
 
-    candidate_input = _convert_detections_to_ocsort_format(slide_candidates)
-    result = tracker.update(candidate_input)
+    for offset in range(1, max_reverse_frames + 1):
+        check_frame = first_frame - offset
+        if check_frame < 0:
+            break
 
-    if result is None or len(result) == 0:
-        return None
+        all_dets = detections_by_frame.get(check_frame, [])
+        # 候选框必须与当前 track 同类型（仅 SLIDE），避免跨类型误匹配
+        # 因为允许多个轨迹选同一个框 (many-to-one)
+        # 所以不需要排除已被匹配的框, 直接传入所有
+        slide_candidates = [d for d in all_dets if d.note_type == NoteType.SLIDE]
+        if not slide_candidates:
+            break
 
-    for row in result:
-        if len(row) < 9:
-            continue
-        frame_offset = int(row[9]) if len(row) >= 10 else 0
-        idx = int(row[8])
-        if frame_offset == 0 and 0 <= idx < len(slide_candidates):
-            return slide_candidates[idx]
+        candidate_input = _convert_detections_to_ocsort_format(slide_candidates)
+        result = tracker.update(candidate_input)
 
-    return None
+        if result is None or len(result) == 0:
+            break
+
+        # 在当前帧找到匹配的候选框
+        found = None
+        for row in result:
+            if len(row) < 9:
+                continue
+            frame_offset = int(row[9]) if len(row) >= 10 else 0
+            idx = int(row[8])
+            if frame_offset == 0 and 0 <= idx < len(slide_candidates):
+                found = slide_candidates[idx]
+                break
+
+        if found is None:
+            break
+
+        matched_geos.append(found)
+
+    # 转为帧升序返回
+    matched_geos.reverse()
+    return matched_geos
 
 
 
@@ -287,13 +312,6 @@ def main(std_video_path: Path,
         print(f"追踪模块完成, 耗时{finish_time - start_time:.1f}s, 平均{total_frames / (finish_time - start_time):.1f}fps          ")
 
         # === 反向追踪 slide tracks ===
-        # 构建每帧未匹配检测框的映射（所有未被任何track匹配的框）
-        unmatched_by_frame = defaultdict(list)
-        for frame_num, dets in detections_by_frame.items():
-            for det in dets:
-                if id(det) not in matched_note_ids:
-                    unmatched_by_frame[frame_num].append(det)
-
         # 对每条 slide track 尝试反向追踪
         reverse_count = 0
         for key, track_geos in final_tracked_results.items():
@@ -303,30 +321,17 @@ def main(std_video_path: Path,
 
             # 按帧排序（防御性，通常已有序）
             track_geos.sort(key=lambda x: x.frame)
-            first_frame = track_geos[0].frame
-            check_frame = first_frame - 1
 
-            if check_frame < 0:
-                continue
-
-            unmatched_at_check = unmatched_by_frame.get(check_frame, [])
-            if not unmatched_at_check:
-                continue
-
-            matched_geo = _reverse_track_slide(track_geos, check_frame, unmatched_at_check, fps)
-            if matched_geo is not None:
-                track_geos.insert(0, matched_geo)
-                matched_note_ids.add(id(matched_geo))
-                # 从unmatched中移除，防止被后续track重复匹配
-                unmatched_at_check = [d for d in unmatched_at_check if id(d) != id(matched_geo)]
-                if unmatched_at_check:
-                    unmatched_by_frame[check_frame] = unmatched_at_check
-                else:
-                    del unmatched_by_frame[check_frame]
-                reverse_count += 1
+            matched_geos = _reverse_track_slide(track_geos, fps, detections_by_frame)
+            if matched_geos:
+                # matched_geos 已按帧升序，直接逐个插入 track 开头
+                for geo in matched_geos:
+                    track_geos.insert(0, geo)
+                    matched_note_ids.add(id(geo))
+                    reverse_count += 1
 
         if reverse_count > 0:
-            print(f"反向追踪: 为 {reverse_count} 条 slide track 补充了首帧")
+            print(f"反向追踪: 补充了 {reverse_count} 个点")
 
         # 保存到文件
         _save_track_results(final_tracked_results, std_video_path.parent, call_fn="track")
