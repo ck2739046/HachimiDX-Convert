@@ -77,54 +77,84 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
 
     # 仅用于 SLIDE；参数按 OC-SORT 原生语义硬编码
     return OCSort(
-        # 第一阶段高分框阈值：score > det_thresh 才进入主匹配
-        # 与 bot-sort 的 track_high_thresh 差不多
-        # 值越大，越严格，越容易视为新 id
+
+        # --- 检测框过滤 ---
+
+        # 高分框的最低置信度。只有 score > det_thresh 的检测框才能参与第一轮匹配。
+        # 值越高 → 越少框能匹配 → 更容易产生新轨道（视为新 id）
         det_thresh=0.5,
 
-        # 轨迹最大失配帧数：超过后删除该轨迹
-        # 与 bot-sort 的 track_buffer 类似
+        # --- 轨迹生命周期 ---
+
+        # 一条轨道连续多少帧没匹配到检测框就删除它。
+        # 值越大 → 轨道存活越久 → 更不容易断链后新建 id
         max_age=round(fps * 0.1), # 0.1s
 
-        # 轨迹最小命中次数：达到后才稳定输出（前 min_hits 帧会放宽）
-        # 设置为 1，表示新轨迹一出现就输出，不需要等待稳定，适合追踪短命的 note
+        # 一条新轨道需要连续匹配多少帧后才被视为有效轨道（正式分配 ID）。
+        # 值越大 → 新轨道越晚出现 → 短命轨道会被过滤掉
         min_hits=max(2, round(fps * 0.05)), # 0.05s，at least 2
 
-        # 方向一致性代价权重：越大越偏好“运动方向一致”的匹配
-        # slide 运动比较规律，调高权重
-        inertia=0.8,
-
-        # 启用 BYTE 二阶段低分框补匹配（0.1 < score < det_thresh）
+        # 是否启用 BYTE 补匹配：
+        # 高分框（score > det_thresh）→ 一阶段主匹配，未匹配的可创建新轨道
+        # 低分框（0.1 < score < det_thresh）→ 二阶段 BYTE，只用于补救未匹配的轨道，不创建新轨道
         use_byte=True,
 
-        # 中心距离硬门控：候选框中心距离 ≤ max_ratio * 轨迹最后观测框的 max(w,h)
-        # 如 20x21 框 max=21，max_ratio=2 → 允许中心距≤42
-        # 值越大越宽松，越小越严格
-        max_ratio=1.7,
 
-        # 尺寸变小门控：候选框 max(w,h) ≥ 轨迹历史 avg_max_side * size_ratio
-        # 如轨迹历史平均 max_side=30，size_ratio=0.85 → 候选框 max_side 须 ≥ 25.5
-        # 值越小越宽松（容忍更大尺寸波动），越大越严格
-        size_ratio=0.85,
 
-        # 尺寸变大门控：候选框 max(w,h) ≤ 轨迹最后一个框 max(w,h) * (1 + ratio)
-        # 如最后一个框 max=30，ratio=0.10 → 候选框 max_side 须 ≤ 33
-        # 值越大越宽松，越小越严格；设为极大值可实质关闭此门控
-        max_size_increase_ratio=0.15,
+        # --- 速度方向一致性 (VDC) 代价 ---
 
-        # 共享候选框认领资格：hit_streak ≥ 此值才有资格认领已被其他轨迹认领的候选框
-        # 值越大越严格，短轨迹不能抢共享框
-        min_track_hits_for_shared=max(2, round(fps * 0.05)), # 0.05s, at least 2
+        # VDC 权重
+        # 轨道匹配候选框时，代价 = -(DIoU + VDC)。
+        # DIoU 看"框重叠多少"（空间），VDC 看"框是否在运动方向上"（方向）。
+        # VDC = diff_angle(θ) × inertia × score
+        #   diff_angle(θ) ∈ [-0.5, +0.5]：候选框方向和轨道运动方向越一致，得分越高
+        #   score：检测框的置信度
 
-        # 最多连续认领共享框次数：超过后必须认领一个独占框才能重置计数器
-        # 值越大越宽松，越小越限制轨迹连续"蹭"别人的框
-        max_consecutive_shared=max(2, round(fps * 0.05)), # 0.05s, at least 2
+        # VDC 取值范围约 ±0.50 × inertia,
+        # inertia 越大，方向偏好越强。
+        # 可以 >1 ，会放大方向影响，但如果 VDC 代价太大可能压制 DIoU 的空间匹配。
+        inertia=0.7,
 
         # VDC 禁用阈值：候选框中心到轨迹上一帧中心的位移 / 候选框 max(w,h) < 此值 → VDC=0
         # 方向不可信时直接禁用方向代价，避免静止或微小位移时 VDC 噪声干扰匹配
         # 值越大 → 越容易禁用 VDC（更保守）
         # 值越小 → 越不容易禁用 VDC（更依赖方向）
-        vdc_disable_threshold=0.1,
+        vdc_disable_threshold=0.15*(fps/60),
+
+
+
+        # --- 硬门控：不满足条件的候选框直接被排除 ---
+
+        # 中心距离门控：候选框的中心离轨道最后一个框的中心不能太远。
+        # 允许距离 = max_ratio × 轨道最后框的 max(宽, 高)
+        # 如框大小 20×21 则 max=21，max_ratio=1.7 → 中心距 ≤ 35.7
+        # 值越大 → 越宽松 → 允许候选框离的更远
+        # 高 fps 时帧间位移小，用较小的 max_ratio 更严格
+        max_ratio=1.7,
+
+        # 尺寸下限门控：候选框不能比轨道历史上的框小太多。
+        # 允许最小尺寸 = size_ratio × 轨道历史框的平均 max(宽, 高)
+        # 如历史平均 max=30，size_ratio=0.85 → 候选框 max 须 ≥ 25.5
+        # 值越小 → 越宽松 → 允许音符突然变小
+        size_ratio=0.85,
+
+        # 尺寸上限门控：候选框不能比轨道上一个框突然大很多。
+        # 允许最大尺寸 = 轨道上一个框的 max(宽, 高) × (1 + ratio)
+        # 如上一个框 max=30，ratio=0.15 → 候选框 max 须 ≤ 34.5
+        # 值越大 → 越宽松 → 允许音符突然变大
+        max_size_increase_ratio=0.15,
+
+
+
+        # --- many-to-one：同一候选框可被多条轨道共享 ---
+
+        # 轨道需要连续命中多少帧，才有资格去认领"已经被其他轨道占了的"框。
+        # 值越大 → 短命轨道只能抢独占框，不能跟长命轨道抢共享框
+        min_track_hits_for_shared=max(2, round(fps * 0.05)), # 0.05s, at least 2
+
+        # 一条轨道最多连续认领多少个共享框。超过后必须认领到一个独占框才能重置计数器继续认领共享框。
+        # 值越大 → 轨道可以连续"蹭"别人的框更久
+        max_consecutive_shared=max(2, round(fps * 0.05)), # 0.05s, at least 2
     )
 
 
