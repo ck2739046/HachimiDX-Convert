@@ -90,11 +90,6 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
         # 设置为 1，表示新轨迹一出现就输出，不需要等待稳定，适合追踪短命的 note
         min_hits=max(2, round(fps * 0.05)), # 0.05s，at least 2
 
-        # IoU 匹配阈值：主匹配/补匹配都使用该阈值过滤低质量关联
-        # 值越大，越严格，越容易视为新 id
-        # 值越小，越宽松，允许较大位移 (低iou) 也匹配上，越不容易视为新 id
-        iou_threshold=0.1,
-
         # 速度方向估计窗口：用于 OCR/VDC 角度代价中的历史观测回看步长
         delta_t=3, # 3帧
 
@@ -127,6 +122,8 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
         # 最多连续认领共享框次数：超过后必须认领一个独占框才能重置计数器
         # 值越大越宽松，越小越限制轨迹连续"蹭"别人的框
         max_consecutive_shared=max(2, round(fps * 0.05)), # 0.05s, at least 2
+
+        inertia_gain_threshold=0.7,
     )
 
 

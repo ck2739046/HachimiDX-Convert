@@ -190,7 +190,6 @@ class OCSort:
         det_thresh: float,
         max_age: int = 30,
         min_hits: int = 3,
-        iou_threshold: float = 0.3,
         delta_t: int = 3,
         inertia: float = 0.2,
         use_byte: bool = False,
@@ -199,10 +198,10 @@ class OCSort:
         max_size_increase_ratio: float = 0.10,
         min_track_hits_for_shared: int = 10,
         max_consecutive_shared: int = 3,
+        inertia_gain_threshold: float = 0.8,
     ):
         self.max_age = int(max_age)
         self.min_hits = int(min_hits)
-        self.iou_threshold = float(iou_threshold)
         self.trackers: list[_KalmanBoxTracker] = []
         self.frame_count = 0
         self.det_thresh = float(det_thresh)
@@ -215,6 +214,7 @@ class OCSort:
         self.max_size_increase_ratio = float(max_size_increase_ratio)
         self.min_track_hits_for_shared = int(min_track_hits_for_shared)
         self.max_consecutive_shared = int(max_consecutive_shared)
+        self.inertia_gain_threshold = float(inertia_gain_threshold)
 
         _KalmanBoxTracker.count = 0
 
@@ -291,13 +291,14 @@ class OCSort:
         matched, unmatched_dets, unmatched_trks, det_claim_count = _greedy_match_many_to_one(
             dets_assoc,
             trks,
-            self.iou_threshold,
+            self.inertia,
             velocities,
             k_observations,
-            self.inertia,
             tracker_objects=self.trackers,
             min_track_hits_for_shared=self.min_track_hits_for_shared,
             max_consecutive_shared=self.max_consecutive_shared,
+            delta_t=self.delta_t,
+            inertia_gain_threshold=self.inertia_gain_threshold,
             trk_last_boxes=last_boxes,
             max_ratio=self.max_ratio,
             trk_avg_sizes=trk_avg_sizes,
@@ -315,13 +316,14 @@ class OCSort:
             byte_matched, _, byte_unmatched_local, _ = _greedy_match_many_to_one(
                 dets_second_assoc,
                 trks[u_indices],
-                self.iou_threshold,
+                self.inertia,
                 velocities[u_indices],
                 k_observations[u_indices],
-                self.inertia,
                 tracker_objects=u_tracker_objs,
                 min_track_hits_for_shared=self.min_track_hits_for_shared,
                 max_consecutive_shared=self.max_consecutive_shared,
+                delta_t=self.delta_t,
+                inertia_gain_threshold=self.inertia_gain_threshold,
                 trk_last_boxes=last_boxes[u_indices],
                 max_ratio=self.max_ratio,
                 trk_avg_sizes=trk_avg_sizes[u_indices],
@@ -349,13 +351,14 @@ class OCSort:
             rec_matched, _, rec_unmatched_local, rec_claim = _greedy_match_many_to_one(
                 left_dets,
                 last_boxes[u_indices],
-                self.iou_threshold,
+                self.inertia,
                 velocities[u_indices],
                 k_observations[u_indices],
-                self.inertia,
                 tracker_objects=u_tracker_objs,
                 min_track_hits_for_shared=self.min_track_hits_for_shared,
                 max_consecutive_shared=self.max_consecutive_shared,
+                delta_t=self.delta_t,
+                inertia_gain_threshold=self.inertia_gain_threshold,
                 trk_last_boxes=last_boxes[u_indices],
                 max_ratio=self.max_ratio,
                 trk_avg_sizes=trk_avg_sizes[u_indices],
