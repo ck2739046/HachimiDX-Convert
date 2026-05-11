@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from ...schemas.op_result import OpResult, err, ok
 from ..analyze.analyze_slide_movement import is_line_pass_a_zone_endpoint
@@ -38,6 +39,7 @@ def main(std_video_path: Path) -> OpResult[None]:
         context = _build_context(std_video_path)
         next_track_id = _get_next_track_id(tracks)
 
+        tracks = _remove_slide_drift_points(tracks)
         tracks, next_track_id = _split_touch_notes(tracks, context, next_track_id)
         tracks, next_track_id = _split_slide_notes(tracks, context, next_track_id)
 
@@ -46,6 +48,137 @@ def main(std_video_path: Path) -> OpResult[None]:
 
     except Exception as e:
         return err("Unexpected error in auto_convert > detect > post_track", e)
+
+
+
+
+
+
+
+
+# -- many-to-one 漂移检测 --
+_DRIFT_ANGLE_THRESHOLD = 120  # 转向角, 0-180度  ( __/\__ 这个尖角大概是140度的样子 )
+_BOX_KEY_PRECISION = 2        # 坐标四舍五入到两位小数如果相同，视为同一个坐标点
+
+
+def _remove_slide_drift_points(tracks: dict) -> dict:
+    """检测并移除 many-to-one 匹配导致的 SLIDE 轨迹漂移点。
+
+    两条平行轨迹，其中一条丢帧时可能误认领另一条的框（共享框），
+    在几何上表现为轨迹剧烈折返。本函数：
+    1. 标记每个点是共享还是独占（同帧坐标相同的 box 为共享）
+    2. 扫描每条 SLIDE 轨迹中「独占框包围的连续共享段」
+    3. 检测段内的转向角是否 > 90°（漂移特征）
+    4. 剔除漂移点
+    """
+    # --- Step 1: 构建每帧的坐标→出现次数 映射 ---
+    # key: (frame, round(x1,p), round(y1,p), ..., round(y4,p))
+    coord_count: dict[tuple, int] = {}
+    for key, geo_list in tracks.items():
+        for geo in geo_list:
+            if geo.note_type != NoteType.SLIDE:
+                continue
+            box_key = (
+                geo.frame,
+                round(geo.x1, _BOX_KEY_PRECISION), round(geo.y1, _BOX_KEY_PRECISION),
+                round(geo.x2, _BOX_KEY_PRECISION), round(geo.y2, _BOX_KEY_PRECISION),
+                round(geo.x3, _BOX_KEY_PRECISION), round(geo.y3, _BOX_KEY_PRECISION),
+                round(geo.x4, _BOX_KEY_PRECISION), round(geo.y4, _BOX_KEY_PRECISION),
+            )
+            coord_count[box_key] = coord_count.get(box_key, 0) + 1
+
+    # --- Step 2: 扫描每条 SLIDE 轨迹 ---
+    removed_count = 0
+    result: dict = {}
+
+    for key, geo_list in tracks.items():
+        track_id, note_type = key
+        if note_type != NoteType.SLIDE or len(geo_list) < 3:
+            result[key] = geo_list[:]
+            continue
+
+        sorted_geos = sorted(geo_list, key=lambda g: g.frame)
+        n = len(sorted_geos)
+
+        # 标记每个点是共享还是独占
+        is_shared = [False] * n
+        for i, geo in enumerate(sorted_geos):
+            box_key = (
+                geo.frame,
+                round(geo.x1, _BOX_KEY_PRECISION), round(geo.y1, _BOX_KEY_PRECISION),
+                round(geo.x2, _BOX_KEY_PRECISION), round(geo.y2, _BOX_KEY_PRECISION),
+                round(geo.x3, _BOX_KEY_PRECISION), round(geo.y3, _BOX_KEY_PRECISION),
+                round(geo.x4, _BOX_KEY_PRECISION), round(geo.y4, _BOX_KEY_PRECISION),
+            )
+            is_shared[i] = coord_count.get(box_key, 0) >= 2
+
+        # 找出可疑段：连续共享框，前后被独占框包围
+        to_remove: set = set()
+        seg_start = None
+
+        for i in range(n):
+            if is_shared[i]:
+                if seg_start is None:
+                    seg_start = i
+            else:
+                if seg_start is not None:
+                    # 共享段结束于 i-1，前一个独占框是 seg_start-1，后一个是 i
+                    if seg_start - 1 >= 0 and i < n:
+                        to_remove |= _detect_drift_segment(
+                            sorted_geos, is_shared, seg_start, i - 1,
+                            seg_start - 1, i,
+                        )
+                    seg_start = None
+
+        # 尾部的共享段（无后置独占框）：不处理
+        # if seg_start is not None: pass
+
+        cleaned = [g for idx, g in enumerate(sorted_geos) if idx not in to_remove]
+        removed_count += n - len(cleaned)
+        result[key] = cleaned
+
+    if removed_count > 0:
+        print(f"post_track: 移除 {removed_count} 个 slide 漂移点")
+    return result
+
+
+def _detect_drift_segment(
+    sorted_geos: list,
+    is_shared: list[bool],
+    seg_start: int,
+    seg_end: int,
+    prev_excl: int,
+    next_excl: int,
+) -> set[int]:
+    """检测一段连续共享框是否为漂移，返回需要移除的索引集合。"""
+
+    # 构建完整检测序列：prev_excl → seg_start...seg_end → next_excl
+    indices = [prev_excl] + list(range(seg_start, seg_end + 1)) + [next_excl]
+    centers = [(sorted_geos[i].cx, sorted_geos[i].cy) for i in indices]
+
+    # 最大转向角：三步中任一步角度 > _DRIFT_ANGLE_THRESHOLD → 判定为漂移
+    max_angle = _max_turn_angle(centers)
+    if max_angle <= _DRIFT_ANGLE_THRESHOLD:
+        return set()
+
+    return set(range(seg_start, seg_end + 1))
+
+
+def _max_turn_angle(centers: list[tuple]) -> float:
+    """计算连续三点之间的最大转向角（°）。"""
+    max_angle = 0.0
+    for k in range(1, len(centers) - 1):
+        v1 = np.array(centers[k]) - np.array(centers[k - 1])
+        v2 = np.array(centers[k + 1]) - np.array(centers[k])
+        dot = np.dot(v1, v2)
+        norm = np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-12
+        cos_angle = np.clip(dot / norm, -1.0, 1.0)
+        angle = float(np.degrees(np.arccos(cos_angle)))
+        if angle > max_angle:
+            max_angle = angle
+    return max_angle
+
+
 
 
 
