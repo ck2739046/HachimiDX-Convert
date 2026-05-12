@@ -1,6 +1,43 @@
 import numpy as np
 
 
+def _tracks_intersect(
+    trk_box_a: np.ndarray,
+    trk_box_b: np.ndarray,
+    avg_max_side_a: float,
+    avg_max_side_b: float,
+    ratio: float,
+) -> bool:
+    """判断两条轨迹在当前帧是否相交（中心距离判定）。
+
+    两条轨迹的卡尔曼预测位置的中心距离 < min(avg_max_side_a, avg_max_side_b) × ratio
+    时视为相交。
+
+    Args:
+        trk_box_a: 轨迹 A 的卡尔曼预测框 [x1, y1, x2, y2, ...]
+        trk_box_b: 轨迹 B 的卡尔曼预测框 [x1, y1, x2, y2, ...]
+        avg_max_side_a: 轨迹 A 历史框 max(w,h) 的均值
+        avg_max_side_b: 轨迹 B 历史框 max(w,h) 的均值
+        ratio: 相交判定阈值系数
+
+    Returns:
+        bool: 两条轨迹是否相交
+    """
+    # 任一方没有历史尺寸信息，保守地视为不相交
+    min_side = min(avg_max_side_a, avg_max_side_b)
+    if min_side <= 0.0:
+        return False
+
+    cx_a = (float(trk_box_a[0]) + float(trk_box_a[2])) / 2.0
+    cy_a = (float(trk_box_a[1]) + float(trk_box_a[3])) / 2.0
+    cx_b = (float(trk_box_b[0]) + float(trk_box_b[2])) / 2.0
+    cy_b = (float(trk_box_b[1]) + float(trk_box_b[3])) / 2.0
+
+    distance = np.sqrt((cx_a - cx_b) ** 2 + (cy_a - cy_b) ** 2)
+    threshold = min_side * ratio
+    return bool(distance < threshold)
+
+
 def iou_batch(bboxes1: np.ndarray, bboxes2: np.ndarray) -> np.ndarray:
     """Compute pairwise IoU for boxes in [x1, y1, x2, y2, ...] format."""
     bboxes1 = np.asarray(bboxes1)
@@ -378,6 +415,7 @@ def _greedy_match_many_to_one(
     trk_last_max_sides: np.ndarray | None = None,
     max_size_increase_ratio: float = 0.10,
     initial_det_claim_count: np.ndarray | None = None,
+    shared_intersect_ratio: float = 0.2,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """贪心 many-to-one 匹配：每条轨迹独立选最优候选框，同一候选框可被多条轨迹认领。
 
@@ -400,6 +438,7 @@ def _greedy_match_many_to_one(
         if initial_det_claim_count is None
         else np.asarray(initial_det_claim_count, dtype=int).copy()
     )
+    det_claimants: list[list[int]] = [[] for _ in range(num_dets)]
 
     if num_trks == 0:
         return (
@@ -497,15 +536,33 @@ def _greedy_match_many_to_one(
             unshared_costs[~unshared_mask] = np.inf
             best_det = int(np.argmin(unshared_costs))
         elif shared_mask.any() and trk_obj.can_claim_shared(min_track_hits_for_shared, max_consecutive_shared):
-            shared_costs = trk_costs.copy()
-            shared_costs[~shared_mask] = np.inf
-            best_det = int(np.argmin(shared_costs))
+            # 相交判定：只允许与已占领该框的轨迹相交的轨迹认领共享框
+            intersect_mask = np.zeros(num_dets, dtype=bool)
+            trk_avg_side = tracker_objects[trk_i].avg_max_side
+            for d in range(num_dets):
+                if not shared_mask[d]:
+                    continue
+                for claimant in det_claimants[d]:
+                    if _tracks_intersect(
+                        trackers[trk_i], trackers[claimant],
+                        trk_avg_side, tracker_objects[claimant].avg_max_side,
+                        shared_intersect_ratio,
+                    ):
+                        intersect_mask[d] = True
+                        break
+            shared_mask = shared_mask & intersect_mask
+
+            if shared_mask.any():
+                shared_costs = trk_costs.copy()
+                shared_costs[~shared_mask] = np.inf
+                best_det = int(np.argmin(shared_costs))
 
         if best_det is None:
             continue
 
         is_shared = det_claim_count[best_det] > 0
         det_claim_count[best_det] += 1
+        det_claimants[best_det].append(trk_i)
         trk_obj.mark_claimed(is_shared)
         matches.append((best_det, trk_i))
         matched_trk_set.add(trk_i)

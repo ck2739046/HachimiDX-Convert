@@ -191,6 +191,7 @@ class OCSort:
         min_track_hits_for_shared: int = 10,
         max_consecutive_shared: int = 3,
         vdc_disable_threshold: float = 0.1,
+        shared_intersect_ratio: float = 0.2,
     ):
         self.max_age = int(max_age)
         self.min_hits = int(min_hits)
@@ -207,6 +208,7 @@ class OCSort:
         self.min_track_hits_for_shared = int(min_track_hits_for_shared)
         self.max_consecutive_shared = int(max_consecutive_shared)
         self.vdc_disable_threshold = float(vdc_disable_threshold)
+        self.shared_intersect_ratio = float(shared_intersect_ratio)
 
         _KalmanBoxTracker.count = 0
 
@@ -292,6 +294,7 @@ class OCSort:
             size_ratio=self.size_ratio,
             trk_last_max_sides=trk_last_max_sides,
             max_size_increase_ratio=self.max_size_increase_ratio,
+            shared_intersect_ratio=self.shared_intersect_ratio,
         )
 
         for det_idx, trk_idx in matched:

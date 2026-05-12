@@ -155,6 +155,13 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
         # 一条轨道最多连续认领多少个共享框。超过后必须认领到一个独占框才能重置计数器继续认领共享框。
         # 值越大 → 轨道可以连续"蹭"别人的框更久
         max_consecutive_shared=max(2, round(fps * 0.05)), # 0.05s, at least 2
+
+        # --- 共享框相交判定：多条轨迹想要占领同一个共享框时，必须经过相交检查 ---
+
+        # 中心距离 / min(轨迹A的avg_max_side, 轨迹B的avg_max_side) < 此值 → 视为相交，允许共享
+        # 值越大 → 越宽松 → 不需要靠那么近也能共享
+        # 值越小 → 越严格 → 必须非常接近才能共享
+        shared_intersect_ratio=0.2,
     )
 
 
