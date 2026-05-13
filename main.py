@@ -16,6 +16,13 @@ from src.app import MainWindow
 from src.services import AllServices
 
 
+# Exit-code:
+# 0. normal exit
+# 1. general error
+# 2. app already running
+# 3. initialization error
+
+
 def setup_font(app: QApplication) -> None:
     try:
         # 加载外部字体文件
@@ -58,10 +65,10 @@ def main() -> int:
     if shared_memory.attach(QSharedMemory.AccessMode.ReadOnly):
         shared_memory.detach()
         print("程序已在运行中。\nApp is already running.")
-        return 0
+        return 2
     if not shared_memory.create(1, QSharedMemory.AccessMode.ReadWrite):
         print("程序已在运行中。\nApp is already running.")
-        return 0
+        return 2
     
     # 启动 watchdog (清理 Majdata 进程)
     watchdog_path = project_root / "src" / "services" / "watchdog.py"
@@ -92,7 +99,7 @@ def main() -> int:
         print(build_str("Initialization Error:"))
         print(print_op_result(result))
         print(build_str("End of Initialization Error."))
-        return 1
+        return 3
 
     # 启动主窗口
     window = MainWindow()

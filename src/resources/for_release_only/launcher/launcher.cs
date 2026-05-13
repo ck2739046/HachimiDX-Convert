@@ -15,8 +15,11 @@ class Program
         var proc = Process.Start(psi);
         proc?.WaitForExit();
 
-        Console.WriteLine();
-        Console.WriteLine("Press any key to continue...\n按任意键继续...");
-        Console.ReadKey(true);
+        if (proc?.ExitCode != 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Press any key to continue...\n按任意键继续...");
+            Console.ReadKey(true);
+        }
     }
 }
