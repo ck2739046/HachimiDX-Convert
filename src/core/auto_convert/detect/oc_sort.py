@@ -54,7 +54,7 @@ class KalmanBoxTracker6D:
     """6 维恒加速 Kalman: [cx,cy, vx,vy, ax,ay].
     观测: [cx,cy] (2 维).
 
-    框的尺寸 w/h 直接从检测框获取，不做 Kalman 估计（SLIDE 总是 ~108×108 px）。"""
+    框的尺寸 w/h 直接从检测框获取，不做 Kalman 估计。"""
 
     count = 0
 
@@ -89,16 +89,15 @@ class KalmanBoxTracker6D:
         self.kf.P[4, 4] = 100.0    # ax 中等不确定
         self.kf.P[5, 5] = 100.0    # ay
 
-        # 过程噪声 Q — tuned on 139 SLIDE tracks (125-grid, dt=1)
-        #   MPE=7.14 px, P50=0.25 px, 转弯 4.54 px, 直线 9.21 px
-        #   q_pos=100 → 位置过程噪声大 → 信任观测（6 维无 s/r 耦合，安全放大）
-        #   q_vel=100 → 速度过程噪声大 → 转弯灵敏
-        #   q_acc=0.01 → 加速度极稳定 → 强 CA 约束
+        # 过程噪声 Q
+        #   q_pos=1.0   → 位置过程噪声中等 → 适度信任模型外推
+        #   q_vel=30   → 速度过程噪声大 → 转弯灵敏
+        #   q_acc=1e-7  → 加速度极稳定 → 强 CA 约束
         #   r_pos=1.0   → 保持默认
         self.kf.Q[0, 0] = 1.0       # cx（信任观测，反正检测框尺寸稳定）
         self.kf.Q[1, 1] = 1.0       # cy
-        self.kf.Q[2, 2] = 100.0     # vx（高度灵活，转弯时快速转向）
-        self.kf.Q[3, 3] = 100.0     # vy
+        self.kf.Q[2, 2] = 30.0     # vx（高度灵活，转弯时快速转向）
+        self.kf.Q[3, 3] = 30.0     # vy
         self.kf.Q[4, 4] = 1e-7      # ax（几乎恒定，强 CA 约束）
         self.kf.Q[5, 5] = 1e-7      # ay
 
