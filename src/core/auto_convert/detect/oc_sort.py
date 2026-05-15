@@ -360,6 +360,7 @@ def associate(
     velocities: np.ndarray,
     previous_obs: np.ndarray,
     vdc_weight: float,
+    vdc_disable_diou_thresh: float = 0.8,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Stage 1: VDC + DIoU joint association."""
     if len(trackers) == 0:
@@ -387,6 +388,10 @@ def associate(
 
     angle_diff_cost = (valid_mask * diff_angle) * vdc_weight
     angle_diff_cost = angle_diff_cost.T * scores
+
+    # 如果 DIoU 已经足够高（几何上高度重合），禁用 VDC，避免方向
+    # 噪声干扰到本来就很明确的匹配
+    angle_diff_cost[diou_matrix > vdc_disable_diou_thresh] = 0
 
     if min(diou_matrix.shape) > 0:
         a = (diou_matrix > iou_threshold).astype(np.int32)
@@ -435,8 +440,10 @@ class OCSort:
         delta_t: int = 3,
         inertia: float = 0.2,
         warmup_frames: int = 3,
+        vdc_disable_diou_thresh: float = 0.5,
     ):
-        """warmup_frames: 新建轨迹前 N 帧不输出 Kalman 预测，直接用检测框位置。"""
+        """warmup_frames: 新建轨迹前 N 帧不输出 Kalman 预测，直接用检测框位置。
+        vdc_disable_diou_thresh: DIoU 高于此值时禁用 VDC（几何上已足够匹配）。"""
         self.max_age = int(max_age)
         self.min_hits = int(min_hits)
         self.iou_threshold = float(iou_threshold)
@@ -446,6 +453,7 @@ class OCSort:
         self.delta_t = int(delta_t)
         self.inertia = float(inertia)
         self.warmup_frames = int(warmup_frames)
+        self.vdc_disable_diou_thresh = float(vdc_disable_diou_thresh)
         KalmanBoxTracker6D.count = 0
 
     @staticmethod
@@ -525,6 +533,7 @@ class OCSort:
                 velocities,
                 k_observations,
                 self.inertia,
+                self.vdc_disable_diou_thresh,
             )
         else:
             matched = np.empty((0, 2), dtype=int)

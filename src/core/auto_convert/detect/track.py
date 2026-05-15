@@ -84,6 +84,7 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
         delta_t=1,
         inertia=0.7,
         warmup_frames=max(2, round(fps * 0.1)),  # 0.1s 暖机，前 N 帧不用 Kalman 预测
+        vdc_disable_diou_thresh=0.8,  # DIoU 高于此值时禁用 VDC（几何重合足够，方向噪声无益）
     )
 
 
