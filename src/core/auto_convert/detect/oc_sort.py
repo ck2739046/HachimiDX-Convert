@@ -21,11 +21,20 @@ def convert_bbox_to_z(bbox: np.ndarray) -> np.ndarray:
 
 
 def convert_x_to_bbox(x: np.ndarray) -> np.ndarray:
-    """Takes a state [x,y,s,r] and returns [x1,y1,x2,y2]."""
-    w = np.sqrt(x[2] * x[3])
-    h = x[2] / (w + 1e-6)
+    """Takes a state [x,y,s,r] and returns [x1,y1,x2,y2].
+
+    10 维 CA Kalman 在极端情况下 s 和 r 可能漂移为负数（如 vs 过大），
+    此时 s×r 为负，sqrt 产生 NaN。这里 clamp 到极小正数以保证数值稳定。
+
+    x 是 filterpy 的列向量 (dim_x, 1) → 用 .item() 提标量。
+    """
+    s = float(np.maximum(x[2].item(), 1e-12))
+    r = float(np.maximum(x[3].item(), 1e-12))
+    w = float(np.sqrt(s * r))
+    h = s / (w + 1e-12)
     return np.array(
-        [x[0] - w / 2.0, x[1] - h / 2.0, x[0] + w / 2.0, x[1] + h / 2.0],
+        [x[0].item() - w / 2.0, x[1].item() - h / 2.0,
+         x[0].item() + w / 2.0, x[1].item() + h / 2.0],
         dtype=np.float64,
     ).reshape((1, 4))
 

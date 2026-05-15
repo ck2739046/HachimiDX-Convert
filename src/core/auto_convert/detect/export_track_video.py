@@ -1,6 +1,7 @@
 import os
 import cv2
 import time
+import math
 import numpy as np
 from collections import defaultdict
 import subprocess
@@ -297,6 +298,8 @@ def main(std_video_path: Path,
             # 绘制 Kalman 预测框（灰色，仅 SLIDE）
             kalman_grey = (160, 160, 160)
             for kp in kalman_predictions.get(frame_number, []):
+                if math.isnan(kp['x1']) or math.isnan(kp['y1']):
+                    continue
                 kp_x1, kp_y1 = int(kp['x1']), int(kp['y1'])
                 kp_x2, kp_y2 = int(kp['x2']), int(kp['y2'])
                 cv2.rectangle(frame, (kp_x1, kp_y1), (kp_x2, kp_y2), kalman_grey, 1)
