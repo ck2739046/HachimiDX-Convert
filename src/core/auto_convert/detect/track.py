@@ -77,14 +77,38 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
 
     # 仅用于 SLIDE；参数按 OC-SORT 原生语义硬编码
     return OCSort(
+
+        # 置信度低于此值的候选框会被丢弃
         det_thresh=0.5,
-        max_age=round(fps * 0.1),            # 0.1s
+
+        # 轨迹在 x 帧没有新的匹配时被删除
+        max_age=max(2, round(fps * 0.05)),   # 0.05s, at least 2
+
+        # 轨迹至少需要 x 个匹配到的点才被保留
         min_hits=max(2, round(fps * 0.05)),  # 0.05s, at least 2
-        iou_threshold=0,
+
+        # 候选框与卡尔曼预测的框的 diou 大于此值时，才会被匹配上
+        # 1倍尺寸=0.4, 2倍尺寸=0.3, 3倍=0.235, 4倍=0.192
+        iou_threshold=0.35,
+
+        # 用于 vdc 的 angle_diff 计算
+        # 轨迹第 delta_t 帧之前的框到候选框的向量
+        # 轨迹第 delta_t 帧之前的框到轨迹最新框的向量
+        # 两者的角度差就是 angle_diff
         delta_t=1,
-        inertia=0.7,
-        warmup_frames=max(2, round(fps * 0.1)),  # 0.1s 暖机，前 N 帧不用 Kalman 预测
-        vdc_disable_diou_thresh=0.8,  # DIoU 高于此值时禁用 VDC（几何重合足够，方向噪声无益）
+
+        # vdc 的权重
+        # vdc = angle_diff * inertia * score(置信度)
+        inertia=1,
+
+        # 暖机，前 N 帧不用 Kalman 预测
+        # 卡尔曼一开始不稳定，预测结果会乱飘，前几帧需要屏蔽
+        warmup_frames=round(fps * 0.1),  # 0.1s
+
+        # DIoU 高于此值时禁用 VDC
+        # 因为框已经够重合了，有时候 vdc 反而会误导
+        # 尤其是 slide_head 刚出现时容易被 vdc 弄成 id switch
+        vdc_disable_diou_thresh=0.85,  
     )
 
 
@@ -96,7 +120,7 @@ def _reverse_track_slide(track_geos, fps, detections_by_frame):
 
     将整个track按帧降序喂入全新的OCSort实例（参数与正向追踪完全一致），重建Kalman运动状态，
     然后从首帧前一帧开始逐帧向前搜索，最多向前添加 max_reverse_frames 个点。
-    同个候选框可被多条轨迹同时选中（many-to-one，规则与正向追踪一致）。
+    同个候选框可被多条轨迹同时选中（many-to-one）。
 
     Args:
         track_geos: 正向追踪的slide轨道 Note_Geometry 列表（帧升序）
