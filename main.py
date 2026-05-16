@@ -9,7 +9,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from PyQt6.QtCore import QSharedMemory
-from PyQt6.QtWidgets import QApplication, QMessageBox, QStyleFactory
+from PyQt6.QtWidgets import QApplication, QStyleFactory
 from PyQt6.QtGui import QFont
 from src.core.schemas.op_result import print_op_result
 from src.app import MainWindow
@@ -21,6 +21,27 @@ from src.services import AllServices
 # 1. general error
 # 2. app already running
 # 3. initialization error
+
+
+
+
+
+# generate by https://patorjk.com/software/taag using font "Terrace"
+logo = """
+
+    ░██     ░██                       ░██        ░██                ░██     ░███████   ░██    ░██ 
+    ░██     ░██                       ░██                                   ░██   ░██   ░██  ░██  
+    ░██     ░██  ░██████    ░███████  ░████████  ░██░█████████████  ░██     ░██    ░██   ░██░██   
+    ░██████████       ░██  ░██    ░██ ░██    ░██ ░██░██   ░██   ░██ ░██     ░██    ░██    ░███    
+    ░██     ░██  ░███████  ░██        ░██    ░██ ░██░██   ░██   ░██ ░██     ░██    ░██   ░██░██   
+    ░██     ░██ ░██   ░██  ░██    ░██ ░██    ░██ ░██░██   ░██   ░██ ░██     ░██   ░██   ░██  ░██  
+    ░██     ░██  ░█████░██  ░███████  ░██    ░██ ░██░██   ░██   ░██ ░██     ░███████   ░██    ░██ 
+
+"""
+
+
+
+
 
 
 def setup_font(app: QApplication) -> None:
@@ -56,6 +77,8 @@ def exception_handler(exctype, value, traceback):
 
 def main() -> int:
     """程序主入口，返回退出码"""
+
+    print(logo)
 
     # 设置全局异常处理器
     sys.excepthook = exception_handler
