@@ -203,18 +203,24 @@ class AutoConvertPage(BaseOutputPage):
         layout.addWidget(row)
 
         # Row 3
-        start_end_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_start_end_label"))
-        start_end_label_between = create_label("→")  # between start and end
+        start_sec_label = create_label(i18n.t(f"{I18N_Prefix}.ui_start_sec_label"))
         self.start_sec_line_edit = create_line_edit(length=60, validator='float')
+        start_sec_help = create_help_icon(i18n.t(f"{I18N_Prefix}.ui_start_sec_help"))
+
+        trim_end_label = create_label(i18n.t("app.media_subpages.run_ffmpeg.ui_trim_end_label"))
         self.end_sec_line_edit = create_line_edit(length=60, validator='float')
-        start_end_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_start_end_help"))
+        trim_end_help = create_help_icon(i18n.t("app.media_subpages.run_ffmpeg.ui_trim_end_help"))
+
         self.video_range_visualizer = RangeVisualizer()
 
-        row = _create_row(start_end_label,
+        row = _create_row(start_sec_label,
                           self.start_sec_line_edit,
-                          start_end_label_between,
+                          start_sec_help,
+
+                          trim_end_label,
                           self.end_sec_line_edit,
-                          start_end_help,
+                          trim_end_help,
+                          
                           self.video_range_visualizer,
                           add_stretch=True)
         layout.addWidget(row)

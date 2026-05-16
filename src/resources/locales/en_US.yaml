@@ -336,6 +336,16 @@ en_US:
 
         If your input is already properly aligned, leave this option unchecked.
 
+      ui_start_sec_label: "Start Time: "
+      ui_start_sec_help: |
+        Controls the starting position of the output file.
+
+        Unit:     Seconds (up to 3 decimal places, e.g. 2.5)
+        Empty(0): Start from the beginning.
+        Positive: Trim away the given duration from the beginning.
+
+        Example: 2.5 → Cuts off the first 2.5 seconds.
+
       ui_skip_detect_label: "Skip Detect: "
       ui_skip_detect_help: "Skip frame-by-frame note detection and directly read the existing detection result (detect_result.txt)."
       ui_skip_cls_label: "Skip Classify: "
