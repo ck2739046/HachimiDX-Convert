@@ -188,7 +188,10 @@ class MajdataSession(QObject):
 
         if self._majdataview_hwnd is not None and self._majdataedit_hwnd is not None:
             self._poll_timer.stop()
-            self.ready.emit(int(self._majdataview_hwnd), int(self._majdataedit_hwnd))
+            # 延迟 10ms 发出 ready 确保窗口完全就绪
+            QTimer.singleShot(
+                10, lambda: self.ready.emit(int(self._majdataview_hwnd), int(self._majdataedit_hwnd))
+            )
 
 
 
