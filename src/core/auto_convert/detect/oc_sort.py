@@ -42,8 +42,6 @@ class KalmanBoxTracker6D:
 
     框的尺寸 w/h 直接从检测框获取，不做 Kalman 估计。"""
 
-    count = 0
-
     # 状态转移矩阵 F (6×6, dt=1)
     _F = np.eye(6, dtype=np.float64)
     _F[0, 2] = 1.0   # cx += vx
@@ -56,7 +54,7 @@ class KalmanBoxTracker6D:
     # 观测矩阵 H (2×6): 直读前 2 维
     _H = np.hstack([np.eye(2, dtype=np.float64), np.zeros((2, 4), dtype=np.float64)])
 
-    def __init__(self, bbox: np.ndarray, delta_dist_pct: float = 0.5):
+    def __init__(self, bbox: np.ndarray, delta_dist_pct: float = 0.5, track_id: int = 0):
         cx, cy, w, h = convert_bbox_centre(bbox[:4])
 
         self.kf = KalmanFilter(dim_x=6, dim_z=2)
@@ -95,8 +93,7 @@ class KalmanBoxTracker6D:
         self._last_h = max(h, 1.0)
 
         self.time_since_update = 0
-        self.id = KalmanBoxTracker6D.count
-        KalmanBoxTracker6D.count += 1
+        self.id = track_id
 
         self.hit_streak = 0
         self.age = 0
@@ -216,7 +213,6 @@ class KalmanBoxTracker6D:
             'x': self.kf.x.copy(),
             'P': self.kf.P.copy(),
             'K': self.kf.K.copy(),
-            '_alpha_sq': self.kf._alpha_sq,
             '_history_obs_z': list(self._history_obs_z),
         }
 
@@ -230,7 +226,6 @@ class KalmanBoxTracker6D:
         self.kf.x = fs['x'].copy()
         self.kf.P = fs['P'].copy()
         self.kf.K = fs['K'].copy()
-        self.kf._alpha_sq = fs['_alpha_sq']
         self._frozen_state = None
 
         self._history_obs_z = list(fs['_history_obs_z'])
@@ -468,7 +463,7 @@ class OCSort:
         self.inertia = float(inertia)
         self.warmup_frames = int(warmup_frames)
         self.vdc_disable_diou_thresh = float(vdc_disable_diou_thresh)
-        KalmanBoxTracker6D.count = 0
+        self._next_track_id = 0
 
     @staticmethod
     def _to_obb_track_row(
@@ -565,8 +560,13 @@ class OCSort:
 
         for det_idx in unmatched_dets:
             self.trackers.append(
-                KalmanBoxTracker6D(dets[det_idx], delta_dist_pct=self.delta_dist_pct)
+                KalmanBoxTracker6D(
+                    dets[det_idx],
+                    delta_dist_pct=self.delta_dist_pct,
+                    track_id=self._next_track_id,
+                )
             )
+            self._next_track_id += 1
 
         # ====== 输出 ======
         ret = []
@@ -579,10 +579,7 @@ class OCSort:
                 else:
                     d = trk.get_state()[0]
             else:
-                if trk.last_observation.sum() < 0:
-                    d = trk.get_state()[0]
-                else:
-                    d = trk.last_observation[:4]
+                d = trk.last_observation[:4]
 
             if (trk.time_since_update < 1) and (
                 trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits

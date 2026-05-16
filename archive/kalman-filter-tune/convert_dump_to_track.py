@@ -189,8 +189,6 @@ def compute_obb(note: ParsedNote):
         - 第一段 其他:           half = 1080 * 0.049 (固定)
     """
     cx = BASE_1080 + note.pos_x
-    cy = BASE_1080 * (120.0 / 1080.0) - note.pos_y  # 120 - posY
-    # 更直接:
     cy = 120.0 - note.pos_y
 
     is_second_stage = "move" in note.note_type.lower()

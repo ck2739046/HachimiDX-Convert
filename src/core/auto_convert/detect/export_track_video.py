@@ -30,7 +30,6 @@ def main(std_video_path: Path,
 
         # === Kalman 预测预计算：对每条 SLIDE 轨迹逐帧重跑 Kalman 滤波器 ===
         # kalman_predictions: frame -> [{track_id, note_variant, x1,y1,x2,y2}, ...]
-        _KalmanBoxTracker.count = 0
         kalman_predictions: dict[int, list[dict]] = defaultdict(list)
         for (track_id, note_type), geo_list in track_results.items():
             if note_type != NoteType.SLIDE:

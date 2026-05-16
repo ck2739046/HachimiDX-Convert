@@ -168,7 +168,6 @@ def _build_kalman_with_params(
     """创建 KalmanBoxTracker6D 并用给定缩放因子覆写 Q/R.
     init_bbox: [x1,y1,x2,y2, cx,cy, conf, cls, idx] from detect array
     """
-    KalmanBoxTracker6D.count = 0
     kf_bbox = np.array([init_bbox[0], init_bbox[1], init_bbox[2], init_bbox[3],
                          init_bbox[6], init_bbox[7], init_bbox[8]], dtype=np.float64)
     kf = KalmanBoxTracker6D(kf_bbox)
