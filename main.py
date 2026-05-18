@@ -100,6 +100,14 @@ def main() -> int:
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
 
+    # 初始化
+    result = AllServices.initialize_all()
+    if not result.is_ok:
+        print(build_str("Initialization Error:"))
+        print(print_op_result(result))
+        print(build_str("End of Initialization Error."))
+        return 3
+
     # 创建应用
     app = QApplication(sys.argv)
     app.aboutToQuit.connect(AllServices.shutdown_all)
@@ -115,14 +123,6 @@ def main() -> int:
 
     # 设置全局字体
     setup_font(app)
-
-    # 初始化
-    result = AllServices.initialize_all()
-    if not result.is_ok:
-        print(build_str("Initialization Error:"))
-        print(print_op_result(result))
-        print(build_str("End of Initialization Error."))
-        return 3
 
     # 启动主窗口
     window = MainWindow()

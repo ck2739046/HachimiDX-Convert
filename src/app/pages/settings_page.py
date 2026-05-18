@@ -57,6 +57,8 @@ class SettingsPage(BaseOutputPage):
         self.default_height_line_edit = None
         self.min_width_line_edit = None
         self.min_height_line_edit = None
+        self.ui_scale_slider = None
+        self.ui_scale_display = None
 
         self.save_button = None
         self.reset_button = None
@@ -67,6 +69,7 @@ class SettingsPage(BaseOutputPage):
             S_Defs.language.key,
             S_Defs.main_app_default_size.key,
             S_Defs.main_app_min_size.key,
+            S_Defs.main_app_ui_scale.key,
         ]
 
         self._build_model_section()
@@ -179,6 +182,23 @@ class SettingsPage(BaseOutputPage):
             add_stretch=True,
         )
 
+        ui_scale_label = create_label(i18n.t(f"{I18N_Prefix}.ui_ui_scale_label"))
+        self.ui_scale_slider, self.ui_scale_display = create_slider(
+            min_val=S_Defs.main_app_ui_scale.constraints["ge"],
+            max_val=S_Defs.main_app_ui_scale.constraints["le"],
+            step=5,
+            default_value=S_Defs.main_app_ui_scale.default,
+            slider_length=250,
+            display_length=50,
+            text_transform=lambda v: f"{v}%",
+        )
+
+        self.create_row(
+            ui_scale_label,
+            self.ui_scale_slider,
+            self.ui_scale_display,
+            add_stretch=True,
+        )
 
 
 
@@ -277,6 +297,7 @@ class SettingsPage(BaseOutputPage):
         self.default_height_line_edit.setText(str(default_size[1]))
         self.min_width_line_edit.setText(str(min_size[0]))
         self.min_height_line_edit.setText(str(min_size[1]))
+        self.ui_scale_slider.setValue(int(settings[S_Defs.main_app_ui_scale.key]))
         self._sync_ui_state()
 
 
@@ -296,6 +317,7 @@ class SettingsPage(BaseOutputPage):
                 self.min_width_line_edit.text().strip(),
                 self.min_height_line_edit.text().strip(),
             ),
+            S_Defs.main_app_ui_scale.key: str(self.ui_scale_slider.value()),
         }
 
 

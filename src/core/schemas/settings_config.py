@@ -155,3 +155,11 @@ class SettingsConfig_Definitions:
         default=(800, 600),
         constraints={"item_ge": 500, "item_le": 5000},
     )
+
+    main_app_ui_scale = SettingsConfig_Definition(
+        key="main_app_ui_scale",
+        type="int",
+        group="window",
+        default=100,
+        constraints={"ge": 50, "le": 200},
+    )

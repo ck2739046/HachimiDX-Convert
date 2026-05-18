@@ -27,6 +27,8 @@ class SettingsModel(BaseModel):
         Annotated[int, Field(ge=S_Defs.main_app_min_size.constraints["item_ge"], le=S_Defs.main_app_min_size.constraints["item_le"])],
         Annotated[int, Field(ge=S_Defs.main_app_min_size.constraints["item_ge"], le=S_Defs.main_app_min_size.constraints["item_le"])],
     ] = S_Defs.main_app_min_size.default
+    # 界面缩放
+    main_app_ui_scale: Annotated[int, Field(ge=S_Defs.main_app_ui_scale.constraints["ge"], le=S_Defs.main_app_ui_scale.constraints["le"])] = S_Defs.main_app_ui_scale.default
 
 
 
