@@ -189,8 +189,7 @@ class SettingsPage(BaseOutputPage):
             step=5,
             default_value=S_Defs.main_app_ui_scale.default,
             slider_length=250,
-            display_length=50,
-            text_transform=lambda v: f"{v}%",
+            text_transform=lambda v: f" {v}%",
         )
 
         self.create_row(

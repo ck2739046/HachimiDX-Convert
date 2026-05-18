@@ -1,7 +1,8 @@
-from PyQt6.QtWidgets import QSlider, QLabel
+from PyQt6.QtWidgets import QSlider
 from PyQt6.QtCore import Qt
 
 from ..ui_style import UI_Style
+from .label import create_label
 
 
 class _SnapSlider(QSlider):
@@ -22,7 +23,7 @@ class _SnapSlider(QSlider):
         super().sliderChange(change)
 
 
-def create_slider(min_val, max_val, step, default_value, slider_length=200, display_length=50, text_transform=None):
+def create_slider(min_val, max_val, step, default_value, slider_length=200, text_transform=None):
     """创建带档位吸附的滑块和数值标签。
 
     Args:
@@ -31,7 +32,6 @@ def create_slider(min_val, max_val, step, default_value, slider_length=200, disp
         step: 步进/档位间距（必须）
         default_value: 默认值（必须）
         slider_length: 滑条宽度（像素），默认 200。
-        display_length: 数值标签宽度（像素），默认 50。
         text_transform: (int) -> str，将滑块数值转为显示文本。为 None 则直接显示数字。
 
     Returns:
@@ -40,20 +40,12 @@ def create_slider(min_val, max_val, step, default_value, slider_length=200, disp
     slider = _SnapSlider(step, Qt.Orientation.Horizontal)
     slider.setMinimum(min_val)
     slider.setMaximum(max_val)
-    slider.setSingleStep(step)
-    slider.setPageStep(step * 2)
+    slider.setSingleStep(step)  # 键盘上下左右方向键
+    slider.setPageStep(step)    # 鼠标滚轮/PageUp/PageDown
     slider.setValue(default_value)
-    slider.setFixedSize(slider_length, UI_Style.element_height)
-
+    slider.setFixedWidth(slider_length)
     _apply_style(slider)
-
-    label = QLabel()
-    label.setFixedWidth(display_length)
-    label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-    label.setStyleSheet(
-        f"color: {UI_Style.COLORS['text_primary']};"
-        f"font-size: {UI_Style.default_text_size}px;"
-    )
+    label = create_label()
 
     def _on_value_changed(v):
         snapped = round(v / step) * step
@@ -68,25 +60,34 @@ def create_slider(min_val, max_val, step, default_value, slider_length=200, disp
 def _apply_style(slider):
     c = UI_Style.COLORS
     slider.setStyleSheet(f"""
+        /* 整体下移 1px, 与同行 label 对齐 */
+        QSlider {{
+            padding-top: 1px;
+        }}
+        
+        /* 滑条右侧 */
         QSlider::groove:horizontal {{
             background: {c['grey']};
-            height: 4px;
-            border-radius: 2px;
+            height: 3px;
         }}
+
+        /* 滑条左侧 */
         QSlider::sub-page:horizontal {{
             background: {c['accent']};
-            height: 4px;
-            border-radius: 2px;
+            height: 3px;
         }}
+
+        /* 滑块本体, margin = -1/2 * (长宽 - 滑条高度) */
         QSlider::handle:horizontal {{
             background: {c['accent']};
-            width: 14px;
-            height: 14px;
+            width: 13px;
+            height: 13px;
             margin: -5px 0;
-            border-radius: 7px;
+            border-radius: 4px;
         }}
+        
+        /* 滑块 hover 颜色 */
         QSlider::handle:horizontal:hover {{
             background: {c['accent_hover']};
         }}
     """)
-
