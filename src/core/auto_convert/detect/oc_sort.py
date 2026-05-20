@@ -94,9 +94,17 @@ class KalmanBoxTracker:
         self.kf.P[4:, 4:] *= 1000.
         self.kf.P *= 10.
 
-        # 过程噪声 Q — 照搬原版: 速度/面积变化率用极小噪声 (CV 约束)
-        self.kf.Q[-1, -1] *= 0.01
-        self.kf.Q[4:, 4:] *= 0.01
+        # 过程噪声 Q — tuned on SLIDE tracks (7D CV)
+        #   q_pos=0.01: 极低位置噪声 → 强信任模型外推
+        #   q_vel=0.4:  中速噪声 → 转弯比较灵敏
+        #   q_s=0.01:   低面积噪声 → 框尺寸稳定
+        self.kf.Q[0, 0] = 0.01   # x
+        self.kf.Q[1, 1] = 0.01   # y
+        self.kf.Q[2, 2] = 0.01   # s (面积)
+        self.kf.Q[3, 3] = 0.01   # r (宽高比)
+        self.kf.Q[4, 4] = 0.4    # vx
+        self.kf.Q[5, 5] = 0.4    # vy
+        self.kf.Q[6, 6] = 0.0001 # vs
 
         self.kf.x[:4] = convert_bbox_to_z(bbox[:4])
 
