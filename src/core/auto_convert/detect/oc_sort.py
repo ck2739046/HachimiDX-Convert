@@ -528,13 +528,11 @@ class OCSort:
         iou_threshold: float = 0.3,
         delta_dist_pct: float = 0.5,
         inertia: float = 0.2,
-        warmup_frames: int = 3,
         vdc_disable_diou_thresh: float = 0.5,
         max_size_increase_ratio: float = 0.15,
         max_size_decrease_ratio: float = 0.15,
     ):
         """delta_dist_pct: 在历史中找参考观测时，要求中心距离 > pct*框尺寸。
-        warmup_frames: 新建轨迹前 N 帧不输出 Kalman 预测，直接用检测框位置。
         vdc_disable_diou_thresh: DIoU 高于此值时禁用 VDC（几何上已足够匹配）。
         max_size_increase_ratio: 尺寸变大门控上限，候选框max(w,h) ≤ 轨迹最后一帧 × (1+ratio)。
         max_size_decrease_ratio: 尺寸变小门控下限，候选框max(w,h) ≥ 轨迹最后一帧 × (1-ratio)。"""
@@ -546,7 +544,6 @@ class OCSort:
         self.det_thresh = float(det_thresh)
         self.delta_dist_pct = float(delta_dist_pct)
         self.inertia = float(inertia)
-        self.warmup_frames = int(warmup_frames)
         self.vdc_disable_diou_thresh = float(vdc_disable_diou_thresh)
         self.max_size_increase_ratio = float(max_size_increase_ratio)
         self.max_size_decrease_ratio = float(max_size_decrease_ratio)
@@ -687,14 +684,10 @@ class OCSort:
         ret = []
         i = len(self.trackers)
         for trk in reversed(self.trackers):
-            # --- 暖机期间：直接输出检测框位置，不用 Kalman 预测 ---
-            if trk.hit_streak < self.warmup_frames:
-                if trk.last_observation.sum() >= 0:
-                    d = trk.last_observation[:4]
-                else:
-                    d = trk.get_state()[0]
-            else:
+            if trk.last_observation.sum() >= 0:
                 d = trk.last_observation[:4]
+            else:
+                d = trk.get_state()[0]
 
             if (trk.time_since_update < 1) and (
                 trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits

@@ -101,10 +101,6 @@ def _build_ocsort_tracker(fps: float) -> OCSort:
         # vdc = angle_diff * inertia * score(置信度)
         inertia=0.7,
 
-        # 暖机，前 N 帧不用 Kalman 预测
-        # 卡尔曼一开始不稳定，预测结果会乱飘，前几帧需要屏蔽
-        warmup_frames=max(2, round(fps * 0.05)),  # 0.05s, at least 2
-
         # DIoU 高于此值时禁用 VDC
         # 因为框已经够重合了，有时候 vdc 反而会误导
         # 尤其是 slide_head 刚出现时容易被 vdc 弄成 id switch
