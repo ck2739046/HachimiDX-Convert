@@ -117,6 +117,7 @@ class KalmanBoxTracker:
         self._last_h = max(h, 1.0)
 
         self.time_since_update = 0
+        self.time_since_output = 0
         self.id = track_id
 
         self.hit_streak = 0
@@ -297,8 +298,9 @@ class KalmanBoxTracker:
         self.age += 1
 
         if self.time_since_update > 0:
-            self.hit_streak = 0
+            self.hit_streak = max(0, self.hit_streak - 2)
         self.time_since_update += 1
+        self.time_since_output += 1
 
         return convert_x_to_bbox(self.kf.x)
 
@@ -753,6 +755,7 @@ class OCSort:
                         d, trk.id + 1, trk.score, trk.cls, frame_number, trk.idx
                     )
                 )
+                trk.time_since_output = 0
 
                 if trk.hit_streak == self.min_hits:
                     pad_cnt = min(
@@ -777,7 +780,7 @@ class OCSort:
                         )
 
             i -= 1
-            if trk.time_since_update > self.max_age:
+            if trk.time_since_output > self.max_age:
                 self.trackers.pop(i)
 
         if len(ret) > 0:
