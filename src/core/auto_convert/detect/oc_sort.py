@@ -132,7 +132,6 @@ class KalmanBoxTracker:
 
         # 动态 delta：基于距离百分比在历史中找参考观测
         self._ref_obs: np.ndarray | None = None
-        self._ref_next_obs: np.ndarray | None = None
 
         # --- freeze/unfreeze 状态机（原版 OC-SORT 在线平滑） ---
         self._history_obs_z: list[np.ndarray | None] = [
@@ -148,14 +147,14 @@ class KalmanBoxTracker:
         self.history_classes: list[int] = [self.cls]
         self.history_indices: list[int] = [self.idx]
 
-    def _find_ref_obs(self, current_obs: np.ndarray) -> tuple[np.ndarray | None, np.ndarray | None]:
+    def _find_ref_obs(self, current_obs: np.ndarray) -> np.ndarray | None:
         """在轨迹历史中回溯，找到第一个与最新框中心距离 > delta_dist_pct*框尺寸 的观测 H。
-        返回 (H, H_next)。找不到则回退到最旧观测；无历史则返回 (None, None).
-
-        H:   参考观测框（用于计算轨迹速度方向：H → current_obs）
-        H_next: H 的下一帧观测（用于 VDC 匹配：H_next → 候选框）"""
+        VDC 两向量共享该参考观测作为起点：
+          轨迹速度方向 = H → current_obs
+          VDC 方向     = H → 候选框
+        找不到则回退到最旧观测；无历史则返回 None."""
         if len(self.history_observations) == 0:
-            return (None, None)
+            return None
 
         cx_cur = (current_obs[0] + current_obs[2]) / 2.0
         cy_cur = (current_obs[1] + current_obs[3]) / 2.0
@@ -168,13 +167,10 @@ class KalmanBoxTracker:
             cy_h = (h[1] + h[3]) / 2.0
             dist = np.sqrt((cx_cur - cx_h) ** 2 + (cy_cur - cy_h) ** 2)
             if dist > threshold:
-                h_next = self.history_observations[i + 1] if i + 1 < n else current_obs
-                return (h, h_next)
+                return h
 
         # 回退：所有历史都太近，用最旧观测（至少比单帧稳定）
-        h = self.history_observations[0]
-        h_next = self.history_observations[1] if len(self.history_observations) >= 2 else current_obs
-        return (h, h_next)
+        return self.history_observations[0]
 
     def update(self, bbox: np.ndarray | None) -> None:
         # ====== 记录 z-format 观测 (cx,cy) ======
@@ -205,9 +201,8 @@ class KalmanBoxTracker:
         )
 
         if self.last_observation.sum() >= 0:
-            ref_obs, ref_next_obs = self._find_ref_obs(obs)
+            ref_obs = self._find_ref_obs(obs)
             self._ref_obs = ref_obs
-            self._ref_next_obs = ref_next_obs
             if ref_obs is not None:
                 self.velocity = speed_direction(ref_obs, obs)
 
@@ -611,9 +606,9 @@ class OCSort:
                 for trk in self.trackers
             ]
         )
-        ref_next_obs_list = np.array(
+        ref_obs_list = np.array(
             [
-                trk._ref_next_obs if trk._ref_next_obs is not None else _sentinel
+                trk._ref_obs if trk._ref_obs is not None else _sentinel
                 for trk in self.trackers
             ]
         )
@@ -625,7 +620,7 @@ class OCSort:
                 trks,
                 self.iou_threshold,
                 velocities,
-                ref_next_obs_list,
+                ref_obs_list,
                 self.inertia,
                 self.vdc_disable_diou_thresh,
             )
