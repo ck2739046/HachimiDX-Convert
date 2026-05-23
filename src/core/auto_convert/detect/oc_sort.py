@@ -146,6 +146,7 @@ class KalmanBoxTracker:
         self.history_scores: list[float] = []
         self.history_classes: list[int] = []
         self.history_indices: list[int] = []
+        self.history_frame_numbers: list[int] = []
 
     def _find_ref_obs(self, current_obs: np.ndarray) -> np.ndarray | None:
         """在轨迹历史中回溯，找到第一个与最新框中心距离 > delta_dist_pct*框尺寸 的观测 H。
@@ -172,7 +173,8 @@ class KalmanBoxTracker:
         # 回退：所有历史都太近，用最旧观测（至少比单帧稳定）
         return self.history_observations[0]
 
-    def update(self, bbox: np.ndarray | None) -> None:
+    def update(self, bbox: np.ndarray | None, frame_number: int = 0) -> None:
+        self.frame_number = frame_number
         # ====== 记录 z-format 观测 (cx,cy) ======
         if bbox is not None:
             cx, cy, w, h = convert_bbox_centre(bbox[:4])
@@ -222,6 +224,7 @@ class KalmanBoxTracker:
         self.history_scores.append(self.score)
         self.history_classes.append(self.cls)
         self.history_indices.append(self.idx)
+        self.history_frame_numbers.append(self.frame_number)
 
     # ========================================================================
     # freeze / unfreeze — 原版 OC-SORT 在线平滑
@@ -553,8 +556,8 @@ class OCSort:
         track_id: int,
         score: float,
         cls_id: int,
-        idx: int,
-        frame_offset: int = 0,
+        det_frame: int,
+        det_idx: int,
     ) -> np.ndarray:
         """Convert xyxy bbox → track.py 需要的 10 列格式."""
         x1, y1, x2, y2 = xyxy
@@ -563,17 +566,18 @@ class OCSort:
         cx = x1 + w / 2.0
         cy = y1 + h / 2.0
         return np.array(
-            [cx, cy, w, h, 0.0, track_id, score, cls_id, idx, frame_offset],
+            [cx, cy, w, h, 0.0, track_id, score, cls_id, det_frame, det_idx],
             dtype=np.float32,
         )
 
-    def update(self, dets_all: np.ndarray | None) -> np.ndarray:
-        """Stage-1 VDC+DIoU + Stage-3 DIoU recovery update.
+    def update(self, dets_all: np.ndarray | None, frame_number: int = 0) -> np.ndarray:
+        """Stage-1 VDC+DIoU + Stage-3 DIoU recovery.
 
         Args:
             dets_all: (N,7) [x1,y1,x2,y2,score,cls,idx]
+            frame_number: current video frame number
         Returns:
-            (M,10) [cx,cy,w,h,r,track_id,score,cls,idx,frame_offset]
+            (M,10) [cx,cy,w,h,r,track_id,score,cls_id,det_frame,det_idx]
         """
         if dets_all is None:
             dets_all = np.empty((0, 7), dtype=np.float64)
@@ -701,7 +705,7 @@ class OCSort:
                 for det_pos, trk_pos in stage3_matched:
                     det_idx = unmatched_dets[det_pos]
                     trk_idx = unmatched_trks[trk_pos]
-                    self.trackers[trk_idx].update(dets[det_idx])
+                    self.trackers[trk_idx].update(dets[det_idx], frame_number)
                     to_remove_det.append(det_idx)
                     to_remove_trk.append(trk_idx)
 
@@ -717,10 +721,10 @@ class OCSort:
         # ====== 更新 ======
         for m in matched:
             det_idx, trk_idx = m[0], m[1]
-            self.trackers[trk_idx].update(dets[det_idx])
+            self.trackers[trk_idx].update(dets[det_idx], frame_number)
 
         for trk_idx in unmatched_trks:
-            self.trackers[trk_idx].update(None)
+            self.trackers[trk_idx].update(None, frame_number)
 
         for det_idx in unmatched_dets:
             self.trackers.append(
@@ -746,7 +750,7 @@ class OCSort:
             ):
                 ret.append(
                     self._to_obb_track_row(
-                        d, trk.id + 1, trk.score, trk.cls, trk.idx, frame_offset=0
+                        d, trk.id + 1, trk.score, trk.cls, frame_number, trk.idx
                     )
                 )
 
@@ -760,14 +764,15 @@ class OCSort:
                         prev_score = trk.history_scores[hist_pos]
                         prev_cls = trk.history_classes[hist_pos]
                         prev_idx = trk.history_indices[hist_pos]
+                        prev_frame = trk.history_frame_numbers[hist_pos]
                         ret.append(
                             self._to_obb_track_row(
                                 prev_obs[:4],
                                 trk.id + 1,
                                 prev_score,
                                 prev_cls,
+                                prev_frame,
                                 prev_idx,
-                                frame_offset=-(prev_i + 1),
                             )
                         )
 
