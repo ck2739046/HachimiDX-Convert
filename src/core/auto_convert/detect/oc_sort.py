@@ -380,7 +380,7 @@ def linear_assignment(cost_matrix: np.ndarray) -> np.ndarray:
 def associate(
     detections: np.ndarray,
     trackers: np.ndarray,
-    iou_threshold: float,
+    s1_diou_thresh: float,
     velocities: np.ndarray,
     previous_obs: np.ndarray,
     vdc_weight: float,
@@ -418,7 +418,7 @@ def associate(
     angle_diff_cost[diou_matrix > vdc_disable_diou_thresh] = 0
 
     if min(diou_matrix.shape) > 0:
-        a = (diou_matrix > iou_threshold).astype(np.int32)
+        a = (diou_matrix > s1_diou_thresh).astype(np.int32)
         if a.sum(1).max() == 1 and a.sum(0).max() == 1:
             matched_indices = np.stack(np.where(a), axis=1)
         else:
@@ -434,7 +434,7 @@ def associate(
             np.arange(len(trackers)), matched_indices[:, 1]
         )
         diou_vals = diou_matrix[matched_indices[:, 0], matched_indices[:, 1]]
-        low_diou_mask = diou_vals < iou_threshold
+        low_diou_mask = diou_vals < s1_diou_thresh
         unmatched_detections = np.concatenate(
             [unmatched_detections, matched_indices[low_diou_mask, 0]]
         )
@@ -520,20 +520,22 @@ class OCSort:
         det_thresh: float,
         max_age: int = 30,
         min_hits: int = 3,
-        iou_threshold: float = 0.3,
+        s1_diou_thresh: float = 0.3,
         delta_dist_pct: float = 0.5,
         inertia: float = 0.2,
         vdc_disable_diou_thresh: float = 0.5,
         max_size_increase_ratio: float = 0.15,
         max_size_decrease_ratio: float = 0.15,
+        s3_diou_thresh: float = 0.3,
     ):
         """delta_dist_pct: 在历史中找参考观测时，要求中心距离 > pct*框尺寸。
         vdc_disable_diou_thresh: DIoU 高于此值时禁用 VDC（几何上已足够匹配）。
         max_size_increase_ratio: 尺寸变大门控上限，候选框max(w,h) ≤ 轨迹最后一帧 × (1+ratio)。
-        max_size_decrease_ratio: 尺寸变小门控下限，候选框max(w,h) ≥ 轨迹最后一帧 × (1-ratio)。"""
+        max_size_decrease_ratio: 尺寸变小门控下限，候选框max(w,h) ≥ 轨迹最后一帧 × (1-ratio)。
+        s3_diou_thresh: Stage 3 回收匹配的 DIoU 阈值，用于剩余检测与轨迹最后观测的纯 DIoU 匹配。"""
         self.max_age = int(max_age)
         self.min_hits = int(min_hits)
-        self.iou_threshold = float(iou_threshold)
+        self.s1_diou_thresh = float(s1_diou_thresh)
         self.trackers: list[KalmanBoxTracker] = []
         self.frame_count = 0
         self.det_thresh = float(det_thresh)
@@ -542,6 +544,7 @@ class OCSort:
         self.vdc_disable_diou_thresh = float(vdc_disable_diou_thresh)
         self.max_size_increase_ratio = float(max_size_increase_ratio)
         self.max_size_decrease_ratio = float(max_size_decrease_ratio)
+        self.s3_diou_thresh = float(s3_diou_thresh)
         self._next_track_id = 0
 
     @staticmethod
@@ -565,7 +568,7 @@ class OCSort:
         )
 
     def update(self, dets_all: np.ndarray | None) -> np.ndarray:
-        """Stage-1-only update.
+        """Stage-1 VDC+DIoU + Stage-3 DIoU recovery update.
 
         Args:
             dets_all: (N,7) [x1,y1,x2,y2,score,cls,idx]
@@ -618,7 +621,7 @@ class OCSort:
             matched, unmatched_dets, unmatched_trks = associate(
                 dets[:, :5],
                 trks,
-                self.iou_threshold,
+                self.s1_diou_thresh,
                 velocities,
                 ref_obs_list,
                 self.inertia,
@@ -630,13 +633,16 @@ class OCSort:
             unmatched_trks = np.arange(len(self.trackers))
 
         # ====== 尺寸门控：基于轨迹最后一帧尺寸过滤不合理匹配 ======
-        if matched.shape[0] > 0 and (self.max_size_increase_ratio > 0 or self.max_size_decrease_ratio > 0):
+        if self.trackers:
             trk_last_max_sides = np.array([
                 max(trk._last_w, trk._last_h)
                 if trk.last_observation.sum() >= 0 else 0.0
                 for trk in self.trackers
             ], dtype=np.float64)
+        else:
+            trk_last_max_sides = np.empty((0,), dtype=np.float64)
 
+        if matched.shape[0] > 0 and (self.max_size_increase_ratio > 0 or self.max_size_decrease_ratio > 0):
             if self.max_size_increase_ratio > 0:
                 matched, rej_dets, rej_trks = _size_increase_gate(
                     matched, dets[:, :5], trk_last_max_sides,
@@ -656,6 +662,57 @@ class OCSort:
                     unmatched_dets = np.concatenate([unmatched_dets, rej_dets])
                 if rej_trks.size:
                     unmatched_trks = np.concatenate([unmatched_trks, rej_trks])
+
+        # ====== Stage 3: DIoU 回收 — 剩余高分检测 ↔ 未匹配轨迹的最后观测 ======
+        if unmatched_dets.size > 0 and unmatched_trks.size > 0:
+            left_dets = dets[unmatched_dets, :5]
+            last_obs_list = np.array(
+                [trk.last_observation for trk in self.trackers], dtype=np.float64
+            )
+            left_trks = last_obs_list[unmatched_trks]
+
+            diou_left = diou_batch(left_dets, left_trks)
+            if diou_left.size > 0 and diou_left.max() > self.s3_diou_thresh:
+                raw_indices = linear_assignment(-diou_left)
+
+                # 按 s3_diou_thresh 硬过滤
+                stage3_matched = raw_indices
+                if stage3_matched.shape[0] > 0:
+                    diou_vals_s3 = diou_left[stage3_matched[:, 0], stage3_matched[:, 1]]
+                    ok_s3 = diou_vals_s3 >= self.s3_diou_thresh
+                    stage3_matched = stage3_matched[ok_s3]
+
+                # 尺寸增大 + 尺寸减小门控（复用 Stage 1 门控函数）
+                if stage3_matched.shape[0] > 0 and self.max_size_increase_ratio > 0:
+                    stage3_matched, _, _ = _size_increase_gate(
+                        stage3_matched, left_dets,
+                        trk_last_max_sides[unmatched_trks],
+                        max_size_increase_ratio=self.max_size_increase_ratio,
+                    )
+                if stage3_matched.shape[0] > 0 and self.max_size_decrease_ratio > 0:
+                    stage3_matched, _, _ = _size_decrease_gate(
+                        stage3_matched, left_dets,
+                        trk_last_max_sides[unmatched_trks],
+                        max_size_decrease_ratio=self.max_size_decrease_ratio,
+                    )
+
+                to_remove_det = []
+                to_remove_trk = []
+                for det_pos, trk_pos in stage3_matched:
+                    det_idx = unmatched_dets[det_pos]
+                    trk_idx = unmatched_trks[trk_pos]
+                    self.trackers[trk_idx].update(dets[det_idx])
+                    to_remove_det.append(det_idx)
+                    to_remove_trk.append(trk_idx)
+
+                if to_remove_det:
+                    unmatched_dets = np.setdiff1d(
+                        unmatched_dets, np.array(to_remove_det, dtype=int)
+                    )
+                if to_remove_trk:
+                    unmatched_trks = np.setdiff1d(
+                        unmatched_trks, np.array(to_remove_trk, dtype=int)
+                    )
 
         # ====== 更新 ======
         for m in matched:
