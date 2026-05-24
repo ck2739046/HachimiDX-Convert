@@ -313,6 +313,9 @@ def is_center_reflection(note_path: list, start_A_zone_id: int, end_A_zone_id: i
     required.append(f'B{start_A_zone_id}')
     required.append(f'B{end_A_zone_id}')
 
+    # 可选激活起点附近的 E 区 (有波动)
+    optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+
     # 检查
     if _ckeck_zones(positions, required, optional, banned):
         return True, 'v'
@@ -395,6 +398,9 @@ def is_inner_loop_q_clockwise(note_path: list, start_A_zone_id: int, end_A_zone_
         optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
         # 可选终点上一个 E 区
         optional.append(f'E{_prev_DE_zone_id(end_A_zone_id)}')
+        # 可选激活起点/终点 B 区 (有波动)
+        optional.append(f'B{start_A_zone_id}')
+        optional.append(f'B{end_A_zone_id}')
         # 必须激活之间的 B 区
         between_AB_zones_id = _get_between_AB_zones(start_A_zone_id, end_A_zone_id, clockwise=True)
         for id in between_AB_zones_id:
@@ -463,6 +469,9 @@ def is_inner_loop_p_counterclockwise(note_path: list, start_A_zone_id: int, end_
         optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
         # 可选终点下一个 E 区
         optional.append(f'E{_next_DE_zone_id(end_A_zone_id)}')
+        # 可选激活起点/终点 B 区 (有波动)
+        optional.append(f'B{start_A_zone_id}')
+        optional.append(f'B{end_A_zone_id}')
         # 必须激活之间的 B 区
         between_AB_zones_id = _get_between_AB_zones(start_A_zone_id, end_A_zone_id, counterclockwise=True)
         for id in between_AB_zones_id:
@@ -726,6 +735,8 @@ def is_outer_loop_qq_clockwise(note_path: list, start_A_zone_id: int, end_A_zone
             optional.append(f'D{id}')
         # 可选激活绕大圈回到终点经过的 E 区
         optional.append(f'E{_prev_DE_zone_id(start_A_zone_id)}')
+        # 可选终点附近的 B 区 (有波动)
+        optional.append(f'B{_prev_AB_zone_id(end_A_zone_id)}')
 
     # if pos_diff == 6:
         # pass
@@ -855,6 +866,8 @@ def is_outer_loop_pp_counterclockwise(note_path: list, start_A_zone_id: int, end
             optional.append(f'D{id}')
         # 可选激活绕大圈回到终点经过的 E 区
         optional.append(f'E{_next_DE_zone_id(start_A_zone_id)}')
+        # 可选终点附近的 B 区 (有波动)
+        optional.append(f'B{_next_AB_zone_id(end_A_zone_id)}')
 
     # if pos_diff == 6:
         # pass
