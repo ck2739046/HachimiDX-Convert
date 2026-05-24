@@ -1,8 +1,8 @@
 from ultralytics import YOLO
 import os
-import cv2
 import time
 from pathlib import Path
+import numpy as np
 
 from ...schemas.op_result import OpResult, ok, err
 from .note_definition import *
@@ -56,6 +56,9 @@ def main(std_video_path: Path,
             for result in yolo_results_generator:
                 # 转换数据格式并保存
                 note_geometrys = _parse_detections_to_note_geometrys(result, counter, name)
+                # 按 note_type 分组做 NMS 去重
+                if name == 'detect':
+                    note_geometrys = _dedup_detections_by_note_type(note_geometrys, iou_thresh=0.95)
                 final_results.extend(note_geometrys)
                 # 打印进度
                 counter += 1
@@ -178,6 +181,67 @@ def _save_detect_results(detections, output_dir):
             f.write(', '.join(data) + '\n')
 
     print(f"检测结果已保存到: {detect_result_path}")
+
+
+
+
+    
+
+def _iou_batch(bboxes1: np.ndarray, bboxes2: np.ndarray, eps: float = 1e-7) -> np.ndarray:
+    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (bboxes1[:, 3] - bboxes1[:, 1])
+    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (bboxes2[:, 3] - bboxes2[:, 1])
+    bboxes2 = np.expand_dims(bboxes2, 0)
+    bboxes1 = np.expand_dims(bboxes1, 1)
+    xx1 = np.maximum(bboxes1[..., 0], bboxes2[..., 0])
+    yy1 = np.maximum(bboxes1[..., 1], bboxes2[..., 1])
+    xx2 = np.minimum(bboxes1[..., 2], bboxes2[..., 2])
+    yy2 = np.minimum(bboxes1[..., 3], bboxes2[..., 3])
+    w = np.maximum(0.0, xx2 - xx1)
+    h = np.maximum(0.0, yy2 - yy1)
+    inter = w * h
+    return inter / (area1[:, np.newaxis] + area2[np.newaxis, :] - inter + eps)
+
+
+def _dedup_detections_by_note_type(note_geometrys: list, iou_thresh: float) -> list:
+    by_type = {}
+    for g in note_geometrys:
+        t = g.note_type
+        if t not in by_type:
+            by_type[t] = []
+        by_type[t].append(g)
+    note_geometrys_final = []
+    for lst in by_type.values():
+        note_geometrys_final.extend(_dedup_detections(lst, iou_thresh))
+    return note_geometrys_final
+
+
+def _dedup_detections(detections: list, iou_thresh: float) -> list:
+    """同一帧内检测框去重：两两 IoU ≥ iou_thresh 时固定删除第二个。"""
+    if len(detections) < 2:
+        return detections
+
+    # 提取 xyxy 坐标
+    boxes = np.array([[d.x1, d.y1, d.x3, d.y3] for d in detections], dtype=np.float64)
+    iou = _iou_batch(boxes, boxes)
+
+    # 上三角索引，找出超过阈值的配对
+    n = len(detections)
+    i_upper, j_upper = np.triu_indices(n, k=1)
+    dup_mask = iou[i_upper, j_upper] >= iou_thresh
+
+    if not np.any(dup_mask):
+        return detections
+
+    removed = set()
+
+    # 对每个重复对，固定删除第二个
+    for i, j in zip(i_upper[dup_mask], j_upper[dup_mask]):
+        if i not in removed and j not in removed:
+            removed.add(j)
+
+    return [d for idx, d in enumerate(detections) if idx not in removed]
+
+
 
 
 
