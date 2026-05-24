@@ -24,8 +24,10 @@ def speed_direction(bbox1: np.ndarray, bbox2: np.ndarray) -> np.ndarray:
     cy1 = (bbox1[1] + bbox1[3]) / 2.0
     cx2 = (bbox2[0] + bbox2[2]) / 2.0
     cy2 = (bbox2[1] + bbox2[3]) / 2.0
-    speed = np.array([cy2 - cy1, cx2 - cx1], dtype=np.float64)
-    norm = np.sqrt((cy2 - cy1) ** 2 + (cx2 - cx1) ** 2) + 1e-6
+    dy = cy2 - cy1
+    dx = cx2 - cx1
+    speed = np.array([dy, dx], dtype=np.float64)
+    norm = np.sqrt(dy ** 2 + dx ** 2) + 1e-6
     return speed / norm
 
 
@@ -38,6 +40,13 @@ def convert_bbox_to_z(bbox: np.ndarray) -> np.ndarray:
     s = w * h
     r = w / float(h + 1e-6)
     return np.array([x, y, s, r], dtype=np.float64).reshape((4, 1))
+
+
+def _convert_wh_to_z(cx: float, cy: float, w: float, h: float) -> np.ndarray:
+    """(cx,cy,w,h) → [x,y,s,r] as (4,1); avoids re-extracting w/h from bbox."""
+    s = w * h
+    r = w / float(h + 1e-6)
+    return np.array([cx, cy, s, r], dtype=np.float64).reshape((4, 1))
 
 
 def convert_x_to_bbox(x: np.ndarray) -> np.ndarray:
@@ -110,7 +119,7 @@ class KalmanBoxTracker:
         self.kf.Q[5, 5] = 0.4    # vy
         self.kf.Q[6, 6] = 0.0001 # vs
 
-        self.kf.x[:4] = convert_bbox_to_z(bbox[:4])
+        self.kf.x[:4] = _convert_wh_to_z(cx, cy, w, h)
 
         # 框尺寸缓存（从检测框读取，用于 _find_ref_obs 阈值）
         self._last_w = max(w, 1.0)
@@ -198,7 +207,6 @@ class KalmanBoxTracker:
             self._unfreeze_kf()
 
         # ====== 正常 tracker 级更新 ======
-        bbox = np.asarray(bbox, dtype=np.float64)
         obs = np.array(
             [bbox[0], bbox[1], bbox[2], bbox[3], bbox[4]], dtype=np.float64
         )
@@ -217,7 +225,7 @@ class KalmanBoxTracker:
         self.hit_streak += 1
 
         # 4 维观测更新 [x,y,s,r]
-        self.kf.update(convert_bbox_to_z(bbox[:4]))
+        self.kf.update(_convert_wh_to_z(cx, cy, w, h))
 
         self.score = float(bbox[4]) if len(bbox) > 4 else self.score
         self.cls = int(bbox[5]) if len(bbox) > 5 else self.cls
@@ -322,6 +330,14 @@ def diou_batch(bboxes1: np.ndarray, bboxes2: np.ndarray) -> np.ndarray:
     DIoU = IoU - center_distance² / enclosing_diag², rescaled to (0,1).
     Ref: https://arxiv.org/abs/1911.08287
     """
+    # Precompute per-box area and center to avoid redundant broadcast computation
+    area1_pre = (bboxes1[:, 2] - bboxes1[:, 0]) * (bboxes1[:, 3] - bboxes1[:, 1])
+    area2_pre = (bboxes2[:, 2] - bboxes2[:, 0]) * (bboxes2[:, 3] - bboxes2[:, 1])
+    cx1_pre = (bboxes1[:, 0] + bboxes1[:, 2]) / 2.0
+    cy1_pre = (bboxes1[:, 1] + bboxes1[:, 3]) / 2.0
+    cx2_pre = (bboxes2[:, 0] + bboxes2[:, 2]) / 2.0
+    cy2_pre = (bboxes2[:, 1] + bboxes2[:, 3]) / 2.0
+
     bboxes2 = np.expand_dims(bboxes2, 0)
     bboxes1 = np.expand_dims(bboxes1, 1)
 
@@ -332,16 +348,10 @@ def diou_batch(bboxes1: np.ndarray, bboxes2: np.ndarray) -> np.ndarray:
     w = np.maximum(0.0, xx2 - xx1)
     h = np.maximum(0.0, yy2 - yy1)
     wh = w * h
-    area1 = (bboxes1[..., 2] - bboxes1[..., 0]) * (bboxes1[..., 3] - bboxes1[..., 1])
-    area2 = (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1])
-    union = area1 + area2 - wh
+    union = area1_pre[:, np.newaxis] + area2_pre[np.newaxis, :] - wh
     iou = wh / union
 
-    centerx1 = (bboxes1[..., 0] + bboxes1[..., 2]) / 2.0
-    centery1 = (bboxes1[..., 1] + bboxes1[..., 3]) / 2.0
-    centerx2 = (bboxes2[..., 0] + bboxes2[..., 2]) / 2.0
-    centery2 = (bboxes2[..., 1] + bboxes2[..., 3]) / 2.0
-    inner_diag = (centerx1 - centerx2) ** 2 + (centery1 - centery2) ** 2
+    inner_diag = (cx1_pre[:, np.newaxis] - cx2_pre[np.newaxis, :]) ** 2 + (cy1_pre[:, np.newaxis] - cy2_pre[np.newaxis, :]) ** 2
 
     xxc1 = np.minimum(bboxes1[..., 0], bboxes2[..., 0])
     yyc1 = np.minimum(bboxes1[..., 1], bboxes2[..., 1])
@@ -455,6 +465,7 @@ def _size_increase_gate(
     det_boxes: np.ndarray,
     trk_last_max_sides: np.ndarray,
     max_size_increase_ratio: float = 0.15,
+    det_max_side: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """尺寸变大门控：候选框 max(w,h) 不应明显大于轨迹最后一帧的 max(w,h)。
 
@@ -468,15 +479,18 @@ def _size_increase_gate(
     det_idx = matched_indices[:, 0]
     trk_idx = matched_indices[:, 1]
 
-    det_w = det_boxes[det_idx, 2] - det_boxes[det_idx, 0]
-    det_h = det_boxes[det_idx, 3] - det_boxes[det_idx, 1]
-    det_max_side = np.maximum(det_w, det_h)
+    if det_max_side is None:
+        det_w = det_boxes[det_idx, 2] - det_boxes[det_idx, 0]
+        det_h = det_boxes[det_idx, 3] - det_boxes[det_idx, 1]
+        matched_det_max = np.maximum(det_w, det_h)
+    else:
+        matched_det_max = det_max_side[det_idx]
 
     trk_last_max = np.asarray(trk_last_max_sides, dtype=np.float64)[trk_idx]
     threshold = trk_last_max * (1.0 + max_size_increase_ratio)
 
     # trk_last_max == 0 表示轨迹无历史，通过所有匹配
-    ok = (trk_last_max == 0.0) | (det_max_side <= threshold)
+    ok = (trk_last_max == 0.0) | (matched_det_max <= threshold)
     return matched_indices[ok], matched_indices[~ok, 0], matched_indices[~ok, 1]
 
 
@@ -485,6 +499,7 @@ def _size_decrease_gate(
     det_boxes: np.ndarray,
     trk_last_max_sides: np.ndarray,
     max_size_decrease_ratio: float = 0.15,
+    det_max_side: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """尺寸变小门控：候选框 max(w,h) 不应明显小于轨迹最后一帧的 max(w,h)。
 
@@ -498,15 +513,18 @@ def _size_decrease_gate(
     det_idx = matched_indices[:, 0]
     trk_idx = matched_indices[:, 1]
 
-    det_w = det_boxes[det_idx, 2] - det_boxes[det_idx, 0]
-    det_h = det_boxes[det_idx, 3] - det_boxes[det_idx, 1]
-    det_max_side = np.maximum(det_w, det_h)
+    if det_max_side is None:
+        det_w = det_boxes[det_idx, 2] - det_boxes[det_idx, 0]
+        det_h = det_boxes[det_idx, 3] - det_boxes[det_idx, 1]
+        matched_det_max = np.maximum(det_w, det_h)
+    else:
+        matched_det_max = det_max_side[det_idx]
 
     trk_last_max = np.asarray(trk_last_max_sides, dtype=np.float64)[trk_idx]
     threshold = trk_last_max * (1.0 - max_size_decrease_ratio)
 
     # trk_last_max == 0 表示轨迹无历史，通过所有匹配
-    ok = (trk_last_max == 0.0) | (det_max_side >= threshold)
+    ok = (trk_last_max == 0.0) | (matched_det_max >= threshold)
     return matched_indices[ok], matched_indices[~ok, 0], matched_indices[~ok, 1]
 
 
@@ -585,6 +603,10 @@ class OCSort:
         scores = dets_all[:, 4] if len(dets_all) else np.empty((0,), dtype=np.float64)
         remain_inds = scores > self.det_thresh
         dets = dets_all[remain_inds]
+        det_max_side = np.maximum(
+            dets[:, 2] - dets[:, 0],
+            dets[:, 3] - dets[:, 1],
+        ) if len(dets) > 0 else np.empty((0,), dtype=np.float64)
 
         # ====== predict ======
         trks = np.zeros((len(self.trackers), 5), dtype=np.float64)
@@ -594,7 +616,7 @@ class OCSort:
             trk[:] = [pos[0], pos[1], pos[2], pos[3], 0.0]
             if np.any(np.isnan(pos)):
                 to_del.append(t)
-        trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
+        trks = trks[~np.any(np.isnan(trks), axis=1)]
         for t in reversed(to_del):
             self.trackers.pop(t)
 
@@ -644,6 +666,7 @@ class OCSort:
                 matched, rej_dets, rej_trks = _size_increase_gate(
                     matched, dets[:, :5], trk_last_max_sides,
                     max_size_increase_ratio=self.max_size_increase_ratio,
+                    det_max_side=det_max_side,
                 )
                 if rej_dets.size:
                     unmatched_dets = np.concatenate([unmatched_dets, rej_dets])
@@ -654,6 +677,7 @@ class OCSort:
                 matched, rej_dets, rej_trks = _size_decrease_gate(
                     matched, dets[:, :5], trk_last_max_sides,
                     max_size_decrease_ratio=self.max_size_decrease_ratio,
+                    det_max_side=det_max_side,
                 )
                 if rej_dets.size:
                     unmatched_dets = np.concatenate([unmatched_dets, rej_dets])
@@ -680,17 +704,20 @@ class OCSort:
                     stage3_matched = stage3_matched[ok_s3]
 
                 # 尺寸增大 + 尺寸减小门控（复用 Stage 1 门控函数）
+                left_dets_max_side = det_max_side[unmatched_dets]
                 if stage3_matched.shape[0] > 0 and self.max_size_increase_ratio > 0:
                     stage3_matched, _, _ = _size_increase_gate(
                         stage3_matched, left_dets,
                         trk_last_max_sides[unmatched_trks],
                         max_size_increase_ratio=self.max_size_increase_ratio,
+                        det_max_side=left_dets_max_side,
                     )
                 if stage3_matched.shape[0] > 0 and self.max_size_decrease_ratio > 0:
                     stage3_matched, _, _ = _size_decrease_gate(
                         stage3_matched, left_dets,
                         trk_last_max_sides[unmatched_trks],
                         max_size_decrease_ratio=self.max_size_decrease_ratio,
+                        det_max_side=left_dets_max_side,
                     )
 
                 to_remove_det = []
