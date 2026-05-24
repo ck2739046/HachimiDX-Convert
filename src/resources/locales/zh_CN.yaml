@@ -351,7 +351,7 @@ zh_CN:
 
       ui_enable_reid_label: "启用 ReID: "
       ui_enable_reid_help: |
-        启用外观重识别(ReID)辅助追踪 TAP/HOLD 音符。
+        启用外观重识别(ReID)辅助追踪 HOLD 音符。
         启用此选项，可以提高追踪的稳定性和准确性，但是追踪耗时会显著增加。
         仅推荐在 30/60 帧的视频中启用。
 

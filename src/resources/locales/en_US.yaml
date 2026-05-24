@@ -355,7 +355,7 @@ en_US:
 
       ui_enable_reid_label: "Enable ReID: "
       ui_enable_reid_help: |
-        Enable appearance Re-Identification (ReID) to assist tracking TAP/HOLD notes.
+        Enable appearance Re-Identification (ReID) to assist tracking HOLD notes.
         Enabling this option can improve the stability and accuracy of tracking, but it will significantly increase the tracking time.
         Recommended to enable only for videos with 30/60 FPS.
 

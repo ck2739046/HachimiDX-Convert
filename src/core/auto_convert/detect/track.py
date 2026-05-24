@@ -210,7 +210,7 @@ def main(std_video_path: Path,
         for note_type in TRACKER_NOTE_TYPES:
             if note_type == NoteType.SLIDE:
                 trackers_by_type[note_type] = _build_ocsort_tracker(fps)
-            elif note_type == NoteType.TAP or note_type == NoteType.HOLD:
+            elif note_type == NoteType.HOLD:
                 trackers_by_type[note_type] = _build_botsort_tracker(fps, with_reid=enable_reid)
             else:
                 trackers_by_type[note_type] = _build_botsort_tracker(fps, with_reid=False)
