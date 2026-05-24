@@ -389,7 +389,6 @@ def associate(
     velocities: np.ndarray,
     previous_obs: np.ndarray,
     vdc_weight: float,
-    vdc_disable_diou_thresh: float = 0.8,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Stage 1: VDC + DIoU joint association."""
     if len(trackers) == 0:
@@ -417,10 +416,6 @@ def associate(
 
     angle_diff_cost = (valid_mask * diff_angle) * vdc_weight
     angle_diff_cost = angle_diff_cost.T * scores
-
-    # 如果 DIoU 已经足够高（几何上高度重合），禁用 VDC，避免方向
-    # 噪声干扰到本来就很明确的匹配
-    angle_diff_cost[diou_matrix > vdc_disable_diou_thresh] = 0
 
     if min(diou_matrix.shape) > 0:
         a = (diou_matrix > s1_diou_thresh).astype(np.int32)
@@ -528,13 +523,11 @@ class OCSort:
         s1_diou_thresh: float = 0.3,
         delta_dist_pct: float = 0.5,
         inertia: float = 0.2,
-        vdc_disable_diou_thresh: float = 0.5,
         max_size_increase_ratio: float = 0.15,
         max_size_decrease_ratio: float = 0.15,
         s3_diou_thresh: float = 0.3,
     ):
         """delta_dist_pct: 在历史中找参考观测时，要求中心距离 > pct*框尺寸。
-        vdc_disable_diou_thresh: DIoU 高于此值时禁用 VDC（几何上已足够匹配）。
         max_size_increase_ratio: 尺寸变大门控上限，候选框max(w,h) ≤ 轨迹最后一帧 × (1+ratio)。
         max_size_decrease_ratio: 尺寸变小门控下限，候选框max(w,h) ≥ 轨迹最后一帧 × (1-ratio)。
         s3_diou_thresh: Stage 3 回收匹配的 DIoU 阈值，用于剩余检测与轨迹最后观测的纯 DIoU 匹配。"""
@@ -546,7 +539,6 @@ class OCSort:
         self.det_thresh = float(det_thresh)
         self.delta_dist_pct = float(delta_dist_pct)
         self.inertia = float(inertia)
-        self.vdc_disable_diou_thresh = float(vdc_disable_diou_thresh)
         self.max_size_increase_ratio = float(max_size_increase_ratio)
         self.max_size_decrease_ratio = float(max_size_decrease_ratio)
         self.s3_diou_thresh = float(s3_diou_thresh)
@@ -631,7 +623,6 @@ class OCSort:
                 velocities,
                 ref_obs_list,
                 self.inertia,
-                self.vdc_disable_diou_thresh,
             )
         else:
             matched = np.empty((0, 2), dtype=int)
