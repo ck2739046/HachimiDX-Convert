@@ -379,7 +379,7 @@ def _compute_kalman_predictions(track_results) -> dict[int, list[dict]]:
             first_geo.conf,
             float(map_note_type_to_class_id(note_type)),
             0.0,
-        ], dtype=np.float64)
+        ], dtype=np.float32)
         tracker = _KalmanBoxTracker(init_bbox)
         # 首帧：predict 后写入预测结果，若有检测框则 update
         pred = tracker.predict()[0]
@@ -406,7 +406,7 @@ def _compute_kalman_predictions(track_results) -> dict[int, list[dict]]:
                     geo.conf,
                     float(map_note_type_to_class_id(note_type)),
                     0.0,
-                ], dtype=np.float64)
+                ], dtype=np.float32)
                 tracker.update(obs)
             else:
                 tracker.update(None)

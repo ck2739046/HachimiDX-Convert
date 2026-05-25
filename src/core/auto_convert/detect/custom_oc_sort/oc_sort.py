@@ -1,7 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import math
 import numpy as np
+import lap
 from filterpy.kalman import KalmanFilter
 
 
@@ -26,7 +27,7 @@ def speed_direction(bbox1: np.ndarray, bbox2: np.ndarray) -> np.ndarray:
     cy2 = (bbox2[1] + bbox2[3]) / 2.0
     dy = cy2 - cy1
     dx = cx2 - cx1
-    speed = np.array([dy, dx], dtype=np.float64)
+    speed = np.array([dy, dx], dtype=np.float32)
     norm = np.sqrt(dy ** 2 + dx ** 2) + 1e-6
     return speed / norm
 
@@ -39,14 +40,14 @@ def convert_bbox_to_z(bbox: np.ndarray) -> np.ndarray:
     y = bbox[1] + h / 2.0
     s = w * h
     r = w / float(h + 1e-6)
-    return np.array([x, y, s, r], dtype=np.float64).reshape((4, 1))
+    return np.array([x, y, s, r], dtype=np.float32).reshape((4, 1))
 
 
 def _convert_wh_to_z(cx: float, cy: float, w: float, h: float) -> np.ndarray:
     """(cx,cy,w,h) → [x,y,s,r] as (4,1); avoids re-extracting w/h from bbox."""
     s = w * h
     r = w / float(h + 1e-6)
-    return np.array([cx, cy, s, r], dtype=np.float64).reshape((4, 1))
+    return np.array([cx, cy, s, r], dtype=np.float32).reshape((4, 1))
 
 
 def convert_x_to_bbox(x: np.ndarray) -> np.ndarray:
@@ -58,7 +59,7 @@ def convert_x_to_bbox(x: np.ndarray) -> np.ndarray:
     h = s / w if w > 0 else 1.0
     return np.array(
         [[x0 - w / 2.0, y0 - h / 2.0, x0 + w / 2.0, y0 + h / 2.0]],
-        dtype=np.float64,
+        dtype=np.float32,
     )
 
 
@@ -83,7 +84,7 @@ class KalmanBoxTracker:
         [0, 0, 0, 0, 1, 0, 0],
         [0, 0, 0, 0, 0, 1, 0],
         [0, 0, 0, 0, 0, 0, 1],
-    ], dtype=np.float64)
+    ], dtype=np.float32)
 
     # 观测矩阵 H (4×7): 直读前 4 维
     _H = np.array([
@@ -91,7 +92,7 @@ class KalmanBoxTracker:
         [0, 1, 0, 0, 0, 0, 0],
         [0, 0, 1, 0, 0, 0, 0],
         [0, 0, 0, 1, 0, 0, 0],
-    ], dtype=np.float64)
+    ], dtype=np.float32)
 
     def __init__(self, bbox: np.ndarray, delta_dist_pct: float = 0.5, track_id: int = 0):
         cx, cy, w, h = convert_bbox_centre(bbox[:4])
@@ -133,7 +134,7 @@ class KalmanBoxTracker:
         self.age = 0
 
         self.last_observation = np.array(
-            [-1.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float64
+            [-1.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float32
         )
         self.observations: dict[int, np.ndarray] = {}
         self.history_observations: list[np.ndarray] = []
@@ -145,7 +146,7 @@ class KalmanBoxTracker:
 
         # --- freeze/unfreeze 状态机（原版 OC-SORT 在线平滑） ---
         self._history_obs_z: list[np.ndarray | None] = [
-            np.array([[cx], [cy]], dtype=np.float64)
+            np.array([[cx], [cy]], dtype=np.float32)
         ]  # z-format 观测历史（含 None 表示缺失帧）
         self._observed: bool = True
         self._frozen_state: dict | None = None
@@ -189,7 +190,7 @@ class KalmanBoxTracker:
         if bbox is not None:
             cx, cy, w, h = convert_bbox_centre(bbox[:4])
             self._history_obs_z.append(
-                np.array([[cx], [cy]], dtype=np.float64)
+                np.array([[cx], [cy]], dtype=np.float32)
             )
             self._last_w = max(w, 1.0)
             self._last_h = max(h, 1.0)
@@ -208,7 +209,7 @@ class KalmanBoxTracker:
 
         # ====== 正常 tracker 级更新 ======
         obs = np.array(
-            [bbox[0], bbox[1], bbox[2], bbox[3], bbox[4]], dtype=np.float64
+            [bbox[0], bbox[1], bbox[2], bbox[3], bbox[4]], dtype=np.float32
         )
 
         if self.last_observation.sum() >= 0:
@@ -286,10 +287,10 @@ class KalmanBoxTracker:
             y = y1 + j * dy
             # _history_obs_z 保持 2D 格式 ([cx,cy])，与 update() 一致
             # Kalman 更新需要用 4D 观测 [x,y,s,r]
-            z_2d = np.array([[x], [y]], dtype=np.float64)
+            z_2d = np.array([[x], [y]], dtype=np.float32)
             s_val = float(self.kf.x[2].item())
             r_val = float(self.kf.x[3].item())
-            z_4d = np.array([[x], [y], [s_val], [r_val]], dtype=np.float64)
+            z_4d = np.array([[x], [y], [s_val], [r_val]], dtype=np.float32)
             self._history_obs_z.append(z_2d)
             self.kf.update(z_4d)
             self.kf.predict()
@@ -382,14 +383,8 @@ def speed_direction_batch(
 
 def linear_assignment(cost_matrix: np.ndarray) -> np.ndarray:
     """Hungarian algorithm on cost_matrix; prefers `lap` if available."""
-    try:
-        import lap  # type: ignore
-        _, x, y = lap.lapjv(cost_matrix, extend_cost=True)
-        return np.array([[y[i], i] for i in x if i >= 0])
-    except ImportError:
-        from scipy.optimize import linear_sum_assignment
-        x, y = linear_sum_assignment(cost_matrix)
-        return np.array(list(zip(x, y)))
+    _, x, y = lap.lapjv(cost_matrix, extend_cost=True)
+    return np.array([[y[i], i] for i in x if i >= 0], dtype=int)
 
 
 def associate(
@@ -428,7 +423,7 @@ def associate(
     diff_angle = np.arccos(diff_angle_cos)
     diff_angle = (np.pi / 2.0 - np.abs(diff_angle)) / np.pi
 
-    valid_mask = np.ones(previous_obs.shape[0])
+    valid_mask = np.ones(previous_obs.shape[0], dtype=np.float32)
     valid_mask[previous_obs[:, 4] < 0] = 0
 
     scores = detections[:, -1][:, np.newaxis]
@@ -457,7 +452,7 @@ def associate(
     if min(diou_matrix.shape) > 0:
         matched_indices = linear_assignment(cost)
     else:
-        matched_indices = np.empty(shape=(0, 2))
+        matched_indices = np.empty(shape=(0, 2), dtype=int)
 
     if matched_indices.shape[0] > 0:
         unmatched_detections = np.setdiff1d(
@@ -626,24 +621,24 @@ class OCSort:
             (M,10) [cx,cy,w,h,r,track_id,score,cls_id,det_frame,det_idx]
         """
         if dets_all is None:
-            dets_all = np.empty((0, 7), dtype=np.float64)
+            dets_all = np.empty((0, 7), dtype=np.float32)
         if len(dets_all) == 0:
-            dets_all = np.empty((0, 7), dtype=np.float64)
+            dets_all = np.empty((0, 7), dtype=np.float32)
         else:
-            dets_all = np.asarray(dets_all, dtype=np.float64)
+            dets_all = np.asarray(dets_all, dtype=np.float32)
 
         self.frame_count += 1
 
-        scores = dets_all[:, 4] if len(dets_all) else np.empty((0,), dtype=np.float64)
+        scores = dets_all[:, 4] if len(dets_all) else np.empty((0,), dtype=np.float32)
         remain_inds = scores > self.det_thresh
         dets = dets_all[remain_inds]
         det_max_side = np.maximum(
             dets[:, 2] - dets[:, 0],
             dets[:, 3] - dets[:, 1],
-        ) if len(dets) > 0 else np.empty((0,), dtype=np.float64)
+        ) if len(dets) > 0 else np.empty((0,), dtype=np.float32)
 
         # ====== predict ======
-        trks = np.zeros((len(self.trackers), 5), dtype=np.float64)
+        trks = np.zeros((len(self.trackers), 5), dtype=np.float32)
         to_del = []
         for t, trk in enumerate(trks):
             pos = self.trackers[t].predict()[0]
@@ -655,19 +650,21 @@ class OCSort:
             self.trackers.pop(t)
 
         # ====== 轨迹速度和 VDC 参考观测 ======
-        _sentinel = np.array([-1.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float64)
-        _zero_vel = np.array((0.0, 0.0), dtype=np.float64)
+        _sentinel = np.array([-1.0, -1.0, -1.0, -1.0, -1.0], dtype=np.float32)
+        _zero_vel = np.array((0.0, 0.0), dtype=np.float32)
         velocities = np.array(
             [
                 trk.velocity if trk.velocity is not None else _zero_vel
                 for trk in self.trackers
-            ]
+            ],
+            dtype=np.float32
         )
         ref_obs_list = np.array(
             [
                 trk._ref_obs if trk._ref_obs is not None else _sentinel
                 for trk in self.trackers
-            ]
+            ],
+            dtype=np.float32
         )
 
         # ====== debug: 打印轨迹状态 ======
@@ -691,9 +688,9 @@ class OCSort:
                 max(trk._last_w, trk._last_h)
                 if trk.last_observation.sum() >= 0 else 0.0
                 for trk in self.trackers
-            ], dtype=np.float64)
+            ], dtype=np.float32)
         else:
-            trk_last_max_sides = np.empty((0,), dtype=np.float64)
+            trk_last_max_sides = np.empty((0,), dtype=np.float32)
 
         # ====== Stage 1: VDC + DIoU（前置过滤 + 惩罚成本 + 后置兜底） ======
         if len(dets) > 0 and len(trks) > 0:
@@ -754,7 +751,7 @@ class OCSort:
         if unmatched_dets.size > 0 and unmatched_trks.size > 0:
             left_dets = dets[unmatched_dets, :5]
             last_obs_list = np.array(
-                [trk.last_observation for trk in self.trackers], dtype=np.float64
+                [trk.last_observation for trk in self.trackers], dtype=np.float32
             )
             left_trks = last_obs_list[unmatched_trks]
             left_det_max_side = det_max_side[unmatched_dets]

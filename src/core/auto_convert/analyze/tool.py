@@ -105,11 +105,11 @@ def catmull_rom_spline(points: list, num_samples: int = 4, tension: float = 1.5)
     if n < 2:
         return np.array([], dtype=np.int32).reshape((-1, 1, 2))
 
-    pts = np.asarray(points, dtype=np.float64)
+    pts = np.asarray(points, dtype=np.float32)
     s = float(tension)
 
     if n == 2:
-        t = np.linspace(0, 1, num_samples + 1, endpoint=True, dtype=np.float64)
+        t = np.linspace(0, 1, num_samples + 1, endpoint=True, dtype=np.float32)
         interp = pts[0] + (pts[1] - pts[0]) * t[:, None]
         return np.asarray(np.round(interp), dtype=np.int32).reshape((-1, 1, 2))
 
@@ -124,7 +124,7 @@ def catmull_rom_spline(points: list, num_samples: int = 4, tension: float = 1.5)
     p3 = pts[np.clip(np.arange(n_seg) + 2, 0, n - 1)]
 
     # t 网格 (num_samples, n_seg)
-    t = np.arange(num_samples, dtype=np.float64) / num_samples
+    t = np.arange(num_samples, dtype=np.float32) / num_samples
     t2 = t * t
     t3 = t2 * t
 
