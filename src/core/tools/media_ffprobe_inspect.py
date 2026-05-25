@@ -17,10 +17,11 @@ import os
 import subprocess
 from dataclasses import dataclass
 from typing import Any, Dict
+import time
 
 import i18n
 
-from ..schemas.op_result import OpResult, ok, err
+from ..schemas.op_result import OpResult, ok, err, print_op_result
 from src.services import PathManage
 from ..schemas.media_config import MediaType
 
@@ -64,6 +65,9 @@ class FFprobeInspect:
 
         return ok((input_path, ffprobe_exe))
 
+
+
+
     @classmethod
     def inspect_media(cls, input_path: str) -> OpResult[FFprobeInspectResult]:
         """Inspect one media file using ffprobe.
@@ -82,8 +86,12 @@ class FFprobeInspect:
         input_path, ffprobe_exe = precheck_res.value
 
         
-        # run ffprobe
-        result = cls._run_ffprobe(ffprobe_exe, input_path)
+        # run ffprobe、
+        args = ["-v", "error",
+                "-show_entries", _STREAM_ENTRIES,
+                "-of", "json",
+                input_path]
+        result = cls._run_ffprobe(ffprobe_exe, args, parse_json=True)
         if not result.is_ok:
             return result
         raw = result.value
@@ -144,6 +152,10 @@ class FFprobeInspect:
                 )
 
 
+
+
+
+
     @classmethod
     def inspect_video_frame_timestamps_msec(cls, input_path: str) -> OpResult[list[float]]:
         """Inspect frame-level timestamps for video stream only.
@@ -157,43 +169,38 @@ class FFprobeInspect:
             OpResult: list[float] where index is frame number and value is ms.
         """
 
+        start_time = time.time()
+
         precheck_res = cls._precheck_input_path_and_ffprobe(input_path)
         if not precheck_res.is_ok:
             return err(precheck_res.error_msg, inner=precheck_res)
         input_path, ffprobe_exe = precheck_res.value
 
-        args = [
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "frame=best_effort_timestamp_time,pkt_pts_time",
-            "-of", "csv=p=0",
-            input_path,
-        ]
+        # CFR 快速路径: 仅读取容器头部不解码，CFR 视频直接计算时间戳
+        cfr_result = cls._check_if_cfr(ffprobe_exe, input_path)
+        if not cfr_result.is_ok:
+            print(f"Video CFR check failed: \n{print_op_result(cfr_result)}")
+        else:
+            is_cfr, avg_frame_rate, nb_frames = cfr_result.value
+            if is_cfr:
+                # 如果是 CFR, 直接构建列表
+                interval_msec = 1000.0 / avg_frame_rate
+                return ok([i * interval_msec for i in range(nb_frames)])
 
-        try:
-            result = subprocess.run(
-                [ffprobe_exe] + args,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-        except Exception as e:
-            return err(str(e), error_raw=e)
 
-        if result.returncode != 0:
-            error_msg = f"ffprobe frame timestamp inspect failed: exit_code={result.returncode}"
-            raw = ""
-            stderr = (result.stderr or "").strip()
-            stdout = (result.stdout or "").strip()
-            if stderr:
-                raw += f"stderr=\n{stderr}"
-            if stdout:
-                raw += f"\nstdout=\n{stdout}"
-            return err(error_msg, error_raw=raw)
+        # 如果 CFR 解析失败, 或者解析成功但视频为 VFR, 精确解析每帧时间戳
+        print("开始精确逐帧解析视频帧时间戳...")
+        args = ["-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "frame=best_effort_timestamp_time,pkt_pts_time",
+                "-of", "csv=p=0",
+                input_path]
+        frame_result = cls._run_ffprobe(ffprobe_exe, args, parse_json=False)
+        if not frame_result.is_ok:
+            return err("ffprobe frame timestamp inspect failed", inner=frame_result)
 
         sec_list: list[float] = []
-        for raw_line in (result.stdout or "").splitlines():
+        for raw_line in (frame_result.value or "").splitlines():
             line = raw_line.strip()
             if not line:
                 continue
@@ -223,22 +230,93 @@ class FFprobeInspect:
             if msec_list[i] < msec_list[i - 1]:
                 msec_list[i] = msec_list[i - 1]
 
+        end_time = time.time()
+        print(f'视频帧时间戳分析完成，耗时: {end_time - start_time:.1f}s')
+
         return ok(msec_list)
     
 
 
 
     @classmethod
-    def _run_ffprobe(cls, ffprobe_exe: str, input_path: str) -> OpResult[any]:
+    def _check_if_cfr(cls, ffprobe_exe: str, input_path: str) -> OpResult[tuple[bool, float, int]]:
         """
+        Lightweight header-only probe to check CFR.
+        Only reads container headers, does NOT decode any frames.
+
         Returns:
-            OpResult: Parsed ffprobe JSON output as dict.
+            OpResult[tuple[bool, float, int]]:
+                is_cfr, avg_frame_rate, nb_frames.
         """
-        
+
+        def _parse_float(value: str) -> float | None:
+            try:
+                if "/" in str(value):
+                    num, denom = str(value).split("/")
+                    return float(num) / float(denom)
+                return float(value)
+            except Exception:
+                return None
+
         args = ["-v", "error",
-                "-show_entries", _STREAM_ENTRIES,
+                "-show_entries", "stream=avg_frame_rate,r_frame_rate,nb_frames",
                 "-of", "json",
                 input_path]
+        result = cls._run_ffprobe(ffprobe_exe, args, parse_json=True)
+        if not result.is_ok:
+            return err("CFR 探测失败", inner=result)
+        data = result.value
+
+        streams = data.get("streams", [])
+        if not streams:
+            return err("CFR 探测失败: 未找到视频流")
+
+        stream = streams[0]
+        avg_frame_rate_raw = stream.get("avg_frame_rate", "N/A")
+        r_frame_rate_raw = stream.get("r_frame_rate", "N/A")
+        nb_frames_raw = stream.get("nb_frames", "N/A")
+
+        # Parse avg_frame_rate
+        fps = _parse_float(avg_frame_rate_raw)
+        if fps is None or fps <= 0:
+            return err(f"CFR 探测失败: 无法解析 avg_frame_rate={avg_frame_rate_raw}")
+
+        # Parse r_frame_rate
+        r_fps = _parse_float(r_frame_rate_raw)
+        if r_fps is None or r_fps <= 0:
+            return err(f"CFR 探测失败: 无法解析 r_frame_rate={r_frame_rate_raw}")
+
+        # CFR 判定: avg_frame_rate == r_frame_rate
+        if abs(fps - r_fps) > 0.001:
+            return ok((False, 0, 0))
+
+        # Parse nb_frames
+        try:
+            nb_frames = int(nb_frames_raw)
+        except Exception:
+            return err(f"CFR 探测失败: 无法解析 nb_frames={nb_frames_raw}")
+
+        if nb_frames <= 0:
+            return err(f"CFR 探测失败: nb_frames={nb_frames} <= 0")
+
+        return ok((True, fps, nb_frames))
+
+
+
+
+
+    @classmethod
+    def _run_ffprobe(cls, ffprobe_exe: str, args: list[str], *, parse_json: bool = True) -> OpResult[any]:
+        """Run ffprobe and return structured result.
+
+        Args:
+            ffprobe_exe: Path to ffprobe executable.
+            args: Arguments to pass to ffprobe (excluding exe path).
+            parse_json: If True, parse stdout as JSON; if False, return raw text.
+
+        Returns:
+            OpResult[dict] when parse_json=True, OpResult[str] when parse_json=False.
+        """
         try:
             result = subprocess.run([ffprobe_exe] + args,
                                     capture_output=True,
@@ -258,7 +336,10 @@ class FFprobeInspect:
             if stdout:
                 raw += f"\nstdout=\n{stdout}"
             return err(error_msg, error_raw=raw)
-        
+
+        if not parse_json:
+            return ok(result.stdout) # success
+
         try:
             raw = json.loads(result.stdout)
             return ok(raw) # success
