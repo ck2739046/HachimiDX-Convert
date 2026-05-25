@@ -9,7 +9,7 @@ from ultralytics.engine.results import OBB
 from pathlib import Path
 
 from ...schemas.op_result import OpResult, ok, err
-from ....services.path_manage import PathManage
+from src.services import PathManage
 from .note_definition import *
 from .detect import _load_detect_results
 from .oc_sort import OCSort
@@ -81,17 +81,22 @@ def _build_ocsort_tracker(fps: float, debug: bool = False) -> OCSort:
     return OCSort(
 
         # 置信度低于此值的候选框会被丢弃
-        det_thresh=0.5,
+        det_thresh=0.4,
 
         # 轨迹在 x 帧没有新的匹配时被删除
-        max_age=max(2, round(fps * 0.05)),   # 0.05s, at least 2
+        # 此处要比 min_hits 更大, 因为漏检一帧 hit_streak-2
+        # 星星尾的开头经常有漏检, 此处要容忍
+        max_age=round(fps * 0.1),  # 0.1s
 
         # 轨迹至少需要 x 个匹配到的点才被保留
         min_hits=max(2, round(fps * 0.05)),  # 0.05s, at least 2
 
-        # 候选框与卡尔曼预测的框的 diou 大于此值时，才会被匹配上
-        # 1倍尺寸=0.4, 2倍尺寸=0.3, 3倍=0.235, 4倍=0.192
-        iou_threshold=0.35,
+        # Stage 1: 候选框与卡尔曼预测的框的 DIoU ≥ 此值时才会被匹配上
+        # 这里应该要比 stage 3 更严格
+        s1_diou_thresh=0.5, # 75%
+
+        # Stage 3: 候选框与轨迹最新框的 DIoU ≥ 此值时才会被匹配上
+        s3_diou_thresh=0.345, # 150%
 
         # 用于 vdc 的 angle_diff 计算
         # 向量 A (轨迹速度): ref_obs → 轨迹最新框
@@ -106,12 +111,12 @@ def _build_ocsort_tracker(fps: float, debug: bool = False) -> OCSort:
         # 尺寸变大门控：候选框 max(w,h) ≤ 轨迹最后一帧 × (1+ratio)
         # 如最后一帧 max=30，ratio=0.15 → 候选框 max 须 ≤ 34.5
         # 值越大越宽松，越小越严格
-        max_size_increase_ratio=0.15,
+        max_size_increase_ratio=0.2,
 
         # 尺寸变小门控：候选框 max(w,h) ≥ 轨迹最后一帧 × (1-ratio)
         # 如最后一帧 max=30，ratio=0.15 → 候选框 max 须 ≥ 25.5
         # 值越大越严格，越小越宽松
-        max_size_decrease_ratio=0.15,
+        max_size_decrease_ratio=0.2,
 
         debug=debug,
     )
