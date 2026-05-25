@@ -434,18 +434,33 @@ def classify_note_path(
     cls_results_all = []
     images_batch_buffer = []
 
-    # 按帧遍历
     last_frame_number = -1
     sorted_frames = sorted(sampling_plan.keys())
+    SEEK_THRESHOLD = 10
+
     for frame_number in sorted_frames:
-        # 速度优化，如果是连续帧，跳过 seek
-        if frame_number - last_frame_number != 1:
+
+        # 速度优化
+        # cap.read() 读取下一帧 比 cap.set() 跳转到指定帧 更快
+        # 如果目标帧和当前帧差距不大, 直接循环读取下一帧直到目标帧，减少 seek 调用
+        gap = frame_number - last_frame_number
+        # 如果目标帧就是下一帧，直接读取
+        if gap == 1:
+            pass
+        # 如果目标帧不远，循环读取
+        elif gap <= SEEK_THRESHOLD:
+            for _ in range(gap - 1):
+                cap.read()
+        # 如果目标帧较远，使用 seek 跳转
+        else:
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        
         # 读取当前帧
         ret, frame = cap.read()
         if not ret: continue
         last_frame_number = frame_number
 
+        # 根据采样计划裁剪图像并写入 batch
         for sample_data in sampling_plan[frame_number]:
             note = sample_data['note_geometry']
             cropped = _crop_single_note_image(imgsz, frame, note, crop_border)
