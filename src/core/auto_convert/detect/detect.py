@@ -71,9 +71,8 @@ def main(std_video_path: Path,
                 note_geometrys = _parse_detections_to_note_geometrys(result, counter, name)
                 # 预过滤：对 tap/hold 去除宽或高过小的误检框
                 note_geometrys = _prefilter_tap_hold_by_size(note_geometrys, size_thresh)
-                # 按 note_type 分组做 NMS 去重
-                if name == 'detect':
-                    note_geometrys = _dedup_detections_by_note_type(note_geometrys, iou_thresh=0.95)
+                # NMS 去重
+                note_geometrys = _dedup_detections(note_geometrys, name, iou_thresh=0.98)
                 final_results.extend(note_geometrys)
                 # 打印进度
                 counter += 1
@@ -191,6 +190,93 @@ def _prefilter_tap_hold_by_size(note_geometrys: list, size_thresh: float) -> lis
 
 
 
+def _dedup_detections(note_geometrys: list, model_name: str, iou_thresh: float) -> list:
+    by_type = {}
+    for g in note_geometrys:
+        t = g.note_type
+        if t not in by_type:
+            by_type[t] = []
+        by_type[t].append(g)
+    note_geometrys_final = []
+    for lst in by_type.values():
+        note_geometrys_final.extend(_dedup_detections_single_type(lst, model_name, iou_thresh))
+    return note_geometrys_final
+
+
+def _dedup_detections_single_type(detections: list, model_name: str, iou_thresh: float) -> list:
+    if len(detections) < 2:
+        return detections
+
+    # 按置信度降序排列，确保高置信度框优先保留
+    detections = sorted(detections, key=lambda d: d.conf, reverse=True)
+
+    if model_name == 'detect':
+        iou = _compute_detect_iou_matrix(detections)
+    else:  # obb
+        iou = _compute_obb_iou_matrix(detections)
+
+    # 只取上三角配对，跳过对角线
+    rows, cols = np.where(np.triu(iou, k=1) >= iou_thresh)
+    if len(rows) == 0:
+        return detections
+
+    removed = set()
+
+    # i < j 总是成立（上三角），排序后 conf[i] >= conf[j]，删除低置信度的 j
+    for i, j in zip(rows, cols):
+        i, j = int(i), int(j)
+        if i not in removed and j not in removed:
+            removed.add(j)
+
+    return [d for idx, d in enumerate(detections) if idx not in removed]
+
+
+def _compute_detect_iou_matrix(detections: list) -> np.ndarray:
+    """计算 detect 框的对称 IoU 矩阵"""
+    boxes = np.array([[d.x1, d.y1, d.x3, d.y3] for d in detections], dtype=np.float32)
+    area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    xx1 = np.maximum(boxes[:, 0, None], boxes[:, 0])
+    yy1 = np.maximum(boxes[:, 1, None], boxes[:, 1])
+    xx2 = np.minimum(boxes[:, 2, None], boxes[:, 2])
+    yy2 = np.minimum(boxes[:, 3, None], boxes[:, 3])
+    iw = np.maximum(0.0, xx2 - xx1)
+    ih = np.maximum(0.0, yy2 - yy1)
+    inter = iw * ih
+    iou = inter / (area[:, None] + area[None, :] - inter + 1e-7)
+    return iou
+
+
+def _obb_iou_single(g1, g2) -> float:
+    """计算两个 OBB 框之间的 IoU"""
+    pixel_box1 = np.array([[g1.x1, g1.y1], [g1.x2, g1.y2], [g1.x3, g1.y3], [g1.x4, g1.y4]], dtype=np.float32)
+    pixel_box2 = np.array([[g2.x1, g2.y1], [g2.x2, g2.y2], [g2.x3, g2.y3], [g2.x4, g2.y4]], dtype=np.float32)
+    rect1 = cv2.minAreaRect(pixel_box1)
+    rect2 = cv2.minAreaRect(pixel_box2)
+    ret, intersection = cv2.rotatedRectangleIntersection(rect1, rect2)
+    if ret == 0:
+        return 0.0
+    intersection_area = cv2.contourArea(intersection)
+    area1 = rect1[1][0] * rect1[1][1]
+    area2 = rect2[1][0] * rect2[1][1]
+    union_area = area1 + area2 - intersection_area
+    if union_area <= 0:
+        return 0.0
+    return intersection_area / union_area
+
+
+def _compute_obb_iou_matrix(detections: list) -> np.ndarray:
+    """计算 OBB 框的对称 IoU 矩阵"""
+    n = len(detections)
+    iou = np.zeros((n, n), dtype=np.float32)
+    for i in range(n):
+        for j in range(i + 1, n):
+            val = _obb_iou_single(detections[i], detections[j])
+            iou[i, j] = val
+            iou[j, i] = val
+    return iou
+
+
+
 
 
 
@@ -226,67 +312,6 @@ def _save_detect_results(detections, output_dir):
             f.write(', '.join(data) + '\n')
 
     print(f"检测结果已保存到: {detect_result_path}")
-
-
-
-
-    
-
-def _iou_batch(bboxes1: np.ndarray, bboxes2: np.ndarray, eps: float = 1e-7) -> np.ndarray:
-    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (bboxes1[:, 3] - bboxes1[:, 1])
-    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (bboxes2[:, 3] - bboxes2[:, 1])
-    bboxes2 = np.expand_dims(bboxes2, 0)
-    bboxes1 = np.expand_dims(bboxes1, 1)
-    xx1 = np.maximum(bboxes1[..., 0], bboxes2[..., 0])
-    yy1 = np.maximum(bboxes1[..., 1], bboxes2[..., 1])
-    xx2 = np.minimum(bboxes1[..., 2], bboxes2[..., 2])
-    yy2 = np.minimum(bboxes1[..., 3], bboxes2[..., 3])
-    w = np.maximum(0.0, xx2 - xx1)
-    h = np.maximum(0.0, yy2 - yy1)
-    inter = w * h
-    return inter / (area1[:, np.newaxis] + area2[np.newaxis, :] - inter + eps)
-
-
-def _dedup_detections_by_note_type(note_geometrys: list, iou_thresh: float) -> list:
-    by_type = {}
-    for g in note_geometrys:
-        t = g.note_type
-        if t not in by_type:
-            by_type[t] = []
-        by_type[t].append(g)
-    note_geometrys_final = []
-    for lst in by_type.values():
-        note_geometrys_final.extend(_dedup_detections(lst, iou_thresh))
-    return note_geometrys_final
-
-
-def _dedup_detections(detections: list, iou_thresh: float) -> list:
-    """同一帧内检测框去重：两两 IoU ≥ iou_thresh 时固定删除第二个。"""
-    if len(detections) < 2:
-        return detections
-
-    # 提取 xyxy 坐标
-    boxes = np.array([[d.x1, d.y1, d.x3, d.y3] for d in detections], dtype=np.float64)
-    iou = _iou_batch(boxes, boxes)
-
-    # 上三角索引，找出超过阈值的配对
-    n = len(detections)
-    i_upper, j_upper = np.triu_indices(n, k=1)
-    dup_mask = iou[i_upper, j_upper] >= iou_thresh
-
-    if not np.any(dup_mask):
-        return detections
-
-    removed = set()
-
-    # 对每个重复对，固定删除第二个
-    for i, j in zip(i_upper[dup_mask], j_upper[dup_mask]):
-        if i not in removed and j not in removed:
-            removed.add(j)
-
-    return [d for idx, d in enumerate(detections) if idx not in removed]
-
-
 
 
 
