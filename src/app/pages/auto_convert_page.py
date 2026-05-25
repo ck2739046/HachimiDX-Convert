@@ -566,7 +566,7 @@ class AutoConvertPage(BaseOutputPage):
                     chart_lv = try_int(self.chart_lv_combo_box.currentText())
                     fps = try_float(self.chart_confirm_video_input.selected_video_fps)
                     if chart_lv is not None and fps is not None:
-                        if chart_lv >= 5 and fps < 58:
+                        if chart_lv >= 4 and fps < 58:
                             title = i18n.t(f"{I18N_Prefix}.ui_low_fps_warning_title")
                             text = i18n.t(f"{I18N_Prefix}.ui_low_fps_warning_text", level=chart_lv, fps=round(fps, 1))
                             if not show_confirm_dialog(title, text):

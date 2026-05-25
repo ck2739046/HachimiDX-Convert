@@ -412,8 +412,9 @@ en_US:
       ui_low_fps_warning_text: |
         The current chart is Level %{level}.
 
-        For high-level charts (Master+), the higher the frame rate of the chart confirmation video, the better the auto-detection accuracy.
-        120fps is most recommended, and at least 60fps is required to achieve acceptable results.
+        High-level charts (Expert+) usually have high note speeds, low-FPS videos struggle to capture fast-moving notes, severely affecting auto-detection accuracy.
+
+        120fps is strongly recommended, and at least 60fps is required to achieve acceptable auto-detection results.
         Your video is only %{fps} fps, which may result in poor accuracy.
 
         Continue anyway?
