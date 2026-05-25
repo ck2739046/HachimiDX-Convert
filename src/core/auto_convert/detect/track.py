@@ -12,7 +12,7 @@ from ...schemas.op_result import OpResult, ok, err
 from src.services import PathManage
 from .note_definition import *
 from .detect import _load_detect_results
-from .oc_sort import OCSort
+from .custom_oc_sort.oc_sort import OCSort
 
 
 TRACKER_NOTE_TYPES = [

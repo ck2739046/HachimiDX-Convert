@@ -11,7 +11,7 @@ from ...schemas.op_result import OpResult, ok, err
 from .note_definition import *
 from .track import _load_track_results
 from ..analyze.tool import catmull_rom_spline
-from .oc_sort import _KalmanBoxTracker
+from .custom_oc_sort.oc_sort import _KalmanBoxTracker
 
 
 # 是否绘制 Kalman 预测框（灰色，仅 SLIDE）
