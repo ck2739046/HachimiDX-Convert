@@ -100,7 +100,7 @@ def _classify_segment(shared_context: SharedContext, note_geometry_list) -> str 
 def _is_close_to_A_zone_endpoint(a_zone_endpoint: dict, std_video_size: int, cx: int, cy: int, target_a_zone: str) -> bool:
     '''
     判断一个点是否接近指定的A区判定点
-    接近的定义: 距离小于 std_video_size * 0.24
+    接近的定义: 距离小于 std_video_size * 0.28
     '''
     if target_a_zone is None:
         return False
@@ -108,7 +108,7 @@ def _is_close_to_A_zone_endpoint(a_zone_endpoint: dict, std_video_size: int, cx:
         return False
     ex, ey = a_zone_endpoint[target_a_zone]
     dist = np.sqrt((cx - ex)**2 + (cy - ey)**2)
-    return dist < std_video_size * 0.24 # 1080p下约为240像素
+    return dist < std_video_size * 0.28 # 1080p下约为300像素
 
 
 
