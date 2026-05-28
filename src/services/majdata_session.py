@@ -222,7 +222,13 @@ class MajdataSession(QObject):
 
         # 1) 先停止 majdata
         stop_majdata()
-        time.sleep(0.6) # 因为 MajdataEdit ControlFileWatcher 有 500ms 延时，所以这里多等一点
+
+        # 因为 MajdataEdit ControlFileWatcher 有延时，所以延迟 500ms 后再继续
+        QTimer.singleShot(500, self._continue_shutdown)
+
+
+    def _continue_shutdown(self) -> None:
+        """shutdown() 的后半段，由 QTimer.singleShot 异步调度，避免阻塞主线程。"""
 
         # majdataedit 退出时会弹窗提示是否要关闭 majdataview
         # 为了避免弹窗，先退出 majdataview 再退出 majdataedit
