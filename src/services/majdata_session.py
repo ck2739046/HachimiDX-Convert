@@ -136,7 +136,8 @@ class MajdataSession(QObject):
                 if line.lower().strip().startswith(filters):
                     continue
                 # 每一行都加上前缀
-                new_lines.append("[MajdataView STDOUT] " + line.rstrip())
+                time_str = time.strftime("%H:%M:%S")
+                new_lines.append(f"[{time_str} MajdataView] " + line.rstrip())
             if new_lines:
                 print("\n".join(new_lines))
 
@@ -157,7 +158,8 @@ class MajdataSession(QObject):
                 if line.lower().strip().startswith(filters):
                     continue
                 # 每一行都加上前缀
-                new_lines.append("[MajdataEdit STDOUT] " + line.rstrip())
+                time_str = time.strftime("%H:%M:%S")
+                new_lines.append(f"[{time_str} MajdataEdit] " + line.rstrip())
             if new_lines:
                 print("\n".join(new_lines))
 
