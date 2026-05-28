@@ -41,83 +41,69 @@ def build_auto_convert_cmd(data: AutoConvertModel) -> OpResult[list[str]]:
     try:
         cmd = build_cmd_head_python_exe(PathManage.AUTO_CONVERT_WORKER_PATH)
 
-        # add common args
-        cmd.append(f"--{AC_Defs.is_detect_enabled.key}")
-        cmd.append("true" if data.is_detect_enabled else "false")
-        cmd.append(f"--{AC_Defs.is_analyze_enabled.key}")
-        cmd.append("true" if data.is_analyze_enabled else "false")
-
         std_video_path = None
 
-        # standardize
+        # 先判断 standardize 模组是否真的启用
         if data.is_standardize_enabled:
             # 检查输出路径
             res = _build_standardize_output_path(data)
             if not res.is_ok:
                 return err("Failed to build standardize output path arg", inner=res)
             is_enable_standardize, temp_output, std_video_path = res.value
-            if is_enable_standardize:
-                # 启用标准化模块
-                cmd.append(f"--{AC_Defs.is_standardize_enabled.key}")
-                cmd.append("true")
-                # 正常写入其他参数
-                cmd.extend(_parse_fields(data, "standardize"))
-                # 将 temp_output 加入参数
-                cmd.append(f"--{AC_Defs.standardize_temp_output_path.key}")
-                cmd.append(str(temp_output.resolve()))
-            else:
-                # 禁用标准化模块
-                cmd.append(f"--{AC_Defs.is_standardize_enabled.key}")
-                cmd.append("false")
         else:
-            # 禁用标准化模块
-            cmd.append(f"--{AC_Defs.is_standardize_enabled.key}")
-            cmd.append("false")
+            is_enable_standardize = False
 
 
+        # add common args
+        cmd.append(f"--{AC_Defs.is_standardize_enabled.key}")
+        cmd.append("true" if is_enable_standardize else "false")  # 此处不用 data 值判断
+        cmd.append(f"--{AC_Defs.is_detect_enabled.key}")
+        cmd.append("true" if data.is_detect_enabled else "false")
+        cmd.append(f"--{AC_Defs.is_analyze_enabled.key}")
+        cmd.append("true" if data.is_analyze_enabled else "false")
+        
 
-        # add shared inference args
-        if data.is_detect_enabled or data.is_analyze_enabled:
-            res = _get_inference_args_from_settings()
-            if not res.is_ok:
-                return err("Failed to get inference args from settings", inner=res)
-            cmd.extend(res.value)
+        # add standardize args
+        if is_enable_standardize:
+            cmd.extend(_parse_fields(data, "standardize"))
+            # 额外添加 temp_output 参数
+            cmd.append(f"--{AC_Defs.standardize_temp_output_path.key}")
+            cmd.append(str(temp_output.resolve()))
 
+        
+        # add std_video_path args
+        if std_video_path is None:
+            filename = f"{data.selected_folder.name}_std.mp4"
+            std_video_path = data.selected_folder / filename
+            if not _is_video_already_standardized(std_video_path, data):
+                return err(f"Selected folder doesn't contain a valid standardized video, expect: {std_video_path}")
 
+        cmd.append(f"--{AC_Defs.std_video_path.key}")
+        cmd.append(str(std_video_path.resolve()))
 
+        
         # add detect args
         if data.is_detect_enabled:
             cmd.extend(_parse_fields(data, "detect"))
-
-            # 增加模型路径
-            res = _get_detect_model_paths()
-            if not res.is_ok:
-                return err("Failed to get detect model paths", inner=res)
-            cmd.extend(res.value)
-
 
 
         # add analyze args
         if data.is_analyze_enabled:
             cmd.extend(_parse_fields(data, "analyze"))
 
-            # 增加 touch-hold 分析模型路径
-            res = _get_analyze_model_paths()
+
+        # add detect/analyze shared args
+        if data.is_detect_enabled or data.is_analyze_enabled:
+            res = _get_inference_args_from_settings()
             if not res.is_ok:
-                return err("Failed to get analyze model paths", inner=res)
+                return err("Failed to get inference args from settings", inner=res)
             cmd.extend(res.value)
 
+            res = _get_all_model_paths()
+            if not res.is_ok:
+                return err("Failed to get model paths", inner=res)
+            cmd.extend(res.value)
 
-
-        # handle std video path
-        if std_video_path is None:
-            filename = f"{data.selected_folder.name}_std.mp4"
-            std_video_path = data.selected_folder / filename
-            if not _is_video_already_standardized(std_video_path, data):
-                return err(f"Selected folder doesn't contain a valid standardized video, should be: {std_video_path}")
-
-        cmd.append(f"--{AC_Defs.std_video_path.key}")
-        cmd.append(str(std_video_path.resolve()))
 
         return ok(cmd)
     
@@ -329,8 +315,7 @@ def _get_inference_args_from_settings() -> OpResult[list]:
 
 
 
-
-def _get_detect_model_paths() -> OpResult[list]:
+def _get_all_model_paths() -> OpResult[list]:
 
     cmd = []
 
@@ -344,40 +329,15 @@ def _get_detect_model_paths() -> OpResult[list]:
         return err(f"Failed to get model paths for backend: {model_backend}", inner=res)
     paths = res.value
 
-    cmd.append(f"--detect_model_path")
+    cmd.append("--detect_model_path")
     cmd.append(str(paths["detect"]))
-    cmd.append(f"--obb_model_path")
+    cmd.append("--obb_model_path")
     cmd.append(str(paths["obb"]))
-    cmd.append(f"--cls_break_model_path")
+    cmd.append("--cls_break_model_path")
     cmd.append(str(paths["cls_break"]))
-    cmd.append(f"--cls_ex_model_path")
+    cmd.append("--cls_ex_model_path")
     cmd.append(str(paths["cls_ex"]))
-
-    return ok(cmd)
-
-
-
-
-def _get_analyze_model_paths() -> OpResult[list]:
-
-    cmd = []
-
-    res = SettingsManage.get(SC_Defs.model_backend.key)
-    if not res.is_ok:
-        return err(f"Failed to get {SC_Defs.model_backend.key} from settings", inner=res)
-    model_backend = res.value
-
-    res = SC_Defs.get_path_by_backend(model_backend)
-    if not res.is_ok:
-        return err(f"Failed to get model paths for backend: {model_backend}", inner=res)
-    paths = res.value
-
-    cmd.append(f"--touch_hold_model_path")
+    cmd.append("--touch_hold_model_path")
     cmd.append(str(paths["touch_hold"]))
-
-    cmd.append(f"--cls_break_model_path")
-    cmd.append(str(paths["cls_break"]))
-    cmd.append(f"--cls_ex_model_path")
-    cmd.append(str(paths["cls_ex"]))
 
     return ok(cmd)
