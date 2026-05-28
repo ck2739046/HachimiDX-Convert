@@ -38,7 +38,6 @@ def _force_kill_process_by_name(target: str) -> None:
                                 timeout=5, capture_output=True)
             except Exception:
                 pass
-        time.sleep(0.5)  # wait a moment
 
 
 
@@ -92,7 +91,7 @@ def main() -> int:
             shutdown_majdata()
             print("[watchdog] Cleanup done, exiting.")
             return 0
-        time.sleep(1)
+        time.sleep(0.1)
 
 
 if __name__ == "__main__":
