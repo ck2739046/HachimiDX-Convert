@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from PyQt6.QtWidgets import QVBoxLayout, QMessageBox
 import i18n
@@ -309,10 +310,21 @@ class SettingsPage(BaseOutputPage):
             for key in self._save_order_keys:
                 result = SettingsManage.set(key, data[key])
                 if not result.is_ok:
-                    reason = print_op_result(result, only_parse_last=True)
+                    reason = print_op_result(result, only_parse_last=True)  # 保底
+                    # 如果是 pydantic 报错，尝试仅打印错误信息
+                    try:
+                        inner = result.inner
+                        if inner is not None and "pydantic validation failed" in str(inner.error_msg).lower():
+                            reason = str(inner.error_raw)
+                    except Exception:
+                        pass
                     show_notify_dialog(
                         i18n.t(f"{I18N_Prefix}.dialog_title"),
                         i18n.t(f"{I18N_Prefix}.warning_save_item_failed", item_key=key, error=reason),
+                    )
+                    self.output_widget.append_text(
+                        f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] " + \
+                        i18n.t(f"{I18N_Prefix}.notice_save_failed")
                     )
                     return
 
@@ -322,7 +334,10 @@ class SettingsPage(BaseOutputPage):
                 # 刷新失败，记录警告但继续
                 self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.warning_refresh_failed", error=refresh_result.error_msg))
 
-            self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_save_success"))
+            self.output_widget.append_text(
+                f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] " + \
+                i18n.t(f"{I18N_Prefix}.notice_save_success")
+            )
             self._load_settings_to_ui()
         finally:
             self.save_button.setEnabled(True)
@@ -355,7 +370,10 @@ class SettingsPage(BaseOutputPage):
                 )
                 return
 
-            self.output_widget.append_text(i18n.t(f"{I18N_Prefix}.notice_reset_success"))
+            self.output_widget.append_text(
+                f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] " + \
+                i18n.t(f"{I18N_Prefix}.notice_reset_success")
+            )
             self._load_settings_to_ui()
         finally:
             self.save_button.setEnabled(True)
