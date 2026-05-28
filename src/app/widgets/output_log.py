@@ -107,7 +107,7 @@ class OutputLogWidget(QWidget):
         document = self.text_edit.document()
         if document.blockCount() <= self.max_output_lines:
             return
-        # 删除旧的行，仅保留最近的 400 行
+        # 删除旧的行，保证总行数不超过 max_output_lines
         cursor = QTextCursor(document)
         cursor.movePosition(QTextCursor.MoveOperation.Start)
         # 计算需要删除的行数

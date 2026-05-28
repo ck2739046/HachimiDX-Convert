@@ -33,6 +33,6 @@ class UI_Style:
     element_height = 25
     default_text_size = 13
 
-    output_log_widget_height = 300
+    output_log_widget_height = 320
     main_navbar_height = 50
     sub_navbar_height = 35
