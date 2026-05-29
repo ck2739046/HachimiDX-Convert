@@ -1,6 +1,6 @@
-# <img src="src/resources/icon.ico" width="60px"> HachimiDX-Convert 🐱
+# <img src="src/resources/icon.ico" width="60px"> HachimiDX: Maimai auto rechart tool 🐱
 
-🔗 [**Project URL**](https://github.com/ck2739046/HachimiDX-Convert)
+🔗 [**Project URL**](https://github.com/ck2739046/HachimiDX)
 &nbsp;•&nbsp;
 📖 [**中文 README**](readme_zh_cn.md)
 &nbsp;•&nbsp;
@@ -8,16 +8,16 @@
 
 
 
-A tool designed for the rhythm game `maimai`. Accepts chart confirmation videos and automatically outputs simai-format charts (`maidata.txt`).
+A tool built specifically for the rhythm game `maimai`. Give it a chart confirmation video, and it will fully automatically rechart — faithfully reproducing the official maimai chart and outputting it in simai format (`maidata.txt`).
 
 
 
 ## ✨ Highlights
 
-- **Fully automatic chart conversion**
-    - Supports recognition and duration inference for all note types: tap, slide, touch, hold, and touch-hold.
-    - Supports variant classification for ex-note, break-note, and ex-break-note.
-    - Supports automatic syntax inference for all slide notations.
+- **Powerful recharting capabilities**
+    - Supports recognition and duration inference for all note types: `tap` `slide` `touch` `hold` `touch-hold`.
+    - Supports all note variants classification: `ex` `break` `ex-break`.
+    - Supports all simai slide movement syntax: `-` `><` `pq` `ppqq` `sz` `v`.
 
 - **Custom vision models**
     - Optimized specifically for maimai, with stronger robustness in complex scenes.
@@ -26,7 +26,7 @@ A tool designed for the rhythm game `maimai`. Accepts chart confirmation videos 
     - Everything is done through a visual interface.
 
 - **Built-in editors**
-    - Integrates [`MajdataEdit`](https://github.com/LingFeng-bbben/MajdataView) and [`MajdataView`](https://github.com/TeamMajdata/MajdataView/tree/431-NC-TH) so convertion results can be previewed and modified in one place.
+    - Integrates [`MajdataEdit`](https://github.com/LingFeng-bbben/MajdataView) and [`MajdataView`](https://github.com/TeamMajdata/MajdataView/tree/431-NC-TH) so rechart results can be previewed and modified in one place.
 
 - **Flexible inference backends**
     - Supports PyTorch / NVIDIA TensorRT / DirectML inference backends for compatibility with a range of hardware.
@@ -71,7 +71,7 @@ Code lives in `src/`, organized in three layers:
 - **Core layer (`src/core`)**
     - OpenCV for frame processing.
     - YOLO for visual recognition.
-    - Elements path tracking.
+    - Elements path tracking (BOTSORT, OCSORT).
     - Filters, converts, and processes data.
     - Infers note position, timing, and duration.
     - Converts to simai syntax.
@@ -117,7 +117,7 @@ Compile from the following repositories and place the outputs into `src/resource
 
 - [MajdataEdit](https://github.com/ck2739046/MajdataEdit/tree/v4.3.1) & [MajdataView](https://github.com/ck2739046/MajdataView/tree/431-NC-TH)
 
-Obtain `SFX` and `Skin` from other placess and put them in the folder.
+Obtain `SFX` and `Skin` from other sources and put them in the folder.
 
 ### 4. Install & launch
 

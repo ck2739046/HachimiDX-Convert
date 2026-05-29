@@ -1,6 +1,6 @@
-# <img src="src/resources/icon.ico" width="60px"> HachimiDX-Convert 🐱
+# <img src="src/resources/icon.ico" width="60px"> HachimiDX: 舞萌自动抄谱工具 🐱
 
-🔗 [**项目地址**](https://github.com/ck2739046/HachimiDX-Convert)
+🔗 [**项目地址**](https://github.com/ck2739046/HachimiDX)
 &nbsp;•&nbsp;
 📖 [**English README**](readme.md)
 &nbsp;•&nbsp;
@@ -10,25 +10,25 @@
 
 **小团体不拉我，拿不到最新最热，所以自己抄谱😡😡😡😭😭😭🤔🤔🤔😋😋😋**
 
-专门为音乐游戏 `maimai`设计的工具，将谱面确认视频一键转换为 simai 格式谱面 (`maidata.txt`) 。
+专门为音乐游戏 `maimai` 设计的工具。输入谱面确认视频，执行全自动抄谱，复刻还原官方 maimai 谱面，输出为 simai 格式 (`maidata.txt`)。
 
 
 
 ## ✨ 主要亮点
 
-- **强大的全自动谱面识别**
-    - 支持 tap, slide, touch, hold, touch-hold 全种类音符识别与时值推理。
-    - 支持 ex-note, break-note, ex-break-note 多子类音符变体分类。
-    - 支持从轨迹反推所有 slide 语法格式。
+- **强大的抄谱能力**
+    - 支持 `tap` `slide` `touch` `hold` `touch-hold` 全种类音符识别与时值推理。
+    - 支持 `ex` `break` `ex-break` 全子类音符变体分类。
+    - 支持所有 simai 星星轨迹语法: `-` `><` `pq` `ppqq` `sz` `v`。
 
 - **定制视觉模型**
     - 专门针对游戏画面优化，能够适应复杂场景，识别更稳健。
 
-- **可视化操作界面**
+- **可视化图形界面**
     - 全程使用可视化图形界面。
 
 - **内置谱面编辑器**
-    - 内嵌 [`MajdataEdit`](https://github.com/LingFeng-bbben/MajdataView) 和 [`MajdataView`](https://github.com/TeamMajdata/MajdataView/tree/431-NC-TH)，识别结果一站式预览与修改。
+    - 内嵌 [`MajdataEdit`](https://github.com/LingFeng-bbben/MajdataView) 和 [`MajdataView`](https://github.com/TeamMajdata/MajdataView/tree/431-NC-TH)，抄谱结果一站式预览与修改。
 
 - **多后台推理支持**
     - 支持 PyTorch / NVIDIA TensorRT / DirectML 多种深度学习推理后端，兼容各类硬件。
@@ -73,7 +73,7 @@
 - **核心算法层 (`src/core`)**
     - 使用 OpenCV 处理画面
     - 使用 YOLO 视觉模型识别画面
-    - 元素路径追踪
+    - 元素路径追踪 (BOTSORT, OCSORT)
     - 数据过滤，转换，处理
     - 音符方位推演、时差推演、时值推演
     - simai 语法转换
