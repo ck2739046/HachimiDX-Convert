@@ -18,13 +18,16 @@ _LAZY_MAP: dict[str, str] = {
     # 聚合入口
     "AllServices":      ".all_services",
 
+    # 调度器数据模型
+    "TaskInfo":         ".task_scheduler",
+    "TaskStatus":       ".task_scheduler",
+
     # pipeline
     "AutoRechartPipeline": ".pipeline.auto_rechart_pipeline",
     "MediaPipeline":       ".pipeline.media_pipeline",
 
-    # 调度器数据模型
-    "TaskInfo":   ".task_scheduler",
-    "TaskStatus": ".task_scheduler",
+    # 更新检查
+    "check_update_on_startup": ".check_update",
 }
 
 
@@ -53,4 +56,5 @@ __all__ = [
     "TaskInfo", "TaskStatus",
     "process_manager_api",
     "task_scheduler_api",
+    "check_update_on_startup",
 ]

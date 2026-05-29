@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget, QLabel, QSizePolicy
-from PyQt6.QtCore import Qt, QSize, QObject, pyqtSignal, pyqtSlot, QUrl
+from PyQt6.QtCore import Qt, QSize, QObject, pyqtSignal, pyqtSlot, QUrl, QTimer
 from PyQt6.QtGui import QIcon, QWindow
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
@@ -23,7 +23,7 @@ from .pages.settings_page import SettingsPage
 import i18n
 from src.core.schemas.settings_config import SettingsConfig_Definitions as S_Defs
 from src.core.schemas.settings_config import MAIN_APP_W_MIN, MAIN_APP_W_MAX, MAIN_APP_H_MIN, MAIN_APP_H_MAX
-from src.services import SettingsManage, PathManage, MajdataSession, VideoSyncServer
+from src.services import SettingsManage, PathManage, MajdataSession, VideoSyncServer, check_update_on_startup
 
 
 class _CallbackEmitter(QObject):
@@ -262,6 +262,9 @@ class MainWindow(QMainWindow):
         result = self._majdata_session.start()
         # if not result.is_ok:
         #     print(f"--Warning: MajdataSession.start failed: {result.error_msg}")
+
+        # 检查更新 (延迟1s)
+        QTimer.singleShot(1000, check_update_on_startup)
 
 
 

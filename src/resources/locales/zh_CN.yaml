@@ -83,9 +83,31 @@ zh_CN:
         该文件将在任务开始时被删除。
         是否继续？
 
-  
 
 
+
+
+  check_update:
+    notice_checking: "正在检查更新..."
+    notice_skipped: |
+      "启动时检查更新" 选项已关闭，跳过。
+    notice_is_latest: "--当前已是最新版本 (%{version})。"
+    notice_new_version: "--发现新版本: %{latest} (当前 %{current})"
+
+    notice_network_error: "--检查更新失败: 网络错误"
+    notice_fetch_failed: "--检查更新失败: 无法获取最新版本 (HTTP %{status}): %{error}"
+    notice_parse_failed: "--检查更新失败: 无法解析版本号: 当前 [%{current}], 最新 [%{latest}]"
+    notice_check_failed: "--检查更新失败: %{error}"
+    
+    dialog_title: "检查更新"
+    dialog_prompt: |
+      发现新版本！
+
+      当前版本: %{current_version}
+      最新版本: %{latest_version}
+      
+      可以前往 GitHub 下载更新:
+      %{repo_url}
 
 
   # ---- app ----
@@ -453,6 +475,7 @@ zh_CN:
 
       ui_general_divider: "通用设置"
       ui_language_label: "语言: "
+      ui_check_update_label: "  启动时检查更新: "
 
       ui_window_divider: "窗口设置"
       ui_default_size_label: "默认窗口尺寸 (W x H): "

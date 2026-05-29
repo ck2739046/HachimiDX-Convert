@@ -86,6 +86,27 @@ en_US:
 
 
 
+  check_update:
+    notice_checking: "Checking for updates..."
+    notice_skipped: |
+      "Check for updates on startup" is disabled, skipping.
+    notice_is_latest: "--Already up to date (%{version})."
+    notice_new_version: "--New version found: %{latest} (current %{current})"
+
+    notice_network_error: "--Update check failed: network error"
+    notice_fetch_failed: "--Update check failed: cannot fetch latest release (HTTP %{status}): %{error}"
+    notice_parse_failed: "--Update check failed: cannot parse version: current [%{current}], latest [%{latest}]"
+    notice_check_failed: "--Update check failed: %{error}"
+    
+    dialog_title: "Check Update"
+    dialog_prompt: |
+      New Version Available!
+
+      Current version: %{current_version}
+      New version:     %{latest_version}
+      
+      Visit GitHub to download:
+      %{repo_url}
 
 
   # ---- app ----
@@ -457,6 +478,7 @@ en_US:
 
       ui_general_divider: "General"
       ui_language_label: "Language: "
+      ui_check_update_label: "  Check for updates on startup: "
 
       ui_window_divider: "Window"
       ui_default_size_label: "Default Window Size (W x H): "

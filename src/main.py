@@ -22,9 +22,12 @@ from src.services import AllServices
 # 2. app already running
 # 3. initialization error
 
+author = "ck2739046"
+repo_name = "HachimiDX"
 
-REPO = "https://github.com/ck2739046/HachimiDX"
 VERSION = "1.2.1"
+REPO = f"https://github.com/{author}/{repo_name}"
+API_RELEASE_LATEST = f"https://api.github.com/repos/{author}/{repo_name}/releases/latest"
 
 
 
