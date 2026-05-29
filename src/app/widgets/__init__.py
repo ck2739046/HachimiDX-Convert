@@ -6,6 +6,7 @@ from .square_widget import SquareWidget
 from .nav_bar import SegmentedNavBar
 from .output_log import OutputLogWidget
 from .help_icon import create_help_icon
+from .clickable_label import create_clickable_label
 from .label import create_label
 from .combo_box import create_combo_box
 from .line_edit import create_line_edit
@@ -25,6 +26,7 @@ __all__ = [
     'SegmentedNavBar',
     'OutputLogWidget',
     'create_help_icon',
+    'create_clickable_label',
     'create_label',
     'create_combo_box',
     'create_line_edit',

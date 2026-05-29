@@ -2,10 +2,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from PyQt6.QtWidgets import QVBoxLayout, QMessageBox
+from PyQt6.QtCore import Qt
 import i18n
 
 from .base_output_page import BaseOutputPage
 from ..widgets import *
+from ..ui_style import UI_Style
 from src.core.schemas.settings_config import SettingsConfig_Definitions as S_Defs
 from src.core.schemas.op_result import print_op_result, ok, err
 from src.core.tools import show_notify_dialog
@@ -77,12 +79,13 @@ class SettingsPage(BaseOutputPage):
         self._build_common_section()
         self._build_window_section()
         self._build_actions()
+        self.content_layout.addStretch()
+        self.build_bottom_section()
 
         process_manager_api.get_signals().runner_output.connect(self.output_widget.handle_process_output)
         process_manager_api.get_signals().runner_ended.connect(self.output_widget.handle_process_ended)
         process_manager_api.get_signals().runner_ended.connect(self._on_runner_ended)
 
-        self.content_layout.addStretch()
         self._load_settings_to_ui()
 
 
@@ -200,6 +203,21 @@ class SettingsPage(BaseOutputPage):
 
         self.save_button.clicked.connect(self.on_save_clicked)
         self.reset_button.clicked.connect(self.on_reset_clicked)
+
+
+
+
+    def build_bottom_section(self) -> None:
+        from src.main import VERSION, REPO  # 避免循环依赖
+        # 版本号（右下角灰色小字，点击可跳转仓库）
+        version_label = create_clickable_label(
+            label_text=f"v{VERSION}",
+            tooltip_text=REPO,
+            url=REPO,
+            label_color=UI_Style.COLORS['text_secondary'],
+            label_bold=True,
+        )
+        self.content_layout.addWidget(version_label, alignment=Qt.AlignmentFlag.AlignRight)
 
 
 

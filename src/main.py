@@ -23,6 +23,10 @@ from src.services import AllServices
 # 3. initialization error
 
 
+REPO = "https://github.com/ck2739046/HachimiDX"
+VERSION = "1.2.1"
+
+
 
 
 
