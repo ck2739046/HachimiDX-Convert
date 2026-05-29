@@ -88,7 +88,7 @@ def copy_root():
     copy_to_release(PathManage.ROOT_DIR / "LICENSE")
     # launcher
     copy_to_release(PathManage.ROOT_DIR / "HachimiDX.exe")
-    copy_to_release(PathManage.ROOT_DIR / "main.py")
+    copy_to_release(PathManage.ROOT_DIR / "src" / "main.py")
 
 
 

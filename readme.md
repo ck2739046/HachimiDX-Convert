@@ -122,4 +122,4 @@ Obtain `SFX` and `Skin` from other placess and put them in the folder.
 ### 4. Install & launch
 
 Run `install/script/install.py` to install dependencies.<br>
-Run `main.py` to launch the application.
+Run `src/main.py` to launch the application.

@@ -124,4 +124,4 @@
 ### 4. 安装并启动
 
 运行 `install/script/install.py` 安装依赖。<br>
-运行 `main.py` 启动程序。
+运行 `src/main.py` 启动程序。

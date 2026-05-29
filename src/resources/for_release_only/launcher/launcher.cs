@@ -46,7 +46,7 @@ class Program
             new ProcessStartInfo
             {
                 FileName = @".\python\python.exe",
-                Arguments = "-u main.py",
+                Arguments = "-u src/main.py",
                 UseShellExecute = false
             }
         );
