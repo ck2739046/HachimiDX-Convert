@@ -174,6 +174,10 @@ class AutoRechartConfig_Definitions:
         default=True
     )
 
+    # 当视频 FPS 达到此阈值时，自动关闭 ReID
+    # 因为帧率已经够高了，ReID 的作用不大
+    REID_MAX_FPS_THRESHOLD = 90.0
+
 
 
 
@@ -221,7 +225,7 @@ class AutoRechartConfig_Definitions:
     CHART_LV_PRESETS = {
         1: {is_big_touch.key: True,  base_denominator.key: 8,  duration_denominator.key: 8},
         2: {is_big_touch.key: True,  base_denominator.key: 8,  duration_denominator.key: 8},
-        3: {is_big_touch.key: True,  base_denominator.key: 8, duration_denominator.key: 8},
+        3: {is_big_touch.key: True,  base_denominator.key: 8,  duration_denominator.key: 8},
         4: {is_big_touch.key: False, base_denominator.key: 16, duration_denominator.key: 16},
         5: {is_big_touch.key: False, base_denominator.key: 32, duration_denominator.key: 32},
         6: {is_big_touch.key: False, base_denominator.key: 32, duration_denominator.key: 32},

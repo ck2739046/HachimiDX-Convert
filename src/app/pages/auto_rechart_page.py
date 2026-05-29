@@ -148,6 +148,18 @@ class AutoRechartPage(BaseOutputPage):
         self._sync_taskname_from_name(Path(self.chart_confirm_video_input.get_path()).stem)
         # 更新视频范围可视化器
         self._update_video_range_visualizer()
+        # 根据预设fps阈值自动切换 ReID
+        self._toggle_reid_by_fps_threshold()
+
+    def _toggle_reid_by_fps_threshold(self) -> None:
+        fps = self.chart_confirm_video_input.selected_video_fps
+        if fps is None: return
+        try: fps_val = float(fps)
+        except: return
+        if fps_val >= AC_Defs.REID_MAX_FPS_THRESHOLD:
+            self.enable_reid_check_box.setChecked(False)
+        else:
+            self.enable_reid_check_box.setChecked(True)
 
     def _sync_taskname_from_name(self, name: str) -> None:
         """更新 task name 输入框内容为给定的名称（文件名/文件夹名）。"""
