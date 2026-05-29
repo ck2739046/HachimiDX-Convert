@@ -204,7 +204,7 @@ class MainWindow(QMainWindow):
         """设置主窗口"""
         
         # 设置窗口标题和图标
-        self.setWindowTitle("Hachimi DX")
+        self.setWindowTitle("HachimiDX")
         self.setWindowIcon(QIcon(str(PathManage.APP_ICON_PATH)))
 
         # 设置窗口硬性边界

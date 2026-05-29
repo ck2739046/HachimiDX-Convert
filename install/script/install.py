@@ -40,7 +40,7 @@ def main():
     main_menu_en = """
 Please select an option:
 
-1. Install Hachimi DX (Default)
+1. Install HachimiDX (Default)
 
 2. Undo Ultralytics DirectML Modification
 
@@ -52,7 +52,7 @@ Please don't choose "2" if you don't know what it is.
     main_menu_zh = """
 请选择：
 
-1. 安装 Hachimi DX (默认)
+1. 安装 HachimiDX (默认)
 
 2. 撤销 Ultralytics DirectML 修改
 
@@ -78,7 +78,7 @@ Please don't choose "2" if you don't know what it is.
     elif choice == "3":
         sys.exit(0)
     else:
-        print("Defaulting to Install Hachimi DX.")
+        print("Defaulting to Install HachimiDX.")
         install()
 
 
