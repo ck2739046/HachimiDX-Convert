@@ -92,6 +92,19 @@ zh_CN:
 
   app:
 
+    nav_bar:
+      majdata_desc: "内嵌 MajdataEdit"
+      auto_convert_desc: "自动抄谱工具"
+      media_tools_desc: "多媒体处理工具集"
+      tasks_desc: "查看与管理任务队列"
+      settings_desc: "应用设置"
+
+    sub_nav_bar:
+      arcade_timing_desc: "分析开头音频延时工具，与官方音频对齐"
+      simply_align_desc: "快速对齐工具，同步音频与视频"
+      run_ffmpeg_desc: "FFmpeg 转码工具"
+      others_desc: "---"
+
     widgets:
 
       # media_input_probe_widget

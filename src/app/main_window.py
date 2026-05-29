@@ -140,7 +140,16 @@ class RightPanel(QWidget):
 
         # 1. 主导航栏
         nav_items = ["Majdata", "Auto Convert", "Media Tools", "Tasks", "Settings"]
-        self.nav_bar = SegmentedNavBar(nav_items, height=UI_Style.main_navbar_height)
+        nav_tooltips = [
+            i18n.t("app.nav_bar.majdata_desc"),
+            i18n.t("app.nav_bar.auto_convert_desc"),
+            i18n.t("app.nav_bar.media_tools_desc"),
+            i18n.t("app.nav_bar.tasks_desc"),
+            i18n.t("app.nav_bar.settings_desc"),
+        ]
+        self.nav_bar = SegmentedNavBar(nav_items,
+                                       height=UI_Style.main_navbar_height,
+                                       tooltip_texts=nav_tooltips)
         layout.addWidget(self.nav_bar)
 
         # 2. 主内容 Stack

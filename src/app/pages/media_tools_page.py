@@ -1,4 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget
+
+import i18n
+
 from ..ui_style import UI_Style
 from ..widgets import SegmentedNavBar
 from .media_subpages.arcade_timing import ArcadeTimingPage
@@ -28,7 +31,15 @@ class MediaToolsPage(QWidget):
                      "Simply Align",
                      "Run FFmpeg",
                      "Others"]
-        self.nav_bar = SegmentedNavBar(nav_items, height=UI_Style.sub_navbar_height)
+        nav_tooltips = [
+            i18n.t("app.sub_nav_bar.arcade_timing_desc"),
+            i18n.t("app.sub_nav_bar.simply_align_desc"),
+            i18n.t("app.sub_nav_bar.run_ffmpeg_desc"),
+            i18n.t("app.sub_nav_bar.others_desc"),
+        ]
+        self.nav_bar = SegmentedNavBar(nav_items,
+                                       height=UI_Style.sub_navbar_height,
+                                       tooltip_texts=nav_tooltips)
         layout.addWidget(self.nav_bar)
 
         # 2. 内容 Stack
