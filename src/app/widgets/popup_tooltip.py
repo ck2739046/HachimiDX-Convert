@@ -1,5 +1,5 @@
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor, QCursor, QFont
 from PyQt6.QtWidgets import QFrame, QGraphicsDropShadowEffect, QLabel, QVBoxLayout, QWidget
 
 from ..ui_style import UI_Style
@@ -83,3 +83,44 @@ def get_shared_tooltip() -> PopupToolTip:
     if _shared_tooltip is None:
         _shared_tooltip = PopupToolTip()
     return _shared_tooltip
+
+
+DEFAULT_TOOLTIP_DELAY_MS = 500
+
+
+def install_tooltip(widget, text: str, delay_ms: int = DEFAULT_TOOLTIP_DELAY_MS) -> None:
+    """
+    为任意 widget 安装悬停 tooltip（共享单例）。
+
+    鼠标进入后延迟 delay_ms 毫秒显示，离开时立即隐藏。
+    若 text 为空则不安装任何行为。
+
+    Args:
+        widget:  目标 QWidget
+        text:    tooltip 显示的文本，空字符串表示不显示
+        delay_ms: 延迟毫秒数，默认 500
+    """
+    if not text:
+        return
+
+    tooltip = get_shared_tooltip()
+    timer: QTimer | None = None
+
+    def _enter_event(_event):
+        nonlocal timer
+        if timer is not None:
+            timer.stop()
+        timer = QTimer(widget)
+        timer.setSingleShot(True)
+        timer.timeout.connect(lambda: tooltip.show_text(text, QCursor.pos()))
+        timer.start(delay_ms)
+
+    def _leave_event(_event):
+        nonlocal timer
+        if timer is not None:
+            timer.stop()
+            timer = None
+        tooltip.hide()
+
+    widget.enterEvent = _enter_event
+    widget.leaveEvent = _leave_event
