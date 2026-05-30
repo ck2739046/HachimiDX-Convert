@@ -2,11 +2,84 @@ from ultralytics import YOLO
 import cv2
 import os
 import time
+import multiprocessing
+from queue import Empty
 from pathlib import Path
 import numpy as np
+from collections import defaultdict
 
 from ...schemas.op_result import OpResult, ok, err
 from .note_definition import *
+
+
+
+
+def _inference_worker(model_path, task_name,
+                      std_video_path,
+                      batch_detect, inference_device,
+                      results_queue, progress_val):
+    """
+    模型推理进程：
+    - 独立创建 YOLO 实例
+    - 流式推理，每帧解析为 Note_Geometrys
+    - 通过 multiprocessing.Queue 发送 (note_geometry, task_name) 到主进程
+    - 通过 multiprocessing.Value 更新进度计数器
+    """
+    start_time = time.time()
+    model = YOLO(model_path, task=task_name)
+    imgsz_val = get_imgsz(task_name)
+    yolo_results_generator = model.predict(
+        source=std_video_path,
+        stream=True,
+        batch=batch_detect,
+        device=inference_device,
+        imgsz=imgsz_val,
+        max_det=50,
+        verbose=False,
+        half=True
+    )
+    frame_counter = 0
+    for result in yolo_results_generator:
+        note_geometrys = _parse_detections_to_note_geometrys(result, frame_counter, task_name)
+        if note_geometrys:
+            for note_geometry in note_geometrys:
+                results_queue.put((note_geometry, task_name))
+        frame_counter += 1
+        progress_val.value = frame_counter
+    # 发送完成信号
+    elapsed_s = time.time() - start_time
+    results_queue.put(("__done__", task_name, elapsed_s))
+
+
+def _process_printer(progress_detect, progress_obb, total_frames, stop_event):
+    """
+    独立打印 progress 进程
+    每 0.2s 轮询两个进度计数器，在同一行打印合并进度
+    """
+    while not stop_event.wait(timeout=0.2):
+        d = progress_detect.value
+        o = progress_obb.value
+        if d >= total_frames and o >= total_frames:
+            break
+        pct_d = min(d / total_frames * 100, 100.0)
+        pct_o = min(o / total_frames * 100, 100.0)
+        print(f"detect: {d}/{total_frames} ({pct_d:.1f}%)  |  obb: {o}/{total_frames} ({pct_o:.1f}%)  ", end="\r", flush=True)
+    # 最后一次刷新
+    d = progress_detect.value
+    o = progress_obb.value
+    pct_d = min(d / total_frames * 100, 100.0)
+    pct_o = min(o / total_frames * 100, 100.0)
+    print(f"detect: {d}/{total_frames} ({pct_d:.1f}%)  |  obb: {o}/{total_frames} ({pct_o:.1f}%)  ", end="\r", flush=True)
+
+
+
+
+
+
+
+
+
+
 
 
 def main(std_video_path: Path,
@@ -30,59 +103,88 @@ def main(std_video_path: Path,
     """
 
     try:
-        final_results = []
         print("Start detection...")
 
-        # 计算 tap/hold 尺寸预过滤的阈值
-        try:
-            cap = cv2.VideoCapture(str(std_video_path))
-            video_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-            cap.release()
-            # 标准尺寸: tap 105px, hold 108px
-            # 这里保守一点取 90px 作为最小尺寸阈值
-            size_thresh = video_width / 1080.0 * 90
-        except Exception as e:
-            print(f"Failed to get video width. Error: {e}")
-            size_thresh = -1 # 不过滤
+        # 跨进程共享对象（主进程创建，传递给子进程）
+        progress_detect = multiprocessing.Value('i', 0)
+        progress_obb    = multiprocessing.Value('i', 0)
+        results_queue   = multiprocessing.Queue()
+        stop_printer    = multiprocessing.Event()
 
-        for model_path, name in [(detect_model_path, 'detect'), (obb_model_path, 'obb')]:
-            counter = 0
-            last_counter = 0
-            start_time = time.time()
-            last_time = start_time
+        # 启动 printer 进程
+        printer_p = multiprocessing.Process(
+            target = _process_printer,
+            args = (progress_detect, progress_obb, total_frames, stop_printer),
+            daemon=True
+        )
+        printer_p.start()
 
-            # 模型推理
-            model = YOLO(model_path, task=name)
-            imgsz = get_imgsz(name)
-            yolo_results_generator = model.predict(
-                source=std_video_path,
-                stream=True,
-                batch=batch_detect,
-                device=inference_device,
-                imgsz=imgsz,
-                max_det=50,
-                verbose=False,
-                half=True
-            )
+        # 启动两个模型推理进程
+        p_detect = multiprocessing.Process(
+            target = _inference_worker,
+            args = (detect_model_path, 'detect', str(std_video_path),
+                    batch_detect, inference_device,
+                    results_queue, progress_detect)
+        )
+        p_obb = multiprocessing.Process(
+            target = _inference_worker,
+            args = (obb_model_path, 'obb', str(std_video_path),
+                    batch_detect, inference_device,
+                    results_queue, progress_obb)
+        )
+        p_detect.start()
+        p_obb.start()
 
-            # 流式输出后处理
-            for result in yolo_results_generator:
-                # 转换数据格式并保存
-                note_geometrys = _parse_detections_to_note_geometrys(result, counter, name)
-                # 预过滤：对 tap/hold 去除宽或高过小的误检框
-                note_geometrys = _prefilter_tap_hold_by_size(note_geometrys, size_thresh)
-                # NMS 去重
-                note_geometrys = _dedup_detections(note_geometrys, name, iou_thresh=0.98)
-                final_results.extend(note_geometrys)
-                # 打印进度
-                counter += 1
-                if counter % 40 == 0:
-                    last_time, last_counter = print_progress(name, 'fps', counter, total_frames, last_time, last_counter)
-            
-            # 结束
-            finish_time = time.time()
-            processed_frames = max(counter, 1)
-            print(f"{name} done, time: {finish_time - start_time:.1f}s, average: {processed_frames / (finish_time - start_time):.1f}fps          ")
+        # 主进程：从队列收集推理结果
+        all_raw_results: list = []  # list[tuple[Note_Geometry, str]]
+        worker_times: dict = {}     # {task_name: elapsed_seconds}
+        workers_alive = 2
+
+        while workers_alive > 0:
+            try:
+                item = results_queue.get(timeout=0.3)
+                if isinstance(item, tuple) and len(item) == 3 and item[0] == "__done__":
+                    _, name, elapsed = item
+                    worker_times[name] = elapsed
+                    workers_alive -= 1  # 已完成，进程数 -1
+                else:
+                    all_raw_results.append(item)
+            except Empty:
+                pass
+
+        # 清空队列中可能残留的结果
+        while True:
+            try:
+                item = results_queue.get_nowait()
+                if isinstance(item, tuple) and len(item) == 3 and item[0] == "__done__":
+                    _, name, elapsed = item
+                    worker_times[name] = elapsed
+                else:
+                    all_raw_results.append(item)
+            except Empty:
+                break
+        
+        # cleanup
+        p_detect.join()
+        p_obb.join()
+        stop_printer.set()  # 通知 printer 进程退出
+        printer_p.join(timeout=1.0)
+        print()  # 跳过 \r 所在行
+
+        # 打印各模型汇总
+        for name in ('detect', 'obb'):
+            if name in worker_times:
+                elapsed = worker_times[name]
+                frames_done = progress_detect.value if name == 'detect' else progress_obb.value
+                fps = frames_done / elapsed if elapsed > 0 else 0
+                print(f"{name} done, time: {elapsed:.1f}s, average: {fps:.1f}fps")
+
+
+
+
+
+        # 后处理（prefilter + NMS）
+        final_results = _postprocess_results(all_raw_results, std_video_path)
 
         # 保存到文件
         _save_detect_results(final_results, std_video_path.parent)
@@ -279,6 +381,44 @@ def _compute_obb_iou_matrix(detections: list) -> np.ndarray:
 
 
 
+
+
+
+
+def _postprocess_results(raw_results: list, std_video_path: Path) -> list:
+    """
+    推理完成后统一执行 prefilter + NMS 后处理。
+    """
+    if not raw_results:
+        return []
+    
+    # 计算 tap/hold 尺寸预过滤的阈值
+    try:
+        cap = cv2.VideoCapture(str(std_video_path))
+        video_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        cap.release()
+        # 标准尺寸: tap 105px, hold 108px
+        # 这里保守一点取 90px 作为最小尺寸阈值
+        size_thresh = video_width / 1080.0 * 90
+    except Exception as e:
+        print(f"Failed to get video width. Error: {e}")
+        size_thresh = -1 # 不过滤
+    
+    by_frame: dict[int, dict] = defaultdict(lambda: {"detect": [], "obb": []})
+    for ng, model_name in raw_results:
+        by_frame[ng.frame][model_name].append(ng)
+
+    final_results = []
+    for frame in sorted(by_frame.keys()):
+        for model_name in ('detect', 'obb'):
+            geos = by_frame[frame][model_name]
+            if not geos:
+                continue
+            geos = _prefilter_tap_hold_by_size(geos, size_thresh)
+            geos = _dedup_detections(geos, model_name, iou_thresh=0.98)
+            final_results.extend(geos)
+
+    return final_results
 
 
 
