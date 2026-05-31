@@ -67,7 +67,7 @@ def _build_botsort_tracker(fps: float, with_reid: bool = False) -> BOTSORT:
         # 只有两个框的 iou ≥ proximity_thresh 时，才会启用 reid 特征进行匹配
         # 值越高，越不容易启用 reid
         # 值越低，越容易启用 reid，越不容易视为新 id
-        proximity_thresh=0.4 if with_reid else 273,
+        proximity_thresh=0.8 if with_reid else 273,
         # 外观相似度
         # 值越低，外观就不需要那么相似也能匹配上，越不容易视为新 id
         appearance_thresh=0.8 if with_reid else 478,
