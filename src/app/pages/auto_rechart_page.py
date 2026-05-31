@@ -487,9 +487,6 @@ class AutoRechartPage(BaseOutputPage):
         self.skip_cls_label.setVisible(is_advanced_mode)
         self.skip_cls_check_box.setVisible(is_advanced_mode)
         self.skip_cls_help.setVisible(is_advanced_mode)
-        self.skip_export_label.setVisible(is_advanced_mode)
-        self.skip_export_tracked_check_box.setVisible(is_advanced_mode)
-        self.skip_export_help.setVisible(is_advanced_mode)
         # common
         self.common_divider.setVisible(is_advanced_mode)
         self.enable_modules_row.setVisible(is_advanced_mode)
@@ -499,7 +496,6 @@ class AutoRechartPage(BaseOutputPage):
             # detect
             self.skip_detect_check_box.setChecked(AC_Defs.skip_detect.default)
             self.skip_cls_check_box.setChecked(AC_Defs.skip_cls.default)
-            self.skip_export_tracked_check_box.setChecked(AC_Defs.skip_export_tracked_video.default)
             # general
             self.enable_standardize_check_box.setChecked(AC_Defs.is_standardize_enabled.default)
             self.enable_detect_check_box.setChecked(AC_Defs.is_detect_enabled.default)
