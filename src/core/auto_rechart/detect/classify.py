@@ -2,6 +2,8 @@ from ultralytics import YOLO
 import cv2
 import time
 import math
+import threading
+import queue
 from collections import defaultdict
 from pathlib import Path
 
@@ -13,8 +15,8 @@ from .track import _save_track_results, _load_track_results
 SEEK_THRESHOLD = 10
 
 
+
 def main(std_video_path: Path,
-         total_frames: int,
          batch_cls: int,
          inference_device: str,
          cls_ex_model_path: str,
@@ -28,6 +30,11 @@ def main(std_video_path: Path,
     - inference_device
     - cls_ex_model_path
     - cls_break_model_path
+
+    架构: 生产者-消费者流水线
+    - 生产者线程负责视频解码 + 图像裁剪
+    - 消费者主线程负责 GPU 推理
+    - 通过 queue.Queue(maxsize=2) 双缓冲实现 CPU/GPU 重叠执行
     """
 
     try:
@@ -38,28 +45,80 @@ def main(std_video_path: Path,
 
         start_time = time.time()
 
-        cap = cv2.VideoCapture(std_video_path)
-
         # 构建采样计划，这样后续读取视频时，就知道当前帧要裁剪哪些图像
         sampling_plan, total_cls_quantity = _build_sampling_plan(track_results)
         if not sampling_plan:
             print("没有需要分类的轨迹")
             return None
-        
-        # 准备变量
-        counter = 0
-        last_counter = 0
-        last_time = start_time
 
-        cls_results_all = []
-        images_batch_buffer = []
-
+        # 加载模型
         cls_ex_model = YOLO(cls_ex_model_path, task="classify")
         cls_break_model = YOLO(cls_break_model_path, task="classify")
         imgsz = get_imgsz('cls')
 
-        crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.005) # 1080p下约5像素
+        # 创建双缓冲队列，启动生产者线程
+        batch_queue = queue.Queue(maxsize=2)
+        producer_thread = threading.Thread(
+            target=_producer,
+            args=(std_video_path, sampling_plan, imgsz, batch_cls, batch_queue),
+            daemon=True
+        )
+        producer_thread.start()
 
+        # 消费者循环：从队列取 batch，GPU 推理
+        counter = 0
+        last_counter = 0
+        last_time = start_time
+        cls_results_all = []
+
+        while True:
+            consumed_batch = batch_queue.get()
+            if consumed_batch is None:
+                break  # producer 结束
+
+            cls_results = _classify_image_batch(consumed_batch,
+                                                cls_ex_model, cls_break_model,
+                                                inference_device, imgsz)
+            if cls_results:
+                cls_results_all.extend(cls_results)
+                counter += len(cls_results)
+                last_time, last_counter = print_progress('分类', ' images/s', counter, total_cls_quantity, last_time, last_counter)
+
+        # producer 线程应该已经自行退出（daemon）
+        # 此处防御性 join 兜底
+        producer_thread.join(timeout=1.0)
+
+        # 根据分类结果，更新track_results
+        track_results = _merge_cls_into_track_results(track_results, cls_results_all)
+
+        # 结束
+        finish_time = time.time()
+        print(f"分类模块完成, 耗时{finish_time - start_time:.1f}s                       ")
+
+        # 保存到文件
+        _save_track_results(track_results, std_video_path.parent, call_fn="classify")
+        return ok()
+
+    except Exception as e:
+        return err("Unexcepted error in auto_rechart > detect > classify", e)
+    
+
+
+
+
+
+
+
+def _producer(std_video_path, sampling_plan,
+              imgsz, batch_cls, batch_queue):
+    """
+    生产者线程：解码视频 + 裁剪音符图像，凑满一个 batch 就放入队列。
+    结束后发送 None 作为 sentinel。
+    """
+    cap = cv2.VideoCapture(std_video_path)
+    crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.005)  # 1080p下约5像素
+    try:
+        buffer = []
         sorted_frames_in_sampling_plan = sorted(sampling_plan.keys())
         last_frame_number = -1
 
@@ -79,7 +138,7 @@ def main(std_video_path: Path,
             # 如果目标帧较远，使用 seek 跳转
             else:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-            
+
             # 读取当前帧
             ret, frame = cap.read()
             if not ret: continue
@@ -91,49 +150,28 @@ def main(std_video_path: Path,
             cropped_images = _extract_note_images_in_frame(imgsz, frame, this_frame_sample_plan, frame_number, crop_border)
             if cropped_images is None:
                 continue
-            # 写入batch
-            images_batch_buffer.extend(cropped_images)
+            # 写入本地 buffer
+            buffer.extend(cropped_images)
 
-            # 如果凑满一个batch，就进行分类
-            while len(images_batch_buffer) >= batch_cls:
-                # 从buffer中取出一个batch
-                consumed_batch = images_batch_buffer[:batch_cls]
-                images_batch_buffer = images_batch_buffer[batch_cls:]
-                # 分类
-                cls_results = _classify_image_batch(consumed_batch,
-                                                    cls_ex_model, cls_break_model,
-                                                    inference_device, imgsz)
-                cls_results_all.extend(cls_results)
-                # 打印进度
-                counter += len(cls_results)
-                last_time, last_counter = print_progress('分类', ' images/s', counter, total_cls_quantity, last_time, last_counter)
+            # 凑满一个 batch 就发送到队列
+            while len(buffer) >= batch_cls:
+                batch_queue.put(buffer[:batch_cls])
+                buffer = buffer[batch_cls:]
 
-            # end of frame loop
+        # 发送剩余的图像
+        if buffer:
+            batch_queue.put(buffer)
 
+        # 发送结束信号
+        batch_queue.put(None)
 
-        # 视频读取完毕后，batch buffer可能有剩余的未分类图像
-        if images_batch_buffer:
-            cls_results = _classify_image_batch(images_batch_buffer,
-                                                cls_ex_model, cls_break_model,
-                                                inference_device, imgsz)
-            cls_results_all.extend(cls_results)
-
-        # 根据分类结果，更新track_results
-        track_results = _merge_cls_into_track_results(track_results, cls_results_all)
-
-        # 结束
-        finish_time = time.time()
-        print(f"分类模块完成, 耗时{finish_time - start_time:.1f}s                       ")
-        
-        # 保存到文件
-        _save_track_results(track_results, std_video_path.parent, call_fn="classify")
-        return ok()
-        
-    except Exception as e:
-        return err("Unexcepted error in auto_rechart > detect > classify", e)
-    
     finally:
         cap.release()
+
+
+
+
+
 
 
 
@@ -474,6 +512,8 @@ def _merge_cls_into_track_results(track_results, cls_results_all):
 
 
 
+
+ # 此函数仅供外部调用
 def classify_note_path(
     path_to_classify: list[Note_Geometry],
     std_video_path: Path,
@@ -518,7 +558,7 @@ def classify_note_path(
 
     # 打开视频
     cap = cv2.VideoCapture(str(std_video_path))
-    crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.003)
+    crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.005)
 
     cls_results_all = []
     images_batch_buffer = []

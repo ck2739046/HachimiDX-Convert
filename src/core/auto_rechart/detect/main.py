@@ -85,7 +85,6 @@ def main(std_video_path,
         # 分类模块
         if not skip_cls:
             result = classify_module(std_video_path,
-                                     total_frames,
                                      batch_cls, inference_device,
                                      cls_ex_model_path, cls_break_model_path)
             if not result.is_ok:
