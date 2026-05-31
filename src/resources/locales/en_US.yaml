@@ -383,7 +383,7 @@ en_US:
       ui_skip_detect_help: "Skip frame-by-frame note detection and directly read the existing detection result (detect_result.txt)."
       ui_skip_cls_label: "Skip Classify: "
       ui_skip_cls_help: "Skip note classification: ex, break, ex-break."
-      ui_skip_export_tracked_label: "Skip Export Tracked: "
+      ui_skip_export_tracked_label: "Skip Export Tracked Video: "
       ui_skip_export_tracked_help: "Skip exporting the video with note tracking overlays."
 
       ui_enable_reid_label: "Enable ReID: "
