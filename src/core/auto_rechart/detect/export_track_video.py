@@ -98,7 +98,7 @@ def main(std_video_path: Path,
         # 轨迹清理和绘制长度使用同一套 fps 计算，避免长视频后期轨迹过长拖慢绘制
         fps_for_calc = float(fps) if fps and fps > 0 else 30.0
         timeout_frames = max(1, int(round(fps_for_calc / 2.0)))
-        max_track_history_len = min(512, max(64, timeout_frames * 4))
+        max_track_history_len = 3000
 
         # 使用 FFmpeg 管道直接编码视频并映射原视频音频，避免临时文件二次编码
         from src.services import PathManage
