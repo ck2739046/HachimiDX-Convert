@@ -116,7 +116,7 @@ zh_CN:
 
     nav_bar:
       majdata_desc: "内嵌 MajdataEdit"
-      auto_convert_desc: "自动抄谱工具"
+      auto_rechart_desc: "自动抄谱工具"
       media_tools_desc: "多媒体处理工具集"
       tasks_desc: "查看与管理任务队列"
       settings_desc: "应用设置"

@@ -115,7 +115,7 @@ en_US:
 
     nav_bar:
       majdata_desc: "Embed MajdataEdit"
-      auto_convert_desc: "Auto charting tool"
+      auto_rechart_desc: "Auto recharting tool"
       media_tools_desc: "Media processing toolkit"
       tasks_desc: "View and manage task queue"
       settings_desc: "Application settings"

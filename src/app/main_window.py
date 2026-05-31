@@ -139,10 +139,10 @@ class RightPanel(QWidget):
         layout.setSpacing(0)
 
         # 1. 主导航栏
-        nav_items = ["Majdata", "Auto Convert", "Media Tools", "Tasks", "Settings"]
+        nav_items = ["Majdata", "Auto Rechart", "Media Tools", "Tasks", "Settings"]
         nav_tooltips = [
             i18n.t("app.nav_bar.majdata_desc"),
-            i18n.t("app.nav_bar.auto_convert_desc"),
+            i18n.t("app.nav_bar.auto_rechart_desc"),
             i18n.t("app.nav_bar.media_tools_desc"),
             i18n.t("app.nav_bar.tasks_desc"),
             i18n.t("app.nav_bar.settings_desc"),
