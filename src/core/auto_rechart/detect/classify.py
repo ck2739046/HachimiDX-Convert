@@ -10,6 +10,9 @@ from .note_definition import *
 from .track import _save_track_results, _load_track_results
 
 
+SEEK_THRESHOLD = 10
+
+
 def main(std_video_path: Path,
          total_frames: int,
          batch_cls: int,
@@ -55,16 +58,34 @@ def main(std_video_path: Path,
         cls_break_model = YOLO(cls_break_model_path, task="classify")
         imgsz = get_imgsz('cls')
 
-        crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.003)
+        crop_border = round(cap.get(cv2.CAP_PROP_FRAME_WIDTH) * 0.005) # 1080p下约5像素
 
-        # 按帧读取视频，提取图像并分类
-        for frame_number in range(total_frames):
+        sorted_frames_in_sampling_plan = sorted(sampling_plan.keys())
+        last_frame_number = -1
+
+        for frame_number in sorted_frames_in_sampling_plan:
+
+            # 速度优化
+            # cap.read() 读取下一帧 比 cap.set() 跳转到指定帧 更快
+            # 如果目标帧和当前帧差距不大, 直接循环读取下一帧直到目标帧，减少 seek 调用
+            gap = frame_number - last_frame_number
+            # 如果目标帧就是下一帧，直接读取
+            if gap == 1:
+                pass
+            # 如果目标帧不远，循环读取
+            elif gap <= SEEK_THRESHOLD:
+                for _ in range(gap - 1):
+                    cap.read()
+            # 如果目标帧较远，使用 seek 跳转
+            else:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            
             # 读取当前帧
             ret, frame = cap.read()
-            if not ret: break
+            if not ret: continue
+            last_frame_number = frame_number
+
             # 获取当前帧的采样计划
-            if frame_number not in sampling_plan.keys():
-                continue # skip
             this_frame_sample_plan = sampling_plan[frame_number]
             # 提取当前帧的所有采样图像
             cropped_images = _extract_note_images_in_frame(imgsz, frame, this_frame_sample_plan, frame_number, crop_border)
@@ -436,7 +457,6 @@ def classify_note_path(
 
     last_frame_number = -1
     sorted_frames = sorted(sampling_plan.keys())
-    SEEK_THRESHOLD = 10
 
     for frame_number in sorted_frames:
 
