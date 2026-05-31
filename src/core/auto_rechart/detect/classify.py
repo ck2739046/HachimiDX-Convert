@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 import cv2
 import time
-import numpy as np
+import math
 from collections import defaultdict
 from pathlib import Path
 
@@ -199,45 +199,113 @@ def _crop_single_note_image(imgsz, frame, note_geometry, crop_border):
     """
     
     try:
-        # 对于普通矩形框，裁剪范围就是(x1, y1, x3, y3)
         if not is_obb(note_geometry.note_type):
+            # 对于普通矩形框，裁剪范围就是(x1, y1, x3, y3)
             x1, y1, x2, y2 = note_geometry.x1, note_geometry.y1, note_geometry.x3, note_geometry.y3
-            target_frame = frame
-        else:
-            # obb需要先将检测框和图像旋转为水平
-            points = np.array([
-                [note_geometry.x1, note_geometry.y1],
-                [note_geometry.x2, note_geometry.y2],
-                [note_geometry.x3, note_geometry.y3],
-                [note_geometry.x4, note_geometry.y4]
-            ], dtype=np.float32)
-            angle = (note_geometry.r * 180 / np.pi) - 90
-            rotation_matrix = cv2.getRotationMatrix2D((note_geometry.cx, note_geometry.cy), angle, 1.0)
-            target_frame = cv2.warpAffine(frame, rotation_matrix, (frame.shape[1], frame.shape[0]))
-            rotated_points = cv2.transform(points.reshape(1, -1, 2), rotation_matrix).reshape(-1, 2)
-            x_coords = rotated_points[:, 0]
-            y_coords = rotated_points[:, 1]
-            x1, y1 = np.min(x_coords), np.min(y_coords)
-            x2, y2 = np.max(x_coords), np.max(y_coords)
+            
+            # 稍微扩展一圈
+            x1 -= crop_border
+            y1 -= crop_border
+            x2 += crop_border
+            y2 += crop_border
 
-        # 稍微扩展一圈
-        x1 -= crop_border
-        y1 -= crop_border
-        x2 += crop_border
-        y2 += crop_border
-        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-        x1 = max(0, x1)
-        y1 = max(0, y1)
-        x2 = min(target_frame.shape[1], x2)
-        y2 = min(target_frame.shape[0], y2)
-        if x1 >= x2 or y1 >= y2:
-            return None
-        cropped_image = target_frame[y1:y2, x1:x2]
-        cropped_image = cv2.resize(cropped_image, (imgsz, imgsz))
-        return cropped_image
+            # clamp到帧边界
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(frame.shape[1], x2)
+            y2 = min(frame.shape[0], y2)
+            if x1 >= x2 or y1 >= y2:
+                return None
+            
+            # 裁剪并resize
+            cropped_image = frame[y1:y2, x1:x2]
+            cropped_image = cv2.resize(cropped_image, (imgsz, imgsz))
+            return cropped_image
+        
+        else:
+            # OBB: 精确裁剪后再旋转（避免对全帧 warpAffine）
+            r = note_geometry.r
+            w = note_geometry.w
+            h = note_geometry.h
+
+            # 1. 用 sin/cos 计算旋转矩形在原始帧中的精确 AABB
+            sin_r = math.sin(r)
+            cos_r = math.cos(r)
+            half_ext_w = abs(w / 2 * cos_r) + abs(h / 2 * sin_r)
+            half_ext_h = abs(w / 2 * sin_r) + abs(h / 2 * cos_r)
+
+            aabb_x1 = note_geometry.cx - half_ext_w
+            aabb_y1 = note_geometry.cy - half_ext_h
+            aabb_x2 = note_geometry.cx + half_ext_w
+            aabb_y2 = note_geometry.cy + half_ext_h
+
+            # 2. 计算 ROI 坐标
+            #    稍微扩展一圈 + clamp到帧边界
+            roi_x1 = max(0, int(aabb_x1 - crop_border))
+            roi_y1 = max(0, int(aabb_y1 - crop_border))
+            roi_x2 = min(frame.shape[1], int(aabb_x2 + crop_border))
+            roi_y2 = min(frame.shape[0], int(aabb_y2 + crop_border))
+
+            if roi_x1 >= roi_x2 or roi_y1 >= roi_y2:
+                return None
+
+            # 3. 从原帧裁剪 ROI
+            roi = frame[roi_y1:roi_y2, roi_x1:roi_x2]
+
+            # 4. 旋转中心在 ROI 空间中的偏移
+            roi_cx = note_geometry.cx - roi_x1
+            roi_cy = note_geometry.cy - roi_y1
+
+            # 5. 对 ROI 做逆旋转，使得 OBB 变为水平矩形
+            angle_deg = r * 180 / math.pi
+            rotation_matrix = cv2.getRotationMatrix2D((roi_cx, roi_cy), angle_deg, 1.0)
+            target_frame = cv2.warpAffine(roi, rotation_matrix, (roi.shape[1], roi.shape[0]))
+
+            # 6. 从 warp 后的 ROI 中提取有效内容区域
+            content_x1 = max(0, roi_cx - w / 2)
+            content_y1 = max(0, roi_cy - h / 2)
+            content_x2 = min(target_frame.shape[1], roi_cx + w / 2)
+            content_y2 = min(target_frame.shape[0], roi_cy + h / 2)
+
+            content_x1 = int(content_x1); content_y1 = int(content_y1)
+            content_x2 = int(content_x2); content_y2 = int(content_y2)
+
+            if content_x1 >= content_x2 or content_y1 >= content_y2:
+                return None
+            
+            # 7. 裁剪并resize
+            cropped_image = target_frame[content_y1:content_y2, content_x1:content_x2]
+            cropped_image = cv2.resize(cropped_image, (imgsz, imgsz))
+
+            # 8. 若原始 OBB 是横着的 (w > h)，旋转 90° 使其竖过来
+            #    因为 cls 训练时所有 hold 都是竖着的
+            if w > h:
+                cropped_image = cv2.rotate(cropped_image, cv2.ROTATE_90_CLOCKWISE)
+
+            # _save_obb_debug_image(cropped_image) # debug
+
+            return cropped_image
+        
     except Exception as e:
         print(f"裁剪音符图像时出错: {e}")
         return None
+
+
+_obb_debug_counter = 0
+_obb_debug_folder_name = time.strftime("%Y%m%d_%H%M%S")
+
+def _save_obb_debug_image(image):
+    """DEBUG: 将 OBB 裁剪结果保存到硬盘"""
+    global _obb_debug_counter
+    try:
+        folder = Path(f"C:/Users/ck273/Desktop/test/{_obb_debug_folder_name}")
+        folder.mkdir(parents=True, exist_ok=True)
+        filepath = folder / f"{_obb_debug_counter}.png"
+        cv2.imwrite(str(filepath), image)
+        _obb_debug_counter += 1
+    except Exception:
+        pass  # 静默失败，不影响主流程
 
 
 
