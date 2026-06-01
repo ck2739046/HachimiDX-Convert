@@ -106,7 +106,7 @@ def _build_ocsort_tracker(fps: float, debug: bool = False) -> OCSort:
 
         # vdc 的权重
         # vdc = angle_diff * inertia * score(置信度)
-        inertia=0.7,
+        inertia=0.8,
 
         # 尺寸变大门控：候选框 max(w,h) ≤ 轨迹最后一帧 × (1+ratio)
         # 如最后一帧 max=30，ratio=0.15 → 候选框 max 须 ≤ 34.5
